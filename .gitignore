@@ -1,0 +1,68 @@
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# IDE and Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.iml
+*.ipr
+*.iws
+
+# Strict protection: Reference source code (DO NOT COMMIT)
+Source goc/
+"Source goc/"
+
+# Node.js (Source goc/backend, Source goc/frontend)
+**/node_modules/
+**/dist/
+**/build/
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+**/lerna-debug.log*
+**/.pnpm-debug.log*
+
+# Environment and sensitive config files
+**/.env
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+!**/.env.example
+!**/.env.*.example
+
+# Flutter & Mobile artifacts
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.pub-cache/
+**/.pub/
+**/coverage/
+
+# Android build artifacts & keystores
+**/.gradle/
+**/local.properties
+*.jks
+*.keystore
+key.properties
+*.apk
+*.aab
+
+# iOS ephemeral and pods
+**/ios/Flutter/ephemeral/
+**/Pods/
+**/DerivedData/
+
+# Windows / Desktop ephemeral
+**/windows/flutter/ephemeral/

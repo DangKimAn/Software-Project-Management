@@ -1,0 +1,61 @@
+name: hotel_booking_flutter
+description: "Hotel Booking Flutter - Luxury Hotel & Villa Discovery & Booking Inquiry Mobile Application for Android and iOS"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+  flutter: '>=3.19.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State Management & Dependency Injection
+  flutter_riverpod: ^2.6.1
+
+  # Navigation & Deep Linking
+  go_router: ^14.8.1
+
+  # Networking & HTTP Client
+  dio: ^5.8.0+1
+
+  # Security & Storage
+  flutter_secure_storage: ^9.2.4
+  shared_preferences: ^2.5.2
+
+  # Formatting & Internationalization
+  intl: ^0.20.2
+
+  # Icons (Lucide Icons compliant with Minh Thanh Villa Design System)
+  lucide_icons_flutter: ^3.1.24
+
+  # Native Integrations (Zalo, Hotline, External Links)
+  url_launcher: ^6.3.1
+
+  # Model & Serialization Annotations
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  mocktail: ^1.0.4
+  build_runner: ^2.4.15
+  freezed: ^2.5.8
+  json_serializable: ^6.9.4
+  integration_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  generate: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+    - config/

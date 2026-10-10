@@ -1,0 +1,83 @@
+{
+  "@@locale": "ko",
+  "appTitle": "민탄 빌라",
+  "appTagline": "붕따우 럭셔리 휴양 빌라",
+  "searchPlaceholder": "검색을 시작하세요...",
+  "navDiscover": "탐색",
+  "navZalo": "Zalo",
+  "navHotline": "핫라인",
+  "navFavorites": "위시리스트",
+  "navSettings": "설정",
+  "bedroomsCount": "침실 {count}개",
+  "@bedroomsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "bedsCount": "침대 {count}개",
+  "@bedsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "guestsCapacity": "최대 {count}명",
+  "@guestsCapacity": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "bathroomsCount": "욕실 {count}개",
+  "@bathroomsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "beachDistance": "해변까지 {distance}m",
+  "@beachDistance": {
+    "placeholders": {
+      "distance": { "type": "int" }
+    }
+  },
+  "priceFrom": "1박당 {price}부터",
+  "@priceFrom": {
+    "placeholders": {
+      "price": { "type": "String" }
+    }
+  },
+  "saturdayPrice": "토요일: {price}",
+  "@saturdayPrice": {
+    "placeholders": {
+      "price": { "type": "String" }
+    }
+  },
+  "contactForPrice": "가격 문의",
+  "badgeFeatured": "추천",
+  "badgeNew": "신규",
+  "badgeNearBeach": "해변 인접",
+  "badgeSaltwater": "해수 풀장",
+  "badgeGroup": "단체 환영",
+  "ctaContactZalo": "Zalo 문의",
+  "ctaCallHotline": "핫라인 전화",
+  "ctaBookNow": "예약 상담",
+  "ctaViewDetail": "상세 보기",
+  "ctaCopyLink": "링크 복사",
+  "ctaCopied": "링크가 클립보드에 복사되었습니다",
+  "ctaRetry": "다시 시도",
+  "ctaResetFilter": "필터 초기화",
+  "loadingText": "빌라 정보를 불러오는 중...",
+  "emptyList": "일치하는 빌라가 없습니다",
+  "emptyListDesc": "검색 조건이나 일정을 변경해 보세요.",
+  "errorOccurred": "오류가 발생했습니다",
+  "errorTryAgain": "네트워크 연결을 확인한 후 다시 시도해 주세요.",
+  "dateBooked": "예약 마감된 날짜입니다",
+  "checkInDate": "체크인",
+  "checkOutDate": "체크아웃",
+  "guestCount": "인원 수",
+  "priceBreakdown": "박별 요금 세부 정보",
+  "faqTitle": "자주 묻는 질문",
+  "settingsLanguage": "언어",
+  "settingsEnvironment": "환경",
+  "settingsVersion": "버전",
+  "favoritesEmpty": "저장된 빌라가 없습니다",
+  "favoritesEmptyDesc": "빌라 카드의 하트 아이콘을 눌러 위시리스트에 저장해 보세요."
+}

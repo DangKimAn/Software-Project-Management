@@ -1,0 +1,7 @@
+{
+  "APP_ENV": "staging",
+  "API_BASE_URL": "https://staging-api.minhthanhvilla.com",
+  "HOTLINE_NUMBER": "0901234567",
+  "ZALO_OA_URL": "https://zalo.me/0901234567",
+  "ENABLE_LOGGING": "true"
+}

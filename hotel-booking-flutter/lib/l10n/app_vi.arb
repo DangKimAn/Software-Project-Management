@@ -1,0 +1,83 @@
+{
+  "@@locale": "vi",
+  "appTitle": "Minh Thanh Villa",
+  "appTagline": "Biệt thự nghỉ dưỡng cao cấp Vũng Tàu",
+  "searchPlaceholder": "Bắt đầu tìm kiếm...",
+  "navDiscover": "Khám phá",
+  "navZalo": "Zalo",
+  "navHotline": "Hotline",
+  "navFavorites": "Yêu thích",
+  "navSettings": "Cài đặt",
+  "bedroomsCount": "{count} phòng",
+  "@bedroomsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "bedsCount": "{count} giường",
+  "@bedsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "guestsCapacity": "{count} khách",
+  "@guestsCapacity": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "bathroomsCount": "{count} WC",
+  "@bathroomsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "beachDistance": "{distance}m tới biển",
+  "@beachDistance": {
+    "placeholders": {
+      "distance": { "type": "int" }
+    }
+  },
+  "priceFrom": "Từ {price} / đêm",
+  "@priceFrom": {
+    "placeholders": {
+      "price": { "type": "String" }
+    }
+  },
+  "saturdayPrice": "Thứ 7: {price}",
+  "@saturdayPrice": {
+    "placeholders": {
+      "price": { "type": "String" }
+    }
+  },
+  "contactForPrice": "Liên hệ báo giá",
+  "badgeFeatured": "Nổi bật",
+  "badgeNew": "Mới",
+  "badgeNearBeach": "Gần biển",
+  "badgeSaltwater": "Hồ bơi nước mặn",
+  "badgeGroup": "Đoàn đông",
+  "ctaContactZalo": "Nhắn tin Zalo",
+  "ctaCallHotline": "Gọi Hotline",
+  "ctaBookNow": "Tư vấn đặt phòng",
+  "ctaViewDetail": "Xem chi tiết",
+  "ctaCopyLink": "Sao chép liên kết",
+  "ctaCopied": "Đã sao chép liên kết vào bộ nhớ tạm",
+  "ctaRetry": "Thử lại",
+  "ctaResetFilter": "Đặt lại bộ lọc",
+  "loadingText": "Đang tải dữ liệu...",
+  "emptyList": "Không tìm thấy villa nào phù hợp",
+  "emptyListDesc": "Hãy thử thay đổi tiêu chí tìm kiếm hoặc khoảng thời gian lưu trú.",
+  "errorOccurred": "Đã có lỗi xảy ra",
+  "errorTryAgain": "Vui lòng kiểm tra kết nối mạng và thử lại.",
+  "dateBooked": "Ngày này đã kín",
+  "checkInDate": "Nhận phòng",
+  "checkOutDate": "Trả phòng",
+  "guestCount": "Số khách",
+  "priceBreakdown": "Chi tiết giá theo đêm",
+  "faqTitle": "Câu hỏi thường gặp",
+  "settingsLanguage": "Ngôn ngữ",
+  "settingsEnvironment": "Môi trường",
+  "settingsVersion": "Phiên bản",
+  "favoritesEmpty": "Chưa có villa nào được lưu",
+  "favoritesEmptyDesc": "Bấm vào biểu tượng trái tim ở góc thẻ villa để lưu vào danh sách yêu thích."
+}

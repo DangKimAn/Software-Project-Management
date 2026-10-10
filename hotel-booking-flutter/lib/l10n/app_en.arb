@@ -1,0 +1,83 @@
+{
+  "@@locale": "en",
+  "appTitle": "Minh Thanh Villa",
+  "appTagline": "Luxury Vacation Villas in Vung Tau",
+  "searchPlaceholder": "Start your search...",
+  "navDiscover": "Discover",
+  "navZalo": "Zalo",
+  "navHotline": "Hotline",
+  "navFavorites": "Wishlist",
+  "navSettings": "Settings",
+  "bedroomsCount": "{count} bedrooms",
+  "@bedroomsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "bedsCount": "{count} beds",
+  "@bedsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "guestsCapacity": "{count} guests",
+  "@guestsCapacity": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "bathroomsCount": "{count} baths",
+  "@bathroomsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "beachDistance": "{distance}m to beach",
+  "@beachDistance": {
+    "placeholders": {
+      "distance": { "type": "int" }
+    }
+  },
+  "priceFrom": "From {price} / night",
+  "@priceFrom": {
+    "placeholders": {
+      "price": { "type": "String" }
+    }
+  },
+  "saturdayPrice": "Sat: {price}",
+  "@saturdayPrice": {
+    "placeholders": {
+      "price": { "type": "String" }
+    }
+  },
+  "contactForPrice": "Contact for pricing",
+  "badgeFeatured": "Featured",
+  "badgeNew": "New",
+  "badgeNearBeach": "Near Beach",
+  "badgeSaltwater": "Saltwater Pool",
+  "badgeGroup": "Large Group",
+  "ctaContactZalo": "Chat on Zalo",
+  "ctaCallHotline": "Call Hotline",
+  "ctaBookNow": "Inquire Booking",
+  "ctaViewDetail": "View Details",
+  "ctaCopyLink": "Copy Link",
+  "ctaCopied": "Link copied to clipboard",
+  "ctaRetry": "Retry",
+  "ctaResetFilter": "Reset Filters",
+  "loadingText": "Loading villas...",
+  "emptyList": "No villas match your search",
+  "emptyListDesc": "Try adjusting your filters or date selection.",
+  "errorOccurred": "Something went wrong",
+  "errorTryAgain": "Please check your network connection and try again.",
+  "dateBooked": "This date is booked",
+  "checkInDate": "Check-in",
+  "checkOutDate": "Check-out",
+  "guestCount": "Guests",
+  "priceBreakdown": "Nightly Price Breakdown",
+  "faqTitle": "Frequently Asked Questions",
+  "settingsLanguage": "Language",
+  "settingsEnvironment": "Environment",
+  "settingsVersion": "Version",
+  "favoritesEmpty": "No saved villas yet",
+  "favoritesEmptyDesc": "Tap the heart icon on any villa card to save it to your wishlist."
+}
