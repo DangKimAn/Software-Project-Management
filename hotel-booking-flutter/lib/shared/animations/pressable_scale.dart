@@ -52,25 +52,26 @@ class _PressableScaleState extends State<PressableScale>
   }
 
   void _onTapDown(TapDownDetails _) {
-    if (widget.onTap != null) {
+    if (widget.onTap != null && !MediaQuery.disableAnimationsOf(context)) {
       _controller.forward();
     }
   }
 
   void _onTapUp(TapUpDetails _) {
-    if (widget.onTap != null) {
+    if (widget.onTap != null && !MediaQuery.disableAnimationsOf(context)) {
       _controller.reverse();
     }
   }
 
   void _onTapCancel() {
-    if (widget.onTap != null) {
+    if (widget.onTap != null && !MediaQuery.disableAnimationsOf(context)) {
       _controller.reverse();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
     if (widget.onTap != null) {
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -78,15 +79,21 @@ class _PressableScaleState extends State<PressableScale>
         onTapUp: _onTapUp,
         onTapCancel: _onTapCancel,
         onTap: widget.onTap,
-        child: AnimatedBuilder(
-          animation: _scaleAnimation,
-          builder: (context, child) => Transform.scale(
-            scale: _scaleAnimation.value,
-            child: child,
-          ),
-          child: widget.child,
-        ),
+        child: disableAnimations
+            ? widget.child
+            : AnimatedBuilder(
+                animation: _scaleAnimation,
+                builder: (context, child) => Transform.scale(
+                  scale: _scaleAnimation.value,
+                  child: child,
+                ),
+                child: widget.child,
+              ),
       );
+    }
+
+    if (disableAnimations) {
+      return widget.child;
     }
 
     return Listener(

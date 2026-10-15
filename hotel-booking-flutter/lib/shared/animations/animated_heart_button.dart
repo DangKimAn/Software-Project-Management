@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../app/theme/app_colors.dart';
 
-/// Interactive heart button with an Airbnb/Instagram spring pop bounce animation.
+/// Interactive heart button with spring pop bounce animation.
+///
+/// Strictly follows Section 2 Icon Design Rules:
+/// - No circular or box background container around the icon.
+/// - Transparent 48x48 hit target.
+/// - Neutral monochrome stroke icon directly on the surface; active state is indicated by a subtle underline indicator bar.
 class AnimatedHeartButton extends StatefulWidget {
   final bool isFavorite;
   final VoidCallback? onToggle;
@@ -14,9 +19,9 @@ class AnimatedHeartButton extends StatefulWidget {
     super.key,
     required this.isFavorite,
     required this.onToggle,
-    this.size = 18,
-    this.activeColor = AppColors.primary,
-    this.inactiveColor = AppColors.textStrong,
+    this.size = 20,
+    this.activeColor = AppColors.iconStrong,
+    this.inactiveColor = AppColors.iconStrong,
   });
 
   @override
@@ -65,46 +70,65 @@ class _AnimatedHeartButtonState extends State<AnimatedHeartButton>
   void didUpdateWidget(covariant AnimatedHeartButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isFavorite != oldWidget.isFavorite && widget.isFavorite) {
-      _controller.forward(from: 0.0);
+      if (!MediaQuery.disableAnimationsOf(context)) {
+        _controller.forward(from: 0.0);
+      }
     }
   }
 
   void _handleTap() {
     if (widget.onToggle != null) {
-      _controller.forward(from: 0.0);
+      if (!MediaQuery.disableAnimationsOf(context)) {
+        _controller.forward(from: 0.0);
+      }
       widget.onToggle!();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          LucideIcons.heart,
+          key: ValueKey<bool>(widget.isFavorite),
+          size: widget.size,
+          color: AppColors.iconStrong,
+        ),
+        const SizedBox(height: 2),
+        AnimatedContainer(
+          duration: disableAnimations
+              ? Duration.zero
+              : const Duration(milliseconds: 160),
+          width: widget.isFavorite ? 14 : 0,
+          height: 2,
+          decoration: BoxDecoration(
+            color: AppColors.textStrong,
+            borderRadius: BorderRadius.circular(1),
+          ),
+        ),
+      ],
+    );
+
     return Semantics(
       button: true,
+      selected: widget.isFavorite,
       label: widget.isFavorite ? 'Bỏ lưu khỏi yêu thích' : 'Lưu vào yêu thích',
-      child: Material(
-        color: Colors.white.withValues(alpha: 0.92),
-        shape: const CircleBorder(),
-        child: InkWell(
-          onTap: _handleTap,
-          customBorder: const CircleBorder(),
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: ScaleTransition(
-              scale: _scaleAnimation,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                transitionBuilder: (child, anim) =>
-                    ScaleTransition(scale: anim, child: child),
-                child: Icon(
-                  widget.isFavorite ? LucideIcons.heart : LucideIcons.heart,
-                  key: ValueKey<bool>(widget.isFavorite),
-                  size: widget.size,
-                  color: widget.isFavorite
-                      ? widget.activeColor
-                      : widget.inactiveColor,
-                ),
-              ),
-            ),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _handleTap,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: disableAnimations
+                ? content
+                : ScaleTransition(
+                    scale: _scaleAnimation,
+                    child: content,
+                  ),
           ),
         ),
       ),

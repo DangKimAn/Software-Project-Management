@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_radii.dart';
 import '../../app/theme/app_typography.dart';
+import '../animations/source_animations.dart';
 import 'app_button.dart';
+
+export '../animations/source_animations.dart'
+    show AppModal, AppToast, AppToastType;
 
 class AppDialog extends StatelessWidget {
   final String title;
@@ -47,37 +51,39 @@ class AppDialog extends StatelessWidget {
     return Dialog(
       backgroundColor: AppColors.surfaceBase,
       shape: const RoundedRectangleBorder(borderRadius: AppRadii.roundedCard),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: AppTypography.sectionHeading),
-            const SizedBox(height: 12),
-            Text(message, style: AppTypography.bodyMedium),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                if (cancelText != null) ...[
+      child: CalFadeIn(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: AppTypography.sectionHeading),
+              const SizedBox(height: 12),
+              Text(message, style: AppTypography.bodyMedium),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  if (cancelText != null) ...[
+                    Expanded(
+                      child: AppButton.secondary(
+                        text: cancelText!,
+                        onPressed:
+                            onCancel ?? () => Navigator.of(context).pop(false),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
                   Expanded(
-                    child: AppButton.secondary(
-                      text: cancelText!,
-                      onPressed:
-                          onCancel ?? () => Navigator.of(context).pop(false),
+                    child: AppButton(
+                      text: confirmText,
+                      onPressed: onConfirm,
                     ),
                   ),
-                  const SizedBox(width: 12),
                 ],
-                Expanded(
-                  child: AppButton(
-                    text: confirmText,
-                    onPressed: onConfirm,
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
