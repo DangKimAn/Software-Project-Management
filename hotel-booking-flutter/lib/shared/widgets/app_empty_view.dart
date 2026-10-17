@@ -29,20 +29,10 @@ class AppEmptyView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceMuted,
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Icon(
-                  icon,
-                  size: 32,
-                  color: AppColors.textMuted,
-                ),
-              ),
+            Icon(
+              icon,
+              size: 32,
+              color: AppColors.iconMuted,
             ),
             const SizedBox(height: 16),
             Text(

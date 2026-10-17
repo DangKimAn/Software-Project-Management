@@ -72,8 +72,7 @@ class _TroThanhHostLandingScreenState
         leading: IconButton(
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           icon: const Icon(LucideIcons.arrowLeft, color: AppColors.textPrimary),
-          onPressed: () =>
-              context.canPop() ? context.pop() : context.go('/'),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/'),
           tooltip: 'Quay lại',
         ),
         title: const Text(
@@ -525,8 +524,7 @@ class _TroThanhHostLandingScreenState
           ),
           SizedBox(height: 12),
           _RequirementRow(
-            text:
-                'CCCD hoặc CMND: Bắt buộc ảnh mặt trước và mặt sau rõ nét.',
+            text: 'CCCD hoặc CMND: Bắt buộc ảnh mặt trước và mặt sau rõ nét.',
           ),
           SizedBox(height: 8),
           _RequirementRow(
@@ -850,9 +848,8 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
         leading: IconButton(
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           icon: const Icon(LucideIcons.arrowLeft, color: AppColors.textPrimary),
-          onPressed: () => context.canPop()
-              ? context.pop()
-              : context.go('/tro-thanh-host'),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/tro-thanh-host'),
           tooltip: 'Quay lại',
         ),
         title: const Text(
@@ -1468,9 +1465,8 @@ class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
         leading: IconButton(
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           icon: const Icon(LucideIcons.arrowLeft, color: AppColors.textPrimary),
-          onPressed: () => context.canPop()
-              ? context.pop()
-              : context.go('/tro-thanh-host'),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/tro-thanh-host'),
           tooltip: 'Quay lại',
         ),
         title: const Text(
@@ -1718,7 +1714,8 @@ class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          _buildDetailRow('Mã hồ sơ', record.id != null ? '#${record.id}' : 'Đang cập nhật'),
+          _buildDetailRow('Mã hồ sơ',
+              record.id != null ? '#${record.id}' : 'Đang cập nhật'),
           _buildDetailRow('Người liên hệ', record.contactName),
           _buildDetailRow('Email', record.contactEmail),
           _buildDetailRow('Số điện thoại', record.phone),

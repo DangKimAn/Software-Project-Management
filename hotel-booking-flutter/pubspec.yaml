@@ -22,6 +22,7 @@ dependencies:
 
   # Networking & HTTP Client
   dio: ^5.8.0+1
+  web_socket_channel: ^3.0.1
 
   # Security & Storage
   flutter_secure_storage: ^9.2.4
@@ -33,8 +34,14 @@ dependencies:
   # Icons (Lucide Icons compliant with Minh Thanh Villa Design System)
   lucide_icons_flutter: ^3.1.24
 
-  # Native Integrations (Zalo, Hotline, External Links)
+  # Native Integrations (Zalo, Hotline, External Links, Google Sign-In, Media & Charts)
   url_launcher: ^6.3.1
+  google_sign_in: ^6.2.2
+  image_picker: ^1.1.2
+  file_picker: ^8.1.7
+  fl_chart: ^0.70.2
+  http_parser: ^4.1.2
+  mime: ^2.0.0
 
   # Model & Serialization Annotations
   freezed_annotation: ^2.4.4
@@ -58,4 +65,128 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - assets/fonts/
     - config/
+
+  fonts:
+    - family: SF Pro Display
+      fonts:
+        - asset: assets/fonts/SF-Pro-Display-Ultralight.otf
+          weight: 100
+        - asset: assets/fonts/SF-Pro-Display-UltralightItalic.otf
+          weight: 100
+          style: italic
+        - asset: assets/fonts/SF-Pro-Display-Thin.otf
+          weight: 200
+        - asset: assets/fonts/SF-Pro-Display-ThinItalic.otf
+          weight: 200
+          style: italic
+        - asset: assets/fonts/SF-Pro-Display-Light.otf
+          weight: 300
+        - asset: assets/fonts/SF-Pro-Display-LightItalic.otf
+          weight: 300
+          style: italic
+        - asset: assets/fonts/SF-Pro-Display-Regular.otf
+          weight: 400
+        - asset: assets/fonts/SF-Pro-Display-RegularItalic.otf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/SF-Pro-Display-Medium.otf
+          weight: 500
+        - asset: assets/fonts/SF-Pro-Display-MediumItalic.otf
+          weight: 500
+          style: italic
+        - asset: assets/fonts/SF-Pro-Display-Semibold.otf
+          weight: 600
+        - asset: assets/fonts/SF-Pro-Display-SemiboldItalic.otf
+          weight: 600
+          style: italic
+        - asset: assets/fonts/SF-Pro-Display-Bold.otf
+          weight: 700
+        - asset: assets/fonts/SF-Pro-Display-BoldItalic.otf
+          weight: 700
+          style: italic
+        - asset: assets/fonts/SF-Pro-Display-Heavy.otf
+          weight: 800
+        - asset: assets/fonts/SF-Pro-Display-HeavyItalic.otf
+          weight: 800
+          style: italic
+        - asset: assets/fonts/SF-Pro-Display-Black.otf
+          weight: 900
+        - asset: assets/fonts/SF-Pro-Display-BlackItalic.otf
+          weight: 900
+          style: italic
+    - family: SF Pro Text
+      fonts:
+        - asset: assets/fonts/SF-Pro-Text-Ultralight.otf
+          weight: 100
+        - asset: assets/fonts/SF-Pro-Text-UltralightItalic.otf
+          weight: 100
+          style: italic
+        - asset: assets/fonts/SF-Pro-Text-Thin.otf
+          weight: 200
+        - asset: assets/fonts/SF-Pro-Text-ThinItalic.otf
+          weight: 200
+          style: italic
+        - asset: assets/fonts/SF-Pro-Text-Light.otf
+          weight: 300
+        - asset: assets/fonts/SF-Pro-Text-LightItalic.otf
+          weight: 300
+          style: italic
+        - asset: assets/fonts/SF-Pro-Text-Regular.otf
+          weight: 400
+        - asset: assets/fonts/SF-Pro-Text-RegularItalic.otf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/SF-Pro-Text-Medium.otf
+          weight: 500
+        - asset: assets/fonts/SF-Pro-Text-MediumItalic.otf
+          weight: 500
+          style: italic
+        - asset: assets/fonts/SF-Pro-Text-Semibold.otf
+          weight: 600
+        - asset: assets/fonts/SF-Pro-Text-SemiboldItalic.otf
+          weight: 600
+          style: italic
+        - asset: assets/fonts/SF-Pro-Text-Bold.otf
+          weight: 700
+        - asset: assets/fonts/SF-Pro-Text-BoldItalic.otf
+          weight: 700
+          style: italic
+        - asset: assets/fonts/SF-Pro-Text-Heavy.otf
+          weight: 800
+        - asset: assets/fonts/SF-Pro-Text-HeavyItalic.otf
+          weight: 800
+          style: italic
+        - asset: assets/fonts/SF-Pro-Text-Black.otf
+          weight: 900
+        - asset: assets/fonts/SF-Pro-Text-BlackItalic.otf
+          weight: 900
+          style: italic
+    - family: SF Pro Rounded
+      fonts:
+        - asset: assets/fonts/SF-Pro-Rounded-Ultralight.otf
+          weight: 100
+        - asset: assets/fonts/SF-Pro-Rounded-Thin.otf
+          weight: 200
+        - asset: assets/fonts/SF-Pro-Rounded-Light.otf
+          weight: 300
+        - asset: assets/fonts/SF-Pro-Rounded-Regular.otf
+          weight: 400
+        - asset: assets/fonts/SF-Pro-Rounded-Medium.otf
+          weight: 500
+        - asset: assets/fonts/SF-Pro-Rounded-Semibold.otf
+          weight: 600
+        - asset: assets/fonts/SF-Pro-Rounded-Bold.otf
+          weight: 700
+        - asset: assets/fonts/SF-Pro-Rounded-Heavy.otf
+          weight: 800
+        - asset: assets/fonts/SF-Pro-Rounded-Black.otf
+          weight: 900
+    - family: SF Pro
+      fonts:
+        - asset: assets/fonts/SF-Pro.ttf
+          weight: 400
+        - asset: assets/fonts/SF-Pro-Italic.ttf
+          weight: 400
+          style: italic

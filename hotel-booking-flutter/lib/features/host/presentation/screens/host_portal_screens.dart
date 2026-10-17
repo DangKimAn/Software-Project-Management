@@ -74,9 +74,8 @@ enum HostPortalSection {
 }
 
 String formatHostVnd(dynamic value) {
-  final numVal = value is num
-      ? value.toDouble()
-      : (double.tryParse('${value ?? 0}') ?? 0);
+  final numVal =
+      value is num ? value.toDouble() : (double.tryParse('${value ?? 0}') ?? 0);
   final formatter = NumberFormat.currency(
     locale: 'vi_VN',
     symbol: '₫',
@@ -421,8 +420,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     Map<String, dynamic> booking,
     String actionType,
   ) async {
-    final bookingId =
-        (booking['bookingId'] ?? booking['id'] ?? '').toString();
+    final bookingId = (booking['bookingId'] ?? booking['id'] ?? '').toString();
     if (bookingId.isEmpty) return;
 
     final repo = ref.read(hostRepositoryProvider);
@@ -573,7 +571,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     if (listingId == null || listingId.isEmpty) return;
     if (_selectedCalendarDates.isEmpty) {
       setState(() {
-        _calendarError = 'Vui lòng chọn ít nhất một ngày trên lịch để cập nhật.';
+        _calendarError =
+            'Vui lòng chọn ít nhất một ngày trên lịch để cập nhật.';
       });
       return;
     }
@@ -649,10 +648,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
         _conversations = list;
         _loadingConversations = false;
         if (_conversations.isNotEmpty && _selectedConversationId == null) {
-          _selectedConversationId =
-              (_conversations.first['conversationId'] ??
-                      _conversations.first['id'])
-                  ?.toString();
+          _selectedConversationId = (_conversations.first['conversationId'] ??
+                  _conversations.first['id'])
+              ?.toString();
         }
       });
       if (_selectedConversationId != null) {
@@ -1126,7 +1124,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               ? null
               : Drawer(
                   backgroundColor: AppColors.surfaceBase,
-                  child: SafeArea(child: _buildSidebarNavigation(inDrawer: true)),
+                  child:
+                      SafeArea(child: _buildSidebarNavigation(inDrawer: true)),
                 ),
           body: SafeArea(
             child: Column(
@@ -1296,12 +1295,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   // ===========================================================================
 
   Widget _buildOverviewSection() {
-    final publishedCount = _listings
-        .where((l) => l['status'] == 'published')
-        .length;
-    final pendingApprovalCount = _listings
-        .where((l) => l['status'] == 'pending_approval')
-        .length;
+    final publishedCount =
+        _listings.where((l) => l['status'] == 'published').length;
+    final pendingApprovalCount =
+        _listings.where((l) => l['status'] == 'pending_approval').length;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -1369,7 +1366,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             (
               label: 'Tổng chỗ nghỉ',
               value: '${_listings.length}',
-              sub: '$publishedCount đang hiển thị • $pendingApprovalCount chờ duyệt',
+              sub:
+                  '$publishedCount đang hiển thị • $pendingApprovalCount chờ duyệt',
             ),
             (
               label: 'Tổng đơn đặt phòng',
@@ -1379,7 +1377,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             (
               label: 'Doanh thu Host (30 ngày)',
               value: formatHostVnd(_revenueReport.hostRevenue),
-              sub: 'Doanh thu gộp: ${formatHostVnd(_revenueReport.grossRevenue)}',
+              sub:
+                  'Doanh thu gộp: ${formatHostVnd(_revenueReport.grossRevenue)}',
             ),
             (
               label: 'Tài khoản nhận tiền',
@@ -1436,9 +1435,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     ),
                   )
                 else
-                  ..._bookings
-                      .take(5)
-                      .map((b) => _buildBookingItemCard(b)),
+                  ..._bookings.take(5).map((b) => _buildBookingItemCard(b)),
               ],
             ),
           ),
@@ -1644,7 +1641,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         width: 88,
                         height: 68,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildNoImagePlaceholder(),
+                        errorBuilder: (_, __, ___) =>
+                            _buildNoImagePlaceholder(),
                       )
                     : _buildNoImagePlaceholder(),
               ),
@@ -1773,7 +1771,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   foregroundColor: const Color(0xFFBE123C),
                   side: const BorderSide(color: Color(0xFFFECDD3)),
                 ),
-                onPressed: isBusy ? null : () => _confirmAndDeleteListing(listing),
+                onPressed:
+                    isBusy ? null : () => _confirmAndDeleteListing(listing),
                 icon: const Icon(LucideIcons.trash2, size: 15),
                 label: const Text('Xóa'),
               ),
@@ -1884,7 +1883,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 key: Key('booking_filter_${tab.$1}'),
                 label: Text(tab.$2),
                 selected: _bookingStatusFilter == tab.$1,
-                onSelected: (_) => setState(() => _bookingStatusFilter = tab.$1),
+                onSelected: (_) =>
+                    setState(() => _bookingStatusFilter = tab.$1),
               );
             }).toList(),
           ),
@@ -1904,8 +1904,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   }
 
   Widget _buildBookingItemCard(Map<String, dynamic> booking) {
-    final bookingId =
-        (booking['bookingId'] ?? booking['id'] ?? '').toString();
+    final bookingId = (booking['bookingId'] ?? booking['id'] ?? '').toString();
     final guestName =
         (booking['guestName'] ?? booking['customerName'] ?? 'Khách #$bookingId')
             .toString();
@@ -1914,8 +1913,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     final listingTitle =
         (booking['listingTitle'] ?? 'Listing #${booking['listingId'] ?? ''}')
             .toString();
-    final checkIn =
-        (booking['checkInDate'] ?? '').toString().split('T').first;
+    final checkIn = (booking['checkInDate'] ?? '').toString().split('T').first;
     final checkOut =
         (booking['checkOutDate'] ?? '').toString().split('T').first;
     final guestsCount = booking['guestsCount'] ?? booking['guests'] ?? 1;
@@ -2089,8 +2087,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   dropdownKey: const Key('calendar_listing_dropdown'),
                   label: 'Chọn chỗ nghỉ',
                   value: _listings.any(
-                    (l) =>
-                        '${l['listingId'] ?? l['id']}' == _calendarListingId,
+                    (l) => '${l['listingId'] ?? l['id']}' == _calendarListingId,
                   )
                       ? _calendarListingId
                       : null,
@@ -2405,8 +2402,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     final query = _guestSearchQuery.trim().toLowerCase();
     final guests = guestMap.values.where((g) {
       if (query.isEmpty) return true;
-      final haystack =
-          '${g['name']} ${g['email']} ${g['phone']}'.toLowerCase();
+      final haystack = '${g['name']} ${g['email']} ${g['phone']}'.toLowerCase();
       return haystack.contains(query);
     }).toList();
 
@@ -2540,9 +2536,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               value: _selectedConversationId,
               items: _conversations.map((c) {
                 final id = '${c['conversationId'] ?? c['id']}';
-                final title =
-                    (c['guestName'] ?? c['title'] ?? 'Hội thoại #$id')
-                        .toString();
+                final title = (c['guestName'] ?? c['title'] ?? 'Hội thoại #$id')
+                    .toString();
                 return DropdownMenuItem<String>(
                   value: id,
                   child: Text(title, overflow: TextOverflow.ellipsis),
@@ -2762,9 +2757,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     final accName =
                         (acc['accountName'] ?? acc['accountHolderName'] ?? '')
                             .toString();
-                    final masked =
-                        (acc['accountNumberMasked'] ?? acc['accountNumber'] ?? '')
-                            .toString();
+                    final masked = (acc['accountNumberMasked'] ??
+                            acc['accountNumber'] ??
+                            '')
+                        .toString();
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
@@ -2959,10 +2955,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   (review['comment'] ?? 'Không có nội dung').toString();
               final createdAt =
                   (review['createdAt'] ?? '').toString().split('T').first;
-              final hostReply =
-                  (review['hostReply'] ?? review['reply'] ?? '')
-                      .toString()
-                      .trim();
+              final hostReply = (review['hostReply'] ?? review['reply'] ?? '')
+                  .toString()
+                  .trim();
 
               final replyCtrl = _reviewReplyControllers.putIfAbsent(
                 reviewId,
@@ -3501,7 +3496,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                             foregroundColor: Colors.white,
                             minimumSize: const Size(160, 48),
                           ),
-                          onPressed: _savingBank ? null : _handleSaveBankAccount,
+                          onPressed:
+                              _savingBank ? null : _handleSaveBankAccount,
                           icon: const Icon(LucideIcons.save, size: 16),
                           label: Text(
                             _savingBank ? 'Đang lưu...' : 'Lưu thông tin',

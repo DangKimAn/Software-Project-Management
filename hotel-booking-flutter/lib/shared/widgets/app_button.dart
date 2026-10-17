@@ -91,12 +91,9 @@ class AppButton extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: isDisabled ? null : onPressed,
-          splashColor: variant == AppButtonVariant.primary
-              ? AppColors.primaryPressed
-              : AppColors.brandSoft,
-          highlightColor: variant == AppButtonVariant.primary
-              ? AppColors.primaryPressed.withValues(alpha: 0.3)
-              : AppColors.brandSoft.withValues(alpha: 0.5),
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          hoverColor: Colors.transparent,
           child: Center(
             child: isLoading
                 ? SizedBox(
@@ -114,7 +111,7 @@ class AppButton extends StatelessWidget {
                     children: [
                       if (icon != null) ...[
                         IconTheme(
-                          data: IconThemeData(color: foregroundColor, size: 20),
+                          data: IconThemeData(color: foregroundColor, size: 18),
                           child: icon!,
                         ),
                         const SizedBox(width: 8),
@@ -147,7 +144,10 @@ class AppButton extends StatelessWidget {
   }
 }
 
-/// Circular or rounded Icon-only button with minimum 48x48 hit target for accessibility.
+/// Transparent-touch-target Icon-only button (minimum 48x48) strictly adhering to Section 2 Icon Rules:
+/// - No circular/box/rounded background container.
+/// - Neutral monochrome icon color directly on UI.
+/// - No background/color change on active, hover, or splash.
 class AppIconButton extends StatelessWidget {
   final Widget icon;
   final VoidCallback? onPressed;
@@ -172,25 +172,21 @@ class AppIconButton extends StatelessWidget {
       message: tooltip,
       child: Semantics(
         button: true,
+        enabled: onPressed != null,
         label: tooltip,
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: Material(
-            color: backgroundColor ?? Colors.transparent,
-            shape: const CircleBorder(),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onPressed,
-              splashColor: AppColors.brandSoft,
-              child: Center(
-                child: IconTheme(
-                  data: IconThemeData(
-                    color: iconColor ?? AppColors.textStrong,
-                    size: 20,
-                  ),
-                  child: icon,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onPressed,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Center(
+              child: IconTheme(
+                data: IconThemeData(
+                  color: iconColor ?? AppColors.iconStrong,
+                  size: 20,
                 ),
+                child: icon,
               ),
             ),
           ),

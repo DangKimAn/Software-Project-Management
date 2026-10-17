@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Hotel Booking</string>
+	<string>Minh Thanh Villa</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -47,6 +47,23 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>FlutterDeepLinkingEnabled</key>
+	<true/>
+
+	<!-- Custom URL Schemes for Deep Links, Payment Callbacks & Google OAuth -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.bronc3.hotel_booking_flutter.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>minhthanhvilla</string>
+			</array>
+		</dict>
+	</array>
 
 	<!-- Schemes for url_launcher to support Zalo, Hotline and External URLs -->
 	<key>LSApplicationQueriesSchemes</key>

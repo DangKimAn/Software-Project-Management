@@ -7,6 +7,10 @@ abstract class AuthRepository {
     required String password,
   });
 
+  Future<AuthSession> loginWithGoogle({
+    required String idToken,
+  });
+
   Future<AuthSession> register({
     required String email,
     required String password,
@@ -26,6 +30,23 @@ abstract class AuthRepository {
   });
 
   Future<User?> getCurrentUser();
+
+  Future<User> updateProfile({
+    String? fullName,
+    String? phone,
+    String? bio,
+    String? location,
+    String? job,
+    String? dreamDestination,
+    String? school,
+    List<String>? languages,
+    String? avatarUrl,
+  });
+
+  Future<User> updateAvatar({
+    required String url,
+    String? key,
+  });
 
   Future<void> logout();
 }

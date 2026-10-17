@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
-import '../../app/theme/app_radii.dart';
 import '../../app/theme/app_typography.dart';
 
 class AppTextField extends StatelessWidget {
@@ -44,9 +43,6 @@ class AppTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMulti = maxLines > 1;
-    final borderRadius = isMulti
-        ? const BorderRadius.all(Radius.circular(20))
-        : AppRadii.roundedPill;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -84,42 +80,37 @@ class AppTextField extends StatelessWidget {
                 AppTypography.bodyMuted.copyWith(color: AppColors.textTertiary),
             prefixIcon: prefixIcon != null
                 ? Padding(
-                    padding: const EdgeInsets.only(left: 16, right: 12),
+                    padding: const EdgeInsets.only(left: 8, right: 12),
                     child: prefixIcon,
                   )
                 : null,
             prefixIconConstraints:
-                const BoxConstraints(minWidth: 48, minHeight: 48),
+                const BoxConstraints(minWidth: 40, minHeight: 48),
             suffixIcon: suffixIcon != null
                 ? Padding(
-                    padding: const EdgeInsets.only(right: 12),
+                    padding: const EdgeInsets.only(right: 8),
                     child: suffixIcon,
                   )
                 : null,
             suffixIconConstraints:
-                const BoxConstraints(minWidth: 48, minHeight: 48),
+                const BoxConstraints(minWidth: 40, minHeight: 48),
             contentPadding: EdgeInsets.symmetric(
-              horizontal: 20,
+              horizontal: 4,
               vertical: isMulti ? 16 : 14,
             ),
             filled: true,
-            fillColor: AppColors.surfaceBase,
-            border: OutlineInputBorder(
-              borderRadius: borderRadius,
-              borderSide: const BorderSide(color: AppColors.borderStrong),
+            fillColor: Colors.white,
+            border: const UnderlineInputBorder(
+              borderSide: BorderSide(color: AppColors.divider),
             ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: borderRadius,
-              borderSide: const BorderSide(color: AppColors.borderStrong),
+            enabledBorder: const UnderlineInputBorder(
+              borderSide: BorderSide(color: AppColors.divider),
             ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: borderRadius,
-              borderSide:
-                  const BorderSide(color: AppColors.textStrong, width: 1.5),
+            focusedBorder: const UnderlineInputBorder(
+              borderSide: BorderSide(color: AppColors.textStrong, width: 1.5),
             ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: borderRadius,
-              borderSide: const BorderSide(color: AppColors.errorRed),
+            errorBorder: const UnderlineInputBorder(
+              borderSide: BorderSide(color: AppColors.errorRed),
             ),
           ),
         ),

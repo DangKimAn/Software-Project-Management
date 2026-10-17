@@ -11,6 +11,8 @@ abstract final class AppConstants {
   static const storageLocaleKey = 'app_user_locale';
   static const storageFavoritesKey = 'app_saved_favorites';
   static const storageAuthTokenKey = 'app_secure_auth_token';
+  static const storageRefreshCookieKey = 'app_secure_refresh_cookie';
+  static const storageRefreshTokenKey = 'app_secure_refresh_token';
 
   // Default Business Settings
   static const defaultTimeZone = 'Asia/Ho_Chi_Minh';

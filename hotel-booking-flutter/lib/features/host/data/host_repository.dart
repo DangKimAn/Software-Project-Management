@@ -361,8 +361,7 @@ class HostRepository {
     final copy = Map<String, dynamic>.from(input);
     copy['country'] = 'VN';
     copy['currency'] = 'VND';
-    copy['propertyType'] =
-        HostPropertyType.fromApi(copy['propertyType']).value;
+    copy['propertyType'] = HostPropertyType.fromApi(copy['propertyType']).value;
     copy['roomType'] = HostRoomType.fromApi(copy['roomType']).value;
     copy['cancellationPolicy'] =
         HostCancellationPolicy.fromApi(copy['cancellationPolicy']).value;
@@ -377,7 +376,8 @@ class HostRepository {
     }
 
     // Normalize status: only 'draft' or 'pending_approval' allowed on create
-    final rawStatus = (copy['status'] ?? 'draft').toString().trim().toLowerCase();
+    final rawStatus =
+        (copy['status'] ?? 'draft').toString().trim().toLowerCase();
     copy['status'] = (rawStatus == 'pending_approval' || rawStatus == 'pending')
         ? 'pending_approval'
         : 'draft';
@@ -621,11 +621,12 @@ class HostRepository {
   // ===========================================================================
 
   /// `GET /api/host/listings/:listingId/images/analysis`
-  Future<({
-    List<ExistingListingImage> images,
-    List<ImageTagTaxonomy> tagTaxonomies,
-    Map<String, dynamic> summary,
-  })> getListingImagesAnalysis(String listingId) async {
+  Future<
+      ({
+        List<ExistingListingImage> images,
+        List<ImageTagTaxonomy> tagTaxonomies,
+        Map<String, dynamic> summary,
+      })> getListingImagesAnalysis(String listingId) async {
     final response = await _client.dio.get<dynamic>(
       '/api/host/listings/$listingId/images/analysis',
     );
@@ -684,8 +685,12 @@ class HostRepository {
   }
 
   /// `POST /api/ai/listings/:listingId/analyze-images?force=true`
-  Future<({int analyzedCount, int failedCount, List<ExistingListingImage> images})>
-      analyzeAllListingImages(
+  Future<
+      ({
+        int analyzedCount,
+        int failedCount,
+        List<ExistingListingImage> images
+      })> analyzeAllListingImages(
     String listingId, {
     bool force = true,
     List<ImageTagTaxonomy> taxonomies = kDefaultImageTagTaxonomies,
@@ -719,11 +724,8 @@ class HostRepository {
     List<String> tags, {
     List<ImageTagTaxonomy> taxonomies = kDefaultImageTagTaxonomies,
   }) async {
-    final cleanTags = tags
-        .map((t) => t.trim())
-        .where((t) => t.isNotEmpty)
-        .toSet()
-        .toList();
+    final cleanTags =
+        tags.map((t) => t.trim()).where((t) => t.isNotEmpty).toSet().toList();
     final response = await _client.dio.patch<dynamic>(
       '/api/host/images/$imageId/tags',
       data: {'tags': cleanTags},
@@ -820,7 +822,8 @@ class HostRepository {
       ..sort();
 
     if (validDates.isEmpty) {
-      throw ArgumentError('Vui lòng chọn ít nhất một ngày hợp lệ (YYYY-MM-DD).');
+      throw ArgumentError(
+          'Vui lòng chọn ít nhất một ngày hợp lệ (YYYY-MM-DD).');
     }
 
     final payload = <String, dynamic>{
@@ -867,8 +870,8 @@ class HostRepository {
       priceOverride: first['priceOverride'] is num
           ? (first['priceOverride'] as num).toDouble()
           : (first['price'] is num ? (first['price'] as num).toDouble() : null),
-      includeNullPriceOverride: first.containsKey('priceOverride') &&
-          first['priceOverride'] == null,
+      includeNullPriceOverride:
+          first.containsKey('priceOverride') && first['priceOverride'] == null,
       minNightsOverride: first['minNightsOverride'] is num
           ? (first['minNightsOverride'] as num).toInt()
           : null,
@@ -1008,7 +1011,8 @@ class HostRepository {
 
   /// `GET /api/host/payout-accounts`
   Future<List<Map<String, dynamic>>> getPayoutAccounts() async {
-    final response = await _client.dio.get<dynamic>('/api/host/payout-accounts');
+    final response =
+        await _client.dio.get<dynamic>('/api/host/payout-accounts');
     return _extractList(
       response.data,
       const ['items', 'accounts', 'payoutAccounts', 'data'],
@@ -1102,7 +1106,8 @@ class HostRepository {
     String rangeKey = '30d',
     DateTime? now,
   }) async {
-    final toDate = (now ?? DateTime.now()).toUtc().add(const Duration(hours: 7));
+    final toDate =
+        (now ?? DateTime.now()).toUtc().add(const Duration(hours: 7));
     late final DateTime fromDate;
     late final String group;
 
@@ -1259,9 +1264,8 @@ class HostRepository {
       '/api/users/me',
       data: {
         'fullName': trimmedName,
-        'phone': (phone != null && phone.trim().isNotEmpty)
-            ? phone.trim()
-            : null,
+        'phone':
+            (phone != null && phone.trim().isNotEmpty) ? phone.trim() : null,
       },
     );
     final map = _unwrapMap(response.data);

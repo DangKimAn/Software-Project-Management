@@ -27,20 +27,10 @@ class AppErrorView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: const BoxDecoration(
-                color: AppColors.brandSoft,
-                shape: BoxShape.circle,
-              ),
-              child: const Center(
-                child: Icon(
-                  LucideIcons.circleAlert,
-                  size: 28,
-                  color: AppColors.primary,
-                ),
-              ),
+            const Icon(
+              LucideIcons.circleAlert,
+              size: 28,
+              color: AppColors.iconStrong,
             ),
             const SizedBox(height: 16),
             Text(

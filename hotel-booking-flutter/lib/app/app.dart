@@ -1,15 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../features/auth/presentation/view_models/auth_notifier.dart';
 import 'di/providers.dart';
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
 
-class MinhThanhVillaApp extends ConsumerWidget {
+class MinhThanhVillaApp extends ConsumerStatefulWidget {
   const MinhThanhVillaApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MinhThanhVillaApp> createState() => _MinhThanhVillaAppState();
+}
+
+class _MinhThanhVillaAppState extends ConsumerState<MinhThanhVillaApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(authNotifierProvider.notifier).onAppResumed();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(appRouterProvider);
     final currentLanguageCode = ref.watch(localeProvider);
 

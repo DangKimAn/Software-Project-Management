@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../app/theme/app_colors.dart';
-import '../../app/theme/app_radii.dart';
 
 class AppCard extends StatelessWidget {
   final Widget child;
@@ -27,10 +25,8 @@ class AppCard extends StatelessWidget {
     final cardContent = Container(
       padding: padding ?? const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: backgroundColor ?? AppColors.surfaceBase,
-        borderRadius: AppRadii.roundedCard,
-        border: border ?? Border.all(color: AppColors.borderSoft),
-        boxShadow: showShadow ? const [AppColors.shadowSoft] : null,
+        color: backgroundColor ?? Colors.transparent,
+        border: border,
       ),
       child: child,
     );
@@ -40,11 +36,9 @@ class AppCard extends StatelessWidget {
         margin: margin,
         child: Material(
           color: Colors.transparent,
-          borderRadius: AppRadii.roundedCard,
           child: InkWell(
             onTap: onTap,
-            borderRadius: AppRadii.roundedCard,
-            splashColor: AppColors.brandSoft.withValues(alpha: 0.5),
+            splashColor: Colors.transparent,
             child: cardContent,
           ),
         ),

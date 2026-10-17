@@ -225,8 +225,10 @@ class HostApplicationDocument {
   factory HostApplicationDocument.fromJson(Map<String, dynamic> json) {
     return HostApplicationDocument(
       documentType:
-          (json['documentType'] ?? json['document_type'] ?? 'identity').toString(),
-      fileUrl: (json['fileUrl'] ?? json['file_url'] ?? json['url'] ?? '').toString(),
+          (json['documentType'] ?? json['document_type'] ?? 'identity')
+              .toString(),
+      fileUrl:
+          (json['fileUrl'] ?? json['file_url'] ?? json['url'] ?? '').toString(),
       originalFilename:
           (json['originalFilename'] ?? json['original_filename'])?.toString(),
       mimeType: (json['mimeType'] ?? json['mime_type'])?.toString(),
@@ -305,12 +307,15 @@ class HostApplicationRecord {
       }
     }
 
-    final rawId = appMap['id'] ?? appMap['applicationId'] ?? appMap['verificationId'];
+    final rawId =
+        appMap['id'] ?? appMap['applicationId'] ?? appMap['verificationId'];
     return HostApplicationRecord(
       id: rawId is num ? rawId.toInt() : int.tryParse('${rawId ?? ''}'),
       status: HostApplicationStatus.fromApi(rawStatus),
-      contactName: (appMap['contactName'] ?? appMap['fullName'] ?? '').toString(),
-      contactEmail: (appMap['contactEmail'] ?? appMap['email'] ?? '').toString(),
+      contactName:
+          (appMap['contactName'] ?? appMap['fullName'] ?? '').toString(),
+      contactEmail:
+          (appMap['contactEmail'] ?? appMap['email'] ?? '').toString(),
       phone: (appMap['phone'] ?? appMap['contactPhone'] ?? '').toString(),
       profileType: HostProfileType.fromApi(
         (appMap['profileType'] ?? appMap['entityType'])?.toString(),
@@ -623,10 +628,12 @@ const List<VungTauWard> kVungTauWards = [
   VungTauWard(name: 'Phường 10', latitude: 10.3914, longitude: 107.1157),
   VungTauWard(name: 'Phường 11', latitude: 10.4046, longitude: 107.1292),
   VungTauWard(name: 'Phường 12', latitude: 10.4221, longitude: 107.1489),
-  VungTauWard(name: 'Phường Thắng Nhất', latitude: 10.3852, longitude: 107.0951),
+  VungTauWard(
+      name: 'Phường Thắng Nhất', latitude: 10.3852, longitude: 107.0951),
   VungTauWard(name: 'Phường Thắng Nhì', latitude: 10.3652, longitude: 107.0758),
   VungTauWard(name: 'Phường Thắng Tam', latitude: 10.3426, longitude: 107.0942),
-  VungTauWard(name: 'Phường Nguyễn An Ninh', latitude: 10.3712, longitude: 107.0994),
+  VungTauWard(
+      name: 'Phường Nguyễn An Ninh', latitude: 10.3712, longitude: 107.0994),
   VungTauWard(name: 'Phường Rạch Dừa', latitude: 10.3976, longitude: 107.1082),
   VungTauWard(name: 'Xã Long Sơn', latitude: 10.4495, longitude: 107.0226),
 ];
@@ -639,14 +646,54 @@ bool isWithinVungTauBounds(double latitude, double longitude) {
 }
 
 const List<String> kHalfHourTimeOptions = [
-  '00:00', '00:30', '01:00', '01:30', '02:00', '02:30',
-  '03:00', '03:30', '04:00', '04:30', '05:00', '05:30',
-  '06:00', '06:30', '07:00', '07:30', '08:00', '08:30',
-  '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
-  '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
-  '18:00', '18:30', '19:00', '19:30', '20:00', '20:30',
-  '21:00', '21:30', '22:00', '22:30', '23:00', '23:30',
+  '00:00',
+  '00:30',
+  '01:00',
+  '01:30',
+  '02:00',
+  '02:30',
+  '03:00',
+  '03:30',
+  '04:00',
+  '04:30',
+  '05:00',
+  '05:30',
+  '06:00',
+  '06:30',
+  '07:00',
+  '07:30',
+  '08:00',
+  '08:30',
+  '09:00',
+  '09:30',
+  '10:00',
+  '10:30',
+  '11:00',
+  '11:30',
+  '12:00',
+  '12:30',
+  '13:00',
+  '13:30',
+  '14:00',
+  '14:30',
+  '15:00',
+  '15:30',
+  '16:00',
+  '16:30',
+  '17:00',
+  '17:30',
+  '18:00',
+  '18:30',
+  '19:00',
+  '19:30',
+  '20:00',
+  '20:30',
+  '21:00',
+  '21:30',
+  '22:00',
+  '22:30',
+  '23:00',
+  '23:30',
 ];
 
 class HostListingUpsertDto {
@@ -850,7 +897,8 @@ class ImageTagTaxonomy {
   factory ImageTagTaxonomy.fromJson(Map<String, dynamic> json) {
     return ImageTagTaxonomy(
       code: (json['code'] ?? json['tag'] ?? '').toString(),
-      labelVi: (json['labelVi'] ?? json['label_vi'] ?? json['code'] ?? '').toString(),
+      labelVi: (json['labelVi'] ?? json['label_vi'] ?? json['code'] ?? '')
+          .toString(),
       category: (json['category'] ?? 'feature').toString(),
     );
   }
@@ -859,12 +907,14 @@ class ImageTagTaxonomy {
 /// The 22 canonical AI Vision taxonomy tags from `Source goc`.
 const List<ImageTagTaxonomy> kDefaultImageTagTaxonomies = [
   ImageTagTaxonomy(code: 'bedroom', labelVi: 'Phòng ngủ', category: 'room'),
-  ImageTagTaxonomy(code: 'double_bed', labelVi: 'Giường đôi', category: 'amenity'),
+  ImageTagTaxonomy(
+      code: 'double_bed', labelVi: 'Giường đôi', category: 'amenity'),
   ImageTagTaxonomy(code: 'pool', labelVi: 'Hồ bơi', category: 'feature'),
   ImageTagTaxonomy(code: 'garden', labelVi: 'Sân vườn', category: 'feature'),
   ImageTagTaxonomy(code: 'bbq', labelVi: 'Khu vực BBQ', category: 'feature'),
   ImageTagTaxonomy(code: 'kitchen', labelVi: 'Bếp', category: 'room'),
-  ImageTagTaxonomy(code: 'living_room', labelVi: 'Phòng khách', category: 'room'),
+  ImageTagTaxonomy(
+      code: 'living_room', labelVi: 'Phòng khách', category: 'room'),
   ImageTagTaxonomy(code: 'toilet', labelVi: 'Nhà vệ sinh', category: 'room'),
   ImageTagTaxonomy(code: 'bathtub', labelVi: 'Bồn tắm', category: 'amenity'),
   ImageTagTaxonomy(code: 'balcony', labelVi: 'Ban công', category: 'feature'),
@@ -872,14 +922,23 @@ const List<ImageTagTaxonomy> kDefaultImageTagTaxonomies = [
   ImageTagTaxonomy(code: 'karaoke', labelVi: 'Karaoke', category: 'feature'),
   ImageTagTaxonomy(code: 'billiards', labelVi: 'Bàn bida', category: 'feature'),
   ImageTagTaxonomy(code: 'front_view', labelVi: 'Mặt tiền', category: 'view'),
-  ImageTagTaxonomy(code: 'garage', labelVi: 'Chỗ đậu xe / Garage', category: 'feature'),
-  ImageTagTaxonomy(code: 'air_conditioner', labelVi: 'Máy lạnh', category: 'amenity'),
+  ImageTagTaxonomy(
+      code: 'garage', labelVi: 'Chỗ đậu xe / Garage', category: 'feature'),
+  ImageTagTaxonomy(
+      code: 'air_conditioner', labelVi: 'Máy lạnh', category: 'amenity'),
   ImageTagTaxonomy(code: 'sofa', labelVi: 'Ghế sofa', category: 'amenity'),
-  ImageTagTaxonomy(code: 'dining_table', labelVi: 'Bàn ăn', category: 'amenity'),
+  ImageTagTaxonomy(
+      code: 'dining_table', labelVi: 'Bàn ăn', category: 'amenity'),
   ImageTagTaxonomy(code: 'modern', labelVi: 'Hiện đại', category: 'style'),
   ImageTagTaxonomy(code: 'luxury', labelVi: 'Sang trọng', category: 'style'),
-  ImageTagTaxonomy(code: 'family_friendly', labelVi: 'Phù hợp gia đình', category: 'capacity'),
-  ImageTagTaxonomy(code: 'large_group_friendly', labelVi: 'Phù hợp đoàn đông', category: 'capacity'),
+  ImageTagTaxonomy(
+      code: 'family_friendly',
+      labelVi: 'Phù hợp gia đình',
+      category: 'capacity'),
+  ImageTagTaxonomy(
+      code: 'large_group_friendly',
+      labelVi: 'Phù hợp đoàn đông',
+      category: 'capacity'),
 ];
 
 class ListingImageAiTag {
@@ -950,7 +1009,8 @@ class ExistingListingImage {
   final bool isCover;
   final int sortOrder;
   final String? roomType;
-  final String aiAnalysisStatus; // 'pending' | 'analyzing' | 'analyzed' | 'failed'
+  final String
+      aiAnalysisStatus; // 'pending' | 'analyzing' | 'analyzed' | 'failed'
   final String? aiErrorMessage;
   final double? aiConfidence;
   final List<String> aiWarnings;
@@ -1009,8 +1069,9 @@ class ExistingListingImage {
     final rawSortOrder = json['sortOrder'] ?? json['sort_order'] ?? 0;
     final rawConfidence = json['aiConfidence'] ?? json['confidence'];
 
-    final statusRaw =
-        (json['aiAnalysisStatus'] ?? json['analysisStatus'] ?? '').toString().trim();
+    final statusRaw = (json['aiAnalysisStatus'] ?? json['analysisStatus'] ?? '')
+        .toString()
+        .trim();
     final effectiveStatus = statusRaw.isNotEmpty
         ? statusRaw
         : (parsedTags.isNotEmpty ? 'analyzed' : 'pending');
@@ -1095,8 +1156,7 @@ class BookingStatusActions {
     this.canCancel = false,
   });
 
-  bool get hasAnyAction =>
-      canConfirm || canCheckIn || canCheckOut || canCancel;
+  bool get hasAnyAction => canConfirm || canCheckIn || canCheckOut || canCancel;
 }
 
 class BookingDisplayStatus {
@@ -1211,13 +1271,15 @@ String? _normalizeKnownBookingCode(dynamic value) {
 }
 
 String _normalizeLegacyCancellation(Map<String, dynamic> booking) {
-  final reason = (booking['cancellationReason'] ?? booking['cancellation_reason'] ?? '')
-      .toString()
-      .trim()
-      .toUpperCase();
+  final reason =
+      (booking['cancellationReason'] ?? booking['cancellation_reason'] ?? '')
+          .toString()
+          .trim()
+          .toUpperCase();
   if (reason == 'ADMIN_CANCELLED') return 'cancelled_by_admin';
   if (reason == 'HOST_REJECTED') return 'rejected';
-  final cancelledBy = booking['cancelledByUserId'] ?? booking['cancelled_by_user_id'];
+  final cancelledBy =
+      booking['cancelledByUserId'] ?? booking['cancelled_by_user_id'];
   final hostId = booking['hostUserId'] ?? booking['host_user_id'];
   if (cancelledBy != null && hostId != null && '$cancelledBy' == '$hostId') {
     return 'cancelled_by_host';
@@ -1231,10 +1293,12 @@ String getBookingLifecycleStatus(Map<String, dynamic> booking) {
           booking['displayStatus'] as Map<Object?, Object?>,
         )
       : null;
-  final backendDisplayCode = _normalizeKnownBookingCode(displayMap?['normalizedStatus']) ??
-      _normalizeKnownBookingCode(displayMap?['code']);
+  final backendDisplayCode =
+      _normalizeKnownBookingCode(displayMap?['normalizedStatus']) ??
+          _normalizeKnownBookingCode(displayMap?['code']);
   final publicStatus = _normalizeKnownBookingCode(booking['status']);
-  final persistedStatus = _normalizeKnownBookingCode(booking['persistedStatus']);
+  final persistedStatus =
+      _normalizeKnownBookingCode(booking['persistedStatus']);
   final internalStatus = _normalizeKnownBookingCode(booking['internalStatus']);
 
   final rawStatus = (booking['internalStatus'] ??
@@ -1248,7 +1312,8 @@ String getBookingLifecycleStatus(Map<String, dynamic> booking) {
     return _normalizeLegacyCancellation(booking);
   }
 
-  if (backendDisplayCode != null && _terminalStatuses.contains(backendDisplayCode)) {
+  if (backendDisplayCode != null &&
+      _terminalStatuses.contains(backendDisplayCode)) {
     return backendDisplayCode;
   }
   if (publicStatus != null && _terminalStatuses.contains(publicStatus)) {
@@ -1278,10 +1343,8 @@ String _getEffectiveLifecycleStatus(
   DateTime now,
 ) {
   final lifecycle = getBookingLifecycleStatus(booking);
-  final reason = (booking['cancellationReason'] ?? '')
-      .toString()
-      .trim()
-      .toUpperCase();
+  final reason =
+      (booking['cancellationReason'] ?? '').toString().trim().toUpperCase();
 
   if (reason == 'PAYMENT_EXPIRED') return 'payment_expired';
 
@@ -1309,8 +1372,8 @@ BookingStatusActions getBookingStatusActions(
   if (!isStaff) {
     // Guests NEVER get host confirm/checkIn/checkOut actions!
     return BookingStatusActions(
-      canCancel: const {'pending_payment', 'paid', 'confirmed'}
-          .contains(lifecycle),
+      canCancel:
+          const {'pending_payment', 'paid', 'confirmed'}.contains(lifecycle),
     );
   }
 
@@ -1337,15 +1400,19 @@ BookingDisplayStatus getBookingDisplayStatus(
   final actions = getBookingStatusActions(booking, role: role, now: currentNow);
 
   String code = lifecycle;
-  final payoutStatus = (booking['payoutStatus'] ?? '').toString().trim().toLowerCase();
-  final refundStatus = (booking['refundStatus'] ?? '').toString().trim().toLowerCase();
-  final paymentStatus = (booking['paymentStatus'] ?? '').toString().trim().toLowerCase();
+  final payoutStatus =
+      (booking['payoutStatus'] ?? '').toString().trim().toLowerCase();
+  final refundStatus =
+      (booking['refundStatus'] ?? '').toString().trim().toLowerCase();
+  final paymentStatus =
+      (booking['paymentStatus'] ?? '').toString().trim().toLowerCase();
 
   if ((role == BookingActionRole.host || role == BookingActionRole.admin) &&
       (lifecycle == 'checked_out' || lifecycle == 'completed')) {
     if (payoutStatus == 'paid') {
       code = 'payout_paid';
-    } else if (const {'pending', 'approved', 'processing'}.contains(payoutStatus)) {
+    } else if (const {'pending', 'approved', 'processing'}
+        .contains(payoutStatus)) {
       code = 'payout_pending';
     }
   }
@@ -1646,7 +1713,8 @@ class HostRevenueSeriesPoint {
         v is num ? v.toInt() : (int.tryParse('${v ?? 0}') ?? 0);
 
     return HostRevenueSeriesPoint(
-      period: (json['period'] ?? json['date'] ?? json['month'] ?? '').toString(),
+      period:
+          (json['period'] ?? json['date'] ?? json['month'] ?? '').toString(),
       grossRevenue: toD(json['grossRevenue']),
       platformRevenue: toD(json['platformRevenue']),
       hostRevenue: toD(json['hostRevenue']),

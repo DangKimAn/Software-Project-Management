@@ -216,15 +216,14 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
 
       if (_isEditMode) {
         final detailFuture = repo.getHostListingById(_activeListingId!);
-        final analysisFuture = repo
-            .getListingImagesAnalysis(_activeListingId!)
-            .catchError(
-              (_) => (
-                images: <ExistingListingImage>[],
-                tagTaxonomies: kDefaultImageTagTaxonomies,
-                summary: const <String, dynamic>{},
-              ),
-            );
+        final analysisFuture =
+            repo.getListingImagesAnalysis(_activeListingId!).catchError(
+                  (_) => (
+                    images: <ExistingListingImage>[],
+                    tagTaxonomies: kDefaultImageTagTaxonomies,
+                    summary: const <String, dynamic>{},
+                  ),
+                );
 
         final results = await Future.wait<dynamic>([
           amenitiesFuture,
@@ -514,7 +513,8 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
 
   void _mergeExistingImage(ExistingListingImage updated) {
     setState(() {
-      final exists = _existingImages.any((img) => img.imageId == updated.imageId);
+      final exists =
+          _existingImages.any((img) => img.imageId == updated.imageId);
       if (!exists) {
         _existingImages = [..._existingImages, updated]
           ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
@@ -530,8 +530,12 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
     });
   }
 
-  Future<({int successCount, List<String> failures, List<String> analysisFailures})>
-      _uploadQueuedImagesForListing(
+  Future<
+      ({
+        int successCount,
+        List<String> failures,
+        List<String> analysisFailures
+      })> _uploadQueuedImagesForListing(
     String listingId,
     List<QueuedListingImage> imagesToProcess,
   ) async {
@@ -837,7 +841,8 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
   Future<void> _handleAnalyzeAllImagesWithAi() async {
     if (!_isEditMode) {
       setState(() {
-        _aiStatusMessage = 'Bạn cần lưu chỗ nghỉ trước khi phân tích ảnh bằng AI.';
+        _aiStatusMessage =
+            'Bạn cần lưu chỗ nghỉ trước khi phân tích ảnh bằng AI.';
       });
       return;
     }
@@ -929,11 +934,13 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
   // Form Validation & Submit (Create / Update + Amenities + Rules + R2 Upload)
   // ===========================================================================
 
-  HostListingUpsertDto? _buildValidatedDto({HostListingStatus? overrideStatus}) {
+  HostListingUpsertDto? _buildValidatedDto(
+      {HostListingStatus? overrideStatus}) {
     final lat = double.tryParse(_latController.text.trim());
     final lng = double.tryParse(_lngController.text.trim());
     if (lat == null || lng == null) {
-      setState(() => _errorMessage = 'Vui lòng nhập tọa độ vĩ độ/kinh độ hợp lệ.');
+      setState(
+          () => _errorMessage = 'Vui lòng nhập tọa độ vĩ độ/kinh độ hợp lệ.');
       return null;
     }
 
@@ -943,9 +950,8 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
     final bathrooms = double.tryParse(_bathroomsController.text.trim());
     final basePrice = double.tryParse(_basePriceController.text.trim());
     final weekendText = _weekendPriceController.text.trim();
-    final weekendPrice = weekendText.isEmpty
-        ? basePrice
-        : double.tryParse(weekendText);
+    final weekendPrice =
+        weekendText.isEmpty ? basePrice : double.tryParse(weekendText);
     final cleaningFee =
         double.tryParse(_cleaningFeeController.text.trim()) ?? 0;
     final surchargeAmount =
@@ -1058,16 +1064,14 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
       }
 
       // Sync rules (`PATCH /api/host/listings/:id/rules`)
-      await repo
-          .updateListingRules(listingId, {
-            'checkInFrom': _checkInFrom,
-            'checkOutBefore': _checkOutBefore,
-            'smokingAllowed': _smokingAllowed,
-            'petsAllowed': _petsAllowed,
-            'partyAllowed': _partyAllowed,
-            'quietHours': _quietHoursController.text.trim(),
-          })
-          .catchError((_) {});
+      await repo.updateListingRules(listingId, {
+        'checkInFrom': _checkInFrom,
+        'checkOutBefore': _checkOutBefore,
+        'smokingAllowed': _smokingAllowed,
+        'petsAllowed': _petsAllowed,
+        'partyAllowed': _partyAllowed,
+        'quietHours': _quietHoursController.text.trim(),
+      }).catchError((_) {});
 
       // Upload queued images to R2 & run AI analysis
       final uploadResult = pendingUploads.isNotEmpty
@@ -1274,7 +1278,9 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _isEditMode ? 'Sửa chỗ nghỉ #$_activeListingId' : 'Thêm chỗ nghỉ mới',
+              _isEditMode
+                  ? 'Sửa chỗ nghỉ #$_activeListingId'
+                  : 'Thêm chỗ nghỉ mới',
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
@@ -1967,9 +1973,8 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
     final isAnalyzing = _analyzingImageIds.contains(image.imageId);
     final isSavingTags = _savingTagImageIds.contains(image.imageId);
     final currentTagCodes = image.tags.map((t) => t.tag).toSet();
-    final availableTaxonomies = _tagTaxonomies
-        .where((t) => !currentTagCodes.contains(t.code))
-        .toList();
+    final availableTaxonomies =
+        _tagTaxonomies.where((t) => !currentTagCodes.contains(t.code)).toList();
 
     String statusLabel = 'Chưa phân tích';
     Color statusColor = AppColors.textSecondary;
@@ -2185,7 +2190,9 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                           ? null
                           : () => _handleAnalyzeSingleImage(image.imageId),
                       child: Text(
-                        statusLabel.contains('lỗi') ? 'Thử lại' : 'Phân tích AI',
+                        statusLabel.contains('lỗi')
+                            ? 'Thử lại'
+                            : 'Phân tích AI',
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),

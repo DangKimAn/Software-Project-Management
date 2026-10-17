@@ -126,8 +126,11 @@ void main() {
   // ===========================================================================
   // 1. FILE VALIDATION & HOST ONBOARDING DTO / MULTIPART FORMDATA TESTS
   // ===========================================================================
-  group('BUG-10: Host Onboarding DTO, File Validation & Multipart FormData', () {
-    test('validateKycPickedFile accepts JPG, PNG, WebP, PDF <= 5MB and rejects > 5MB or unsupported MIME', () {
+  group('BUG-10: Host Onboarding DTO, File Validation & Multipart FormData',
+      () {
+    test(
+        'validateKycPickedFile accepts JPG, PNG, WebP, PDF <= 5MB and rejects > 5MB or unsupported MIME',
+        () {
       final validJpg = createValidImageFile(
         name: 'cccd_front.jpg',
         mimeType: 'image/jpeg',
@@ -158,10 +161,15 @@ void main() {
       expect(validateKycPickedFile(invalidMime), contains('không hỗ trợ'));
     });
 
-    test('HostKycSubmissionDto enforces CCCD front+back, Passport single, and Business license rules', () {
-      final front = createValidImageFile(name: 'front.jpg', mimeType: 'image/jpeg');
-      final back = createValidImageFile(name: 'back.jpg', mimeType: 'image/jpeg');
-      final single = createValidImageFile(name: 'passport.jpg', mimeType: 'image/jpeg');
+    test(
+        'HostKycSubmissionDto enforces CCCD front+back, Passport single, and Business license rules',
+        () {
+      final front =
+          createValidImageFile(name: 'front.jpg', mimeType: 'image/jpeg');
+      final back =
+          createValidImageFile(name: 'back.jpg', mimeType: 'image/jpeg');
+      final single =
+          createValidImageFile(name: 'passport.jpg', mimeType: 'image/jpeg');
       final license = HostPickedFile(
         name: 'gpkd.pdf',
         mimeType: 'application/pdf',
@@ -239,7 +247,9 @@ void main() {
       );
     });
 
-    test('HostRepository calls GET /api/host/applications/me and POST /api/host/applications', () async {
+    test(
+        'HostRepository calls GET /api/host/applications/me and POST /api/host/applications',
+        () async {
       final apiAdapter = FakeRecordingHttpClientAdapter(
         responder: (options) {
           if (options.method == 'GET' &&
@@ -315,13 +325,16 @@ void main() {
   // 2. R2 PRESIGNED UPLOAD FLOW & AI VISION 22-TAG TAXONOMY TESTS
   // ===========================================================================
   group('R2 Presigned Upload & AI Vision 22-Tag Taxonomy', () {
-    test('uploadFileToR2 requests presigned URL and PUTs raw bytes WITHOUT Authorization Bearer header', () async {
+    test(
+        'uploadFileToR2 requests presigned URL and PUTs raw bytes WITHOUT Authorization Bearer header',
+        () async {
       final apiAdapter = FakeRecordingHttpClientAdapter(
         responder: (options) {
           if (options.method == 'POST' &&
               options.path == '/api/uploads/presign') {
             return jsonResponse({
-              'uploadUrl': 'https://r2.cloudflarestorage.com/bucket/listings/img1.png?sig=abc',
+              'uploadUrl':
+                  'https://r2.cloudflarestorage.com/bucket/listings/img1.png?sig=abc',
               'publicUrl': 'https://pub-r2.example.com/listings/img1.png',
               'key': 'listings/img1.png',
               'expiresIn': 300,
@@ -338,7 +351,8 @@ void main() {
       );
 
       final apiClient = DioClient();
-      apiClient.dio.options.headers['Authorization'] = 'Bearer secret-api-jwt-token';
+      apiClient.dio.options.headers['Authorization'] =
+          'Bearer secret-api-jwt-token';
       apiClient.dio.httpClientAdapter = apiAdapter;
 
       final cleanR2Dio = Dio();
@@ -389,7 +403,11 @@ void main() {
             return jsonResponse({
               'listingId': 99,
               'tagTaxonomies': kDefaultImageTagTaxonomies
-                  .map((t) => {'code': t.code, 'labelVi': t.labelVi, 'category': t.category})
+                  .map((t) => {
+                        'code': t.code,
+                        'labelVi': t.labelVi,
+                        'category': t.category
+                      })
                   .toList(),
               'images': [
                 {
@@ -444,8 +462,11 @@ void main() {
   // ===========================================================================
   // 3. BUG-11 & BUG-12: HOST LISTING CRUD, ENUMS, AMENITIES & RULES
   // ===========================================================================
-  group('BUG-11 & BUG-12: Host Listing CRUD, Status Enums, Amenities & Rules', () {
-    test('Listing CRUD uses /api/host/listings/mine, PATCH for updates/rules, PUT for amenities', () async {
+  group('BUG-11 & BUG-12: Host Listing CRUD, Status Enums, Amenities & Rules',
+      () {
+    test(
+        'Listing CRUD uses /api/host/listings/mine, PATCH for updates/rules, PUT for amenities',
+        () async {
       final apiAdapter = FakeRecordingHttpClientAdapter(
         responder: (options) {
           if (options.method == 'GET' &&
@@ -464,7 +485,8 @@ void main() {
               ],
             });
           }
-          if (options.method == 'POST' && options.path == '/api/host/listings') {
+          if (options.method == 'POST' &&
+              options.path == '/api/host/listings') {
             return jsonResponse({
               'listingId': 11,
               ...Map<String, dynamic>.from(options.data as Map),
@@ -533,7 +555,11 @@ void main() {
         (r) => r.path == '/api/host/listings/11/amenities',
       );
       expect(amenityReq.method, 'PUT');
-      expect(amenityReq.data, equals({'amenityIds': [1, 3, 5]}));
+      expect(
+          amenityReq.data,
+          equals({
+            'amenityIds': [1, 3, 5]
+          }));
 
       await repo.updateListingRules('11', {
         'checkInFrom': '14:00',
@@ -554,7 +580,9 @@ void main() {
   // ===========================================================================
   // 4. BUG-13 & BUG-38: CALENDAR, BOOKINGS, PAYOUTS, REPORTS, BANKS & REVIEWS
   // ===========================================================================
-  group('BUG-13 & BUG-38: Calendar, Bookings, Role Guard, Payouts, Reports, Banks & Reviews', () {
+  group(
+      'BUG-13 & BUG-38: Calendar, Bookings, Role Guard, Payouts, Reports, Banks & Reviews',
+      () {
     test('Calendar GET & PATCH /api/host/listings/:id/calendar/bulk', () async {
       final apiAdapter = FakeRecordingHttpClientAdapter(
         responder: (options) {
@@ -609,9 +637,11 @@ void main() {
       expect(bulkReq.data['isBlockedByHost'], isTrue);
     });
 
-    test('Host Bookings confirm/check-in/check-out/cancel & Guest role guard', () async {
+    test('Host Bookings confirm/check-in/check-out/cancel & Guest role guard',
+        () async {
       final apiAdapter = FakeRecordingHttpClientAdapter(
-        responder: (options) => jsonResponse({'bookingId': 77, 'status': 'confirmed'}),
+        responder: (options) =>
+            jsonResponse({'bookingId': 77, 'status': 'confirmed'}),
       );
       final client = DioClient()..dio.httpClientAdapter = apiAdapter;
       final repo = HostRepository(client);
@@ -684,7 +714,8 @@ void main() {
       expect(apiAdapter.requests.last.path, '/api/host/bookings/77/check-out');
     });
 
-    test('Payouts, Revenue Report, Vietnam Banks (items key), and Review Reply', () async {
+    test('Payouts, Revenue Report, Vietnam Banks (items key), and Review Reply',
+        () async {
       final apiAdapter = FakeRecordingHttpClientAdapter(
         responder: (options) {
           if (options.path == '/api/banks/vn') {
@@ -816,7 +847,9 @@ void main() {
       fakePicker = FakeTestFilePickerService();
     });
 
-    testWidgets('DangKyHostScreen & TrangThaiHostScreen render cleanly at 320px width', (tester) async {
+    testWidgets(
+        'DangKyHostScreen & TrangThaiHostScreen render cleanly at 320px width',
+        (tester) async {
       await tester.binding.setSurfaceSize(const Size(320, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -841,7 +874,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('HostPortalScreen & ThemChoNghiScreen render cleanly at 360px mobile width without overflow', (tester) async {
+    testWidgets(
+        'HostPortalScreen & ThemChoNghiScreen render cleanly at 360px mobile width without overflow',
+        (tester) async {
       await tester.binding.setSurfaceSize(const Size(360, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 

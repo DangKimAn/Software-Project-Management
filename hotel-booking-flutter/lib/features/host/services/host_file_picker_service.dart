@@ -207,7 +207,8 @@ if (\$dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(const <String>[]),
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(const <String>[]),
               child: const Text('Hủy'),
             ),
             ElevatedButton(
@@ -251,7 +252,8 @@ if (\$dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       paths = await _promptFilePathDialog(
         context,
         title: title,
-        hint: 'Chọn tệp thật từ thiết bị (JPG, PNG, WebP hoặc PDF, tối đa 5MB).',
+        hint:
+            'Chọn tệp thật từ thiết bị (JPG, PNG, WebP hoặc PDF, tối đa 5MB).',
         allowMultiple: false,
       );
     }

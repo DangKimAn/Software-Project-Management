@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/date/booking_date.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/network/socket_service.dart';
 import '../../core/security/secure_storage_service.dart';
 import '../../core/storage/preferences_service.dart';
 import '../../features/auth/presentation/view_models/auth_notifier.dart';
@@ -19,7 +20,18 @@ final secureStorageProvider = Provider<SecureStorageService>((ref) {
 
 final dioClientProvider = Provider<DioClient>((ref) {
   final secureStorage = ref.watch(secureStorageProvider);
-  return DioClient(secureStorage: secureStorage);
+  final client = DioClient(secureStorage: secureStorage);
+  ref.onDispose(() {
+    client.abortSession(clearStorage: false);
+  });
+  return client;
+});
+
+final socketServiceProvider = Provider<SocketService>((ref) {
+  final secureStorage = ref.watch(secureStorageProvider);
+  final service = SocketService(secureStorage: secureStorage);
+  ref.onDispose(service.dispose);
+  return service;
 });
 
 /// Overridden in bootstrap when initialized
@@ -56,7 +68,13 @@ final localeProvider = StateNotifierProvider<LocaleNotifier, String>((ref) {
 
 final wishlistRepositoryProvider = Provider<WishlistRepository>((ref) {
   final client = ref.watch(dioClientProvider);
-  return WishlistRepositoryImpl(client);
+  PreferencesService? prefs;
+  try {
+    prefs = ref.watch(preferencesServiceProvider);
+  } catch (_) {
+    prefs = null;
+  }
+  return WishlistRepositoryImpl(client, prefs: prefs);
 });
 
 /// Wishlist / Favorites Notifier
@@ -118,32 +136,250 @@ final favoritesProvider =
   return FavoritesNotifier(prefs, wishlistRepo, authUser != null);
 });
 
+/// Recently Viewed Notifier (max 8 items, synced to PreferencesService)
+class RecentlyViewedNotifier extends StateNotifier<List<RecentlyViewedItem>> {
+  final PreferencesService _prefs;
+
+  RecentlyViewedNotifier(this._prefs) : super(_prefs.getRecentlyViewed());
+
+  Future<void> recordVilla(Villa villa) async {
+    final item = RecentlyViewedItem(
+      id: villa.id,
+      title: villa.name,
+      location: villa.address,
+      pricePerNight: villa.basePriceVnd ?? 0,
+      rating: villa.rating,
+      reviewCount: villa.reviewCount,
+      imageUrl: villa.imageUrls.isNotEmpty ? villa.imageUrls.first : '',
+      bedrooms: villa.specs.bedrooms,
+      maxGuests: villa.specs.maxGuests,
+      viewedAtIso: DateTime.now().toIso8601String(),
+    );
+    await _prefs.addRecentlyViewed(item);
+    state = _prefs.getRecentlyViewed();
+  }
+
+  Future<void> clear() async {
+    await _prefs.clearRecentlyViewed();
+    state = const [];
+  }
+}
+
+final recentlyViewedProvider =
+    StateNotifierProvider<RecentlyViewedNotifier, List<RecentlyViewedItem>>(
+        (ref) {
+  final prefs = ref.watch(preferencesServiceProvider);
+  return RecentlyViewedNotifier(prefs);
+});
+
+/// Search History Notifier (max 8 items)
+class SearchHistoryNotifier extends StateNotifier<List<String>> {
+  final PreferencesService _prefs;
+
+  SearchHistoryNotifier(this._prefs) : super(_prefs.getSearchHistory());
+
+  Future<void> addTerm(String term) async {
+    await _prefs.addSearchHistory(term);
+    state = _prefs.getSearchHistory();
+  }
+
+  Future<void> removeTerm(String term) async {
+    await _prefs.removeSearchHistory(term);
+    state = _prefs.getSearchHistory();
+  }
+
+  Future<void> clear() async {
+    await _prefs.clearSearchHistory();
+    state = const [];
+  }
+}
+
+final searchHistoryProvider =
+    StateNotifierProvider<SearchHistoryNotifier, List<String>>((ref) {
+  final prefs = ref.watch(preferencesServiceProvider);
+  return SearchHistoryNotifier(prefs);
+});
+
+/// Booking Queue (Giỏ chờ đặt — MultiBooking) Notifier (max 5 items)
+class BookingQueueNotifier extends StateNotifier<List<BookingQueueItem>> {
+  final PreferencesService _prefs;
+
+  BookingQueueNotifier(this._prefs) : super(_prefs.getBookingQueue());
+
+  Future<String> addItem(BookingQueueItem item) async {
+    final status = await _prefs.addToBookingQueue(item);
+    state = _prefs.getBookingQueue();
+    return status; // 'added' | 'exists' | 'full'
+  }
+
+  Future<void> updateItem(BookingQueueItem item) async {
+    await _prefs.updateBookingQueueItem(item);
+    state = _prefs.getBookingQueue();
+  }
+
+  Future<void> removeItem(String listingId) async {
+    await _prefs.removeFromBookingQueue(listingId);
+    state = _prefs.getBookingQueue();
+  }
+
+  Future<void> clear() async {
+    await _prefs.clearBookingQueue();
+    state = const [];
+  }
+}
+
+final bookingQueueProvider =
+    StateNotifierProvider<BookingQueueNotifier, List<BookingQueueItem>>((ref) {
+  final prefs = ref.watch(preferencesServiceProvider);
+  return BookingQueueNotifier(prefs);
+});
+
 // --- Villa Feature ViewModels ---
 
 class VillaFilterState {
   final String searchQuery;
+  final String? locationGroup;
+  final double? lat;
+  final double? lng;
+  final int? radius;
+  final String
+      propertyType; // 'all' | 'villa' | 'apartment' | 'house' | 'resort' | 'homestay'
+  final int? priceMin;
+  final int? priceMax;
   final int? minGuests;
+  final int adults;
+  final int children;
+  final int infants;
+  final int pets;
+  final int? bedrooms;
+  final int? beds;
+  final int? bathrooms;
+  final List<String> amenities;
   final BookingDate? checkIn;
   final BookingDate? checkOut;
+  final String sort; // 'newest' | 'price_asc' | 'price_desc' | 'rating_desc'
+  final int page;
+  final int limit;
+  final String dateMode; // 'dates' | 'months' | 'flexible'
+  final List<int> selectedMonths;
+  final String flexDuration; // 'weekend' | 'week' | 'month'
+  final int exactnessDays; // 0 | 1 | 2 | 3 | 7 | 14
 
   const VillaFilterState({
     this.searchQuery = '',
+    this.locationGroup,
+    this.lat,
+    this.lng,
+    this.radius,
+    this.propertyType = 'all',
+    this.priceMin,
+    this.priceMax,
     this.minGuests,
+    this.adults = 0,
+    this.children = 0,
+    this.infants = 0,
+    this.pets = 0,
+    this.bedrooms,
+    this.beds,
+    this.bathrooms,
+    this.amenities = const [],
     this.checkIn,
     this.checkOut,
+    this.sort = 'newest',
+    this.page = 1,
+    this.limit = 12,
+    this.dateMode = 'dates',
+    this.selectedMonths = const [],
+    this.flexDuration = 'weekend',
+    this.exactnessDays = 0,
   });
+
+  int get effectiveGuests {
+    final fromCounters = adults + children;
+    if (fromCounters > 0) return fromCounters;
+    return minGuests ?? 0;
+  }
+
+  int get activeFilterCount {
+    int count = 0;
+    if (propertyType != 'all' && propertyType.isNotEmpty) count++;
+    if (priceMin != null && priceMin! > 500000) count++;
+    if (priceMax != null && priceMax! < 20000000) count++;
+    if (bedrooms != null && bedrooms! > 0) count++;
+    if (beds != null && beds! > 0) count++;
+    if (bathrooms != null && bathrooms! > 0) count++;
+    count += amenities.length;
+    if (sort != 'newest') count++;
+    return count;
+  }
 
   VillaFilterState copyWith({
     String? searchQuery,
+    String? locationGroup,
+    bool clearLocationGroup = false,
+    double? lat,
+    double? lng,
+    int? radius,
+    bool clearGeo = false,
+    String? propertyType,
+    int? priceMin,
+    int? priceMax,
+    bool clearPrice = false,
     int? minGuests,
+    int? adults,
+    int? children,
+    int? infants,
+    int? pets,
+    int? bedrooms,
+    int? beds,
+    int? bathrooms,
+    List<String>? amenities,
     BookingDate? checkIn,
     BookingDate? checkOut,
+    bool clearDates = false,
+    String? sort,
+    int? page,
+    int? limit,
+    String? dateMode,
+    List<int>? selectedMonths,
+    String? flexDuration,
+    int? exactnessDays,
   }) {
+    final nextAdults = adults ?? this.adults;
+    final nextChildren = children ?? this.children;
+    final nextMinGuests = minGuests ??
+        ((adults != null || children != null)
+            ? (nextAdults + nextChildren > 0 ? nextAdults + nextChildren : null)
+            : this.minGuests);
+
     return VillaFilterState(
       searchQuery: searchQuery ?? this.searchQuery,
-      minGuests: minGuests ?? this.minGuests,
-      checkIn: checkIn ?? this.checkIn,
-      checkOut: checkOut ?? this.checkOut,
+      locationGroup:
+          clearLocationGroup ? null : (locationGroup ?? this.locationGroup),
+      lat: clearGeo ? null : (lat ?? this.lat),
+      lng: clearGeo ? null : (lng ?? this.lng),
+      radius: clearGeo ? null : (radius ?? this.radius),
+      propertyType: propertyType ?? this.propertyType,
+      priceMin: clearPrice ? null : (priceMin ?? this.priceMin),
+      priceMax: clearPrice ? null : (priceMax ?? this.priceMax),
+      minGuests: nextMinGuests,
+      adults: nextAdults,
+      children: nextChildren,
+      infants: infants ?? this.infants,
+      pets: pets ?? this.pets,
+      bedrooms: bedrooms ?? this.bedrooms,
+      beds: beds ?? this.beds,
+      bathrooms: bathrooms ?? this.bathrooms,
+      amenities: amenities ?? this.amenities,
+      checkIn: clearDates ? null : (checkIn ?? this.checkIn),
+      checkOut: clearDates ? null : (checkOut ?? this.checkOut),
+      sort: sort ?? this.sort,
+      page: page ?? this.page,
+      limit: limit ?? this.limit,
+      dateMode: dateMode ?? this.dateMode,
+      selectedMonths: selectedMonths ?? this.selectedMonths,
+      flexDuration: flexDuration ?? this.flexDuration,
+      exactnessDays: exactnessDays ?? this.exactnessDays,
     );
   }
 }
@@ -153,16 +389,57 @@ final villaFilterProvider = StateProvider<VillaFilterState>((ref) {
 });
 
 /// Loads villas live from Backend API.
-/// If server is unreachable or offline, returns AppFailure cleanly caught by UI state.
 final villaListProvider = FutureProvider.autoDispose<List<Villa>>((ref) async {
   final repository = ref.watch(villaRepositoryProvider);
   final filter = ref.watch(villaFilterProvider);
 
   return repository.getVillas(
     searchQuery: filter.searchQuery,
-    minGuests: filter.minGuests,
+    locationGroup: filter.locationGroup,
+    lat: filter.lat,
+    lng: filter.lng,
+    radius: filter.radius,
+    propertyType: filter.propertyType,
+    priceMin: filter.priceMin,
+    priceMax: filter.priceMax,
+    minGuests: filter.effectiveGuests > 0 ? filter.effectiveGuests : null,
+    bedrooms: filter.bedrooms,
+    beds: filter.beds,
+    bathrooms: filter.bathrooms,
+    amenities: filter.amenities,
     checkIn: filter.checkIn,
     checkOut: filter.checkOut,
+    sort: filter.sort,
+    page: filter.page,
+    limit: filter.limit,
+  );
+});
+
+/// Loads paginated villas with pagination metadata.
+final villaPaginatedProvider =
+    FutureProvider.autoDispose<PaginatedResult<Villa>>((ref) async {
+  final repository = ref.watch(villaRepositoryProvider);
+  final filter = ref.watch(villaFilterProvider);
+
+  return repository.getVillasPaginated(
+    searchQuery: filter.searchQuery,
+    locationGroup: filter.locationGroup,
+    lat: filter.lat,
+    lng: filter.lng,
+    radius: filter.radius,
+    propertyType: filter.propertyType,
+    priceMin: filter.priceMin,
+    priceMax: filter.priceMax,
+    minGuests: filter.effectiveGuests > 0 ? filter.effectiveGuests : null,
+    bedrooms: filter.bedrooms,
+    beds: filter.beds,
+    bathrooms: filter.bathrooms,
+    amenities: filter.amenities,
+    checkIn: filter.checkIn,
+    checkOut: filter.checkOut,
+    sort: filter.sort,
+    page: filter.page,
+    limit: filter.limit,
   );
 });
 
@@ -171,6 +448,13 @@ final villaDetailProvider =
     FutureProvider.autoDispose.family<Villa?, String>((ref, id) async {
   final repository = ref.watch(villaRepositoryProvider);
   return repository.getVillaById(id);
+});
+
+/// Loads nearby/similar recommendations for a villa.
+final villaRecommendationsProvider =
+    FutureProvider.autoDispose.family<List<Villa>, String>((ref, id) async {
+  final repository = ref.watch(villaRepositoryProvider);
+  return repository.getRecommendations(id, limit: 4);
 });
 
 /// Loads real nightly pricing from Backend API for selected date range.
