@@ -9,12 +9,20 @@ import '../../../villas/domain/entities/villa.dart';
 
 class BookingActionBar extends StatelessWidget {
   final Villa villa;
+  final int? totalCalculatedVnd;
+  final int? selectedNights;
+  final VoidCallback? onBookNow;
+  final VoidCallback? onAddToQueue;
   final VoidCallback? onInquireZalo;
   final VoidCallback? onCallHotline;
 
   const BookingActionBar({
     super.key,
     required this.villa,
+    this.totalCalculatedVnd,
+    this.selectedNights,
+    this.onBookNow,
+    this.onAddToQueue,
     this.onInquireZalo,
     this.onCallHotline,
   });
@@ -23,15 +31,8 @@ class BookingActionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: AppColors.surfaceBase,
-        border: Border(top: BorderSide(color: AppColors.borderSoft)),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 10,
-            offset: Offset(0, -3),
-          ),
-        ],
+        color: Colors.white,
+        border: Border(top: BorderSide(color: AppColors.divider)),
       ),
       child: SafeArea(
         top: false,
@@ -47,42 +48,67 @@ class BookingActionBar extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     PriceDisplay(
-                      basePriceVnd: villa.basePriceVnd,
+                      basePriceVnd: totalCalculatedVnd ?? villa.basePriceVnd,
+                      showPerNightUnit: totalCalculatedVnd == null,
                       priceStyle: AppTypography.cardTitle.copyWith(
                         color: AppColors.primary,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     Text(
-                      'Tư vấn trực tiếp 24/7',
+                      selectedNights != null && selectedNights! > 0
+                          ? 'Tổng $selectedNights đêm • Đã gồm phí'
+                          : (villa.instantBook
+                              ? 'Đặt phòng xác nhận ngay'
+                              : 'Tư vấn & Đặt phòng 24/7'),
                       style: AppTypography.caption
                           .copyWith(color: AppColors.textMuted),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
 
-              // Action buttons on right
-              // Hotline icon button
+              // Add to Queue (MultiBooking) button
+              if (onAddToQueue != null)
+                AppIconButton(
+                  icon: const Icon(LucideIcons.shoppingBag, size: 18),
+                  iconColor: AppColors.iconStrong,
+                  tooltip: 'Thêm vào giỏ chờ đặt',
+                  onPressed: onAddToQueue,
+                ),
+
+              // Hotline icon button (monochrome, no background circle)
               AppIconButton(
                 icon: const Icon(LucideIcons.phone, size: 18),
-                backgroundColor: AppColors.surfaceMuted,
-                iconColor: AppColors.textStrong,
+                iconColor: AppColors.iconStrong,
                 tooltip: 'Gọi hotline tư vấn',
                 onPressed: onCallHotline ?? () => ContactService.callHotline(),
               ),
 
               const SizedBox(width: 8),
 
-              // Zalo primary CTA button
+              // Primary CTA button: Book Now (if provided) or Zalo Inquiry
               Expanded(
                 flex: 5,
                 child: AppButton(
-                  text: 'Tư vấn Zalo',
-                  icon: const Icon(LucideIcons.messageCircle, size: 18),
-                  onPressed: onInquireZalo ??
+                  text: onBookNow != null
+                      ? (villa.instantBook
+                          ? 'Đặt phòng ngay'
+                          : 'Gửi yêu cầu đặt')
+                      : 'Tư vấn Zalo',
+                  icon: Icon(
+                    onBookNow != null
+                        ? LucideIcons.calendarCheck
+                        : LucideIcons.messageCircle,
+                    size: 18,
+                    color: Colors.white,
+                  ),
+                  onPressed: onBookNow ??
+                      onInquireZalo ??
                       () {
                         final msg = ContactService.buildZaloInquiryMessage(
                           villaName: villa.name,

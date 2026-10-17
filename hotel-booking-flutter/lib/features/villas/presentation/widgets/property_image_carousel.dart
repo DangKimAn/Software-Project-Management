@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radii.dart';
+import '../../../../shared/widgets/app_image.dart';
 
 class PropertyImageCarousel extends StatefulWidget {
   final List<String> imageUrls;
@@ -38,9 +38,7 @@ class _PropertyImageCarouselState extends State<PropertyImageCarousel> {
   Widget build(BuildContext context) {
     final images = widget.imageUrls.isNotEmpty
         ? widget.imageUrls
-        : const [
-            'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=800'
-          ];
+        : const ['assets/images/NDT05929-HDR1.jpg'];
 
     return ClipRRect(
       borderRadius: widget.borderRadius,
@@ -56,40 +54,11 @@ class _PropertyImageCarouselState extends State<PropertyImageCarousel> {
               },
               itemBuilder: (context, index) {
                 final url = images[index];
-                return Image.network(
-                  url,
+                return AppImage(
+                  url: url,
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return Container(
-                      color: AppColors.surfaceMuted,
-                      child: const Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                AppColors.primary),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: AppColors.surfaceMuted,
-                      child: const Center(
-                        child: Icon(
-                          Icons.image_not_supported_outlined,
-                          size: 32,
-                          color: AppColors.textTertiary,
-                        ),
-                      ),
-                    );
-                  },
                 );
               },
             ),

@@ -23,21 +23,31 @@ class PropertySpecsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = <Widget>[
-      _buildSpecItem(LucideIcons.bed, '${specs.bedrooms} phòng'),
-      _buildSpecItem(LucideIcons.bedDouble, '${specs.beds} giường'),
-      _buildSpecItem(LucideIcons.users, '${specs.maxGuests} khách'),
-      _buildSpecItem(LucideIcons.bath, '${specs.bathrooms} WC'),
+      if (specs.bedrooms > 0)
+        _buildSpecItem(LucideIcons.bed, '${specs.bedrooms} phòng'),
+      if (specs.beds > 0)
+        _buildSpecItem(LucideIcons.bedDouble, '${specs.beds} giường'),
+      if (specs.maxGuests > 0)
+        _buildSpecItem(LucideIcons.users, '${specs.maxGuests} khách'),
+      if (specs.bathrooms > 0)
+        _buildSpecItem(LucideIcons.bath, '${specs.bathrooms} WC'),
       if (showBeachDistance &&
           specs.beachDistanceMeters != null &&
           specs.beachDistanceMeters! > 0)
         _buildSpecItem(
-            LucideIcons.mapPin, '${specs.beachDistanceMeters}m tới biển'),
+          LucideIcons.mapPin,
+          '${specs.beachDistanceMeters}m tới biển',
+        ),
     ];
+
+    if (items.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     // Uses Wrap to prevent RenderFlex overflow on small screens and large text scaling
     return Wrap(
-      spacing: 12.0,
-      runSpacing: 6.0,
+      spacing: 14.0,
+      runSpacing: 8.0,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: items,
     );
@@ -47,12 +57,12 @@ class PropertySpecsRow extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 15, color: AppColors.textMuted),
-        const SizedBox(width: 4),
+        Icon(icon, size: 14, color: AppColors.iconMuted),
+        const SizedBox(width: 6),
         Text(
           text,
           style: AppTypography.caption.copyWith(
-            color: AppColors.textMuted,
+            color: const Color(0xFF4B5563),
             fontWeight: FontWeight.w500,
           ),
         ),

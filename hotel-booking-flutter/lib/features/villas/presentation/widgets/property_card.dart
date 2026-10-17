@@ -32,124 +32,150 @@ class PropertyCard extends StatelessWidget {
     return PressableScale(
       onTap: onTap,
       scaleDown: 0.98,
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surfaceBase,
-          borderRadius: AppRadii.roundedCard,
-          border: Border.all(color: AppColors.borderSoft),
-          boxShadow: const [AppColors.shadowSoft],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Image Carousel with Badges & Favorite Button
-            Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Image Carousel with Favorite Button
+          Stack(
+            children: [
+              Hero(
+                tag: 'villa_image_${villa.id}',
+                child: PropertyImageCarousel(
+                  imageUrls: villa.imageUrls,
+                  aspectRatio: 4 / 3,
+                  borderRadius: BorderRadius.circular(AppRadii.card),
+                ),
+              ),
+
+              // Top Right: Favorite heart button with pop animation
+              Positioned(
+                top: 10,
+                right: 10,
+                child: AnimatedHeartButton(
+                  isFavorite: isFavorite,
+                  onToggle: onFavoriteToggle,
+                ),
+              ),
+            ],
+          ),
+
+          // Card Body Details (`StayCard.tsx` - Flat Minimal UI)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Hero(
-                  tag: 'villa_image_${villa.id}',
-                  child: PropertyImageCarousel(
-                    imageUrls: villa.imageUrls,
-                    aspectRatio: 4 / 3,
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(AppRadii.card),
-                    ),
-                  ),
-                ),
-
-                // Top Left: At most 1 primary badge (priority order)
-                if (primaryBadge != null)
-                  Positioned(
-                    top: 12,
-                    left: 12,
-                    child: VillaBadge(badgeType: primaryBadge),
-                  ),
-
-                // Top Right: Favorite heart button with pop animation
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: AnimatedHeartButton(
-                    isFavorite: isFavorite,
-                    onToggle: onFavoriteToggle,
-                  ),
-                ),
-              ],
-            ),
-
-            // Card Body Details
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Title and Rating Row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          villa.name,
-                          style: AppTypography.cardTitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
+                if (primaryBadge != null) ...[
+                  VillaBadge(badgeType: primaryBadge),
+                  const SizedBox(height: 4),
+                ],
+                // Title + Address on left, Orange Star + Rating on right (no badge/frame)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(
-                            LucideIcons.star,
-                            size: 15,
-                            color: AppColors.starAmber,
-                          ),
-                          const SizedBox(width: 4),
                           Text(
-                            villa.rating.toStringAsFixed(1),
-                            style: AppTypography.caption.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textStrong,
-                            ),
+                            villa.name,
+                            style: AppTypography.cardTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(
+                                LucideIcons.mapPin,
+                                size: 13,
+                                color: AppColors.iconMuted,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  villa.address.isNotEmpty
+                                      ? villa.address
+                                      : villa.tagline,
+                                  style: AppTypography.caption.copyWith(
+                                    color: const Color(0xFF6B7280),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  // Tagline / Address preview
-                  Text(
-                    villa.tagline,
-                    style: AppTypography.caption.copyWith(
-                      color: AppColors.textMuted,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    const SizedBox(width: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          LucideIcons.star,
+                          size: 14,
+                          color: AppColors.iconStrong,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          villa.rating.toStringAsFixed(1),
+                          style: AppTypography.caption.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 8),
+
+                // Description / Tagline preview
+                Text(
+                  villa.tagline.isNotEmpty ? villa.tagline : villa.description,
+                  style: AppTypography.caption.copyWith(
+                    color: const Color(0xFF4B5563),
+                    height: 1.45,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
 
-                  const SizedBox(height: 12),
+                const SizedBox(height: 12),
 
-                  // Specifications Row in strict business order
-                  PropertySpecsRow(specs: villa.specs),
+                // Specifications Row in strict business order
+                PropertySpecsRow(specs: villa.specs),
 
-                  const SizedBox(height: 14),
+                const SizedBox(height: 12),
 
-                  const Divider(color: AppColors.borderSoft, height: 1),
-
-                  const SizedBox(height: 12),
-
-                  // Price Display
-                  PriceDisplay(
-                    basePriceVnd: villa.basePriceVnd,
-                    saturdayPriceVnd: villa.saturdayPriceVnd,
-                  ),
-                ],
-              ),
+                // Price Display + "Còn trống" text (no pill/frame)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: PriceDisplay(
+                        basePriceVnd: villa.basePriceVnd,
+                        saturdayPriceVnd: villa.saturdayPriceVnd,
+                      ),
+                    ),
+                    const Text(
+                      'Còn trống',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0891B2),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

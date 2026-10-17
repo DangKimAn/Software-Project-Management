@@ -34,51 +34,43 @@ class PropertyFaqSection extends StatelessWidget {
           style: AppTypography.sectionHeading.copyWith(fontSize: 18),
         ),
         const SizedBox(height: 12),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.surfaceBase,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.borderSoft),
-          ),
-          child: Column(
-            children: _faqs.asMap().entries.map((entry) {
-              final idx = entry.key;
-              final faq = entry.value;
-              final isLast = idx == _faqs.length - 1;
+        Column(
+          children: _faqs.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final faq = entry.value;
+            final isLast = idx == _faqs.length - 1;
 
-              return Column(
-                children: [
-                  Theme(
-                    data: Theme.of(context)
-                        .copyWith(dividerColor: Colors.transparent),
-                    child: ExpansionTile(
-                      tilePadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 4),
-                      title: Text(
-                        faq.$1,
-                        style: AppTypography.bodyLarge.copyWith(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
+            return Column(
+              children: [
+                Theme(
+                  data: Theme.of(context)
+                      .copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: const EdgeInsets.symmetric(vertical: 4),
+                    title: Text(
+                      faq.$1,
+                      style: AppTypography.bodyLarge.copyWith(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
                       ),
-                      iconColor: AppColors.primary,
-                      collapsedIconColor: AppColors.textMuted,
-                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      children: [
-                        Text(
-                          faq.$2,
-                          style: AppTypography.bodyMedium
-                              .copyWith(color: AppColors.textMuted),
-                        ),
-                      ],
                     ),
+                    iconColor: AppColors.iconStrong,
+                    collapsedIconColor: AppColors.iconMuted,
+                    childrenPadding: const EdgeInsets.only(bottom: 16),
+                    children: [
+                      Text(
+                        faq.$2,
+                        style: AppTypography.bodyMedium
+                            .copyWith(color: AppColors.textMuted),
+                      ),
+                    ],
                   ),
-                  if (!isLast)
-                    const Divider(color: AppColors.borderSoft, height: 1),
-                ],
-              );
-            }).toList(),
-          ),
+                ),
+                if (!isLast)
+                  const Divider(color: AppColors.borderSoft, height: 1),
+              ],
+            );
+          }).toList(),
         ),
       ],
     );

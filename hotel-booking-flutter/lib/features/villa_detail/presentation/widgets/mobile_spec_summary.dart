@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../villas/domain/entities/villa_specs.dart';
 
@@ -23,31 +22,28 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
   @override
   Widget build(BuildContext context) {
     final specs = widget.specs;
+    final coreItems = <Widget>[
+      if (specs.maxGuests > 0)
+        _buildCoreItem(
+            LucideIcons.users, '${specs.maxGuests} khách', 'Sức chứa'),
+      if (specs.bedrooms > 0)
+        _buildCoreItem(LucideIcons.bed, '${specs.bedrooms} phòng', 'Phòng ngủ'),
+      if (specs.beds > 0)
+        _buildCoreItem(LucideIcons.bedDouble, '${specs.beds} giường', 'Giường'),
+      if (specs.bathrooms > 0)
+        _buildCoreItem(LucideIcons.bath, '${specs.bathrooms} WC', 'Phòng tắm'),
+    ];
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
-        borderRadius: AppRadii.roundedCard,
-        border: Border.all(color: AppColors.borderSoft),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row of 4 Core Specs: Sức chứa → Phòng ngủ → Giường → WC
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildCoreItem(
-                  LucideIcons.users, '${specs.maxGuests} khách', 'Sức chứa'),
-              _buildCoreItem(
-                  LucideIcons.bed, '${specs.bedrooms} phòng', 'Phòng ngủ'),
-              _buildCoreItem(
-                  LucideIcons.bedDouble, '${specs.beds} giường', 'Giường'),
-              _buildCoreItem(
-                  LucideIcons.bath, '${specs.bathrooms} WC', 'Phòng tắm'),
-            ],
-          ),
+          if (coreItems.isNotEmpty)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: coreItems,
+            ),
 
           // Expandable Supporting Specs
           AnimatedSize(
@@ -103,7 +99,8 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                           Expanded(
                             child: _buildSupportingItem(
                               LucideIcons.mapPin,
-                              specs.beachDistanceMeters != null
+                              specs.beachDistanceMeters != null &&
+                                      specs.beachDistanceMeters! > 0
                                   ? '${specs.beachDistanceMeters}m ra bãi tắm'
                                   : 'Gần trung tâm',
                             ),
@@ -124,30 +121,33 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                 setState(() => _isExpanded = !_isExpanded);
               },
               borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _isExpanded
-                          ? 'Thu gọn thông số'
-                          : 'Xem thêm thông số chi tiết',
-                      style: AppTypography.caption.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w600,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _isExpanded
+                            ? 'Thu gọn thông số'
+                            : 'Xem thêm thông số chi tiết',
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    Icon(
-                      _isExpanded
-                          ? LucideIcons.chevronUp
-                          : LucideIcons.chevronDown,
-                      size: 16,
-                      color: AppColors.primary,
-                    ),
-                  ],
+                      const SizedBox(width: 4),
+                      Icon(
+                        _isExpanded
+                            ? LucideIcons.chevronUp
+                            : LucideIcons.chevronDown,
+                        size: 16,
+                        color: AppColors.iconStrong,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -161,7 +161,7 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 22, color: AppColors.textStrong),
+        Icon(icon, size: 22, color: AppColors.iconStrong),
         const SizedBox(height: 4),
         Text(
           value,
@@ -185,7 +185,7 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: AppColors.primary),
+        Icon(icon, size: 16, color: AppColors.iconStrong),
         const SizedBox(width: 6),
         Flexible(
           child: Text(

@@ -52,84 +52,69 @@ class DailyPriceBreakdown extends StatelessWidget {
         ),
         const SizedBox(height: 8),
 
-        // Constrained scrolling container
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.surfaceMuted,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.borderSoft),
-          ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: maxHeight),
-            child: ListView.separated(
-              primary: false,
-              shrinkWrap: true,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              itemCount: nightlyPrices.length,
-              separatorBuilder: (_, __) => const Divider(
-                color: AppColors.borderSoft,
-                height: 1,
-              ),
-              itemBuilder: (context, index) {
-                final item = nightlyPrices[index];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
+        // Constrained scrolling list (Flat Minimal - no outer box)
+        ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: ListView.separated(
+            primary: false,
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            itemCount: nightlyPrices.length,
+            separatorBuilder: (_, __) => const Divider(
+              color: AppColors.borderSoft,
+              height: 1,
+            ),
+            itemBuilder: (context, index) {
+              final item = nightlyPrices[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          item.date.toDisplayString(format: 'dd/MM (EEE)'),
+                          style: AppTypography.bodyMedium.copyWith(
+                            fontWeight: item.isWeekend
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                            color: item.isWeekend
+                                ? AppColors.primary
+                                : AppColors.textStrong,
+                          ),
+                        ),
+                        if (item.note != null) ...[
+                          const SizedBox(width: 6),
                           Text(
-                            item.date.toDisplayString(format: 'dd/MM (EEE)'),
-                            style: AppTypography.bodyMedium.copyWith(
-                              fontWeight: item.isWeekend
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                              color: item.isWeekend
-                                  ? AppColors.primary
-                                  : AppColors.textStrong,
+                            item.note!,
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.primary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                          if (item.note != null) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.brandSoft,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                item.note!,
-                                style: AppTypography.caption.copyWith(
-                                  color: AppColors.primary,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
                         ],
+                      ],
+                    ),
+                    Text(
+                      item.isAvailable
+                          ? CurrencyFormatter.formatVnd(item.priceVnd)
+                          : 'Đã kín phòng',
+                      style: AppTypography.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: item.isAvailable
+                            ? AppColors.textStrong
+                            : AppColors.errorRed,
+                        decoration: item.isAvailable
+                            ? null
+                            : TextDecoration.lineThrough,
                       ),
-                      Text(
-                        item.isAvailable
-                            ? CurrencyFormatter.formatVnd(item.priceVnd)
-                            : 'Đã kín phòng',
-                        style: AppTypography.bodyMedium.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: item.isAvailable
-                              ? AppColors.textStrong
-                              : AppColors.errorRed,
-                          decoration: item.isAvailable
-                              ? null
-                              : TextDecoration.lineThrough,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         ),
       ],

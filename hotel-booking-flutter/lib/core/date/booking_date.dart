@@ -51,15 +51,28 @@ class BookingDate implements Comparable<BookingDate> {
     }
   }
 
+  /// Alias for [tryParse] used across calendar pickers.
+  static BookingDate? tryParseIso(String? isoDate) => tryParse(isoDate);
+
   /// Returns today's date in local time.
   factory BookingDate.today() {
     return BookingDate.fromDateTime(DateTime.now());
+  }
+
+  /// Returns today's date in Vietnam timezone (`Asia/Ho_Chi_Minh`, UTC+7),
+  /// matching `getTodayVN()` in `Source goc/frontend/src/views/components/search/searchState.ts`.
+  factory BookingDate.todayVn() {
+    final vnNow = DateTime.now().toUtc().add(const Duration(hours: 7));
+    return BookingDate(year: vnNow.year, month: vnNow.month, day: vnNow.day);
   }
 
   /// Converts to an internal UTC DateTime for date-only calendar arithmetic.
   DateTime toDateTime() {
     return DateTime.utc(year, month, day);
   }
+
+  /// Alias for `toDateTime()` returning UTC DateTime.
+  DateTime toDateTimeUtc() => toDateTime();
 
   /// Serializes into the standard API date format `YYYY-MM-DD`.
   String toIsoDate() {
@@ -74,13 +87,17 @@ class BookingDate implements Comparable<BookingDate> {
     return DateFormat(format).format(dt);
   }
 
+  /// Short Vietnamese display helper (`dd/MM/yyyy`).
+  String toDisplayVi() => toDisplayString();
+
   /// Adds a number of days to this date.
   BookingDate addDays(int days) {
     final dt = toDateTime().add(Duration(days: days));
     return BookingDate(year: dt.year, month: dt.month, day: dt.day);
   }
 
-  /// Difference in nights between this date and another date.
+  /// Difference in nights between this date and another date (`other - this`).
+  /// Positive when `other` is after `this` (e.g. `checkIn.differenceInNights(checkOut)`).
   int differenceInNights(BookingDate other) {
     final d1 = toDateTime();
     final d2 = other.toDateTime();
@@ -91,6 +108,12 @@ class BookingDate implements Comparable<BookingDate> {
   bool isAfter(BookingDate other) => compareTo(other) > 0;
   bool isAtSameMomentAs(BookingDate other) => compareTo(other) == 0;
   bool get isSaturday => toDateTime().weekday == DateTime.saturday;
+
+  /// Whether this date falls on a weekend (Saturday or Sunday) per `booking-pricing.service.ts`.
+  bool get isWeekend {
+    final wd = toDateTime().weekday;
+    return wd == DateTime.saturday || wd == DateTime.sunday;
+  }
 
   @override
   int compareTo(BookingDate other) {
@@ -153,5 +176,69 @@ class BookingDate implements Comparable<BookingDate> {
       }
     }
     return true;
+  }
+}
+
+/// Pure business logic helper for date mode conversions (`dates` | `months` | `flexible`)
+/// matching `DatePickerPanel.tsx` and `searchState.ts` so `checkIn` and `checkOut` are always
+/// valid, conflict-free ISO dates.
+class SearchDateModeHelper {
+  SearchDateModeHelper._();
+
+  static ({
+    BookingDate checkIn,
+    BookingDate checkOut,
+    List<int> months
+  }) computeForMonths(List<int> selectedMonths, {BookingDate? referenceToday}) {
+    final today = referenceToday ?? BookingDate.todayVn();
+    final effectiveMonths =
+        selectedMonths.isEmpty ? <int>[today.month] : [...selectedMonths]
+          ..sort();
+    final firstMonth = effectiveMonths.first;
+    final lastMonth = effectiveMonths.last;
+
+    final startYear = firstMonth < today.month ? today.year + 1 : today.year;
+    var checkIn = BookingDate(year: startYear, month: firstMonth, day: 1);
+    if (checkIn.isBefore(today)) {
+      checkIn = today;
+    }
+
+    final endYear = lastMonth < firstMonth ? startYear + 1 : startYear;
+    final firstOfNextMonth = DateTime.utc(endYear, lastMonth + 1, 1);
+    var checkOut = BookingDate(
+      year: firstOfNextMonth.year,
+      month: firstOfNextMonth.month,
+      day: firstOfNextMonth.day,
+    );
+    if (!checkOut.isAfter(checkIn)) {
+      checkOut = checkIn.addDays(1);
+    }
+
+    return (
+      checkIn: checkIn,
+      checkOut: checkOut,
+      months: effectiveMonths,
+    );
+  }
+
+  static ({BookingDate checkIn, BookingDate checkOut}) computeForFlexible(
+    String flexDuration, {
+    BookingDate? referenceToday,
+  }) {
+    final today = referenceToday ?? BookingDate.todayVn();
+    switch (flexDuration) {
+      case 'week':
+        final checkIn = today.addDays(1);
+        return (checkIn: checkIn, checkOut: checkIn.addDays(7));
+      case 'month':
+        final checkIn = today.addDays(1);
+        return (checkIn: checkIn, checkOut: checkIn.addDays(30));
+      case 'weekend':
+      default:
+        final weekday = today.toDateTime().weekday;
+        final daysUntilSaturday = (DateTime.saturday - weekday + 7) % 7;
+        final checkIn = today.addDays(daysUntilSaturday);
+        return (checkIn: checkIn, checkOut: checkIn.addDays(2));
+    }
   }
 }

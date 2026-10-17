@@ -5,5 +5,12 @@ abstract class ReviewRepository {
     String listingId, {
     int? page,
     int? limit,
+    int? rating,
+  });
+
+  Future<ReviewItem> createReview({
+    required String bookingId,
+    required int rating,
+    required String comment,
   });
 }
