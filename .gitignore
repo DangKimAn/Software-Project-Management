@@ -19,9 +19,22 @@ $RECYCLE.BIN/
 *.ipr
 *.iws
 
-# Strict protection: Reference source code (DO NOT COMMIT)
+# Strict protection: Reference source code & archives (DO NOT COMMIT)
 Source goc/
 "Source goc/"
+Source goc.zip
+"Source goc.zip"
+*.zip
+*.rar
+*.7z
+*.tar.gz
+
+# Internal AI audit & fix reports
+docs/ai-fix/
+**/docs/ai-fix/
+*.md
+!README.md
+!**/README.md
 
 # Node.js (Source goc/backend, Source goc/frontend)
 **/node_modules/
@@ -35,6 +48,7 @@ Source goc/
 
 # Environment and sensitive config files
 **/.env
+**/.env.*
 **/.env.local
 **/.env.development.local
 **/.env.test.local
@@ -46,23 +60,47 @@ Source goc/
 **/.dart_tool/
 **/.flutter-plugins
 **/.flutter-plugins-dependencies
+**/.packages
 **/.pub-cache/
 **/.pub/
 **/coverage/
+**/doc/api/
+app.*.symbols
+app.*.map.txt
 
 # Android build artifacts & keystores
 **/.gradle/
+**/android/.gradle/
+**/android/.cxx/
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/**/gradle-wrapper.jar
+**/android/**/GeneratedPluginRegistrant.java
 **/local.properties
 *.jks
 *.keystore
-key.properties
+**/key.properties
 *.apk
 *.aab
+*.ap_
 
-# iOS ephemeral and pods
+# iOS / macOS / Linux / Windows ephemeral and pods
 **/ios/Flutter/ephemeral/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Runner/GeneratedPluginRegistrant.*
+**/ios/.symlinks/
 **/Pods/
 **/DerivedData/
-
-# Windows / Desktop ephemeral
+**/macos/Flutter/ephemeral/
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/linux/flutter/ephemeral/
+**/linux/flutter/generated_plugin_registrant.cc
+**/linux/flutter/generated_plugins.cmake
 **/windows/flutter/ephemeral/
+**/windows/flutter/generated_plugin_registrant.cc
+**/windows/flutter/generated_plugins.cmake
