@@ -14,3 +14,21 @@ final myBookingsProvider =
   final repository = ref.watch(bookingRepositoryProvider);
   return repository.getMyBookings();
 });
+
+final bookingDetailProvider =
+    FutureProvider.autoDispose.family<Booking?, String>((ref, bookingId) async {
+  final repository = ref.watch(bookingRepositoryProvider);
+  return repository.getBookingById(bookingId);
+});
+
+final paymentMethodsProvider =
+    FutureProvider.autoDispose<List<PaymentMethodAvailability>>((ref) async {
+  final repository = ref.watch(bookingRepositoryProvider);
+  return repository.getPaymentMethods();
+});
+
+final paymentDetailProvider = FutureProvider.autoDispose
+    .family<PaymentSessionResult?, String>((ref, paymentId) async {
+  final repository = ref.watch(bookingRepositoryProvider);
+  return repository.getPaymentById(paymentId);
+});
