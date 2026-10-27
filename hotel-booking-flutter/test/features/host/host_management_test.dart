@@ -1484,7 +1484,8 @@ void main() {
       await tester.pumpAndSettle();
 
       final listingCard = find.text('Villa Biển Vũng Tàu');
-      if (listingCard.evaluate().isNotEmpty) {
+      if (listingCard.evaluate().isNotEmpty &&
+          find.byKey(const Key('calendar_listing_dropdown')).evaluate().isEmpty) {
         await tester.tap(listingCard);
         await tester.pumpAndSettle();
       }

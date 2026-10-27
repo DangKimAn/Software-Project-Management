@@ -85,7 +85,7 @@ void main() {
       );
 
       expect(allChip.selected, isTrue);
-      expect(allChip.selectedColor, AppColors.surfaceBase);
+      expect(allChip.selectedColor, AppColors.primary);
       expect(allChip.backgroundColor, AppColors.surfaceBase);
       expect(allChip.side?.color, AppColors.primary);
 
@@ -100,7 +100,7 @@ void main() {
         find.widgetWithText(ChoiceChip, '5 sao'),
       );
       expect(updatedFiveStarChip.selected, isTrue);
-      expect(updatedFiveStarChip.selectedColor, AppColors.surfaceBase);
+      expect(updatedFiveStarChip.selectedColor, AppColors.primary);
       expect(updatedFiveStarChip.side?.color, AppColors.primary);
     });
   });
