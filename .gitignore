@@ -56,6 +56,24 @@ docs/ai-fix/
 !**/.env.example
 !**/.env.*.example
 
+# Certificates, keys and credentials
+certs/
+**/certs/
+secrets/
+**/secrets/
+private/
+**/private/
+*.pem
+**/*.pem
+*.key
+**/*.key
+*.crt
+**/*.crt
+*.p12
+**/*.p12
+*.pfx
+**/*.pfx
+
 # Flutter & Mobile artifacts
 **/.dart_tool/
 **/.flutter-plugins

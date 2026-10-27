@@ -1,6 +1,6 @@
 {
   "APP_ENV": "dev",
-  "API_BASE_URL": "https://dev-api.minhthanhvilla.com",
+"API_BASE_URL": "http://localhost:7000",
   "HOTLINE_NUMBER": "0901234567",
   "ZALO_OA_URL": "https://zalo.me/0901234567",
   "ENABLE_LOGGING": "true"

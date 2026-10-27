@@ -21,7 +21,7 @@ final popularDestinationsProvider = FutureProvider<List<Villa>>((ref) async {
   return repository.getVillas(
     page: 1,
     limit: 36,
-    sort: 'relevance',
+    sort: 'newest',
   );
 });
 

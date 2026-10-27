@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+node_modules
+dist
+build
+coverage
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+certs/*.pem
+*.pem
+backend.zip
