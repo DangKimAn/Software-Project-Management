@@ -5,12 +5,13 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/errors/app_failure.dart';
 import '../../../../shared/widgets/app_button.dart';
-import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../../data/services/google_auth_service.dart';
 import '../../domain/entities/user.dart';
 import '../view_models/auth_notifier.dart';
+import '../validation/auth_validation.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   final String? redirectTo;
@@ -28,6 +29,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscurePassword = true;
   bool _isLoading = false;
   String? _errorMessage;
+  Map<String, String> _fieldErrors = {};
 
   @override
   void dispose() {
@@ -37,6 +39,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   String _resolveLoginErrorMessage(Object error) {
+    if (error is AppFailure) {
+      return error.message;
+    }
     final raw = error.toString().replaceFirst('Exception: ', '');
     final lower = raw.toLowerCase();
     if (lower.contains('invalid credentials')) {
@@ -60,6 +65,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
+    if (_isLoading) return;
+    _fieldErrors = {};
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -77,6 +84,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     } catch (e) {
       if (mounted) {
+        _fieldErrors = AuthValidation.fieldErrors(e);
+        _formKey.currentState?.validate();
         setState(() {
           _errorMessage = _resolveLoginErrorMessage(e);
           _isLoading = false;
@@ -117,11 +126,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.surfaceMuted,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
+          tooltip: 'Quay lại',
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           icon: const Icon(LucideIcons.arrowLeft, color: AppColors.iconStrong),
           onPressed: () {
             if (context.canPop()) {
@@ -165,35 +176,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       const SizedBox(height: AppSpacing.s24),
                       if (_errorMessage != null) ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(AppSpacing.s12),
-                          margin: const EdgeInsets.only(bottom: AppSpacing.s16),
-                          decoration: BoxDecoration(
-                            color: AppColors.errorSoft,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                LucideIcons.circleAlert,
-                                color: AppColors.iconStrong,
-                                size: 20,
-                              ),
-                              const SizedBox(width: AppSpacing.s8),
-                              Expanded(
-                                child: Text(
-                                  _errorMessage!,
-                                  style: AppTypography.caption
-                                      .copyWith(color: AppColors.errorRed),
+                        Semantics(
+                          liveRegion: true,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(AppSpacing.s12),
+                            margin:
+                                const EdgeInsets.only(bottom: AppSpacing.s16),
+                            decoration: BoxDecoration(
+                              color: AppColors.errorSoft,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  LucideIcons.circleAlert,
+                                  color: AppColors.iconStrong,
+                                  size: 20,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: AppSpacing.s8),
+                                Expanded(
+                                  child: Text(
+                                    _errorMessage!,
+                                    style: AppTypography.caption
+                                        .copyWith(color: AppColors.errorRed),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                       AppTextField(
                         controller: _identifierController,
+                        readOnly: _isLoading,
                         labelText: 'Email hoặc số điện thoại',
                         hintText: 'Nhập email hoặc số điện thoại',
                         prefixIcon: const Icon(
@@ -202,25 +218,46 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           color: AppColors.iconMuted,
                         ),
                         keyboardType: TextInputType.emailAddress,
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Vui lòng nhập email hoặc số điện thoại';
+                        onChanged: (_) {
+                          if (_fieldErrors.containsKey('identifier')) {
+                            setState(() {
+                              _fieldErrors.remove('identifier');
+                              _formKey.currentState?.validate();
+                            });
                           }
-                          return null;
                         },
+                        validator: (value) =>
+                            _fieldErrors['identifier'] ??
+                            AuthValidation.identifier(value),
                       ),
                       const SizedBox(height: AppSpacing.s16),
                       AppTextField(
                         controller: _passwordController,
+                        readOnly: _isLoading,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _handleLogin(),
                         labelText: 'Mật khẩu',
                         hintText: 'Nhập mật khẩu',
                         obscureText: _obscurePassword,
+                        onChanged: (_) {
+                          if (_fieldErrors.containsKey('password')) {
+                            setState(() {
+                              _fieldErrors.remove('password');
+                              _formKey.currentState?.validate();
+                            });
+                          }
+                        },
                         prefixIcon: const Icon(
                           LucideIcons.lock,
                           size: 20,
                           color: AppColors.iconMuted,
                         ),
                         suffixIcon: IconButton(
+                          tooltip: _obscurePassword
+                              ? 'Hiện mật khẩu'
+                              : 'Ẩn mật khẩu',
+                          constraints:
+                              const BoxConstraints(minWidth: 48, minHeight: 48),
                           icon: Icon(
                             _obscurePassword
                                 ? LucideIcons.eyeOff
@@ -235,8 +272,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           },
                         ),
                         validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Vui lòng nhập mật khẩu';
+                          if (_fieldErrors['password'] != null) {
+                            return _fieldErrors['password'];
+                          }
+                          if (value == null || value.trim().length < 8) {
+                            return 'Mật khẩu cần ít nhất 8 ký tự';
                           }
                           return null;
                         },
@@ -291,15 +331,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: AppSpacing.s16),
                       AppButton.secondary(
                         text: 'Đăng nhập với Google',
-                        icon: const AppBrandIcon.google(
+                        icon: const Icon(
+                          LucideIcons.logIn,
                           size: 18,
                           color: AppColors.iconStrong,
                         ),
                         onPressed: _isLoading ? null : _handleGoogleLogin,
                       ),
                       const SizedBox(height: AppSpacing.s24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      Wrap(
+                        alignment: WrapAlignment.center,
                         children: [
                           Text(
                             'Chưa có tài khoản? ',

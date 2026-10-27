@@ -5,12 +5,13 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/errors/app_failure.dart';
 import '../../../../shared/widgets/app_button.dart';
-import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../../data/services/google_auth_service.dart';
 import '../../domain/entities/user.dart';
 import '../view_models/auth_notifier.dart';
+import '../validation/auth_validation.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   final String? redirectTo;
@@ -30,6 +31,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscurePassword = true;
   bool _isLoading = false;
   String? _errorMessage;
+  Map<String, String> _fieldErrors = {};
 
   @override
   void initState() {
@@ -69,6 +71,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
   }
 
+  String _resolveErrorMessage(Object error) {
+    if (error is AppFailure) {
+      return error.message;
+    }
+    return error.toString().replaceFirst('Exception: ', '');
+  }
+
   void _navigateAfterAuth(User user) {
     final target = AuthNotifier.resolvePostAuthRedirectPath(
       user,
@@ -78,6 +87,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   Future<void> _handleRegister() async {
+    if (_isLoading) return;
+    _fieldErrors = {};
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -102,8 +113,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       }
     } catch (e) {
       if (mounted) {
+        _fieldErrors = AuthValidation.fieldErrors(e);
+        _formKey.currentState?.validate();
         setState(() {
-          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+          _errorMessage = _resolveErrorMessage(e);
           _isLoading = false;
         });
       }
@@ -132,7 +145,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+          _errorMessage = _resolveErrorMessage(e);
           _isLoading = false;
         });
       }
@@ -145,11 +158,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final strength = _getPasswordStrength(pwd);
 
     return Scaffold(
-      backgroundColor: AppColors.surfaceMuted,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
+          tooltip: 'Quay lại',
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           icon: const Icon(LucideIcons.arrowLeft, color: AppColors.iconStrong),
           onPressed: () {
             if (context.canPop()) {
@@ -193,35 +208,40 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       ),
                       const SizedBox(height: AppSpacing.s24),
                       if (_errorMessage != null) ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(AppSpacing.s12),
-                          margin: const EdgeInsets.only(bottom: AppSpacing.s16),
-                          decoration: BoxDecoration(
-                            color: AppColors.errorSoft,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                LucideIcons.circleAlert,
-                                color: AppColors.iconStrong,
-                                size: 20,
-                              ),
-                              const SizedBox(width: AppSpacing.s8),
-                              Expanded(
-                                child: Text(
-                                  _errorMessage!,
-                                  style: AppTypography.caption
-                                      .copyWith(color: AppColors.errorRed),
+                        Semantics(
+                          liveRegion: true,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(AppSpacing.s12),
+                            margin:
+                                const EdgeInsets.only(bottom: AppSpacing.s16),
+                            decoration: BoxDecoration(
+                              color: AppColors.errorSoft,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  LucideIcons.circleAlert,
+                                  color: AppColors.iconStrong,
+                                  size: 20,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: AppSpacing.s8),
+                                Expanded(
+                                  child: Text(
+                                    _errorMessage!,
+                                    style: AppTypography.caption
+                                        .copyWith(color: AppColors.errorRed),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                       AppTextField(
                         controller: _fullNameController,
+                        readOnly: _isLoading,
                         labelText: 'Họ và tên',
                         hintText: 'Nhập họ và tên',
                         prefixIcon: const Icon(
@@ -229,7 +249,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           size: 20,
                           color: AppColors.iconMuted,
                         ),
+                        onChanged: (_) {
+                          if (_fieldErrors.containsKey('firstName') ||
+                              _fieldErrors.containsKey('lastName')) {
+                            setState(() {
+                              _fieldErrors.remove('firstName');
+                              _fieldErrors.remove('lastName');
+                              _formKey.currentState?.validate();
+                            });
+                          }
+                        },
                         validator: (v) {
+                          final nameError = _fieldErrors['firstName'] ??
+                              _fieldErrors['lastName'];
+                          if (nameError != null) return nameError;
                           if (v == null || v.trim().isEmpty) {
                             return 'Vui lòng nhập họ và tên';
                           }
@@ -239,6 +272,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       const SizedBox(height: AppSpacing.s16),
                       AppTextField(
                         controller: _phoneController,
+                        readOnly: _isLoading,
                         labelText: 'Số điện thoại',
                         hintText: 'Nhập số điện thoại',
                         prefixIcon: const Icon(
@@ -247,16 +281,21 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           color: AppColors.iconMuted,
                         ),
                         keyboardType: TextInputType.phone,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Vui lòng nhập số điện thoại';
+                        onChanged: (_) {
+                          if (_fieldErrors.containsKey('phone')) {
+                            setState(() {
+                              _fieldErrors.remove('phone');
+                              _formKey.currentState?.validate();
+                            });
                           }
-                          return null;
                         },
+                        validator: (v) =>
+                            _fieldErrors['phone'] ?? AuthValidation.phone(v),
                       ),
                       const SizedBox(height: AppSpacing.s16),
                       AppTextField(
                         controller: _emailController,
+                        readOnly: _isLoading,
                         labelText: 'Email',
                         hintText: 'Nhập địa chỉ email',
                         prefixIcon: const Icon(
@@ -265,28 +304,45 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           color: AppColors.iconMuted,
                         ),
                         keyboardType: TextInputType.emailAddress,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Vui lòng nhập email';
+                        onChanged: (_) {
+                          if (_fieldErrors.containsKey('email')) {
+                            setState(() {
+                              _fieldErrors.remove('email');
+                              _formKey.currentState?.validate();
+                            });
                           }
-                          if (!v.contains('@') || !v.contains('.')) {
-                            return 'Email không hợp lệ';
-                          }
-                          return null;
                         },
+                        validator: (v) =>
+                            _fieldErrors['email'] ?? AuthValidation.email(v),
                       ),
                       const SizedBox(height: AppSpacing.s16),
                       AppTextField(
                         controller: _passwordController,
+                        readOnly: _isLoading,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _handleRegister(),
                         labelText: 'Mật khẩu',
                         hintText: 'Tạo mật khẩu (tối thiểu 8 ký tự)',
                         obscureText: _obscurePassword,
+                        onChanged: (_) {
+                          if (_fieldErrors.containsKey('password')) {
+                            setState(() {
+                              _fieldErrors.remove('password');
+                              _formKey.currentState?.validate();
+                            });
+                          }
+                        },
                         prefixIcon: const Icon(
                           LucideIcons.lock,
                           size: 20,
                           color: AppColors.iconMuted,
                         ),
                         suffixIcon: IconButton(
+                          tooltip: _obscurePassword
+                              ? 'Hiện mật khẩu'
+                              : 'Ẩn mật khẩu',
+                          constraints:
+                              const BoxConstraints(minWidth: 48, minHeight: 48),
                           icon: Icon(
                             _obscurePassword
                                 ? LucideIcons.eyeOff
@@ -300,12 +356,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             });
                           },
                         ),
-                        validator: (v) {
-                          if (v == null || v.length < 8) {
-                            return 'Mật khẩu phải có ít nhất 8 ký tự';
-                          }
-                          return null;
-                        },
+                        validator: (v) =>
+                            _fieldErrors['password'] ??
+                            AuthValidation.password(v),
                       ),
                       if (pwd.isNotEmpty) ...[
                         const SizedBox(height: 10),
@@ -347,8 +400,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         onPressed: _handleRegister,
                       ),
                       const SizedBox(height: AppSpacing.s24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      Wrap(
+                        alignment: WrapAlignment.center,
                         children: [
                           Text(
                             'Bạn đã có tài khoản? ',
@@ -410,7 +463,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       const SizedBox(height: AppSpacing.s16),
                       AppButton.secondary(
                         text: 'Đăng nhập với Google',
-                        icon: const AppBrandIcon.google(
+                        icon: const Icon(
+                          LucideIcons.logIn,
                           size: 18,
                           color: AppColors.iconStrong,
                         ),

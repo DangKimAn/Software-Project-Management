@@ -140,8 +140,8 @@ class GoogleAuthService {
       rethrow;
     } on AppFailure {
       rethrow;
-    } on PlatformException catch (e, stackTrace) {
-      AppLogger.w('Google Sign-In PlatformException (${e.code}): ${e.message}');
+    } on PlatformException catch (e) {
+      AppLogger.w('Google Sign-In platform failure');
       final normalizedCode = e.code.toLowerCase();
       if (normalizedCode.contains('canceled') ||
           normalizedCode.contains('cancelled') ||
@@ -156,8 +156,6 @@ class GoogleAuthService {
       }
       AppLogger.e(
         'Google Sign-In failed',
-        error: e,
-        stackTrace: stackTrace,
       );
       throw AuthFailure(
         e.message?.trim().isNotEmpty == true
@@ -165,11 +163,9 @@ class GoogleAuthService {
             : 'Đăng nhập Google thất bại (${e.code}). Vui lòng kiểm tra cấu hình OAuth.',
         e.code,
       );
-    } catch (e, stackTrace) {
+    } catch (_) {
       AppLogger.e(
         'Unexpected Google Sign-In error',
-        error: e,
-        stackTrace: stackTrace,
       );
       throw const UnknownFailure(
         'Không thể hoàn tất đăng nhập Google. Vui lòng thử lại.',
@@ -183,8 +179,8 @@ class GoogleAuthService {
     if (client == null) return;
     try {
       await client.signOut();
-    } catch (e) {
-      AppLogger.d('Google SDK signOut ignored error: $e');
+    } catch (_) {
+      AppLogger.d('Google SDK signOut failed');
     }
   }
 }
