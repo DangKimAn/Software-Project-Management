@@ -1031,7 +1031,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isSelected ? AppColors.primary : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? AppColors.primary : const Color(0xFFE2E8F0),
@@ -1043,7 +1043,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
             Icon(
               LucideIcons.mapPin,
               size: 16,
-              color: isSelected ? AppColors.iconStrong : AppColors.iconMuted,
+              color: isSelected ? Colors.white : AppColors.iconMuted,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -1054,7 +1054,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                  color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                  color: isSelected ? Colors.white : AppColors.textPrimary,
                 ),
               ),
             ),
@@ -1063,7 +1063,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
               const Icon(
                 LucideIcons.check,
                 size: 14,
-                color: AppColors.iconStrong,
+                color: Colors.white,
               ),
             ],
           ],
@@ -1149,7 +1149,9 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: mode == entry.$1
+                            ? AppColors.primary
+                            : Colors.white,
                         borderRadius: BorderRadius.circular(999),
                         border: mode == entry.$1
                             ? Border.all(color: AppColors.primary, width: 1.4)
@@ -1164,7 +1166,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                               ? FontWeight.w700
                               : FontWeight.w500,
                           color: mode == entry.$1
-                              ? AppColors.primary
+                              ? Colors.white
                               : AppColors.textSecondary,
                         ),
                       ),
@@ -1295,7 +1297,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: selected ? AppColors.primary : Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: selected ? AppColors.primary : AppColors.border,
@@ -1306,10 +1308,10 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         LucideIcons.calendar,
                         size: 16,
-                        color: AppColors.iconStrong,
+                        color: selected ? Colors.white : AppColors.iconStrong,
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -1319,7 +1321,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                           fontWeight:
                               selected ? FontWeight.w700 : FontWeight.w500,
                           color: selected
-                              ? AppColors.primary
+                              ? Colors.white
                               : AppColors.textPrimary,
                         ),
                       ),
@@ -1804,10 +1806,23 @@ class _StayFilterModalSheetState extends ConsumerState<_StayFilterModalSheet> {
                                 : Icon(
                                     AppSemanticIcons.resolveSortIcon(opt.$1),
                                     size: 15,
-                                    color: AppColors.iconStrong,
+                                    color: selected
+                                        ? Colors.white
+                                        : AppColors.iconStrong,
                                   ),
                             showCheckmark: false,
-                            label: Text(opt.$2),
+                            selectedColor: AppColors.primary,
+                            label: Text(
+                              opt.$2,
+                              style: TextStyle(
+                                fontWeight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: selected
+                                    ? Colors.white
+                                    : AppColors.textPrimary,
+                              ),
+                            ),
                             selected: selected,
                             onSelected: (_) => setState(() => _sort = opt.$1),
                           );
@@ -1829,7 +1844,18 @@ class _StayFilterModalSheetState extends ConsumerState<_StayFilterModalSheet> {
                           final selected = _propertyType == t.$1;
                           return ChoiceChip(
                             showCheckmark: false,
-                            label: Text(t.$2),
+                            selectedColor: AppColors.primary,
+                            label: Text(
+                              t.$2,
+                              style: TextStyle(
+                                fontWeight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: selected
+                                    ? Colors.white
+                                    : AppColors.textPrimary,
+                              ),
+                            ),
                             selected: selected,
                             onSelected: (_) =>
                                 setState(() => _propertyType = t.$1),
@@ -1867,7 +1893,7 @@ class _StayFilterModalSheetState extends ConsumerState<_StayFilterModalSheet> {
                         min: 500000,
                         max: 20000000,
                         divisions: 39,
-                        activeColor: AppColors.textPrimary,
+                        activeColor: AppColors.primary,
                         onChanged: (v) => setState(() => _priceRange = v),
                       ),
                       const SizedBox(height: 20),
@@ -1916,10 +1942,23 @@ class _StayFilterModalSheetState extends ConsumerState<_StayFilterModalSheet> {
                             avatar: Icon(
                               AppSemanticIcons.resolveAmenityIcon(label),
                               size: 15,
-                              color: AppColors.iconStrong,
+                              color: selected
+                                  ? Colors.white
+                                  : AppColors.iconStrong,
                             ),
                             showCheckmark: false,
-                            label: Text(label),
+                            selectedColor: AppColors.primary,
+                            label: Text(
+                              label,
+                              style: TextStyle(
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                                color: selected
+                                    ? Colors.white
+                                    : AppColors.textPrimary,
+                              ),
+                            ),
                             selected: selected,
                             onSelected: (val) {
                               setState(() {
@@ -1983,7 +2022,7 @@ class _StayFilterModalSheetState extends ConsumerState<_StayFilterModalSheet> {
                             Navigator.of(context).pop();
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.textPrimary,
+                            backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 20,
@@ -2051,7 +2090,7 @@ class _RoomCountPills extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: value == count
-                            ? AppColors.textPrimary
+                            ? AppColors.primary
                             : Colors.white,
                         borderRadius: BorderRadius.circular(999),
                       ),

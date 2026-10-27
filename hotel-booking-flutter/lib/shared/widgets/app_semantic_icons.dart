@@ -227,9 +227,16 @@ class AppBrandIcon extends StatelessWidget {
   final double size;
   final Color color;
 
-  /// The Palm Villa architectural crest mark (`logo_mau.svg`) rendered in
-  /// clean monochrome stroke.
+  /// The Palm Villa palm tree mark (`assets/icons/app_icon.png`) rendered in
+  /// clean monochrome tint.
   const AppBrandIcon.minhThanhLogo({
+    super.key,
+    this.size = 24,
+    this.color = AppColors.iconStrong,
+  }) : _type = _BrandType.minhThanhLogo;
+
+  /// Alias for [AppBrandIcon.minhThanhLogo] displaying The Palm Villa icon.
+  const AppBrandIcon.thePalmLogo({
     super.key,
     this.size = 24,
     this.color = AppColors.iconStrong,
@@ -327,8 +334,19 @@ class AppBrandIcon extends StatelessWidget {
         return SizedBox(
           width: size,
           height: size,
-          child: CustomPaint(
-            painter: _MinhThanhLogoStrokePainter(color: color),
+          child: Image.asset(
+            'assets/icons/app_icon.png',
+            width: size,
+            height: size,
+            fit: BoxFit.contain,
+            color: color,
+            colorBlendMode: BlendMode.srcIn,
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (_, __, ___) => Icon(
+              LucideIcons.treePalm,
+              size: size,
+              color: color,
+            ),
           ),
         );
     }
@@ -541,46 +559,5 @@ class _TikTokStrokePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TikTokStrokePainter oldDelegate) =>
-      oldDelegate.color != color;
-}
-
-class _MinhThanhLogoStrokePainter extends CustomPainter {
-  final Color color;
-
-  const _MinhThanhLogoStrokePainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final stroke = math.max(1.75, size.width * 0.085);
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final w = size.width;
-    final h = size.height;
-
-    // Outer circular wave crest from `logo_mau.svg`
-    final rect = Rect.fromLTWH(w * 0.08, h * 0.08, w * 0.84, h * 0.84);
-    canvas.drawArc(rect, -0.35 * math.pi, 1.55 * math.pi, false, paint);
-
-    // Inner villa roof + pillars silhouette from `logo_mau.svg`
-    final roof = Path()
-      ..moveTo(w * 0.22, h * 0.54)
-      ..lineTo(w * 0.50, h * 0.32)
-      ..lineTo(w * 0.78, h * 0.54)
-      ..moveTo(w * 0.32, h * 0.50)
-      ..lineTo(w * 0.32, h * 0.76)
-      ..moveTo(w * 0.50, h * 0.46)
-      ..lineTo(w * 0.50, h * 0.78)
-      ..moveTo(w * 0.68, h * 0.50)
-      ..lineTo(w * 0.68, h * 0.76);
-    canvas.drawPath(roof, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _MinhThanhLogoStrokePainter oldDelegate) =>
       oldDelegate.color != color;
 }

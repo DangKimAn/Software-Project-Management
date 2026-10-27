@@ -1,10 +1,14 @@
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../host/services/host_file_picker_web_stub.dart'
+    if (dart.library.js_interop) '../../host/services/host_file_picker_web.dart';
 import '../domain/account_profile_models.dart';
 
 /// Interface for picking an avatar image from the user's device.
@@ -38,7 +42,33 @@ class DefaultAvatarPickerService implements AvatarPickerService {
     ImageSource source = ImageSource.gallery,
   }) async {
     try {
-      final XFile? picked = await _picker.pickImage(source: source);
+      if (kIsWeb) {
+        ensureWebFilePickerRegistered();
+      }
+      XFile? picked;
+      try {
+        picked = await _picker.pickImage(source: source);
+      } on PlatformException {
+        rethrow;
+      } catch (_) {
+        // Fallback to FilePicker when ImagePicker plugin channel is unavailable
+        final fpResult = await FilePicker.platform.pickFiles(
+          dialogTitle: 'Chọn ảnh đại diện',
+          type: FileType.custom,
+          allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+          allowMultiple: false,
+          withData: true,
+        );
+        if (fpResult == null || fpResult.files.isEmpty) {
+          return null;
+        }
+        final pf = fpResult.files.first;
+        picked = pf.bytes != null
+            ? XFile.fromData(pf.bytes!, name: pf.name)
+            : (!kIsWeb && pf.path != null
+                ? XFile(pf.path!, name: pf.name)
+                : null);
+      }
       if (picked == null) {
         // User cancelled the picker — not an error.
         return null;

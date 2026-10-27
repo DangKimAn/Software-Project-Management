@@ -60,18 +60,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isDesktop = screenWidth >= 768;
     final pastHero = offset > (isDesktop ? 120.0 : 80.0);
 
-    // Only pin the header search bar when the body search card has completely scrolled past the header
-    bool isPinned = false;
-    final renderBox =
-        _bodySearchKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox != null && renderBox.hasSize) {
-      final position = renderBox.localToGlobal(Offset.zero);
-      final headerBottom = MediaQuery.paddingOf(context).top + 58.0;
-      isPinned = (position.dy + renderBox.size.height) <= headerBottom;
-    } else {
-      final searchTriggerOffset = isDesktop ? 480.0 : 310.0;
-      isPinned = offset > searchTriggerOffset;
-    }
+    // Pin header search bar when scrolling past the hero search area (matches Airbnb / Header.tsx)
+    final searchTriggerOffset = isDesktop ? 300.0 : 200.0;
+    final isPinned = offset >= searchTriggerOffset;
 
     if ((pastHero != _isScrolledPastHero || isPinned != _isPinnedByScroll) &&
         mounted) {

@@ -109,7 +109,7 @@ abstract final class AppTheme {
                       : AppColors.textMuted,
                   fontWeight: states.contains(WidgetState.selected)
                       ? FontWeight.w700
-                      : FontWeight.w400,
+                      : FontWeight.w700,
                 )),
       ),
       expansionTileTheme: const ExpansionTileThemeData(
@@ -171,27 +171,28 @@ abstract final class AppTheme {
         errorMaxLines: 4,
       ),
       filledButtonTheme: FilledButtonThemeData(
-          style: buttonStyle(scheme.primary, scheme.onPrimary)),
+          style: buttonStyle(AppColors.primary, AppColors.textInverse)),
       elevatedButtonTheme: ElevatedButtonThemeData(
-          style: buttonStyle(scheme.secondary, scheme.onSecondary)),
+          style: buttonStyle(AppColors.primary, AppColors.textInverse)),
       outlinedButtonTheme: OutlinedButtonThemeData(
           style: buttonStyle(scheme.surface, scheme.onSurface, outlined: true)),
       textButtonTheme: TextButtonThemeData(
           style: buttonStyle(Colors.transparent, scheme.onSurface)),
       chipTheme: ChipThemeData(
         backgroundColor: scheme.surface,
-        selectedColor: AppColors.brandSoft,
+        selectedColor: AppColors.primary,
         disabledColor: AppColors.surfaceMuted,
         surfaceTintColor: Colors.transparent,
-        checkmarkColor: AppColors.iconStrong,
+        checkmarkColor: AppColors.textInverse,
+        showCheckmark: false,
         shape: const StadiumBorder(),
         side: WidgetStateBorderSide.resolveWith((states) => BorderSide(
             color: states.contains(WidgetState.selected)
                 ? scheme.primary
                 : AppColors.border)),
-        labelStyle: AppTypography.bodyMedium,
+        labelStyle: WidgetStateTextStyle.resolveWith((states) => states.contains(WidgetState.selected) ? AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.w700, color: AppColors.textInverse) : AppTypography.bodyMedium),
         secondaryLabelStyle:
-            AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.w700),
+            AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.w700, color: AppColors.textInverse),
       ),
       datePickerTheme: const DatePickerThemeData(
           rangeSelectionBackgroundColor: AppColors.rangeBackground,

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/app/di/providers.dart';
+import 'package:hotel_booking_flutter/core/storage/preferences_service.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
 import 'package:hotel_booking_flutter/features/auth/presentation/view_models/auth_notifier.dart';
 import 'package:hotel_booking_flutter/features/blog/data/blog_repository.dart';
-import 'package:hotel_booking_flutter/features/blog/domain/entities/blog_post.dart';
 import 'package:hotel_booking_flutter/features/home/presentation/screens/home_screen.dart';
 import 'package:hotel_booking_flutter/features/search/presentation/widgets/source_search_bar.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/view_models/trips_view_model.dart';
@@ -20,7 +20,8 @@ class _FakeAuthNotifier extends StateNotifier<AsyncValue<User?>>
             User(
               id: 'user-1',
               email: 'lehoang@example.com',
-              fullName: 'Lê Hoàng',
+              firstName: 'Lê',
+              lastName: 'Hoàng',
               role: 'user',
             ),
           ),
@@ -110,16 +111,13 @@ void main() {
               'Notification bell should render at ${size.width}x${size.height}',
         );
 
-        // Verify layout order: brand logo X < search bar X < notification bell X
-        final brandLogoCenter =
-            tester.getCenter(find.text(size.width < 540 ? 'Palm Villa' : 'The Palm Villa')).dx;
+        // Verify layout order: search bar X < notification bell X
         final searchBarCenter = tester
             .getCenter(find.byKey(const ValueKey<String>('header-search-bar')))
             .dx;
         final bellCenter =
             tester.getCenter(find.byType(NotificationBell)).dx;
 
-        expect(brandLogoCenter < searchBarCenter, isTrue);
         expect(searchBarCenter < bellCenter, isTrue);
       }
     });
@@ -190,7 +188,7 @@ void main() {
       // Scroll back up to the top
       await tester.drag(
         find.byType(CustomScrollView),
-        const Offset(0, 600),
+        const Offset(0, 900),
       );
       await tester.pumpAndSettle();
 

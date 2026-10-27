@@ -767,41 +767,45 @@ class AppTopHeader extends ConsumerWidget {
                               child: Row(
                                 children: [
                                   // Left: Brand Logo + "The Palm Villa"
-                                  InkWell(
-                                    onTap: () => context.go('/'),
-                                    splashColor: Colors.transparent,
-                                    highlightColor: Colors.transparent,
-                                    hoverColor: Colors.transparent,
-                                    child: ConstrainedBox(
-                                      constraints: const BoxConstraints(minHeight: 48),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          AppBrandIcon.minhThanhLogo(
-                                            size: 26,
-                                            color: isOverlayTop
-                                                ? Colors.white
-                                                : AppColors.iconStrong,
-                                          ),
-                                          if (screenWidth >= 380) ...[
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              'The Palm Villa',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontSize: isDesktop
-                                                    ? 19
-                                                    : (isCompactMobile ? 16 : 19),
-                                                fontWeight: FontWeight.w800,
-                                                letterSpacing: -0.4,
-                                                color: isOverlayTop
-                                                    ? Colors.white
-                                                    : AppColors.textPrimary,
-                                              ),
+                                  Flexible(
+                                    child: InkWell(
+                                      onTap: () => context.go('/'),
+                                      splashColor: Colors.transparent,
+                                      highlightColor: Colors.transparent,
+                                      hoverColor: Colors.transparent,
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(minHeight: 48),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            AppBrandIcon.minhThanhLogo(
+                                              size: 26,
+                                              color: isOverlayTop
+                                                  ? Colors.white
+                                                  : AppColors.iconStrong,
                                             ),
+                                            if (screenWidth >= 380) ...[
+                                              const SizedBox(width: 8),
+                                              Flexible(
+                                                child: Text(
+                                                  'The Palm Villa',
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: isDesktop
+                                                        ? 19
+                                                        : (isCompactMobile ? 16 : 19),
+                                                    fontWeight: FontWeight.w800,
+                                                    letterSpacing: -0.4,
+                                                    color: isOverlayTop
+                                                        ? Colors.white
+                                                        : AppColors.textPrimary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ],
-                                        ],
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -1294,7 +1298,7 @@ class _NavTextLink extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 16,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: isActive ? FontWeight.w800 : FontWeight.w700,
                 color: textColor,
               ),
             ),

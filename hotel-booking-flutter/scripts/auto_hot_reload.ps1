@@ -2,7 +2,9 @@
 # Watches lib/**/*.dart for changes and automatically triggers Hot Reload ('r')
 # on any running `flutter run` process, while keeping `adb reverse tcp:7000 tcp:7000` active.
 
-$ErrorActionPreference = "SilentlyContinue"
+param([int]$FlutterProcessId = 0, [int]$WebPort = 0)
+
+$ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $libPath = Join-Path $projectRoot "lib"
 $adbExe = Join-Path $env:LOCALAPPDATA "Android\sdk\platform-tools\adb.exe"
@@ -82,11 +84,22 @@ function Invoke-FlutterHotReload {
             if ($d) { & $adbExe -s $d reverse tcp:7000 tcp:7000 | Out-Null }
         }
     }
+    $targetProcessId = $FlutterProcessId
+    if ($WebPort -gt 0) {
+        $listener = Get-NetTCPConnection -State Listen -LocalPort $WebPort -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $listener) { return }
+        $targetProcessId = $listener.OwningProcess
+    }
     $procs = Get-CimInstance Win32_Process | Where-Object {
-        $_.Name -match '^dart(vm)?\.exe$' -and $_.CommandLine -match 'flutter_tools\.snapshot.*run'
+        $_.Name -match '^dart(vm)?\.exe$' -and $_.CommandLine -match 'flutter_tools\.snapshot.*run' -and
+        ($targetProcessId -eq 0 -or $_.ProcessId -eq $targetProcessId)
     }
     foreach ($p in $procs) {
-        [FlutterConsoleInjector]::SendKey([uint32]$p.ProcessId, [char]'r') | Out-Null
+        if ([FlutterConsoleInjector]::SendKey([uint32]$p.ProcessId, [char]'r')) {
+            Write-Output "$(Get-Date -Format s) Hot reload requested for Flutter PID $($p.ProcessId)."
+        } else {
+            Write-Warning "Cannot send hot reload to Flutter PID $($p.ProcessId). Start Flutter in an interactive terminal."
+        }
     }
 }
 
@@ -98,6 +111,8 @@ $watcher.NotifyFilter = [System.IO.NotifyFilters]'FileName, LastWrite, Size'
 $watcher.EnableRaisingEvents = $true
 
 $lastReload = [DateTime]::MinValue
+Write-Output "Watching $libPath for Dart changes."
+Invoke-FlutterHotReload
 
 while ($true) {
     $result = $watcher.WaitForChanged([System.IO.WatcherChangeTypes]::All, 2000)

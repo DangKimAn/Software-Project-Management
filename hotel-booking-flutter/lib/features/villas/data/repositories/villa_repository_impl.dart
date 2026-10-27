@@ -1,4 +1,5 @@
 import '../../../../core/date/booking_date.dart';
+import '../../../../core/media/app_media_helper.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../shared/widgets/vung_tau_map_picker.dart';
 import '../../domain/entities/nightly_price.dart';
@@ -596,36 +597,99 @@ class VillaRepositoryImpl implements VillaRepository {
     final propertyType =
         (json['propertyType'] ?? json['property_type'] ?? 'villa').toString();
 
-    // Extract images & structured VillaImage list
+    // Extract images & structured VillaImage list, replacing any stock Unsplash URLs
+    // with curated bundled assets in `assets/images/`.
+    final fallbackGallery = AppMediaHelper.bundledGalleryForListing(
+      listingId,
+      title: title,
+      address: address,
+    );
     final imageUrls = <String>[];
     final villaImages = <VillaImage>[];
     if (json['images'] is List) {
+      var idx = 0;
       for (final img in json['images'] as List<dynamic>) {
         if (img is Map<String, dynamic> && img['url'] != null) {
           final parsed = VillaImage.fromJson(img);
-          villaImages.add(parsed);
-          imageUrls.add(parsed.url);
+          final resolvedUrl = AppMediaHelper.isStockPlaceholderUrl(parsed.url)
+              ? fallbackGallery[idx % fallbackGallery.length]
+              : parsed.url;
+          villaImages.add(
+            VillaImage(
+              imageId: parsed.imageId,
+              url: resolvedUrl,
+              type: parsed.type,
+              typeConfidence: parsed.typeConfidence,
+              typeSource: parsed.typeSource,
+              sortOrder: parsed.sortOrder,
+              isCover: parsed.isCover,
+            ),
+          );
+          imageUrls.add(resolvedUrl);
+          idx++;
         } else if (img is String) {
-          imageUrls.add(img);
-          villaImages.add(VillaImage(imageId: img, url: img));
+          final resolvedUrl = AppMediaHelper.isStockPlaceholderUrl(img)
+              ? fallbackGallery[idx % fallbackGallery.length]
+              : img;
+          imageUrls.add(resolvedUrl);
+          villaImages.add(
+            VillaImage(
+              imageId: '${listingId}_$idx',
+              url: resolvedUrl,
+              sortOrder: idx,
+              isCover: idx == 0,
+            ),
+          );
+          idx++;
         }
       }
     }
     if (imageUrls.isEmpty) {
       final cover = json['coverImage'];
       if (cover is Map<String, dynamic> && cover['url'] != null) {
-        final url = cover['url'].toString();
+        final rawUrl = cover['url'].toString();
+        final url = AppMediaHelper.isStockPlaceholderUrl(rawUrl)
+            ? fallbackGallery.first
+            : rawUrl;
         imageUrls.add(url);
         villaImages.add(VillaImage(imageId: 'cover', url: url, isCover: true));
       } else if (json['imageUrl'] != null) {
-        final url = json['imageUrl'].toString();
+        final rawUrl = json['imageUrl'].toString();
+        final url = AppMediaHelper.isStockPlaceholderUrl(rawUrl)
+            ? fallbackGallery.first
+            : rawUrl;
         imageUrls.add(url);
         villaImages.add(VillaImage(imageId: 'cover', url: url, isCover: true));
       } else if (json['image_urls'] is List) {
+        var idx = 0;
         for (final u in (json['image_urls'] as List)) {
-          final url = u.toString();
+          final rawUrl = u.toString();
+          final url = AppMediaHelper.isStockPlaceholderUrl(rawUrl)
+              ? fallbackGallery[idx % fallbackGallery.length]
+              : rawUrl;
           imageUrls.add(url);
-          villaImages.add(VillaImage(imageId: url, url: url));
+          villaImages.add(
+            VillaImage(
+              imageId: '${listingId}_$idx',
+              url: url,
+              sortOrder: idx,
+              isCover: idx == 0,
+            ),
+          );
+          idx++;
+        }
+      } else {
+        for (var idx = 0; idx < fallbackGallery.length; idx++) {
+          final url = fallbackGallery[idx];
+          imageUrls.add(url);
+          villaImages.add(
+            VillaImage(
+              imageId: '${listingId}_$idx',
+              url: url,
+              sortOrder: idx,
+              isCover: idx == 0,
+            ),
+          );
         }
       }
     }
@@ -715,8 +779,11 @@ class VillaRepositoryImpl implements VillaRepository {
         ((json['similarityScore'] ?? json['score']) as num?)?.toDouble();
     final matchedRoomType =
         (json['matchedRoomType'] ?? json['roomType'])?.toString();
-    final matchedImageUrl =
+    final rawMatchedImage =
         (json['matchedImageUrl'] ?? json['matchedImage'])?.toString();
+    final matchedImageUrl = AppMediaHelper.isStockPlaceholderUrl(rawMatchedImage)
+        ? fallbackGallery.first
+        : rawMatchedImage;
     final matchedReasons = filterCustomerReasons(
       json['matchedReasons'] as Iterable<dynamic>?,
     );

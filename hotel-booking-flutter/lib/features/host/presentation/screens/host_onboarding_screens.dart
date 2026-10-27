@@ -3307,7 +3307,7 @@ class _StepPillChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = isActive ? AppColors.textStrong : AppColors.surfaceBase;
+    final bgColor = isActive ? AppColors.primary : AppColors.surfaceBase;
     final fgColor = isActive ? Colors.white : AppColors.textStrong;
 
     return Semantics(
@@ -3328,7 +3328,7 @@ class _StepPillChip extends StatelessWidget {
               color: bgColor,
               borderRadius: BorderRadius.circular(AppRadii.pill),
               border: Border.all(
-                color: isActive ? AppColors.textStrong : AppColors.borderSoft,
+                color: isActive ? AppColors.primary : AppColors.borderSoft,
               ),
             ),
             child: Row(
