@@ -822,7 +822,7 @@ class AppTopHeader extends ConsumerWidget {
                                   : 'Trở thành host',
                               style: TextStyle(
                                 fontSize: 13,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w700,
                                 color: isOverlayTop
                                     ? Colors.white
                                     : const Color(0xFF18181B),
@@ -1244,7 +1244,7 @@ class _NavTextLink extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 16,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: isActive ? FontWeight.w800 : FontWeight.w700,
                 color: textColor,
               ),
             ),

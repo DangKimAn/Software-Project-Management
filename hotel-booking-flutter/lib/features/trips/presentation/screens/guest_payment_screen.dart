@@ -1024,7 +1024,7 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                         style: ElevatedButton.styleFrom(
                                           elevation: 0,
                                           backgroundColor:
-                                              AppColors.textPrimary,
+                                              AppColors.primary,
                                           foregroundColor: Colors.white,
                                           minimumSize:
                                               const Size.fromHeight(52),

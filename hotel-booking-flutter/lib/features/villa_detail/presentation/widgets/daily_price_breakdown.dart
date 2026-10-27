@@ -21,6 +21,26 @@ class DailyPriceBreakdown extends StatelessWidget {
     this.isTablet = false,
   });
 
+  String _formatWeekdayVi(int weekday) {
+    switch (weekday) {
+      case DateTime.monday:
+        return 'Thứ 2';
+      case DateTime.tuesday:
+        return 'Thứ 3';
+      case DateTime.wednesday:
+        return 'Thứ 4';
+      case DateTime.thursday:
+        return 'Thứ 5';
+      case DateTime.friday:
+        return 'Thứ 6';
+      case DateTime.saturday:
+        return 'Thứ 7';
+      case DateTime.sunday:
+      default:
+        return 'CN';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (nightlyPrices.isEmpty) {
@@ -37,72 +57,87 @@ class DailyPriceBreakdown extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Bảng giá theo từng đêm',
-              style: AppTypography.cardTitle.copyWith(fontSize: 15),
+            Expanded(
+              child: Text(
+                'Bảng giá theo từng đêm',
+                style: AppTypography.cardTitle.copyWith(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textStrong,
+                ),
+              ),
             ),
+            const SizedBox(width: 8),
             Text(
               '${nightlyPrices.length} đêm',
               style: AppTypography.caption.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
         ),
         const SizedBox(height: 8),
 
-        // Constrained scrolling list (Flat Minimal - no outer box)
+        // Constrained scrolling list (Flat Minimal - no outer box, no noisy row dividers)
         ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),
-          child: ListView.separated(
+          child: ListView.builder(
             primary: false,
             shrinkWrap: true,
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(vertical: 2),
             itemCount: nightlyPrices.length,
-            separatorBuilder: (_, __) => const Divider(
-              color: AppColors.borderSoft,
-              height: 1,
-            ),
             itemBuilder: (context, index) {
               final item = nightlyPrices[index];
+              final weekdayVi =
+                  _formatWeekdayVi(item.date.toDateTime().weekday);
+              final dateLabel =
+                  '${item.date.toDisplayString(format: 'dd/MM')} ($weekdayVi)';
               return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                padding: const EdgeInsets.symmetric(vertical: 6.0),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Text(
-                          item.date.toDisplayString(format: 'dd/MM (EEE)'),
-                          style: AppTypography.bodyMedium.copyWith(
-                            fontWeight: item.isWeekend
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                            color: item.isWeekend
-                                ? AppColors.primary
-                                : AppColors.textStrong,
-                          ),
-                        ),
-                        if (item.note != null) ...[
-                          const SizedBox(width: 6),
-                          Text(
-                            item.note!,
-                            style: AppTypography.caption.copyWith(
-                              color: AppColors.primary,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
+                    Flexible(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              dateLabel,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.bodyMedium.copyWith(
+                                fontSize: 14.5,
+                                fontWeight: item.isWeekend
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: AppColors.textSecondary,
+                              ),
                             ),
                           ),
+                          if (item.note != null) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              item.note!,
+                              style: AppTypography.caption.copyWith(
+                                color: AppColors.textSecondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
+                    const SizedBox(width: 12),
                     Text(
                       item.isAvailable
                           ? CurrencyFormatter.formatVnd(item.priceVnd)
                           : 'Đã kín phòng',
                       style: AppTypography.bodyMedium.copyWith(
-                        fontWeight: FontWeight.w600,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w500,
                         color: item.isAvailable
                             ? AppColors.textStrong
                             : AppColors.errorRed,

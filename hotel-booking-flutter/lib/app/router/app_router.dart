@@ -938,8 +938,8 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: isSelected
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
+                                  ? FontWeight.w800
+                                  : FontWeight.w700,
                               color: isSelected
                                   ? AppColors.textStrong
                                   : AppColors.textSecondary,

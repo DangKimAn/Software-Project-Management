@@ -57,6 +57,15 @@ class AppImage extends StatelessWidget {
   static String? resolveLocalAsset(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
     final trimmed = raw.trim().replaceAll('\\', '/');
+    final lowerTrimmed = trimmed.toLowerCase();
+    if (lowerTrimmed.contains('images.unsplash.com') ||
+        lowerTrimmed.contains('plus.unsplash.com') ||
+        lowerTrimmed.contains('source.unsplash.com')) {
+      final hash = trimmed.hashCode.abs();
+      final mapped = _bundledAssetFiles[hash % _bundledAssetFiles.length];
+      return 'assets/images/$mapped';
+    }
+
     final lastSlash = trimmed.lastIndexOf('/');
     final basename =
         lastSlash >= 0 ? trimmed.substring(lastSlash + 1) : trimmed;

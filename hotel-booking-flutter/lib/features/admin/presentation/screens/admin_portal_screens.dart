@@ -12,6 +12,7 @@ import 'package:hotel_booking_flutter/shared/animations/fade_slide_in.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_dialog.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_image.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -116,6 +117,8 @@ final ButtonStyle _kCompactPillOutlinedStyle = OutlinedButton.styleFrom(
 );
 
 final ButtonStyle _kPillElevatedStyle = ElevatedButton.styleFrom(
+  backgroundColor: AppColors.primary,
+  foregroundColor: Colors.white,
   minimumSize: const Size(48, 48),
   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
   shape: const StadiumBorder(),
@@ -418,24 +421,36 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                     },
                     child: const Padding(
                       padding: EdgeInsets.symmetric(vertical: 4),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Text(
-                            'the palm villa',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textPrimary,
-                            ),
+                          AppBrandIcon.minhThanhLogo(
+                            size: 26,
+                            color: AppColors.iconStrong,
                           ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Admin Panel',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'The Palm Villa',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Admin Panel',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -506,8 +521,8 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: selected
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
+                                    ? FontWeight.w800
+                                    : FontWeight.w700,
                                 color: selected
                                     ? AppColors.textPrimary
                                     : AppColors.textSecondary,
@@ -725,8 +740,8 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: isSelected
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
+                                    ? FontWeight.w800
+                                    : FontWeight.w700,
                                 color: isSelected
                                     ? AppColors.textStrong
                                     : AppColors.textSecondary,
@@ -902,7 +917,17 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                     children: [
                       for (final daysOption in const [7, 30, 90])
                         ChoiceChip(
-                          label: Text('$daysOption ngày'),
+                          label: Text(
+                            '$daysOption ngày',
+                            style: TextStyle(
+                              fontWeight: _rangeDays == daysOption
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: _rangeDays == daysOption
+                                  ? Colors.white
+                                  : AppColors.textPrimary,
+                            ),
+                          ),
                           selected: _rangeDays == daysOption,
                           showCheckmark: false,
                           visualDensity: VisualDensity.compact,
@@ -912,7 +937,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                             horizontal: 8,
                             vertical: 4,
                           ),
-                          selectedColor: AppColors.surfaceBase,
+                          selectedColor: AppColors.primary,
                           shape: const StadiumBorder(),
                           onSelected: _loading
                               ? null
@@ -3249,6 +3274,8 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                         ),
                                         ElevatedButton(
                                           style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppColors.primary,
+                                            foregroundColor: Colors.white,
                                             minimumSize: const Size(48, 40),
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 14,
@@ -4208,6 +4235,8 @@ class _AdminHostApplicationsTabState
                         children: [
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
                               minimumSize: const Size(48, 38),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 14,
@@ -4732,7 +4761,17 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                           ('admin', 'Admin'),
                         ])
                           ChoiceChip(
-                            label: Text(roleOption.$2),
+                            label: Text(
+                              roleOption.$2,
+                              style: TextStyle(
+                                fontWeight: _roleFilter == roleOption.$1
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: _roleFilter == roleOption.$1
+                                    ? Colors.white
+                                    : AppColors.textPrimary,
+                              ),
+                            ),
                             selected: _roleFilter == roleOption.$1,
                             showCheckmark: false,
                             visualDensity: VisualDensity.compact,
@@ -4742,7 +4781,7 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                               horizontal: 8,
                               vertical: 4,
                             ),
-                            selectedColor: AppColors.surfaceBase,
+                            selectedColor: AppColors.primary,
                             shape: const StadiumBorder(),
                             onSelected: _loading
                                 ? null
@@ -4903,6 +4942,8 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                                   ),
                                   ElevatedButton(
                                     style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primary,
+                                      foregroundColor: Colors.white,
                                       minimumSize: const Size(48, 34),
                                       tapTargetSize:
                                           MaterialTapTargetSize.padded,

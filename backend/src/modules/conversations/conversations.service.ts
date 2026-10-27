@@ -379,14 +379,19 @@ const getConversationRowsForUser = async (
             LEFT JOIN conversation_participant current_participant
                 ON current_participant.conversation_id = c.conversation_id
                AND current_participant.user_id = :userId
-            LEFT JOIN message latest_message
-                ON latest_message.message_id = (
-                    SELECT m2.message_id
-                    FROM message m2
-                    WHERE m2.conversation_id = c.conversation_id
-                    ORDER BY m2.created_at DESC, m2.message_id DESC
-                    LIMIT 1
-                )
+            LEFT JOIN (
+                SELECT
+                    m2.conversation_id,
+                    m2.content,
+                    m2.created_at,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY m2.conversation_id
+                        ORDER BY m2.created_at DESC, m2.message_id DESC
+                    ) AS rn
+                FROM message m2
+            ) latest_message
+                ON latest_message.conversation_id = c.conversation_id
+               AND latest_message.rn = 1
             LEFT JOIN message unread_message
                 ON unread_message.conversation_id = c.conversation_id
                AND unread_message.sender_id <> :userId
@@ -396,26 +401,36 @@ const getConversationRowsForUser = async (
                )
             LEFT JOIN listings l
                 ON l.listing_id = c.listing_id
-            LEFT JOIN listing_images listing_cover
-                ON listing_cover.id = (
-                    SELECT li.id
-                    FROM listing_images li
-                    WHERE li.listing_id = c.listing_id
-                    ORDER BY li.is_cover DESC, li.sort_order ASC, li.id ASC
-                    LIMIT 1
-                )
+            LEFT JOIN (
+                SELECT
+                    li.listing_id,
+                    li.url,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY li.listing_id
+                        ORDER BY li.is_cover DESC, li.sort_order ASC, li.id ASC
+                    ) AS rn
+                FROM listing_images li
+            ) listing_cover
+                ON listing_cover.listing_id = c.listing_id
+               AND listing_cover.rn = 1
+            LEFT JOIN (
+                SELECT
+                    fallback_cp.conversation_id,
+                    fallback_cp.user_id,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY fallback_cp.conversation_id
+                        ORDER BY FIELD(fallback_cp.role, 'host', 'guest', 'admin'), fallback_cp.user_id ASC
+                    ) AS rn
+                FROM conversation_participant fallback_cp
+                WHERE fallback_cp.user_id <> :userId
+            ) fallback_participant
+                ON fallback_participant.conversation_id = c.conversation_id
+               AND fallback_participant.rn = 1
             LEFT JOIN users other_user
                 ON other_user.user_id = CASE
                     WHEN c.guest_user_id = :userId THEN c.host_user_id
                     WHEN c.host_user_id = :userId THEN c.guest_user_id
-                    ELSE (
-                        SELECT fallback_participant.user_id
-                        FROM conversation_participant fallback_participant
-                        WHERE fallback_participant.conversation_id = c.conversation_id
-                          AND fallback_participant.user_id <> :userId
-                        ORDER BY FIELD(fallback_participant.role, 'host', 'guest', 'admin'), fallback_participant.user_id
-                        LIMIT 1
-                    )
+                    ELSE fallback_participant.user_id
                 END
             WHERE (
                     c.guest_user_id = :userId

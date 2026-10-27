@@ -33,7 +33,7 @@ class PropertyFaqSection extends StatelessWidget {
           'Quy định & Câu hỏi thường gặp',
           style: AppTypography.sectionHeading.copyWith(fontSize: 18),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         Column(
           children: _faqs.asMap().entries.map((entry) {
             final idx = entry.key;
@@ -43,25 +43,38 @@ class PropertyFaqSection extends StatelessWidget {
             return Column(
               children: [
                 Theme(
-                  data: Theme.of(context)
-                      .copyWith(dividerColor: Colors.transparent),
+                  data: Theme.of(context).copyWith(
+                    dividerColor: Colors.transparent,
+                    splashColor: Colors.transparent,
+                    highlightColor: Colors.transparent,
+                  ),
                   child: ExpansionTile(
-                    tilePadding: const EdgeInsets.symmetric(vertical: 4),
+                    shape: const Border(),
+                    collapsedShape: const Border(),
+                    tilePadding: const EdgeInsets.symmetric(vertical: 6),
                     title: Text(
                       faq.$1,
                       style: AppTypography.bodyLarge.copyWith(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.textStrong,
+                        height: 1.4,
                       ),
                     ),
                     iconColor: AppColors.iconStrong,
                     collapsedIconColor: AppColors.iconMuted,
                     childrenPadding: const EdgeInsets.only(bottom: 16),
                     children: [
-                      Text(
-                        faq.$2,
-                        style: AppTypography.bodyMedium
-                            .copyWith(color: AppColors.textMuted),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          faq.$2,
+                          style: AppTypography.bodyMedium.copyWith(
+                            fontSize: 14,
+                            height: 1.5,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
                       ),
                     ],
                   ),

@@ -280,6 +280,12 @@ abstract final class BlogContentSanitizer {
     final scheme = uri.scheme.toLowerCase();
     if (scheme != 'https' && scheme != 'http') return '';
     if (uri.host.isEmpty || !uri.host.contains('.')) return '';
+    final hostLower = uri.host.toLowerCase();
+    if (hostLower.contains('unsplash.com')) {
+      return trimmed.contains('1507525428034')
+          ? 'assets/images/NDT05929-HDR1.jpg'
+          : 'assets/images/19tranphu.jpg';
+    }
     return uri.toString();
   }
 

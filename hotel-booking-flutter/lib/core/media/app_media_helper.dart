@@ -152,15 +152,115 @@ abstract final class AppMediaHelper {
   /// Maximum physical decode width/height for hero/detail galleries.
   static const int maxHeroDecodeDimensionPx = 1600;
 
+  /// Curated bundled galleries in `assets/images/` for each seeded Vũng Tàu villa.
+  static const Map<String, List<String>> _curatedVillaAssetGalleries = {
+    '101': [
+      'assets/images/109tranphu.jpg',
+      'assets/images/19tranphu.jpg',
+      'assets/images/87tranphu.jpg',
+      'assets/images/11tranphu.jpg',
+      'assets/images/NDT05929-HDR1.jpg',
+    ],
+    '102': [
+      'assets/images/casamar.jpg',
+      'assets/images/lacase.jpg',
+      'assets/images/diamond.jpg',
+      'assets/images/b25thuyduong.jpg',
+      'assets/images/a3dtt.jpg',
+    ],
+    '103': [
+      'assets/images/22012aphanchutrinh.jpg',
+      'assets/images/mocnhien.jpg',
+      'assets/images/b5dtt.jpg',
+      'assets/images/16022ahht.jpg',
+      'assets/images/16hahuytap.jpg',
+    ],
+    '104': [
+      'assets/images/sunset.jpg',
+      'assets/images/nabi.JPG',
+      'assets/images/s07.jpg',
+      'assets/images/osaka.jpg',
+      'assets/images/6nguyentuan.jpg',
+    ],
+    '105': [
+      'assets/images/343vothisau.jpg',
+      'assets/images/1phanhuychu.jpg',
+      'assets/images/c12tongocvan.jpg',
+      'assets/images/nasa.jpg',
+      'assets/images/NDT05929-HDR1.jpg',
+    ],
+  };
+
+  /// Returns true if [rawUrl] is an external stock placeholder image (e.g. Unsplash).
+  static bool isStockPlaceholderUrl(String? rawUrl) {
+    if (rawUrl == null || rawUrl.trim().isEmpty) return false;
+    final lower = rawUrl.trim().toLowerCase();
+    return lower.contains('images.unsplash.com') ||
+        lower.contains('plus.unsplash.com') ||
+        lower.contains('source.unsplash.com');
+  }
+
+  /// Returns a deterministic 5-image gallery from `assets/images/` for [listingId].
+  static List<String> bundledGalleryForListing(
+    String listingId, {
+    String? title,
+    String? address,
+  }) {
+    final cleanId = listingId.trim();
+    if (_curatedVillaAssetGalleries.containsKey(cleanId)) {
+      return _curatedVillaAssetGalleries[cleanId]!;
+    }
+
+    final lowerHint = '${title ?? ''} ${address ?? ''}'.toLowerCase();
+    if (lowerHint.contains('phan chu trinh') ||
+        lowerHint.contains('white lotus')) {
+      return _curatedVillaAssetGalleries['103']!;
+    }
+    if (lowerHint.contains('hạ long') ||
+        lowerHint.contains('ha long') ||
+        lowerHint.contains('sunset')) {
+      return _curatedVillaAssetGalleries['104']!;
+    }
+    if (lowerHint.contains('quang trung') ||
+        lowerHint.contains('bãi trước') ||
+        lowerHint.contains('ocean pearl')) {
+      return _curatedVillaAssetGalleries['105']!;
+    }
+    if (lowerHint.contains('aria') || lowerHint.contains('bãi sau')) {
+      return _curatedVillaAssetGalleries['102']!;
+    }
+    if (lowerHint.contains('trần phú') ||
+        lowerHint.contains('tran phu') ||
+        lowerHint.contains('bãi dâu')) {
+      return _curatedVillaAssetGalleries['101']!;
+    }
+
+    final numericId = int.tryParse(cleanId) ?? cleanId.hashCode.abs();
+    final total = bundledRasterImageFiles.length;
+    final startIdx = (numericId.abs() * 5) % total;
+    return List<String>.generate(
+      5,
+      (i) => 'assets/images/${bundledRasterImageFiles[(startIdx + i) % total]}',
+    );
+  }
+
   /// Resolves a raw path or filename to a verified bundled asset path in `assets/`,
   /// or returns `null` if the input does not refer to a local asset.
   ///
   /// Handles case-insensitive matching for `assets/images/nabi.JPG`, legacy web paths
-  /// (`/src/assets/img/...`), `villa_bien.jpg`, and numbered `anh_1.jpg`..`anh_24.jpg`.
+  /// (`/src/assets/img/...`), `villa_bien.jpg`, numbered `anh_1.jpg`..`anh_24.jpg`,
+  /// and replaces stock Unsplash URLs with bundled assets from `assets/images/`.
   static String? resolveBundledAssetPath(String? raw) {
     if (raw == null) return null;
     final trimmed = raw.trim().replaceAll('\\', '/');
     if (trimmed.isEmpty) return null;
+
+    if (isStockPlaceholderUrl(trimmed)) {
+      final hash = trimmed.hashCode.abs();
+      final file =
+          bundledRasterImageFiles[hash % bundledRasterImageFiles.length];
+      return 'assets/images/$file';
+    }
 
     // Strip query string or fragment if present on a local asset path
     final cleanPath = trimmed.split('?').first.split('#').first.trim();

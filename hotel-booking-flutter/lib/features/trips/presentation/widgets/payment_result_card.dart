@@ -137,7 +137,7 @@ class PaymentResultCard extends StatelessWidget {
           _action(FilledButton(
               onPressed: onViewTrips,
               style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.textPrimary,
+                  backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white),
               child: const Text('Xem chuyến đi của tôi',
                   textAlign: TextAlign.center))),

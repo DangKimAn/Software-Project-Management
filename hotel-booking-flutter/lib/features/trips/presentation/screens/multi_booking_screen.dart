@@ -902,7 +902,7 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                                 child: ElevatedButton(
                                   onPressed: () => context.go('/account/trips'),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.textPrimary,
+                                    backgroundColor: AppColors.primary,
                                     foregroundColor: Colors.white,
                                   ),
                                   child: const Text('Quản lý trong Chuyến đi'),

@@ -278,13 +278,13 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                               alignment: Alignment.center,
                                               decoration: BoxDecoration(
                                                 color: selected
-                                                    ? AppColors.textStrong
+                                                    ? AppColors.primary
                                                     : AppColors.surfaceBase,
                                                 borderRadius:
                                                     AppRadii.roundedPill,
                                                 border: Border.all(
                                                   color: selected
-                                                      ? AppColors.textStrong
+                                                      ? AppColors.primary
                                                       : AppColors.borderSoft,
                                                 ),
                                               ),
@@ -688,12 +688,12 @@ class _BlogPaginationBar extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: p == currentPage
-                        ? AppColors.textStrong
+                        ? AppColors.primary
                         : AppColors.surfaceBase,
                     borderRadius: AppRadii.roundedPill,
                     border: Border.all(
                       color: p == currentPage
-                          ? AppColors.textStrong
+                          ? AppColors.primary
                           : AppColors.borderSoft,
                     ),
                   ),

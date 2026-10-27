@@ -1610,7 +1610,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                               _scrollToBottom(animate: true),
                                           style: FilledButton.styleFrom(
                                             backgroundColor:
-                                                AppColors.textStrong,
+                                                AppColors.primary,
                                             foregroundColor: Colors.white,
                                             minimumSize: const Size(48, 44),
                                             shape: const StadiumBorder(),
@@ -1791,7 +1791,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
 
     final bgColor = msg.isFailed
         ? AppColors.errorSoft
-        : (isMe ? AppColors.textPrimary : AppColors.surfaceBase);
+        : (isMe ? AppColors.primary : AppColors.surfaceBase);
     final textColor = msg.isFailed
         ? AppColors.textStrong
         : (isMe ? Colors.white : AppColors.textPrimary);
@@ -2161,7 +2161,6 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                         decoration: BoxDecoration(
                                           color: isSelected
                                               ? AppColors.primary
-                                                  .withValues(alpha: 0.06)
                                               : AppColors.surfaceBase,
                                           borderRadius:
                                               BorderRadius.circular(12),
@@ -2176,10 +2175,12 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.center,
                                           children: [
-                                            const Icon(
+                                            Icon(
                                               LucideIcons.messageSquare,
                                               size: 15,
-                                              color: AppColors.iconStrong,
+                                              color: isSelected
+                                                  ? Colors.white
+                                                  : AppColors.iconStrong,
                                             ),
                                             const SizedBox(width: 10),
                                             Expanded(
@@ -2191,7 +2192,9 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                                   fontWeight: isSelected
                                                       ? FontWeight.w600
                                                       : FontWeight.w500,
-                                                  color: AppColors.textStrong,
+                                                  color: isSelected
+                                                      ? Colors.white
+                                                      : AppColors.textStrong,
                                                 ),
                                               ),
                                             ),

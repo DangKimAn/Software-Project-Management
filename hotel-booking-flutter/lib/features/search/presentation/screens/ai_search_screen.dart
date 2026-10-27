@@ -292,7 +292,19 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                                           ),
                                           for (final k in const [3, 6, 9, 12])
                                             ChoiceChip(
-                                              label: Text('$k'),
+                                              showCheckmark: false,
+                                              selectedColor: AppColors.primary,
+                                              label: Text(
+                                                '$k',
+                                                style: TextStyle(
+                                                  fontWeight: _topK == k
+                                                      ? FontWeight.w700
+                                                      : FontWeight.w500,
+                                                  color: _topK == k
+                                                      ? Colors.white
+                                                      : AppColors.textPrimary,
+                                                ),
+                                              ),
                                               selected: _topK == k,
                                               onSelected: (_) =>
                                                   setState(() => _topK = k),
