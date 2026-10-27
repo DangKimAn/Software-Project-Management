@@ -485,11 +485,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           content: TextField(
             key: const Key('booking_cancel_reason_input'),
             controller: reasonCtrl,
-            maxLines: 2,
+            maxLines: 1,
+            style: const TextStyle(fontSize: 13, height: 1.2),
             decoration: InputDecoration(
               labelText: 'Lý do hủy booking *',
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(16),
               ),
             ),
           ),

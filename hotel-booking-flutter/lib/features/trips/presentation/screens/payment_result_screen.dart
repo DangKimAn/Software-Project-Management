@@ -353,7 +353,10 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen>
       body: SafeArea(
         child: Column(
           children: [
-            const AppTopHeader(currentPath: '/account/trips'),
+            const AppTopHeader(
+              currentPath: '/thanh-toan/ket-qua',
+              hidePendingBanner: true,
+            ),
             Expanded(
               child: SingleChildScrollView(
                 child: Column(

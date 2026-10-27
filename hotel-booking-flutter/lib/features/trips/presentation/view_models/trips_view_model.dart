@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/di/providers.dart';
+import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../data/repositories/booking_repository_impl.dart';
 import '../../domain/entities/booking.dart';
 import '../../domain/repositories/booking_repository.dart';
@@ -13,6 +14,39 @@ final myBookingsProvider =
     FutureProvider.autoDispose<List<Booking>>((ref) async {
   final repository = ref.watch(bookingRepositoryProvider);
   return repository.getMyBookings();
+});
+
+/// Provides the active pending booking that is awaiting payment and has remaining hold time.
+/// Returns `null` if user is not authenticated or has no pending payment bookings.
+final activePendingBookingProvider = Provider<Booking?>((ref) {
+  final authState = ref.watch(authNotifierProvider);
+  final user = authState.valueOrNull;
+  if (user == null) {
+    return null;
+  }
+
+  final bookingsAsync = ref.watch(myBookingsProvider);
+  return bookingsAsync.when(
+    data: (bookings) {
+      final now = DateTime.now();
+      final pendingBookings = bookings.where((b) {
+        return b.canPayNow &&
+            !b.isPaid &&
+            !b.isCancelled &&
+            b.computeRemainingPaymentSeconds(now: now) > 0;
+      }).toList();
+
+      if (pendingBookings.isEmpty) return null;
+
+      pendingBookings.sort((a, b) =>
+          a.computeRemainingPaymentSeconds(now: now)
+              .compareTo(b.computeRemainingPaymentSeconds(now: now)));
+
+      return pendingBookings.first;
+    },
+    loading: () => null,
+    error: (_, __) => null,
+  );
 });
 
 final bookingDetailProvider =
@@ -32,3 +66,4 @@ final paymentDetailProvider = FutureProvider.autoDispose
   final repository = ref.watch(bookingRepositoryProvider);
   return repository.getPaymentById(paymentId);
 });
+

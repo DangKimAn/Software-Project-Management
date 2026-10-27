@@ -14,12 +14,14 @@ import '../../../villas/data/repositories/villa_repository_impl.dart';
 /// Complete port of `SearchBar.tsx`, `BookingWidget.tsx`, `DatePickerPanel.tsx`, `Guest.tsx`, and `StayFilterModal`.
 class SourceSearchBar extends ConsumerStatefulWidget {
   final bool isCompact;
+  final bool isInHeader;
   final VoidCallback? onSearchSubmitted;
   final VoidCallback? onOpenAiSearch;
 
   const SourceSearchBar({
     super.key,
     this.isCompact = false,
+    this.isInHeader = false,
     this.onSearchSubmitted,
     this.onOpenAiSearch,
   });
@@ -144,96 +146,119 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
   Widget build(BuildContext context) {
     final filter = ref.watch(villaFilterProvider);
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final isWide = screenWidth >= 768 && !widget.isCompact;
+    final isWide =
+        screenWidth >= 768 && !widget.isCompact && !widget.isInHeader;
     final disableAnimations = MediaQuery.disableAnimationsOf(context);
 
     final Widget searchBarChild;
-    if (!isWide) {
+    if (!isWide || widget.isInHeader) {
+      final inHeader = widget.isInHeader;
       // Pill Search Bar matching reference design (left mapPin + content + right circular search button, no AI button)
-      searchBarChild = Container(
-        key: const ValueKey<String>('compact-search-bar'),
-        decoration: BoxDecoration(
-          color: Colors.white,
+      searchBarChild = Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _openSearchModal(context, initialTab: 0),
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x120F172A),
-              blurRadius: 16,
-              offset: Offset(0, 6),
+          child: Container(
+            key: ValueKey<String>(
+              inHeader ? 'header-search-bar' : 'compact-search-bar',
             ),
-          ],
-        ),
-        padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const Icon(
-              LucideIcons.mapPin,
-              size: 20,
-              color: AppColors.iconStrong,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: InkWell(
-                onTap: () => _openSearchModal(context, initialTab: 0),
-                borderRadius: BorderRadius.circular(16),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _locationSummary(filter),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF0F172A),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${_dateSummary(filter)} • ${_guestSummary(filter)}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          color: Color(0xFF64748B),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: const Color(0xFFE2E8F0),
+                width: inHeader ? 1.0 : 1.2,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0x120F172A),
+                  blurRadius: inHeader ? 10 : 16,
+                  offset: Offset(0, inHeader ? 2 : 6),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Semantics(
-              button: true,
-              label: 'Tìm kiếm',
-              child: InkWell(
-                onTap: () => _triggerSubmit(context),
-                customBorder: const CircleBorder(),
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Center(
-                    child: Icon(
-                      LucideIcons.search,
-                      size: 19,
-                      color: Colors.white,
+            padding: EdgeInsets.fromLTRB(
+              inHeader ? (screenWidth < 420 ? 10 : 12) : 14,
+              inHeader ? 4 : 6,
+              inHeader ? 4 : 6,
+              inHeader ? 4 : 6,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(
+                  LucideIcons.mapPin,
+                  size: inHeader ? (screenWidth < 420 ? 16 : 18) : 20,
+                  color: AppColors.iconStrong,
+                ),
+                SizedBox(width: inHeader ? (screenWidth < 420 ? 6 : 8) : 10),
+                Expanded(
+                  child: inHeader
+                      ? Text(
+                          _locationSummary(filter),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: screenWidth < 420 ? 13.0 : 14.0,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _locationSummary(filter),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: screenWidth < 420 ? 12.0 : 14,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${_dateSummary(filter)} • ${_guestSummary(filter)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: screenWidth < 420 ? 10.0 : 11.5,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+                SizedBox(width: inHeader ? 4 : 8),
+                Semantics(
+                  button: true,
+                  label: 'Tìm kiếm',
+                  child: InkWell(
+                    onTap: () => _triggerSubmit(context),
+                    customBorder: const CircleBorder(),
+                    child: Container(
+                      width: inHeader ? (screenWidth < 420 ? 32 : 36) : 44,
+                      height: inHeader ? (screenWidth < 420 ? 32 : 36) : 44,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Icon(
+                          LucideIcons.search,
+                          size: inHeader ? (screenWidth < 420 ? 14 : 16) : 19,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       );
     } else {

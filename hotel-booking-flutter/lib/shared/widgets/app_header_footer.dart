@@ -9,6 +9,7 @@ import '../../app/theme/app_colors.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/socket_service.dart';
 import '../../features/auth/presentation/view_models/auth_notifier.dart';
+import '../../features/trips/presentation/widgets/global_pending_booking_banner.dart';
 import 'app_semantic_icons.dart';
 
 class AppNotificationItem {
@@ -599,16 +600,31 @@ class NotificationBell extends ConsumerWidget {
               ),
               if (notifState.unreadCount > 0)
                 Positioned(
-                  top: 8,
-                  right: 4,
-                  child: Text(
-                    notifState.unreadCount > 99
-                        ? '99+'
-                        : '${notifState.unreadCount}',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
+                  top: 6,
+                  right: 2,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    decoration: BoxDecoration(
                       color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isOverlayTop ? Colors.transparent : Colors.white,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        notifState.unreadCount > 99
+                            ? '99+'
+                            : '${notifState.unreadCount}',
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          height: 1.0,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -625,12 +641,14 @@ class AppTopHeader extends ConsumerWidget {
   final String currentPath;
   final Widget? centerSearchTrigger;
   final bool isOverlayTop;
+  final bool hidePendingBanner;
 
   const AppTopHeader({
     super.key,
     this.currentPath = '/',
     this.centerSearchTrigger,
     this.isOverlayTop = false,
+    this.hidePendingBanner = false,
   });
 
   @override
@@ -644,8 +662,8 @@ class AppTopHeader extends ConsumerWidget {
       return AnimatedContainer(
         duration: MediaQuery.disableAnimationsOf(context)
             ? Duration.zero
-            : const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
+            : const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
         decoration: BoxDecoration(
           color: isOverlayTop ? Colors.transparent : Colors.white,
           border: isOverlayTop
@@ -655,193 +673,249 @@ class AppTopHeader extends ConsumerWidget {
                 ),
         ),
         padding: EdgeInsets.symmetric(
-          horizontal: isDesktop ? 40 : (isCompactMobile ? 12 : 16),
-          vertical: 12,
+          horizontal: isDesktop
+              ? (centerSearchTrigger != null ? 24 : 40)
+              : (centerSearchTrigger != null
+                  ? (isCompactMobile ? 8.0 : 12.0)
+                  : (isCompactMobile ? 12.0 : 16.0)),
+          vertical: 10,
         ),
         child: SafeArea(
           bottom: false,
-          child: Center(
-            heightFactor: 1.0,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1440),
-              child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                heightFactor: 1.0,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1440),
+                  child: Row(
                 children: [
-                  // Left: Brand Logo + "The Palm Villa"
-                  if (isDesktop)
-                    InkWell(
-                      onTap: () => context.go('/'),
-                      splashColor: Colors.transparent,
-                      highlightColor: Colors.transparent,
-                      hoverColor: Colors.transparent,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 48),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                  // Left & Center Area: Switches smoothly between (Brand Logo + Nav Links) and (Pinned Search Bar)
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 380),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      layoutBuilder: (currentChild, previousChildren) {
+                        return Stack(
+                          alignment: Alignment.centerLeft,
                           children: [
-                            AppBrandIcon.minhThanhLogo(
-                              size: 26,
-                              color: isOverlayTop
-                                  ? Colors.white
-                                  : AppColors.iconStrong,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'The Palm Villa',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 19,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.4,
-                                color: isOverlayTop
-                                    ? Colors.white
-                                    : AppColors.textPrimary,
+                            ...previousChildren,
+                            if (currentChild != null) currentChild,
+                          ],
+                        );
+                      },
+                      transitionBuilder: (child, animation) {
+                        final isSearch = (child.key as ValueKey?)?.value == 'pinned_search_content';
+                        if (isSearch) {
+                          return SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0.0, 0.70),
+                              end: Offset.zero,
+                            ).animate(CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic,
+                            )),
+                            child: FadeTransition(
+                              opacity: CurvedAnimation(
+                                parent: animation,
+                                curve: const Interval(0.1, 1.0, curve: Curves.easeOut),
+                              ),
+                              child: ScaleTransition(
+                                scale: Tween<double>(
+                                  begin: 0.94,
+                                  end: 1.0,
+                                ).animate(CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeOutCubic,
+                                )),
+                                child: child,
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: InkWell(
-                          onTap: () => context.go('/'),
-                          splashColor: Colors.transparent,
-                          highlightColor: Colors.transparent,
-                          hoverColor: Colors.transparent,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(minHeight: 48),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                AppBrandIcon.minhThanhLogo(
-                                  size: 26,
-                                  color: isOverlayTop
-                                      ? Colors.white
-                                      : AppColors.iconStrong,
-                                ),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    'The Palm Villa',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: isCompactMobile ? 16 : 19,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: -0.4,
-                                      color: isOverlayTop
-                                          ? Colors.white
-                                          : AppColors.textPrimary,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  if (isDesktop) ...[
-                    const Spacer(),
-                    // Center: 4 Navigation Links (`Navbar.tsx`) or Compact Search Trigger
-                    if (centerSearchTrigger != null)
-                      centerSearchTrigger!
-                    else
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _NavTextLink(
-                            label: 'Trang chủ',
-                            isActive: currentPath == '/',
-                            isOverlayTop: isOverlayTop,
-                            onTap: () => context.go('/'),
-                          ),
-                          const SizedBox(width: 32),
-                          _NavTextLink(
-                            label: 'Nơi lưu trú',
-                            isActive: currentPath.startsWith('/search') ||
-                                currentPath.startsWith('/tim-kiem') ||
-                                currentPath.startsWith('/noi-luu-tru') ||
-                                currentPath.startsWith('/villas'),
-                            isOverlayTop: isOverlayTop,
-                            onTap: () => context.push('/tim-kiem'),
-                          ),
-                          const SizedBox(width: 32),
-                          _NavTextLink(
-                            label: 'Blog',
-                            isActive: currentPath.startsWith('/blog') ||
-                                currentPath.startsWith('/cam-nang'),
-                            isOverlayTop: isOverlayTop,
-                            onTap: () => context.push('/cam-nang'),
-                          ),
-                          const SizedBox(width: 32),
-                          _NavTextLink(
-                            label: 'Liên hệ',
-                            isActive: currentPath.startsWith('/lien-he'),
-                            isOverlayTop: isOverlayTop,
-                            onTap: () => context.push('/lien-he'),
-                          ),
-                        ],
-                      ),
-                    const Spacer(),
-                  ],
-
-                  // Right: Host action, booking queue, NotificationBell, then Menu + Account icons
-                  if (screenWidth >= 640 &&
-                      (authUser == null || !authUser.isAdmin)) ...[
-                    InkWell(
-                      onTap: () {
-                        if (authUser != null && authUser.isHost) {
-                          context.push('/chu-nha/cho-nghi');
+                          );
                         } else {
-                          context.push('/tro-thanh-host');
+                          return SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0.0, -0.2),
+                              end: Offset.zero,
+                            ).animate(CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic,
+                            )),
+                            child: FadeTransition(
+                              opacity: animation,
+                              child: child,
+                            ),
+                          );
                         }
                       },
-                      borderRadius: BorderRadius.circular(999),
-                      child: Container(
-                        constraints: const BoxConstraints(minHeight: 48),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 9,
-                        ),
-                        decoration: BoxDecoration(
-                          color:
-                              isOverlayTop ? Colors.transparent : Colors.white,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              authUser != null && authUser.isHost
-                                  ? 'Khu vực host'
-                                  : 'Trở thành host',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: isOverlayTop
-                                    ? Colors.white
-                                    : const Color(0xFF18181B),
+                      child: centerSearchTrigger != null
+                          ? KeyedSubtree(
+                              key: const ValueKey('pinned_search_content'),
+                              child: Padding(
+                                padding: EdgeInsets.only(
+                                  right: isDesktop ? 16 : 8,
+                                ),
+                                child: centerSearchTrigger!,
+                              ),
+                            )
+                          : KeyedSubtree(
+                              key: const ValueKey('top_header_content'),
+                              child: Row(
+                                children: [
+                                  // Left: Brand Logo + "The Palm Villa"
+                                  InkWell(
+                                    onTap: () => context.go('/'),
+                                    splashColor: Colors.transparent,
+                                    highlightColor: Colors.transparent,
+                                    hoverColor: Colors.transparent,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(minHeight: 48),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          AppBrandIcon.minhThanhLogo(
+                                            size: 26,
+                                            color: isOverlayTop
+                                                ? Colors.white
+                                                : AppColors.iconStrong,
+                                          ),
+                                          if (screenWidth >= 380) ...[
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              'The Palm Villa',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: isDesktop
+                                                    ? 19
+                                                    : (isCompactMobile ? 16 : 19),
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: -0.4,
+                                                color: isOverlayTop
+                                                    ? Colors.white
+                                                    : AppColors.textPrimary,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+
+                                  if (isDesktop) ...[
+                                    const Spacer(),
+                                    // Center: 4 Navigation Links (`Navbar.tsx`)
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _NavTextLink(
+                                          label: 'Trang chủ',
+                                          isActive: currentPath == '/',
+                                          isOverlayTop: isOverlayTop,
+                                          onTap: () => context.go('/'),
+                                        ),
+                                        SizedBox(width: screenWidth >= 1280 ? 28 : (screenWidth >= 1080 ? 20 : 14)),
+                                        _NavTextLink(
+                                          label: 'Nơi lưu trú',
+                                          isActive: currentPath.startsWith('/search') ||
+                                              currentPath.startsWith('/tim-kiem') ||
+                                              currentPath.startsWith('/noi-luu-tru') ||
+                                              currentPath.startsWith('/villas'),
+                                          isOverlayTop: isOverlayTop,
+                                          onTap: () => context.push('/tim-kiem'),
+                                        ),
+                                        SizedBox(width: screenWidth >= 1280 ? 28 : (screenWidth >= 1080 ? 20 : 14)),
+                                        _NavTextLink(
+                                          label: 'Blog',
+                                          isActive: currentPath.startsWith('/blog') ||
+                                              currentPath.startsWith('/cam-nang'),
+                                          isOverlayTop: isOverlayTop,
+                                          onTap: () => context.push('/cam-nang'),
+                                        ),
+                                        SizedBox(width: screenWidth >= 1280 ? 28 : (screenWidth >= 1080 ? 20 : 14)),
+                                        _NavTextLink(
+                                          label: 'Liên hệ',
+                                          isActive: currentPath.startsWith('/lien-he'),
+                                          isOverlayTop: isOverlayTop,
+                                          onTap: () => context.push('/lien-he'),
+                                        ),
+                                      ],
+                                    ),
+                                    const Spacer(),
+                                  ] else
+                                    const Spacer(),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
-                      ),
                     ),
-                    const SizedBox(width: 6),
-                  ],
+                  ),
+
+                  // Right: Host action (only when not scrolled down), NotificationBell, then Menu
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 320),
+                    curve: Curves.easeOutCubic,
+                    child: (centerSearchTrigger == null &&
+                            (authUser == null || !authUser.isAdmin) &&
+                            screenWidth >= 1260)
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                onTap: () {
+                                  if (authUser != null && authUser.isHost) {
+                                    context.push('/chu-nha/cho-nghi');
+                                  } else {
+                                    context.push('/tro-thanh-host');
+                                  }
+                                },
+                                borderRadius: BorderRadius.circular(999),
+                                child: Container(
+                                  constraints: const BoxConstraints(minHeight: 48),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 9,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        isOverlayTop ? Colors.transparent : Colors.white,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        authUser != null && authUser.isHost
+                                            ? 'Khu vực host'
+                                            : 'Trở thành host',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: isOverlayTop
+                                              ? Colors.white
+                                              : const Color(0xFF18181B),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                          )
+                        : const SizedBox.shrink(),
+                  ),
 
                   // Notification Bell (Icon thông báo)
                   NotificationBell(isOverlayTop: isOverlayTop),
                   const SizedBox(width: 2),
 
-                  // User Account Menu (Icon menu -> Icon tài khoản)
+                  // Menu Button (Icon menu)
                   PopupMenuButton<String>(
-                    tooltip: 'Tài khoản',
+                    tooltip: 'Menu',
                     offset: const Offset(0, 48),
                     color: Colors.white,
                     elevation: 0,
@@ -1109,55 +1183,25 @@ class AppTopHeader extends ConsumerWidget {
                     },
                     child: Container(
                       constraints: const BoxConstraints(
-                        minWidth: 48,
+                        minWidth: 40,
                         minHeight: 48,
                       ),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
+                        horizontal: 8,
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
                         color: Colors.transparent,
                         borderRadius: BorderRadius.circular(999),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            LucideIcons.menu,
-                            size: 20,
-                            color: isOverlayTop
-                                ? Colors.white
-                                : AppColors.iconStrong,
-                          ),
-                          const SizedBox(width: 10),
-                          Icon(
-                            LucideIcons.circleUser,
-                            size: 22,
-                            color: isOverlayTop
-                                ? Colors.white
-                                : AppColors.iconStrong,
-                          ),
-                          if (authUser != null && screenWidth >= 520) ...[
-                            const SizedBox(width: 6),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 96),
-                              child: Text(
-                                authUser.firstName.isNotEmpty
-                                    ? authUser.firstName
-                                    : authUser.fullName,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: isOverlayTop
-                                      ? Colors.white
-                                      : AppColors.textPrimary,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
+                      child: Center(
+                        child: Icon(
+                          LucideIcons.menu,
+                          size: 20,
+                          color: isOverlayTop
+                              ? Colors.white
+                              : AppColors.iconStrong,
+                        ),
                       ),
                     ),
                   ),
@@ -1165,8 +1209,14 @@ class AppTopHeader extends ConsumerWidget {
               ),
             ),
           ),
-        ),
-      );
+          if (!hidePendingBanner)
+            const GlobalPendingBookingHeaderBanner(
+              margin: EdgeInsets.only(top: 8),
+            ),
+        ],
+      ),
+    ),
+  );
     });
   }
 }

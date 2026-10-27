@@ -364,58 +364,72 @@ const getConversationRowsForUser = async (
                 c.guest_user_id AS guestUserId,
                 c.host_user_id AS hostUserId,
                 c.booking_order_id AS bookingOrderId,
-                COALESCE(c.last_message, latest_message.content) AS lastMessage,
-                COALESCE(c.last_message_at, latest_message.created_at, c.updated_at) AS lastMessageAt,
-                COUNT(unread_message.message_id) AS unreadCount,
+                COALESCE(
+                    c.last_message,
+                    (
+                        SELECT m2.content
+                        FROM message m2
+                        WHERE m2.conversation_id = c.conversation_id
+                        ORDER BY m2.created_at DESC, m2.message_id DESC
+                        LIMIT 1
+                    )
+                ) AS lastMessage,
+                COALESCE(
+                    c.last_message_at,
+                    (
+                        SELECT m2.created_at
+                        FROM message m2
+                        WHERE m2.conversation_id = c.conversation_id
+                        ORDER BY m2.created_at DESC, m2.message_id DESC
+                        LIMIT 1
+                    ),
+                    c.updated_at
+                ) AS lastMessageAt,
+                (
+                    SELECT COUNT(*)
+                    FROM message unread_message
+                    WHERE unread_message.conversation_id = c.conversation_id
+                      AND unread_message.sender_id <> :userId
+                      AND (
+                          current_participant.last_read_at IS NULL
+                          OR unread_message.created_at > current_participant.last_read_at
+                      )
+                ) AS unreadCount,
                 c.created_at AS createdAt,
                 c.updated_at AS updatedAt,
                 l.title AS listingTitle,
-                listing_cover.url AS listingCoverImageUrl,
-                other_user.user_id AS otherUserId,
-                other_user.full_name AS otherFullName,
-                other_user.avatar_url AS otherAvatarUrl,
-                COALESCE(c.last_message_at, latest_message.created_at, c.updated_at) AS sortAt
-            FROM conversation c
-            LEFT JOIN conversation_participant current_participant
-                ON current_participant.conversation_id = c.conversation_id
-               AND current_participant.user_id = :userId
-            LEFT JOIN message latest_message
-                ON latest_message.message_id = (
-                    SELECT m2.message_id
-                    FROM message m2
-                    WHERE m2.conversation_id = c.conversation_id
-                    ORDER BY m2.created_at DESC, m2.message_id DESC
-                    LIMIT 1
-                )
-            LEFT JOIN message unread_message
-                ON unread_message.conversation_id = c.conversation_id
-               AND unread_message.sender_id <> :userId
-               AND (
-                    current_participant.last_read_at IS NULL
-                    OR unread_message.created_at > current_participant.last_read_at
-               )
-            LEFT JOIN listings l
-                ON l.listing_id = c.listing_id
-            LEFT JOIN listing_images listing_cover
-                ON listing_cover.id = (
-                    SELECT li.id
+                (
+                    SELECT li.url
                     FROM listing_images li
                     WHERE li.listing_id = c.listing_id
                     ORDER BY li.is_cover DESC, li.sort_order ASC, li.id ASC
                     LIMIT 1
-                )
+                ) AS listingCoverImageUrl,
+                other_user.user_id AS otherUserId,
+                other_user.full_name AS otherFullName,
+                other_user.avatar_url AS otherAvatarUrl,
+                COALESCE(
+                    c.last_message_at,
+                    (
+                        SELECT m2.created_at
+                        FROM message m2
+                        WHERE m2.conversation_id = c.conversation_id
+                        ORDER BY m2.created_at DESC, m2.message_id DESC
+                        LIMIT 1
+                    ),
+                    c.updated_at
+                ) AS sortAt
+            FROM conversation c
+            LEFT JOIN conversation_participant current_participant
+                ON current_participant.conversation_id = c.conversation_id
+               AND current_participant.user_id = :userId
+            LEFT JOIN listings l
+                ON l.listing_id = c.listing_id
             LEFT JOIN users other_user
                 ON other_user.user_id = CASE
                     WHEN c.guest_user_id = :userId THEN c.host_user_id
                     WHEN c.host_user_id = :userId THEN c.guest_user_id
-                    ELSE (
-                        SELECT fallback_participant.user_id
-                        FROM conversation_participant fallback_participant
-                        WHERE fallback_participant.conversation_id = c.conversation_id
-                          AND fallback_participant.user_id <> :userId
-                        ORDER BY FIELD(fallback_participant.role, 'host', 'guest', 'admin'), fallback_participant.user_id
-                        LIMIT 1
-                    )
+                    ELSE COALESCE(c.guest_user_id, c.host_user_id)
                 END
             WHERE (
                     c.guest_user_id = :userId
@@ -424,26 +438,36 @@ const getConversationRowsForUser = async (
               )
               ${scopeClause}
               ${conversationClause}
-            GROUP BY
-                c.conversation_id,
-                c.created_by_user_id,
-                c.listing_id,
-                c.guest_user_id,
-                c.host_user_id,
-                c.booking_order_id,
-                c.last_message,
-                c.last_message_at,
-                c.created_at,
-                c.updated_at,
-                latest_message.content,
-                latest_message.created_at,
-                l.title,
-                listing_cover.url,
-                other_user.user_id,
-                other_user.full_name,
-                other_user.avatar_url
         ) conversation_rows
         ${unreadOnlyClause}
+    `;
+    const countSql = `
+        SELECT COUNT(*) AS totalItems
+        FROM conversation c
+        LEFT JOIN conversation_participant current_participant
+            ON current_participant.conversation_id = c.conversation_id
+           AND current_participant.user_id = :userId
+        WHERE (
+                c.guest_user_id = :userId
+             OR c.host_user_id = :userId
+             OR current_participant.user_id = :userId
+          )
+          ${scopeClause}
+          ${conversationClause}
+          ${
+              query.unreadOnly === true
+                  ? `AND EXISTS (
+                        SELECT 1
+                        FROM message unread_message
+                        WHERE unread_message.conversation_id = c.conversation_id
+                          AND unread_message.sender_id <> :userId
+                          AND (
+                              current_participant.last_read_at IS NULL
+                              OR unread_message.created_at > current_participant.last_read_at
+                          )
+                    )`
+                  : ""
+          }
     `;
     const replacements = { userId, conversationId, limit, offset };
 
@@ -460,10 +484,7 @@ const getConversationRowsForUser = async (
             },
         ),
         sequelize.query<{ totalItems: number }>(
-            `
-            SELECT COUNT(*) AS totalItems
-            FROM (${baseSql}) counted_rows
-            `,
+            countSql,
             {
                 replacements,
                 type: QueryTypes.SELECT,

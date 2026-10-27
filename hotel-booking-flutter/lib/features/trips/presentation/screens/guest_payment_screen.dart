@@ -400,7 +400,10 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
       body: SafeArea(
         child: Column(
           children: [
-            const AppTopHeader(currentPath: '/account/trips'),
+            const AppTopHeader(
+              currentPath: '/thanh-toan',
+              hidePendingBanner: true,
+            ),
             Expanded(
               child: bookingAsync.when(
                 loading: () => const AppLoading(

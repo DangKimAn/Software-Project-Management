@@ -17,6 +17,7 @@ import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../../reviews/presentation/widgets/review_list_widget.dart';
 import '../../domain/entities/booking.dart';
 import '../view_models/trips_view_model.dart';
+import '../widgets/global_pending_booking_banner.dart';
 
 /// Complete port of `Source goc/frontend/src/views/pages/Trips/index.tsx` (`TripHistoryList`, `TripHistoryCard`, `ReviewModal`).
 class TripsScreen extends ConsumerStatefulWidget {
@@ -77,11 +78,15 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
               const SizedBox(height: AppSpacing.s16),
               TextField(
                 controller: reasonController,
+                maxLines: 1,
+                style: const TextStyle(fontSize: 13, height: 1.2),
                 decoration: const InputDecoration(
                   labelText: 'Lý do hủy (bắt buộc)',
                   hintText: 'Thay đổi kế hoạch cá nhân...',
+                  isDense: true,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-                maxLines: 2,
               ),
             ],
           ),
@@ -343,45 +348,53 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
         ),
       ),
       body: SafeArea(
-        child: bookingsAsync.when(
-          loading: () => const Center(
-              child: AppLoading(message: 'Đang tải lịch trình...')),
-          error: (err, _) => Center(
-            child: AppErrorView(
-              message: err.toString().replaceFirst('Exception: ', ''),
-              onRetry: () => ref.invalidate(myBookingsProvider),
-            ),
-          ),
-          data: (bookings) {
-            final activeBookings = bookings.where((b) => b.isActive).toList();
-            final completedBookings =
-                bookings.where((b) => b.isCompleted).toList();
-            final cancelledBookings =
-                bookings.where((b) => b.isCancelled).toList();
+        child: Column(
+          children: [
+            const GlobalPendingBookingHeaderBanner(),
+            Expanded(
+              child: bookingsAsync.when(
+                loading: () => const Center(
+                    child: AppLoading(message: 'Đang tải lịch trình...')),
+                error: (err, _) => Center(
+                  child: AppErrorView(
+                    message: err.toString().replaceFirst('Exception: ', ''),
+                    onRetry: () => ref.invalidate(myBookingsProvider),
+                  ),
+                ),
+                data: (bookings) {
+                  final activeBookings =
+                      bookings.where((b) => b.isActive).toList();
+                  final completedBookings =
+                      bookings.where((b) => b.isCompleted).toList();
+                  final cancelledBookings =
+                      bookings.where((b) => b.isCancelled).toList();
 
-            return TabBarView(
-              controller: _tabController,
-              children: [
-                _buildBookingList(
-                  bookings: activeBookings,
-                  emptyTitle: 'Chưa có chuyến đi sắp tới',
-                  emptyDescription:
-                      'Bạn chưa có kỳ nghỉ nào sắp diễn ra. Hãy khám phá và đặt villa ngay!',
-                ),
-                _buildBookingList(
-                  bookings: completedBookings,
-                  emptyTitle: 'Chưa có kỳ nghỉ đã hoàn tất',
-                  emptyDescription:
-                      'Các chuyến đi đã qua sẽ được lưu giữ tại đây.',
-                ),
-                _buildBookingList(
-                  bookings: cancelledBookings,
-                  emptyTitle: 'Không có đơn đặt đã hủy',
-                  emptyDescription: 'Không có chuyến đi nào bị hủy.',
-                ),
-              ],
-            );
-          },
+                  return TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildBookingList(
+                        bookings: activeBookings,
+                        emptyTitle: 'Chưa có chuyến đi sắp tới',
+                        emptyDescription:
+                            'Bạn chưa có kỳ nghỉ nào sắp diễn ra. Hãy khám phá và đặt villa ngay!',
+                      ),
+                      _buildBookingList(
+                        bookings: completedBookings,
+                        emptyTitle: 'Chưa có kỳ nghỉ đã hoàn tất',
+                        emptyDescription:
+                            'Các chuyến đi đã qua sẽ được lưu giữ tại đây.',
+                      ),
+                      _buildBookingList(
+                        bookings: cancelledBookings,
+                        emptyTitle: 'Không có đơn đặt đã hủy',
+                        emptyDescription: 'Không có chuyến đi nào bị hủy.',
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

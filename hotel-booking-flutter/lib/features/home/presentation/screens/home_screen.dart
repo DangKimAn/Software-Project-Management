@@ -6,7 +6,6 @@ import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/storage/preferences_service.dart';
 import '../../../../core/utils/currency_formatter.dart';
-import '../../../../shared/animations/source_animations.dart';
 import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
@@ -38,8 +37,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
   final ScrollController _popularScrollController = ScrollController();
-  late final ScrollVisibilityTracker _scrollTracker;
-  bool _isSearchVisible = true;
+  final GlobalKey _bodySearchKey = GlobalKey();
   bool _isPinnedByScroll = false;
   bool _isScrolledPastHero = false;
   bool _isDestinationGridMode = false;
@@ -51,29 +49,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _scrollTracker = ScrollVisibilityTracker(
-      onChanged: (isVisible, isPinned) {
-        if (mounted &&
-            (_isSearchVisible != isVisible || _isPinnedByScroll != isPinned)) {
-          setState(() {
-            _isSearchVisible = isVisible;
-            _isPinnedByScroll = isPinned;
-          });
-        }
-      },
-    );
     _scrollController.addListener(_onScroll);
   }
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     final offset = _scrollController.offset;
-    final viewport = MediaQuery.sizeOf(context).height;
-    _scrollTracker.onScroll(offset, viewport);
-    final pastHero = offset > 80;
-    if (pastHero != _isScrolledPastHero && mounted) {
+
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isDesktop = screenWidth >= 768;
+    final pastHero = offset > (isDesktop ? 120.0 : 80.0);
+
+    // Only pin the header search bar when the body search card has completely scrolled past the header
+    bool isPinned = false;
+    final renderBox =
+        _bodySearchKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox != null && renderBox.hasSize) {
+      final position = renderBox.localToGlobal(Offset.zero);
+      final headerBottom = MediaQuery.paddingOf(context).top + 58.0;
+      isPinned = (position.dy + renderBox.size.height) <= headerBottom;
+    } else {
+      final searchTriggerOffset = isDesktop ? 480.0 : 310.0;
+      isPinned = offset > searchTriggerOffset;
+    }
+
+    if ((pastHero != _isScrolledPastHero || isPinned != _isPinnedByScroll) &&
+        mounted) {
       setState(() {
         _isScrolledPastHero = pastHero;
+        _isPinnedByScroll = isPinned;
       });
     }
   }
@@ -112,8 +116,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final popularVillasAsync = ref.watch(popularDestinationsProvider);
     final recentlyViewed = ref.watch(recentlyViewedProvider);
     final blogsAsync = ref.watch(blogHighlightsProvider);
-    final shouldShowPinnedSearch =
-        _isSearchVisible && _isPinnedByScroll && !_isDestinationGridMode;
+    final shouldShowPinnedSearch = _isPinnedByScroll;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -160,45 +163,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
 
-          // Fixed / Overlay Top Header + Scroll-pinned SearchBar (`MainLayout.tsx` + `Header.tsx`)
+          // Fixed / Overlay Top Header with Shrunk Center SearchBar
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AppTopHeader(
-                  currentPath: '/',
-                  isOverlayTop: !_isScrolledPastHero && !shouldShowPinnedSearch,
-                ),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 240),
-                  child: shouldShowPinnedSearch
-                      ? Container(
-                          key: const ValueKey('pinned_search'),
-                          width: double.infinity,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            border: Border(
-                              bottom: BorderSide(color: Color(0xFFE4E4E7)),
-                            ),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          child: Center(
-                            child: SourceSearchBar(
-                              isCompact: true,
-                              onSearchSubmitted: () =>
-                                  context.push('/tim-kiem'),
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-              ],
+            child: AppTopHeader(
+              currentPath: '/',
+              isOverlayTop: !_isScrolledPastHero && !shouldShowPinnedSearch,
+              centerSearchTrigger: shouldShowPinnedSearch
+                  ? SourceSearchBar(
+                      isCompact: true,
+                      isInHeader: true,
+                      onSearchSubmitted: () => context.push('/tim-kiem'),
+                    )
+                  : null,
             ),
           ),
         ],
@@ -300,6 +279,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                           SizedBox(height: isDesktop ? 18 : 14),
                           SourceSearchBar(
+                            key: _bodySearchKey,
                             onSearchSubmitted: () => context.push('/tim-kiem'),
                           ),
                         ],

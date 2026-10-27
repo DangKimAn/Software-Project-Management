@@ -16,6 +16,7 @@ import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../../booking_inquiry/domain/services/contact_service.dart';
 import '../../domain/account_profile_models.dart';
 import '../../services/avatar_upload_service.dart';
+import 'package:hotel_booking_flutter/features/trips/presentation/widgets/global_pending_booking_banner.dart';
 import '../view_models/account_settings_view_model.dart';
 
 /// Account & Settings tab (`Hồ sơ & Tài khoản`).
@@ -1140,6 +1141,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const GlobalPendingBookingHeaderBanner(),
                 // Async Error / Offline / 401-403 Status Banner
                 if (activeSyncState.isOffline ||
                     activeSyncState.isError ||
