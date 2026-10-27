@@ -19,12 +19,29 @@ Future<void> bootstrap({String? expectedEnvironment}) async {
     expectedEnvironment: resolvedExpectedEnv,
     buildFlavor: appFlavor,
   );
+
+  final configWarnings = AppConfig.auditConfiguration(
+    currentEnvironment: resolvedExpectedEnv,
+    buildFlavor: appFlavor,
+  );
+  for (final warning in configWarnings) {
+    AppLogger.w(warning);
+  }
+
   AppLogger.i(
     'Starting The Palm Villa Mobile in [$resolvedExpectedEnv] environment.',
   );
 
-  // 2. Initialize local preferences
-  final prefsService = await PreferencesService.create();
+  // 2. Initialize local preferences with graceful fallback
+  PreferencesService prefsService;
+  try {
+    prefsService = await PreferencesService.create();
+  } catch (e) {
+    AppLogger.w(
+      'SharedPreferences initialization failed; using in-memory fallback: $e',
+    );
+    prefsService = PreferencesService.inMemory();
+  }
 
   // 3. Launch application inside Riverpod ProviderScope
   runApp(

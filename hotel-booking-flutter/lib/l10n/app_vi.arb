@@ -2,32 +2,130 @@
   "@@locale": "vi",
   "appTitle": "The Palm Villa",
   "appTagline": "Biệt thự nghỉ dưỡng cao cấp Vũng Tàu",
+  "greetingMorning": "Chào buổi sáng!",
+  "greetingAfternoon": "Chào buổi chiều!",
+  "greetingEvening": "Chào buổi tối!",
+  "homeWelcomeSubtitle": "Trân trọng được chào đón bạn tại thành phố biển Vũng Tàu",
+  "homeRecentlyViewedTitle": "Đã xem gần đây",
+  "homePopularDestinationsTitle": "Điểm đến phổ biến tại Vũng Tàu",
+  "homeApprovedListingsTitle": "Danh sách chỗ nghỉ đã duyệt",
+  "homeSeeMoreVillas": "Xem thêm villa",
+  "homeSeeNext": "Xem tiếp",
+  "homeShowLess": "Thu gọn",
+  "homeBlogBadge": "BÀI VIẾT MỚI",
+  "homeBlogTitle": "Kinh nghiệm lưu trú nổi bật",
+  "homeBlogSubtitle": "Nội dung tập trung vào nhu cầu thực tế khi đặt villa tại Vũng Tàu, từ nhóm gia đình đến nhóm bạn đông người.",
+  "homeBlogSeeAll": "Xem tất cả bài viết",
   "searchPlaceholder": "Bắt đầu tìm kiếm...",
+  "searchDestinationLabel": "Địa điểm",
+  "searchDestinationHint": "Bạn muốn nghỉ dưỡng ở đâu tại Vũng Tàu?",
+  "searchModeDates": "Theo ngày",
+  "searchModeMonths": "Theo tháng",
+  "searchModeFlexible": "Linh hoạt",
+  "searchFlexibleWeekend": "Cuối tuần",
+  "searchFlexibleWeek": "1 tuần",
+  "searchFlexibleMonth": "1 tháng",
+  "searchExactDates": "Chính xác ngày",
+  "searchPlusMinusDays": "± {days} ngày",
+  "@searchPlusMinusDays": {
+    "placeholders": {
+      "days": { "type": "int" }
+    }
+  },
+  "searchAdults": "Người lớn",
+  "searchAdultsDesc": "Từ 13 tuổi trở lên",
+  "searchChildren": "Trẻ em",
+  "searchChildrenDesc": "Độ tuổi 2 – 12",
+  "searchInfants": "Em bé",
+  "searchInfantsDesc": "Dưới 2 tuổi",
+  "searchPets": "Thú cưng",
+  "searchPetsDesc": "Mang theo thú cưng",
+  "searchFilterTitle": "Bộ lọc nâng cao",
+  "searchSortNewest": "Mới nhất",
+  "searchSortPriceAsc": "Giá thấp đến cao",
+  "searchSortPriceDesc": "Giá cao đến thấp",
+  "searchSortRatingDesc": "Đánh giá cao nhất",
+  "aiSearchTitle": "Tìm kiếm thông minh bằng AI",
+  "aiSearchPlaceholder": "Mô tả kỳ nghỉ mong muốn (VD: Villa sát biển Bãi Sau cho 15 người có hồ bơi nước mặn, BBQ)...",
+  "aiSearchAction": "Tìm bằng AI",
   "navDiscover": "Khám phá",
   "navZalo": "Zalo",
   "navHotline": "Hotline",
   "navFavorites": "Yêu thích",
+  "navTrips": "Chuyến đi",
+  "navAccount": "Tài khoản",
   "navSettings": "Cài đặt",
-  "bedroomsCount": "{count} phòng",
+  "navStays": "Nơi lưu trú",
+  "navBlog": "Cẩm nang",
+  "navContact": "Liên hệ",
+  "navMessages": "Tin nhắn",
+  "navNotifications": "Thông báo",
+  "navBookingQueue": "Giỏ chờ đặt",
+  "navBecomeHost": "Trở thành Host",
+  "navHostPortal": "Kênh Chủ nhà",
+  "navAdminPortal": "Quản trị hệ thống",
+  "bedroomsCount": "{count, plural, =1{1 phòng} other{{count} phòng}}",
   "@bedroomsCount": {
     "placeholders": {
       "count": { "type": "int" }
     }
   },
-  "bedsCount": "{count} giường",
+  "bedsCount": "{count, plural, =1{1 giường} other{{count} giường}}",
   "@bedsCount": {
     "placeholders": {
       "count": { "type": "int" }
     }
   },
-  "guestsCapacity": "{count} khách",
+  "guestsCapacity": "{count, plural, =1{1 khách} other{{count} khách}}",
   "@guestsCapacity": {
     "placeholders": {
       "count": { "type": "int" }
     }
   },
-  "bathroomsCount": "{count} WC",
+  "guestsCount": "{count, plural, =1{1 khách} other{{count} khách}}",
+  "@guestsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "adultsCount": "{count, plural, =1{1 người lớn} other{{count} người lớn}}",
+  "@adultsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "childrenCount": "{count, plural, =1{1 trẻ em} other{{count} trẻ em}}",
+  "@childrenCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "infantsCount": "{count, plural, =1{1 em bé} other{{count} em bé}}",
+  "@infantsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "petsCount": "{count, plural, =1{1 thú cưng} other{{count} thú cưng}}",
+  "@petsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "bathroomsCount": "{count, plural, =1{1 WC} other{{count} WC}}",
   "@bathroomsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "nightsCount": "{count, plural, =1{1 đêm} other{{count} đêm}}",
+  "@nightsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "reviewsCount": "{count, plural, =0{Chưa có đánh giá} =1{1 đánh giá} other{{count} đánh giá}}",
+  "@reviewsCount": {
     "placeholders": {
       "count": { "type": "int" }
     }
@@ -44,13 +142,22 @@
       "price": { "type": "String" }
     }
   },
+  "pricePerNightUnit": "/ đêm",
   "saturdayPrice": "Thứ 7: {price}",
   "@saturdayPrice": {
     "placeholders": {
       "price": { "type": "String" }
     }
   },
+  "totalNightsWithFee": "{nights, plural, =1{Tổng 1 đêm • Đã gồm phí} other{Tổng {nights} đêm • Đã gồm phí}}",
+  "@totalNightsWithFee": {
+    "placeholders": {
+      "nights": { "type": "int" }
+    }
+  },
   "contactForPrice": "Liên hệ báo giá",
+  "statusAvailable": "Còn trống",
+  "statusBooked": "Đã kín phòng",
   "badgeFeatured": "Nổi bật",
   "badgeNew": "Mới",
   "badgeNearBeach": "Gần biển",
@@ -59,25 +166,138 @@
   "ctaContactZalo": "Nhắn tin Zalo",
   "ctaCallHotline": "Gọi Hotline",
   "ctaBookNow": "Tư vấn đặt phòng",
+  "ctaBookInstant": "Đặt phòng ngay",
+  "ctaRequestBooking": "Gửi yêu cầu đặt",
+  "ctaAddToQueue": "Thêm vào giỏ chờ đặt",
   "ctaViewDetail": "Xem chi tiết",
   "ctaCopyLink": "Sao chép liên kết",
   "ctaCopied": "Đã sao chép liên kết vào bộ nhớ tạm",
+  "ctaZaloCopied": "Đã sao chép nội dung tư vấn và mở Zalo",
   "ctaRetry": "Thử lại",
   "ctaResetFilter": "Đặt lại bộ lọc",
+  "ctaBack": "Quay lại",
+  "ctaBackHome": "Về trang chủ",
+  "ctaClose": "Đóng",
+  "ctaCancel": "Hủy",
+  "ctaConfirm": "Xác nhận",
+  "ctaSave": "Lưu thay đổi",
+  "ctaPrevPage": "Trang trước",
+  "ctaNextPage": "Trang sau",
+  "paginationPageOf": "Trang {page} / {totalPages}",
+  "@paginationPageOf": {
+    "placeholders": {
+      "page": { "type": "int" },
+      "totalPages": { "type": "int" }
+    }
+  },
   "loadingText": "Đang tải dữ liệu...",
+  "loadingVillas": "Đang tải chỗ nghỉ...",
+  "loadingVillaDetail": "Đang tải thông tin chi tiết biệt thự...",
+  "loadingFavorites": "Đang tải danh sách yêu thích...",
   "emptyList": "Không tìm thấy villa nào phù hợp",
   "emptyListDesc": "Hãy thử thay đổi tiêu chí tìm kiếm hoặc khoảng thời gian lưu trú.",
   "errorOccurred": "Đã có lỗi xảy ra",
-  "errorTryAgain": "Vui lòng kiểm tra kết nối mạng và thử lại.",
+  "errorTryAgain": "Không thể hoàn tất yêu cầu lúc này. Vui lòng thử lại.",
+  "errorOfflineTitle": "Không có kết nối mạng",
+  "errorOfflineMessage": "Không có kết nối mạng hoặc mạng không ổn định. Vui lòng kiểm tra kết nối và thử lại.",
+  "errorServerTitle": "Lỗi máy chủ",
+  "errorServerMessage": "Máy chủ đang bận hoặc gặp sự cố tạm thời. Vui lòng thử lại sau.",
+  "errorUnauthorizedMessage": "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.",
+  "errorForbiddenMessage": "Bạn không có quyền truy cập chức năng này.",
+  "errorNotFoundTitle": "404 — Không tìm thấy trang",
+  "errorNotFoundMessage": "Đường dẫn bạn truy cập không tồn tại hoặc đã được di chuyển.",
+  "errorVillaNotFoundTitle": "Không tìm thấy biệt thự",
+  "errorVillaNotFoundMessage": "Biệt thự bạn tìm kiếm không tồn tại hoặc đã ngừng phục vụ.",
+  "errorRateLimitMessage": "Bạn đã thao tác quá nhanh. Vui lòng thử lại sau ít phút.",
+  "errorValidationMessage": "Thông tin gửi lên không hợp lệ. Vui lòng kiểm tra lại.",
   "dateBooked": "Ngày này đã kín",
   "checkInDate": "Nhận phòng",
   "checkOutDate": "Trả phòng",
   "guestCount": "Số khách",
   "priceBreakdown": "Chi tiết giá theo đêm",
+  "dailyPriceBreakdownTitle": "Bảng giá theo từng đêm",
+  "specCapacityLabel": "Sức chứa",
+  "specBedroomsLabel": "Phòng ngủ",
+  "specBedsLabel": "Giường",
+  "specBathroomsLabel": "Phòng tắm",
+  "specHighlightsTitle": "Tiện ích nổi bật & Vị trí",
+  "specExpandAction": "Xem thêm thông số chi tiết",
+  "specCollapseAction": "Thu gọn thông số",
+  "specPrivatePool": "Hồ bơi riêng",
+  "specNoPool": "Không có hồ bơi",
+  "specBbqKitchen": "Bếp & Lò BBQ đầy đủ",
+  "specBasicKitchen": "Bếp cơ bản",
+  "specParking": "Chỗ đậu xe ô tô",
+  "specSelfParking": "Đậu xe tự túc",
+  "specNearCenter": "Gần trung tâm",
+  "hostDefaultName": "Chủ nhà VungTauStay",
+  "hostDefaultBio": "Chủ nhà tại Vũng Tàu, hỗ trợ thông tin lưu trú và nhận phòng.",
+  "bookingInstantConfirm": "Đặt phòng xác nhận ngay",
+  "bookingSupport247": "Tư vấn & Đặt phòng 24/7",
   "faqTitle": "Câu hỏi thường gặp",
+  "rulesAndFaqTitle": "Quy định & Câu hỏi thường gặp",
+  "faqCheckInTitle": "Thời gian nhận và trả villa như thế nào?",
+  "faqCheckInBody": "Giờ nhận villa tiêu chuẩn từ 14:00 chiều và giờ trả trước 12:00 trưa hôm sau. Quý khách có nhu cầu nhận sớm hoặc trả muộn vui lòng thông báo trước để được hỗ trợ tùy theo tình trạng phòng trống.",
+  "faqNoiseTitle": "Quy định về tiếng ồn và sử dụng karaoke?",
+  "faqNoiseBody": "Theo quy định trật tự đô thị tại Vũng Tàu, dàn karaoke và âm thanh ngoài trời hoạt động đến 22:00 tối. Sau 22:00, quý khách vui lòng sinh hoạt văn minh trong không gian phòng kín để không ảnh hưởng các biệt thự lân cận.",
+  "faqKitchenTitle": "Biệt thự có trang bị đầy đủ gia vị và đồ dùng nấu ăn không?",
+  "faqKitchenBody": "Khu vực bếp và lò nướng BBQ được trang bị sẵn chén bát, đũa muỗng, nồi niêu xoong chảo, bếp từ/gas và vỉ nướng. Quý khách chỉ cần chuẩn bị thực phẩm tươi sống và than nướng theo sở thích.",
+  "faqDepositTitle": "Chính sách đặt cọc và hủy phòng?",
+  "faqDepositBody": "Để giữ lịch villa, quý khách vui lòng đặt cọc 50% giá trị hợp đồng. Số tiền còn lại thanh toán khi nhận bàn giao villa. Chính sách dời ngày linh hoạt khi thông báo trước ít nhất 7 ngày.",
   "settingsLanguage": "Ngôn ngữ",
   "settingsEnvironment": "Môi trường",
   "settingsVersion": "Phiên bản",
   "favoritesEmpty": "Chưa có villa nào được lưu",
-  "favoritesEmptyDesc": "Bấm vào biểu tượng trái tim ở góc thẻ villa để lưu vào danh sách yêu thích."
+  "favoritesEmptyDesc": "Bấm vào biểu tượng trái tim ở góc thẻ villa để lưu vào danh sách yêu thích.",
+  "bookingStatusPendingPayment": "Chờ thanh toán",
+  "bookingStatusPaymentExpired": "Quá hạn thanh toán",
+  "bookingStatusPaid": "Đã thanh toán",
+  "bookingStatusConfirmed": "Đã xác nhận",
+  "bookingStatusCheckedIn": "Đang lưu trú",
+  "bookingStatusCheckedOut": "Đã trả phòng",
+  "bookingStatusCompleted": "Đã hoàn thành",
+  "bookingStatusCancelledByGuest": "Khách đã hủy",
+  "bookingStatusCancelledByHost": "Host đã hủy",
+  "bookingStatusCancelledByAdmin": "Admin đã hủy",
+  "bookingStatusRejected": "Từ chối",
+  "bookingStatusRefundPending": "Đang hoàn tiền",
+  "bookingStatusRefunded": "Đã hoàn tiền",
+  "paymentUnverifiedTitle": "Chưa xác nhận được giao dịch",
+  "paymentUnverifiedDesc": "Tạm thời chưa thể xác minh trạng thái giao dịch với máy chủ. Vui lòng kiểm tra kết nối mạng và thử xác minh lại.",
+  "paymentRecheckStatus": "Kiểm tra lại trạng thái",
+  "authLoginTitle": "Đăng nhập",
+  "authRegisterTitle": "Đăng ký tài khoản",
+  "authForgotPasswordTitle": "Quên mật khẩu",
+  "authGoogleSignIn": "Tiếp tục với Google",
+  "authLogout": "Đăng xuất",
+  "profileVerified": "Đã xác minh",
+  "profileUnverified": "Chưa xác minh",
+  "hostOnboardingTitle": "Trở thành Chủ nhà tại Minh Thanh Villa",
+  "hostKycTitle": "Đăng ký & Xác minh Hồ sơ Chủ nhà",
+  "hostKycStatusTitle": "Trạng thái xét duyệt Hồ sơ Chủ nhà",
+  "hostTabOverview": "Tổng quan",
+  "hostTabProperties": "Chỗ nghỉ",
+  "hostTabNewProperty": "Thêm chỗ nghỉ",
+  "hostTabBookings": "Đặt phòng",
+  "hostTabCalendar": "Lịch lưu trú",
+  "hostTabGuests": "Khách lưu trú",
+  "hostTabMessages": "Tin nhắn",
+  "hostTabPayouts": "Thanh toán",
+  "hostTabReviews": "Đánh giá",
+  "hostTabReports": "Báo cáo",
+  "hostTabSupport": "Hỗ trợ",
+  "hostTabSettings": "Cài đặt",
+  "hostListingDraft": "Bản nháp",
+  "hostListingPendingApproval": "Chờ duyệt",
+  "hostListingPublished": "Đang hiển thị",
+  "hostListingHidden": "Đang ẩn",
+  "hostListingRejected": "Từ chối duyệt",
+  "adminTabOverview": "Tổng quan",
+  "adminTabUsers": "Người dùng",
+  "adminTabModeration": "Kiểm duyệt bài đăng",
+  "adminTabHostApplications": "Duyệt hồ sơ Host",
+  "adminTabRoles": "Phân quyền hệ thống",
+  "adminUserStatusActive": "Hoạt động",
+  "adminUserStatusSuspended": "Đang khóa",
+  "adminUserStatusInactive": "Ngừng hoạt động"
 }

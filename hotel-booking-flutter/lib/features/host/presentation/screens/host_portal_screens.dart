@@ -107,6 +107,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   String? _listingsError;
   List<Map<String, dynamic>> _listings = [];
   String _listingStatusFilter = 'all';
+  String _listingSortBy = 'newest';
+  int _listingsVisibleCount = 10;
   String? _busyListingActionId;
 
   // Bookings state
@@ -115,6 +117,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   String? _bookingsSuccess;
   List<Map<String, dynamic>> _bookings = [];
   String _bookingStatusFilter = 'all';
+  String _bookingSortBy = 'newest';
+  int _bookingsVisibleCount = 10;
   String? _busyBookingActionId;
 
   // Calendar state
@@ -135,6 +139,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   // Guests search state
   final TextEditingController _guestSearchCtrl = TextEditingController();
   String _guestSearchQuery = '';
+  String _guestSortBy = 'spent_desc';
+  int _guestsVisibleCount = 10;
 
   // Messages state
   bool _loadingConversations = false;
@@ -150,6 +156,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   String? _payoutsError;
   List<Map<String, dynamic>> _payoutAccounts = [];
   List<Map<String, dynamic>> _payouts = [];
+  String _payoutStatusFilter = 'all';
 
   // Reviews state
   String? _reviewListingId;
@@ -162,6 +169,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
   // Reports state
   String _reportRange = '30d';
+  String _reportGroup = 'auto';
+  String _reportListingId = 'all';
   bool _loadingReport = false;
   String? _reportError;
   HostRevenueReport _revenueReport = const HostRevenueReport();
@@ -271,6 +280,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
         _ensureReviewsLoaded();
         break;
       case HostPortalSection.reports:
+        if (_listings.isEmpty) {
+          _fetchListings();
+        }
         _fetchRevenueReport();
         break;
       case HostPortalSection.settings:
@@ -365,12 +377,17 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
         title: const Text('Xác nhận xóa chỗ nghỉ'),
         content: Text(
           'Bạn chắc chắn muốn xóa chỗ nghỉ "$title"? Thao tác này không thể hoàn tác.',
         ),
         actions: [
           TextButton(
+            style: TextButton.styleFrom(
+              minimumSize: const Size(88, 48),
+              shape: const StadiumBorder(),
+            ),
             onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Hủy'),
           ),
@@ -379,6 +396,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFBE123C),
               foregroundColor: Colors.white,
+              minimumSize: const Size(120, 48),
+              shape: const StadiumBorder(),
+              elevation: 0,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Xóa chỗ nghỉ'),
@@ -434,18 +454,26 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
           title: Text('Hủy booking #$bookingId'),
           content: TextField(
             key: const Key('booking_cancel_reason_input'),
             controller: reasonCtrl,
             maxLines: 2,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Lý do hủy booking *',
-              border: OutlineInputBorder(),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
             ),
           ),
           actions: [
             TextButton(
+              style: TextButton.styleFrom(
+                minimumSize: const Size(88, 48),
+                shape: const StadiumBorder(),
+              ),
               onPressed: () => Navigator.of(ctx).pop(false),
               child: const Text('Đóng'),
             ),
@@ -454,6 +482,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFBE123C),
                 foregroundColor: Colors.white,
+                minimumSize: const Size(120, 48),
+                shape: const StadiumBorder(),
+                elevation: 0,
               ),
               onPressed: () => Navigator.of(ctx).pop(true),
               child: const Text('Xác nhận hủy'),
@@ -566,6 +597,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     required bool isAvailable,
     required bool isBlockedByHost,
     bool resetPriceOverride = false,
+    bool requireConfirm = true,
   }) async {
     final listingId = _calendarListingId;
     if (listingId == null || listingId.isEmpty) return;
@@ -573,6 +605,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       setState(() {
         _calendarError =
             'Vui lòng chọn ít nhất một ngày trên lịch để cập nhật.';
+      });
+      return;
+    }
+
+    final validation = validateCalendarBulkDates(
+      _selectedCalendarDates.toList(),
+      currentCalendarDays: _calendarDays,
+    );
+    if (!validation.isAllValid) {
+      setState(() {
+        _calendarError =
+            validation.errorMessage ?? 'Các ngày đã chọn không hợp lệ.';
       });
       return;
     }
@@ -597,6 +641,54 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       }
     }
 
+    if (requireConfirm) {
+      final statusDesc =
+          isBlockedByHost || !isAvailable ? 'Khóa ngày' : 'Mở bán';
+      final priceDesc = resetPriceOverride
+          ? 'Xóa giá ghi đè (về giá gốc)'
+          : (priceOverride != null
+              ? formatHostVnd(priceOverride)
+              : 'Giữ nguyên');
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          key: const Key('calendar_bulk_confirm_dialog'),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+          title: const Text('Xác nhận cập nhật lịch lưu trú'),
+          content: Text(
+            'Bạn sắp cập nhật ${validation.editableDates.length} ngày đã chọn:\n'
+            '• Trạng thái: $statusDesc\n'
+            '• Giá theo ngày: $priceDesc',
+          ),
+          actions: [
+            TextButton(
+              key: const Key('calendar_bulk_confirm_cancel_btn'),
+              style: TextButton.styleFrom(
+                minimumSize: const Size(88, 48),
+                shape: const StadiumBorder(),
+              ),
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Hủy'),
+            ),
+            ElevatedButton(
+              key: const Key('calendar_bulk_confirm_submit_btn'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(140, 48),
+                shape: const StadiumBorder(),
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Xác nhận cập nhật'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
     setState(() {
       _savingCalendar = true;
       _calendarError = null;
@@ -607,7 +699,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     try {
       await repo.bulkUpdateListingCalendar(
         listingId,
-        dates: _selectedCalendarDates.toList(),
+        dates: validation.editableDates,
         isAvailable: isAvailable,
         isBlockedByHost: isBlockedByHost,
         priceOverride: resetPriceOverride ? null : priceOverride,
@@ -616,6 +708,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
         notes: _calendarNotesCtrl.text.trim().isNotEmpty
             ? _calendarNotesCtrl.text.trim()
             : null,
+        currentCalendarDays: _calendarDays,
       );
       await _fetchCalendarDays();
       if (!mounted) return;
@@ -676,7 +769,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       setState(() {
         _conversationMessages = msgs;
       });
-    } catch (_) {}
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _conversationsError = repo.extractErrorMessage(
+          e,
+          'Không thể tải nội dung tin nhắn của cuộc trò chuyện.',
+        );
+      });
+    }
   }
 
   Future<void> _sendHostMessage() async {
@@ -815,7 +916,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     });
     final repo = ref.read(hostRepositoryProvider);
     try {
-      final report = await repo.getTypedRevenueReport(rangeKey: _reportRange);
+      final report = await repo.getTypedRevenueReport(
+        rangeKey: _reportRange,
+        groupOverride: _reportGroup == 'auto' ? null : _reportGroup,
+        listingId: _reportListingId == 'all' ? null : _reportListingId,
+      );
       if (!mounted) return;
       setState(() {
         _revenueReport = report;
@@ -1034,9 +1139,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     return InputDecorator(
       decoration: InputDecoration(
         labelText: label,
-        border: const OutlineInputBorder(),
+        filled: true,
+        fillColor: AppColors.surfaceBase,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<T>(
@@ -1053,6 +1167,83 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentRole = ref.watch(hostCurrentUserRoleProvider);
+    if (!isApprovedHostRole(currentRole)) {
+      return Scaffold(
+        backgroundColor: AppColors.surfaceBase,
+        appBar: AppBar(
+          backgroundColor: AppColors.surfaceBase,
+          elevation: 0,
+          title: const Text(
+            'Host Portal',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Container(
+                key: const Key('host_portal_unauthorized_guard'),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceBase,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      LucideIcons.shieldAlert,
+                      size: 32,
+                      color: AppColors.textPrimary,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Quyền truy cập dành riêng cho Chủ nhà (Host)',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Tài khoản của bạn chưa có quyền Host đã duyệt. Vui lòng hoàn tất đăng ký và xác minh KYC trước khi quản lý chỗ nghỉ.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      key: const Key('host_portal_go_onboarding_btn'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(180, 48),
+                        shape: const StadiumBorder(),
+                        elevation: 0,
+                      ),
+                      onPressed: () => context.go('/host/dang-ky'),
+                      child: const Text('Đăng ký làm Chủ nhà'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final isDesktop = constraints.maxWidth >= 960;
@@ -1080,7 +1271,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 const Icon(
                   LucideIcons.building2,
                   size: 20,
-                  color: AppColors.primary,
+                  color: AppColors.textPrimary,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -1162,37 +1353,47 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
   Widget _buildMobileSectionTabBar() {
     return Container(
-      height: 54,
+      width: double.infinity,
       decoration: const BoxDecoration(
         color: AppColors.surfaceBase,
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
-      child: ListView.separated(
+      child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        itemCount: HostPortalSection.values.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
-        itemBuilder: (context, index) {
-          final section = HostPortalSection.values[index];
-          final selected = _activeSection == section;
-          return ChoiceChip(
-            key: Key('host_tab_${section.keyName}'),
-            label: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  section.icon,
-                  size: 15,
-                  color: selected ? AppColors.primary : AppColors.textSecondary,
-                ),
-                const SizedBox(width: 6),
-                Text(section.label),
-              ],
-            ),
-            selected: selected,
-            onSelected: (_) => _switchSection(section),
-          );
-        },
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Row(
+          children: [
+            for (var i = 0; i < HostPortalSection.values.length; i++) ...[
+              if (i > 0) const SizedBox(width: 6),
+              Builder(
+                builder: (context) {
+                  final section = HostPortalSection.values[i];
+                  final selected = _activeSection == section;
+                  return ChoiceChip(
+                    key: Key('host_tab_${section.keyName}'),
+                    shape: const StadiumBorder(),
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          section.icon,
+                          size: 15,
+                          color: selected
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(section.label),
+                      ],
+                    ),
+                    selected: selected,
+                    onSelected: (_) => _switchSection(section),
+                  );
+                },
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1206,7 +1407,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             padding: const EdgeInsets.only(bottom: 4),
             child: InkWell(
               key: Key('host_sidebar_${section.keyName}'),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(999),
               onTap: () {
                 if (inDrawer) Navigator.of(context).pop();
                 _switchSection(section);
@@ -1214,12 +1415,17 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               child: Container(
                 constraints: const BoxConstraints(minHeight: 48),
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: _activeSection == section
-                      ? const Color(0xFFECFEFF)
+                      ? AppColors.surfaceMuted
                       : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: _activeSection == section
+                        ? AppColors.primary
+                        : Colors.transparent,
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -1295,10 +1501,22 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   // ===========================================================================
 
   Widget _buildOverviewSection() {
-    final publishedCount =
-        _listings.where((l) => l['status'] == 'published').length;
-    final pendingApprovalCount =
-        _listings.where((l) => l['status'] == 'pending_approval').length;
+    final publishedCount = _listings
+        .where(
+          (l) =>
+              HostListingStatus.fromApi(l['status']) ==
+              HostListingStatus.published,
+        )
+        .length;
+    final pendingApprovalCount = _listings
+        .where(
+          (l) =>
+              HostListingStatus.fromApi(l['status']) ==
+              HostListingStatus.pendingApproval,
+        )
+        .length;
+    final overviewError =
+        _listingsError ?? _bookingsError ?? _reportError ?? _payoutsError;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -1341,6 +1559,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       minimumSize: const Size(120, 48),
                       foregroundColor: AppColors.textPrimary,
                       side: const BorderSide(color: AppColors.border),
+                      shape: const StadiumBorder(),
                     ),
                     onPressed: _loadInitialPortalData,
                     icon: const Icon(LucideIcons.refreshCw, size: 16),
@@ -1351,6 +1570,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(150, 48),
+                      shape: const StadiumBorder(),
+                      elevation: 0,
                     ),
                     onPressed: () =>
                         _switchSection(HostPortalSection.newProperty),
@@ -1361,6 +1582,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               ),
             ],
           ),
+          if (overviewError != null) ...[
+            const SizedBox(height: 16),
+            _buildInlineError(
+              overviewError,
+              onRetry: _loadInitialPortalData,
+            ),
+          ],
           const SizedBox(height: 20),
           _buildKpiGrid([
             (
@@ -1391,7 +1619,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: AppColors.surfaceBase,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(color: AppColors.border),
             ),
             child: Column(
@@ -1413,6 +1641,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     TextButton(
                       style: TextButton.styleFrom(
                         minimumSize: const Size(88, 48),
+                        shape: const StadiumBorder(),
                       ),
                       onPressed: () =>
                           _switchSection(HostPortalSection.bookings),
@@ -1470,6 +1699,38 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       ('rejected', 'Bị từ chối'),
     ];
 
+    const sortOptions = [
+      ('newest', 'Mới nhất'),
+      ('price_asc', 'Giá thấp → cao'),
+      ('price_desc', 'Giá cao → thấp'),
+      ('title_asc', 'Tên A → Z'),
+    ];
+
+    final sortedListings = List<Map<String, dynamic>>.from(_listings);
+    sortedListings.sort((a, b) {
+      if (_listingSortBy == 'price_asc' || _listingSortBy == 'price_desc') {
+        final pa = (a['basePrice'] ?? a['pricePerNight'] ?? 0) is num
+            ? ((a['basePrice'] ?? a['pricePerNight'] ?? 0) as num).toDouble()
+            : (double.tryParse('${a['basePrice'] ?? 0}') ?? 0);
+        final pb = (b['basePrice'] ?? b['pricePerNight'] ?? 0) is num
+            ? ((b['basePrice'] ?? b['pricePerNight'] ?? 0) as num).toDouble()
+            : (double.tryParse('${b['basePrice'] ?? 0}') ?? 0);
+        return _listingSortBy == 'price_asc'
+            ? pa.compareTo(pb)
+            : pb.compareTo(pa);
+      }
+      if (_listingSortBy == 'title_asc') {
+        final ta = (a['title'] ?? '').toString().toLowerCase();
+        final tb = (b['title'] ?? '').toString().toLowerCase();
+        return ta.compareTo(tb);
+      }
+      final ida = int.tryParse('${a['listingId'] ?? a['id'] ?? 0}') ?? 0;
+      final idb = int.tryParse('${b['listingId'] ?? b['id'] ?? 0}') ?? 0;
+      return idb.compareTo(ida);
+    });
+
+    final visibleListings = sortedListings.take(_listingsVisibleCount).toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -1515,6 +1776,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       minimumSize: const Size(110, 48),
                       foregroundColor: AppColors.textPrimary,
                       side: const BorderSide(color: AppColors.border),
+                      shape: const StadiumBorder(),
                     ),
                     onPressed: _loadingListings ? null : _fetchListings,
                     icon: const Icon(LucideIcons.refreshCw, size: 16),
@@ -1526,6 +1788,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(150, 48),
+                      shape: const StadiumBorder(),
+                      elevation: 0,
                     ),
                     onPressed: () =>
                         _switchSection(HostPortalSection.newProperty),
@@ -1538,7 +1802,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           ),
           if (_listingsError != null) ...[
             const SizedBox(height: 16),
-            _buildInlineError(_listingsError!),
+            _buildInlineError(
+              _listingsError!,
+              onRetry: _fetchListings,
+            ),
           ],
           const SizedBox(height: 20),
           _buildKpiGrid([
@@ -1558,7 +1825,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               sub: 'pending_approval',
             ),
             (
-              label: 'Bản nháp / Ẩn',
+              label: 'Bản nháp / Ẩn / Từ chối',
               value:
                   '${(counts['draft'] ?? 0) + (counts['hidden'] ?? 0) + (counts['rejected'] ?? 0)}',
               sub: 'draft / hidden / rejected',
@@ -1572,14 +1839,43 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               final selected = _listingStatusFilter == opt.$1;
               return ChoiceChip(
                 key: Key('listing_filter_${opt.$1}'),
+                shape: const StadiumBorder(),
                 label: Text(opt.$2),
                 selected: selected,
                 onSelected: (_) {
-                  setState(() => _listingStatusFilter = opt.$1);
+                  setState(() {
+                    _listingStatusFilter = opt.$1;
+                    _listingsVisibleCount = 10;
+                  });
                   _fetchListings();
                 },
               );
             }).toList(),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              const Text(
+                'Sắp xếp:',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              ...sortOptions.map((opt) {
+                return ChoiceChip(
+                  key: Key('listing_sort_${opt.$1}'),
+                  shape: const StadiumBorder(),
+                  label: Text(opt.$2),
+                  selected: _listingSortBy == opt.$1,
+                  onSelected: (_) => setState(() => _listingSortBy = opt.$1),
+                );
+              }),
+            ],
           ),
           const SizedBox(height: 16),
           if (_loadingListings)
@@ -1587,10 +1883,30 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               padding: EdgeInsets.all(32),
               child: Center(child: CircularProgressIndicator()),
             )
-          else if (_listings.isEmpty)
+          else if (sortedListings.isEmpty)
             _buildEmptyBox('Chưa có chỗ nghỉ phù hợp bộ lọc.')
-          else
-            ..._listings.map(_buildListingCard),
+          else ...[
+            ...visibleListings.map(_buildListingCard),
+            if (sortedListings.length > visibleListings.length)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: OutlinedButton(
+                  key: const Key('listings_load_more_btn'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(160, 48),
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: const StadiumBorder(),
+                  ),
+                  onPressed: () {
+                    setState(() => _listingsVisibleCount += 10);
+                  },
+                  child: Text(
+                    'Xem thêm (${sortedListings.length - visibleListings.length} chỗ nghỉ)',
+                  ),
+                ),
+              ),
+          ],
         ],
       ),
     );
@@ -1602,9 +1918,14 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     final statusEnum = HostListingStatus.fromApi(listing['status']);
     final propType = HostPropertyType.fromApi(listing['propertyType']);
     final basePrice = listing['basePrice'] ?? listing['pricePerNight'] ?? 0;
+    final weekendPrice = listing['weekendPrice'];
     final maxGuests = listing['maxGuests'] ?? 1;
     final imageUrl =
         (listing['imageUrl'] ?? listing['coverImageUrl'] ?? '').toString();
+    final rejectReason =
+        (listing['rejectionReason'] ?? listing['rejectReason'] ?? '')
+            .toString()
+            .trim();
     final addressParts = [
       listing['addressLine'],
       listing['ward'],
@@ -1624,7 +1945,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -1634,7 +1955,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(18),
                 child: imageUrl.isNotEmpty
                     ? Image.network(
                         imageUrl,
@@ -1677,7 +1998,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       children: [
                         _buildStatusPill(statusEnum.labelVi, statusEnum.value),
                         Text(
-                          '${propType.labelVi} • ${formatHostVnd(basePrice)}/đêm • $maxGuests khách',
+                          '${propType.labelVi} • ${formatHostVnd(basePrice)}/đêm'
+                          '${weekendPrice != null ? ' (CT: ${formatHostVnd(weekendPrice)})' : ''}'
+                          ' • $maxGuests khách',
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -1691,6 +2014,26 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               ),
             ],
           ),
+          if (statusEnum == HostListingStatus.rejected &&
+              rejectReason.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1F2),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFFECDD3)),
+              ),
+              child: Text(
+                'Lý do từ chối: $rejectReason',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFFBE123C),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -1702,6 +2045,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   minimumSize: const Size(88, 48),
                   foregroundColor: AppColors.textPrimary,
                   side: const BorderSide(color: AppColors.border),
+                  shape: const StadiumBorder(),
                 ),
                 onPressed: isBusy
                     ? null
@@ -1720,6 +2064,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     minimumSize: const Size(110, 48),
+                    shape: const StadiumBorder(),
+                    elevation: 0,
                   ),
                   onPressed: isBusy
                       ? null
@@ -1730,6 +2076,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   icon: const Icon(LucideIcons.send, size: 15),
                   label: const Text('Gửi duyệt'),
                 ),
+              if (statusEnum == HostListingStatus.pendingApproval)
+                OutlinedButton.icon(
+                  key: Key('listing_withdraw_draft_btn_$id'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(110, 48),
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: const StadiumBorder(),
+                  ),
+                  onPressed: isBusy
+                      ? null
+                      : () => _runListingMutation(
+                            id,
+                            () => repo.updateHostListing(
+                              id,
+                              {'status': HostListingStatus.draft.value},
+                            ),
+                          ),
+                  icon: const Icon(LucideIcons.rotateCcw, size: 15),
+                  label: const Text('Rút về nháp'),
+                ),
               if (statusEnum == HostListingStatus.published)
                 OutlinedButton.icon(
                   key: Key('listing_hide_btn_$id'),
@@ -1737,6 +2104,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     minimumSize: const Size(88, 48),
                     foregroundColor: AppColors.textPrimary,
                     side: const BorderSide(color: AppColors.border),
+                    shape: const StadiumBorder(),
                   ),
                   onPressed: isBusy
                       ? null
@@ -1754,6 +2122,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     minimumSize: const Size(88, 48),
                     foregroundColor: AppColors.primary,
                     side: const BorderSide(color: AppColors.primary),
+                    shape: const StadiumBorder(),
                   ),
                   onPressed: isBusy
                       ? null
@@ -1770,6 +2139,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   minimumSize: const Size(88, 48),
                   foregroundColor: const Color(0xFFBE123C),
                   side: const BorderSide(color: Color(0xFFFECDD3)),
+                  shape: const StadiumBorder(),
                 ),
                 onPressed:
                     isBusy ? null : () => _confirmAndDeleteListing(listing),
@@ -1787,7 +2157,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     return Container(
       width: 88,
       height: 68,
-      color: const Color(0xFFF1F5F9),
+      color: AppColors.surfaceMuted,
       alignment: Alignment.center,
       child: const Text(
         'Chưa có ảnh',
@@ -1812,6 +2182,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       ('cancelled', 'Đã hủy'),
     ];
 
+    const sortOptions = [
+      ('newest', 'Mới nhất'),
+      ('checkin_asc', 'Nhận phòng gần nhất'),
+      ('total_desc', 'Tổng tiền cao nhất'),
+    ];
+
     final filtered = _bookings
         .where(
           (b) => bookingMatchesDisplayStatus(
@@ -1821,6 +2197,28 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           ),
         )
         .toList();
+
+    filtered.sort((a, b) {
+      if (_bookingSortBy == 'checkin_asc') {
+        final ca = (a['checkInDate'] ?? '').toString();
+        final cb = (b['checkInDate'] ?? '').toString();
+        return ca.compareTo(cb);
+      }
+      if (_bookingSortBy == 'total_desc') {
+        final ta = (a['totalPrice'] ?? a['totalAmount'] ?? 0) is num
+            ? ((a['totalPrice'] ?? a['totalAmount'] ?? 0) as num).toDouble()
+            : (double.tryParse('${a['totalPrice'] ?? 0}') ?? 0);
+        final tb = (b['totalPrice'] ?? b['totalAmount'] ?? 0) is num
+            ? ((b['totalPrice'] ?? b['totalAmount'] ?? 0) as num).toDouble()
+            : (double.tryParse('${b['totalPrice'] ?? 0}') ?? 0);
+        return tb.compareTo(ta);
+      }
+      final ida = int.tryParse('${a['bookingId'] ?? a['id'] ?? 0}') ?? 0;
+      final idb = int.tryParse('${b['bookingId'] ?? b['id'] ?? 0}') ?? 0;
+      return idb.compareTo(ida);
+    });
+
+    final visibleBookings = filtered.take(_bookingsVisibleCount).toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -1859,6 +2257,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   minimumSize: const Size(110, 48),
                   foregroundColor: AppColors.textPrimary,
                   side: const BorderSide(color: AppColors.border),
+                  shape: const StadiumBorder(),
                 ),
                 onPressed: _loadingBookings ? null : _fetchBookings,
                 icon: const Icon(LucideIcons.refreshCw, size: 16),
@@ -1868,7 +2267,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           ),
           if (_bookingsError != null) ...[
             const SizedBox(height: 16),
-            _buildInlineError(_bookingsError!),
+            _buildInlineError(
+              _bookingsError!,
+              onRetry: _fetchBookings,
+            ),
           ],
           if (_bookingsSuccess != null) ...[
             const SizedBox(height: 16),
@@ -1881,12 +2283,40 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             children: filterTabs.map((tab) {
               return ChoiceChip(
                 key: Key('booking_filter_${tab.$1}'),
+                shape: const StadiumBorder(),
                 label: Text(tab.$2),
                 selected: _bookingStatusFilter == tab.$1,
-                onSelected: (_) =>
-                    setState(() => _bookingStatusFilter = tab.$1),
+                onSelected: (_) => setState(() {
+                  _bookingStatusFilter = tab.$1;
+                  _bookingsVisibleCount = 10;
+                }),
               );
             }).toList(),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              const Text(
+                'Sắp xếp:',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              ...sortOptions.map((opt) {
+                return ChoiceChip(
+                  key: Key('booking_sort_${opt.$1}'),
+                  shape: const StadiumBorder(),
+                  label: Text(opt.$2),
+                  selected: _bookingSortBy == opt.$1,
+                  onSelected: (_) => setState(() => _bookingSortBy = opt.$1),
+                );
+              }),
+            ],
           ),
           const SizedBox(height: 16),
           if (_loadingBookings)
@@ -1896,8 +2326,28 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             )
           else if (filtered.isEmpty)
             _buildEmptyBox('Chưa có đặt phòng phù hợp.')
-          else
-            ...filtered.map(_buildBookingItemCard),
+          else ...[
+            ...visibleBookings.map(_buildBookingItemCard),
+            if (filtered.length > visibleBookings.length)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: OutlinedButton(
+                  key: const Key('bookings_load_more_btn'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(160, 48),
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: const StadiumBorder(),
+                  ),
+                  onPressed: () {
+                    setState(() => _bookingsVisibleCount += 10);
+                  },
+                  child: Text(
+                    'Xem thêm (${filtered.length - visibleBookings.length} booking)',
+                  ),
+                ),
+              ),
+          ],
         ],
       ),
     );
@@ -1932,7 +2382,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -1985,6 +2435,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(110, 48),
+                      shape: const StadiumBorder(),
+                      elevation: 0,
                     ),
                     onPressed: isBusy
                         ? null
@@ -1999,6 +2451,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(110, 48),
+                      shape: const StadiumBorder(),
+                      elevation: 0,
                     ),
                     onPressed: isBusy
                         ? null
@@ -2013,6 +2467,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(110, 48),
+                      shape: const StadiumBorder(),
+                      elevation: 0,
                     ),
                     onPressed: isBusy
                         ? null
@@ -2027,6 +2483,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       minimumSize: const Size(96, 48),
                       foregroundColor: const Color(0xFFBE123C),
                       side: const BorderSide(color: Color(0xFFFECDD3)),
+                      shape: const StadiumBorder(),
                     ),
                     onPressed: isBusy
                         ? null
@@ -2067,7 +2524,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           ),
           if (_calendarError != null) ...[
             const SizedBox(height: 16),
-            _buildInlineError(_calendarError!),
+            _buildInlineError(
+              _calendarError!,
+              onRetry: _fetchCalendarDays,
+            ),
           ],
           if (_calendarSuccess != null) ...[
             const SizedBox(height: 16),
@@ -2078,7 +2538,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppColors.surfaceBase,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(color: AppColors.border),
             ),
             child: Column(
@@ -2168,40 +2628,52 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               runSpacing: 8,
               children: _calendarDays.map((day) {
                 final isSelected = _selectedCalendarDates.contains(day.date);
-                final isBooked =
-                    day.bookingStatus != null && day.bookingStatus!.isNotEmpty;
+                final isBooked = day.isBooked ||
+                    (day.bookingStatus != null &&
+                        day.bookingStatus!.isNotEmpty);
+                final isPast = day.isPast;
+                final isEditable = day.isEditable() && !isBooked && !isPast;
                 Color borderColor = AppColors.border;
                 Color bgColor = AppColors.surfaceBase;
                 if (isSelected) {
                   borderColor = AppColors.primary;
-                  bgColor = const Color(0xFFECFEFF);
+                  bgColor = AppColors.surfaceMuted;
                 } else if (isBooked) {
                   bgColor = const Color(0xFFECFDF5);
+                } else if (isPast) {
+                  bgColor = const Color(0xFFF8FAFC);
                 } else if (!day.isAvailable || day.isBlockedByHost) {
                   bgColor = const Color(0xFFFFF1F2);
                 }
 
                 return InkWell(
                   key: Key('calendar_day_${day.date}'),
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: isBooked
-                      ? null
-                      : () {
-                          setState(() {
-                            if (isSelected) {
-                              _selectedCalendarDates.remove(day.date);
-                            } else {
-                              _selectedCalendarDates.add(day.date);
-                            }
-                          });
-                        },
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () {
+                    if (!isEditable) {
+                      setState(() {
+                        _calendarError = isBooked
+                            ? 'Ngày ${day.date} đã có khách đặt phòng, không thể chỉnh sửa.'
+                            : 'Ngày ${day.date} đã qua hoặc không thuộc quyền chỉnh sửa.';
+                      });
+                      return;
+                    }
+                    setState(() {
+                      _calendarError = null;
+                      if (isSelected) {
+                        _selectedCalendarDates.remove(day.date);
+                      } else {
+                        _selectedCalendarDates.add(day.date);
+                      }
+                    });
+                  },
                   child: Container(
                     width: 112,
                     constraints: const BoxConstraints(minHeight: 72),
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: bgColor,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(18),
                       border: Border.all(
                         color: borderColor,
                         width: isSelected ? 1.5 : 1,
@@ -2231,17 +2703,21 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         Text(
                           isBooked
                               ? 'Đã đặt'
-                              : (!day.isAvailable || day.isBlockedByHost
-                                  ? 'Đã khóa'
-                                  : 'Còn trống'),
+                              : (isPast
+                                  ? 'Đã qua'
+                                  : (!day.isAvailable || day.isBlockedByHost
+                                      ? 'Đã khóa'
+                                      : 'Còn trống')),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                             color: isBooked
                                 ? const Color(0xFF047857)
-                                : (!day.isAvailable || day.isBlockedByHost
-                                    ? const Color(0xFFBE123C)
-                                    : AppColors.primary),
+                                : (isPast
+                                    ? AppColors.textSecondary
+                                    : (!day.isAvailable || day.isBlockedByHost
+                                        ? const Color(0xFFBE123C)
+                                        : AppColors.primary)),
                           ),
                         ),
                       ],
@@ -2255,7 +2731,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.surfaceBase,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: AppColors.border),
               ),
               child: Column(
@@ -2277,18 +2753,22 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         key: const Key('calendar_price_override_input'),
                         controller: _calendarPriceOverrideCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Giá riêng ngày (VND)',
-                          border: OutlineInputBorder(),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                         ),
                       );
                       final minNightsInput = TextField(
                         key: const Key('calendar_min_nights_input'),
                         controller: _calendarMinNightsCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Số đêm tối thiểu riêng',
-                          border: OutlineInputBorder(),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                         ),
                       );
                       if (isWide) {
@@ -2313,9 +2793,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   TextField(
                     key: const Key('calendar_notes_input'),
                     controller: _calendarNotesCtrl,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Ghi chú ngày',
-                      border: OutlineInputBorder(),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -2329,6 +2811,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
                           minimumSize: const Size(150, 48),
+                          shape: const StadiumBorder(),
+                          elevation: 0,
                         ),
                         onPressed: _savingCalendar
                             ? null
@@ -2345,6 +2829,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                           minimumSize: const Size(140, 48),
                           foregroundColor: const Color(0xFFBE123C),
                           side: const BorderSide(color: Color(0xFFFECDD3)),
+                          shape: const StadiumBorder(),
                         ),
                         onPressed: _savingCalendar
                             ? null
@@ -2354,6 +2839,24 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                                 ),
                         icon: const Icon(LucideIcons.lock, size: 16),
                         label: const Text('Khóa ngày đã chọn'),
+                      ),
+                      OutlinedButton.icon(
+                        key: const Key('calendar_reset_price_btn'),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(140, 48),
+                          foregroundColor: AppColors.textPrimary,
+                          side: const BorderSide(color: AppColors.border),
+                          shape: const StadiumBorder(),
+                        ),
+                        onPressed: _savingCalendar
+                            ? null
+                            : () => _applyBulkCalendarUpdate(
+                                  isAvailable: true,
+                                  isBlockedByHost: false,
+                                  resetPriceOverride: true,
+                                ),
+                        icon: const Icon(LucideIcons.rotateCcw, size: 16),
+                        label: const Text('Xóa giá ghi đè'),
                       ),
                     ],
                   ),
@@ -2406,6 +2909,25 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       return haystack.contains(query);
     }).toList();
 
+    guests.sort((a, b) {
+      if (_guestSortBy == 'bookings_desc') {
+        final ba = (a['bookingCount'] as int?) ?? 0;
+        final bb = (b['bookingCount'] as int?) ?? 0;
+        return bb.compareTo(ba);
+      }
+      if (_guestSortBy == 'name_asc') {
+        return (a['name'] ?? '')
+            .toString()
+            .toLowerCase()
+            .compareTo((b['name'] ?? '').toString().toLowerCase());
+      }
+      final sa = (a['totalSpent'] as double?) ?? 0;
+      final sb = (b['totalSpent'] as double?) ?? 0;
+      return sb.compareTo(sa);
+    });
+
+    final visibleGuests = guests.take(_guestsVisibleCount).toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -2428,26 +2950,53 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           TextField(
             key: const Key('guests_search_input'),
             controller: _guestSearchCtrl,
-            onChanged: (v) => setState(() => _guestSearchQuery = v),
-            decoration: const InputDecoration(
+            onChanged: (v) => setState(() {
+              _guestSearchQuery = v;
+              _guestsVisibleCount = 10;
+            }),
+            decoration: InputDecoration(
               labelText: 'Tìm theo tên, email hoặc số điện thoại',
-              prefixIcon: Icon(LucideIcons.search, size: 18),
-              border: OutlineInputBorder(),
+              prefixIcon: const Icon(LucideIcons.search, size: 18),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(999),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
             ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ('spent_desc', 'Chi tiêu cao nhất'),
+              ('bookings_desc', 'Nhiều lượt đặt nhất'),
+              ('name_asc', 'Tên A → Z'),
+            ].map((opt) {
+              return ChoiceChip(
+                key: Key('guest_sort_${opt.$1}'),
+                shape: const StadiumBorder(),
+                label: Text(opt.$2),
+                selected: _guestSortBy == opt.$1,
+                onSelected: (_) => setState(() => _guestSortBy = opt.$1),
+              );
+            }).toList(),
           ),
           const SizedBox(height: 16),
           if (_loadingBookings)
             const Center(child: CircularProgressIndicator())
           else if (guests.isEmpty)
             _buildEmptyBox('Chưa có dữ liệu khách lưu trú phù hợp.')
-          else
-            ...guests.map((g) {
+          else ...[
+            ...visibleGuests.map((g) {
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceBase,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Wrap(
@@ -2491,6 +3040,24 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 ),
               );
             }),
+            if (guests.length > visibleGuests.length)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: OutlinedButton(
+                  key: const Key('guests_load_more_btn'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(160, 48),
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: const StadiumBorder(),
+                  ),
+                  onPressed: () => setState(() => _guestsVisibleCount += 10),
+                  child: Text(
+                    'Xem thêm (${guests.length - visibleGuests.length} khách)',
+                  ),
+                ),
+              ),
+          ],
         ],
       ),
     );
@@ -2506,22 +3073,78 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Tin nhắn',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Trao đổi với khách hàng về chỗ nghỉ và lịch đặt phòng.',
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tin nhắn',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Trao đổi với khách hàng về chỗ nghỉ và lịch đặt phòng.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(110, 48),
+                      foregroundColor: AppColors.textPrimary,
+                      side: const BorderSide(color: AppColors.border),
+                      shape: const StadiumBorder(),
+                    ),
+                    onPressed:
+                        _loadingConversations ? null : _fetchConversations,
+                    icon: const Icon(LucideIcons.refreshCw, size: 16),
+                    label: const Text('Tải lại'),
+                  ),
+                  OutlinedButton.icon(
+                    key: const Key('host_messages_open_full_btn'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(140, 48),
+                      foregroundColor: AppColors.textPrimary,
+                      side: const BorderSide(color: AppColors.border),
+                      shape: const StadiumBorder(),
+                    ),
+                    onPressed: () {
+                      final convId = _selectedConversationId;
+                      if (convId != null && convId.isNotEmpty) {
+                        context.go('/messages?conversationId=$convId');
+                      } else {
+                        context.go('/messages');
+                      }
+                    },
+                    icon: const Icon(LucideIcons.externalLink, size: 16),
+                    label: const Text('Hộp thư đầy đủ'),
+                  ),
+                ],
+              ),
+            ],
           ),
           if (_conversationsError != null) ...[
             const SizedBox(height: 16),
-            _buildInlineError(_conversationsError!),
+            _buildInlineError(
+              _conversationsError!,
+              onRetry: _fetchConversations,
+            ),
           ],
           const SizedBox(height: 16),
           if (_loadingConversations)
@@ -2532,12 +3155,25 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             )
           else ...[
             _buildPortalDropdown<String>(
+              dropdownKey: const Key('messages_conversation_dropdown'),
               label: 'Chọn cuộc trò chuyện',
               value: _selectedConversationId,
               items: _conversations.map((c) {
                 final id = '${c['conversationId'] ?? c['id']}';
-                final title = (c['guestName'] ?? c['title'] ?? 'Hội thoại #$id')
+                final other = c['otherParticipant'] is Map
+                    ? Map<String, dynamic>.from(c['otherParticipant'] as Map)
+                    : null;
+                final participantName = (other?['fullName'] ??
+                        other?['name'] ??
+                        c['guestName'] ??
+                        c['title'] ??
+                        'Hội thoại #$id')
                     .toString();
+                final listingTitle =
+                    (c['listingTitle'] ?? '').toString().trim();
+                final title = listingTitle.isNotEmpty
+                    ? '$participantName • $listingTitle'
+                    : participantName;
                 return DropdownMenuItem<String>(
                   value: id,
                   child: Text(title, overflow: TextOverflow.ellipsis),
@@ -2554,7 +3190,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.surfaceBase,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: AppColors.border),
               ),
               child: Column(
@@ -2570,9 +3206,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     )
                   else
                     ..._conversationMessages.map((m) {
-                      final content = (m['content'] ?? '').toString();
-                      final sender =
-                          (m['senderName'] ?? 'Người dùng').toString();
+                      final content =
+                          (m['content'] ?? m['body'] ?? '').toString();
+                      final sender = (m['senderName'] ??
+                              m['sender']?['fullName'] ??
+                              'Người dùng')
+                          .toString();
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text('$sender: $content'),
@@ -2583,19 +3222,34 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     children: [
                       Expanded(
                         child: TextField(
+                          key: const Key('host_message_input'),
                           controller: _messageInputCtrl,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             hintText: 'Nhập tin nhắn...',
-                            border: OutlineInputBorder(),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(999),
+                              borderSide:
+                                  const BorderSide(color: AppColors.border),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
+                        key: const Key('host_message_send_btn'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
                           minimumSize: const Size(88, 48),
+                          shape: const StadiumBorder(),
+                          elevation: 0,
                         ),
                         onPressed: _sendingMessage ? null : _sendHostMessage,
                         child: const Text('Gửi'),
@@ -2640,6 +3294,20 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       'cancelled': 'Đã hủy',
     };
 
+    const payoutFilterTabs = [
+      ('all', 'Tất cả'),
+      ('pending', 'Chờ duyệt'),
+      ('approved', 'Đã duyệt'),
+      ('paid', 'Đã chuyển tiền'),
+      ('rejected', 'Đã từ chối'),
+    ];
+
+    final filteredPayouts = _payouts.where((p) {
+      if (_payoutStatusFilter == 'all') return true;
+      final st = (p['status'] ?? '').toString().trim().toLowerCase();
+      return st == _payoutStatusFilter;
+    }).toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -2677,6 +3345,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   minimumSize: const Size(110, 48),
                   foregroundColor: AppColors.textPrimary,
                   side: const BorderSide(color: AppColors.border),
+                  shape: const StadiumBorder(),
                 ),
                 onPressed: _loadingPayouts ? null : _fetchPayoutData,
                 icon: const Icon(LucideIcons.refreshCw, size: 16),
@@ -2686,7 +3355,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           ),
           if (_payoutsError != null) ...[
             const SizedBox(height: 16),
-            _buildInlineError(_payoutsError!),
+            _buildInlineError(
+              _payoutsError!,
+              onRetry: _fetchPayoutData,
+            ),
           ],
           const SizedBox(height: 16),
           _buildKpiGrid([
@@ -2711,28 +3383,30 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppColors.surfaceBase,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(color: AppColors.border),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    const Expanded(
-                      child: Text(
-                        'Tài khoản ngân hàng nhận chi trả',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
+                    const Text(
+                      'Tài khoản ngân hàng nhận chi trả',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
                       ),
                     ),
                     TextButton(
                       style: TextButton.styleFrom(
                         minimumSize: const Size(88, 48),
+                        shape: const StadiumBorder(),
                       ),
                       onPressed: () {
                         setState(() => _settingsTab = 'bank');
@@ -2757,10 +3431,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     final accName =
                         (acc['accountName'] ?? acc['accountHolderName'] ?? '')
                             .toString();
-                    final masked = (acc['accountNumberMasked'] ??
+                    final rawOrMasked = (acc['accountNumberMasked'] ??
                             acc['accountNumber'] ??
                             '')
                         .toString();
+                    final masked = maskBankAccountNumber(rawOrMasked);
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
@@ -2776,21 +3451,43 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          const Text(
-            'Lịch sử Payout',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              const Text(
+                'Lịch sử Payout',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: payoutFilterTabs.map((tab) {
+                  return ChoiceChip(
+                    key: Key('payout_filter_${tab.$1}'),
+                    shape: const StadiumBorder(),
+                    label: Text(tab.$2),
+                    selected: _payoutStatusFilter == tab.$1,
+                    onSelected: (_) =>
+                        setState(() => _payoutStatusFilter = tab.$1),
+                  );
+                }).toList(),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           if (_loadingPayouts)
             const Center(child: CircularProgressIndicator())
-          else if (_payouts.isEmpty)
+          else if (filteredPayouts.isEmpty)
             _buildEmptyBox('Chưa có lịch sử chi trả (payout).')
           else
-            ..._payouts.map((payout) {
+            ...filteredPayouts.map((payout) {
               final id = payout['payoutId'] ?? payout['id'] ?? '';
               final amount = payout['amount'] ?? 0;
               final statusRaw = (payout['status'] ?? 'pending').toString();
@@ -2799,13 +3496,20 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   (payout['transferReference'] ?? 'Chưa có').toString();
               final created =
                   (payout['createdAt'] ?? '').toString().split('T').first;
+              final rawAcc = (payout['accountNumberMasked'] ??
+                      payout['accountNumber'] ??
+                      '')
+                  .toString();
+              final maskedAcc = rawAcc.isNotEmpty
+                  ? ' • TK: ${maskBankAccountNumber(rawAcc)}'
+                  : '';
               return Container(
                 key: Key('payout_item_$id'),
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceBase,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Wrap(
@@ -2827,7 +3531,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Mã CK: $refCode • Ngày tạo: $created',
+                          'Mã CK: $refCode$maskedAcc • Ngày tạo: $created',
                           style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary,
@@ -2882,7 +3586,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           ),
           if (_reviewsError != null) ...[
             const SizedBox(height: 16),
-            _buildInlineError(_reviewsError!),
+            _buildInlineError(
+              _reviewsError!,
+              onRetry: _fetchReviewsForSelectedListing,
+            ),
           ],
           if (_reviewsSuccess != null) ...[
             const SizedBox(height: 16),
@@ -2893,7 +3600,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppColors.surfaceBase,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(color: AppColors.border),
             ),
             child: Column(
@@ -2971,7 +3678,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceBase,
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Column(
@@ -3012,8 +3719,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(12),
+                          color: AppColors.surfaceMuted,
+                          borderRadius: BorderRadius.circular(18),
                           border: Border.all(color: AppColors.border),
                         ),
                         child: Text(
@@ -3032,9 +3739,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                             key: Key('review_reply_input_$reviewId'),
                             controller: replyCtrl,
                             maxLines: 2,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               hintText: 'Nhập phản hồi của chủ nhà...',
-                              border: OutlineInputBorder(),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -3044,6 +3753,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                               backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,
                               minimumSize: const Size(140, 48),
+                              shape: const StadiumBorder(),
+                              elevation: 0,
                             ),
                             onPressed: _savingReviewId != null
                                 ? null
@@ -3082,6 +3793,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       ('30d', '30 ngày'),
       ('90d', '90 ngày'),
       ('year', '1 năm'),
+    ];
+
+    const groups = [
+      ('auto', 'Tự động'),
+      ('day', 'Theo ngày'),
+      ('month', 'Theo tháng'),
     ];
 
     final maxRevenue = _revenueReport.series.isEmpty
@@ -3129,6 +3846,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 children: ranges.map((r) {
                   return ChoiceChip(
                     key: Key('report_range_${r.$1}'),
+                    shape: const StadiumBorder(),
                     label: Text(r.$2),
                     selected: _reportRange == r.$1,
                     onSelected: (_) {
@@ -3140,9 +3858,85 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceBase,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildPortalDropdown<String>(
+                  dropdownKey: const Key('reports_listing_filter_dropdown'),
+                  label: 'Lọc theo chỗ nghỉ',
+                  value: _reportListingId == 'all' ||
+                          _listings.any(
+                            (l) =>
+                                '${l['listingId'] ?? l['id']}' ==
+                                _reportListingId,
+                          )
+                      ? _reportListingId
+                      : 'all',
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: 'all',
+                      child: Text('Tất cả chỗ nghỉ'),
+                    ),
+                    ..._listings.map((l) {
+                      final id = '${l['listingId'] ?? l['id']}';
+                      final title = (l['title'] ?? 'Listing #$id').toString();
+                      return DropdownMenuItem<String>(
+                        value: id,
+                        child: Text(title, overflow: TextOverflow.ellipsis),
+                      );
+                    }),
+                  ],
+                  onChanged: (val) {
+                    if (val == null) return;
+                    setState(() => _reportListingId = val);
+                    _fetchRevenueReport();
+                  },
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Text(
+                      'Nhóm theo:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    ...groups.map((g) {
+                      return ChoiceChip(
+                        key: Key('report_group_${g.$1}'),
+                        shape: const StadiumBorder(),
+                        label: Text(g.$2),
+                        selected: _reportGroup == g.$1,
+                        onSelected: (_) {
+                          setState(() => _reportGroup = g.$1);
+                          _fetchRevenueReport();
+                        },
+                      );
+                    }),
+                  ],
+                ),
+              ],
+            ),
+          ),
           if (_reportError != null) ...[
             const SizedBox(height: 16),
-            _buildInlineError(_reportError!),
+            _buildInlineError(
+              _reportError!,
+              onRetry: _fetchRevenueReport,
+            ),
           ],
           const SizedBox(height: 16),
           _buildKpiGrid([
@@ -3172,7 +3966,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: AppColors.surfaceBase,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(color: AppColors.border),
             ),
             child: Column(
@@ -3228,11 +4022,14 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                             ],
                           ),
                           const SizedBox(height: 6),
-                          LinearProgressIndicator(
-                            value: ratio,
-                            minHeight: 8,
-                            backgroundColor: const Color(0xFFF1F5F9),
-                            color: AppColors.primary,
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(999),
+                            child: LinearProgressIndicator(
+                              value: ratio,
+                              minHeight: 8,
+                              backgroundColor: AppColors.surfaceMuted,
+                              color: AppColors.primary,
+                            ),
                           ),
                         ],
                       ),
@@ -3284,12 +4081,14 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             children: [
               ChoiceChip(
                 key: const Key('settings_tab_profile'),
+                shape: const StadiumBorder(),
                 label: const Text('Hồ sơ Host'),
                 selected: _settingsTab == 'profile',
                 onSelected: (_) => setState(() => _settingsTab = 'profile'),
               ),
               ChoiceChip(
                 key: const Key('settings_tab_bank'),
+                shape: const StadiumBorder(),
                 label: const Text('Tài khoản ngân hàng'),
                 selected: _settingsTab == 'bank',
                 onSelected: (_) => setState(() => _settingsTab = 'bank'),
@@ -3302,7 +4101,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: AppColors.surfaceBase,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: AppColors.border),
               ),
               child: _loadingSettings
@@ -3311,7 +4110,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (_profileError != null) ...[
-                          _buildInlineError(_profileError!),
+                          _buildInlineError(
+                            _profileError!,
+                            onRetry: _loadSettingsData,
+                          ),
                           const SizedBox(height: 12),
                         ],
                         if (_profileSuccess != null) ...[
@@ -3325,7 +4127,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                           children: [
                             CircleAvatar(
                               radius: 32,
-                              backgroundColor: const Color(0xFFE2E8F0),
+                              backgroundColor: AppColors.surfaceMuted,
                               backgroundImage:
                                   (_hostProfile?['avatarUrl'] != null &&
                                           '${_hostProfile!['avatarUrl']}'
@@ -3345,6 +4147,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                             OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
                                 minimumSize: const Size(140, 48),
+                                shape: const StadiumBorder(),
                               ),
                               onPressed: _uploadingAvatar
                                   ? null
@@ -3362,9 +4165,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         TextField(
                           key: const Key('settings_profile_name_input'),
                           controller: _profileNameCtrl,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Họ và tên *',
-                            border: OutlineInputBorder(),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -3372,18 +4177,22 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                           key: const Key('settings_profile_email_input'),
                           controller: _profileEmailCtrl,
                           readOnly: true,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Email',
-                            border: OutlineInputBorder(),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
                         TextField(
                           key: const Key('settings_profile_phone_input'),
                           controller: _profilePhoneCtrl,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Số điện thoại',
-                            border: OutlineInputBorder(),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -3393,6 +4202,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
                             minimumSize: const Size(160, 48),
+                            shape: const StadiumBorder(),
+                            elevation: 0,
                           ),
                           onPressed:
                               _savingProfile ? null : _handleSaveHostProfile,
@@ -3409,7 +4220,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: AppColors.surfaceBase,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: AppColors.border),
               ),
               child: _loadingBanks
@@ -3418,7 +4229,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (_bankError != null) ...[
-                          _buildInlineError(_bankError!),
+                          _buildInlineError(
+                            _bankError!,
+                            onRetry: _loadSettingsData,
+                          ),
                           const SizedBox(height: 12),
                         ],
                         if (_bankSuccess != null) ...[
@@ -3429,10 +4243,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                           key: const Key('settings_bank_search_input'),
                           controller: _bankSearchCtrl,
                           onChanged: (_) => setState(() {}),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Tìm kiếm ngân hàng (Tên, Mã, BIN)',
-                            prefixIcon: Icon(LucideIcons.search, size: 18),
-                            border: OutlineInputBorder(),
+                            prefixIcon:
+                                const Icon(LucideIcons.search, size: 18),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(999),
+                              borderSide:
+                                  const BorderSide(color: AppColors.border),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -3463,9 +4285,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                           key: const Key('settings_bank_account_number_input'),
                           controller: _bankAccountNumberCtrl,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Số tài khoản (6–30 chữ số) *',
-                            border: OutlineInputBorder(),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -3473,19 +4297,23 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                           key: const Key('settings_bank_account_holder_input'),
                           controller: _bankAccountHolderCtrl,
                           textCapitalization: TextCapitalization.characters,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Chủ tài khoản (IN HOA) *',
                             hintText: 'NGUYEN VAN A',
-                            border: OutlineInputBorder(),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
                         TextField(
                           key: const Key('settings_bank_branch_input'),
                           controller: _bankBranchCtrl,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Chi nhánh (không bắt buộc)',
-                            border: OutlineInputBorder(),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -3495,6 +4323,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
                             minimumSize: const Size(160, 48),
+                            shape: const StadiumBorder(),
+                            elevation: 0,
                           ),
                           onPressed:
                               _savingBank ? null : _handleSaveBankAccount,
@@ -3534,7 +4364,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.surfaceBase,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: AppColors.border),
               ),
               child: Column(
@@ -3620,7 +4450,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.border),
       ),
       child: Text(
@@ -3634,32 +4464,53 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     );
   }
 
-  Widget _buildInlineError(String message) {
+  Widget _buildInlineError(String message, {VoidCallback? onRetry}) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF1F2),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFFECDD3)),
       ),
-      child: Row(
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
         children: [
-          const Icon(
-            LucideIcons.circleAlert,
-            size: 18,
-            color: Color(0xFFBE123C),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                LucideIcons.circleAlert,
+                size: 18,
                 color: Color(0xFFBE123C),
               ),
-            ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFFBE123C),
+                  ),
+                ),
+              ),
+            ],
           ),
+          if (onRetry != null)
+            TextButton.icon(
+              key: const Key('host_inline_error_retry_btn'),
+              style: TextButton.styleFrom(
+                minimumSize: const Size(88, 48),
+                foregroundColor: const Color(0xFFBE123C),
+                shape: const StadiumBorder(),
+              ),
+              onPressed: onRetry,
+              icon: const Icon(LucideIcons.refreshCw, size: 14),
+              label: const Text('Thử lại'),
+            ),
         ],
       ),
     );
@@ -3670,7 +4521,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFECFDF5),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFA7F3D0)),
       ),
       child: Row(

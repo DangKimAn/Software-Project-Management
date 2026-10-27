@@ -2,32 +2,130 @@
   "@@locale": "en",
   "appTitle": "The Palm Villa",
   "appTagline": "Luxury Vacation Villas in Vung Tau",
+  "greetingMorning": "Good morning!",
+  "greetingAfternoon": "Good afternoon!",
+  "greetingEvening": "Good evening!",
+  "homeWelcomeSubtitle": "Warmly welcoming you to the coastal city of Vung Tau",
+  "homeRecentlyViewedTitle": "Recently viewed",
+  "homePopularDestinationsTitle": "Popular destinations in Vung Tau",
+  "homeApprovedListingsTitle": "Verified listings",
+  "homeSeeMoreVillas": "Show more villas",
+  "homeSeeNext": "Next page",
+  "homeShowLess": "Show less",
+  "homeBlogBadge": "LATEST ARTICLES",
+  "homeBlogTitle": "Featured travel guides",
+  "homeBlogSubtitle": "Practical guides tailored for booking villas in Vung Tau, from family trips to large group getaways.",
+  "homeBlogSeeAll": "View all articles",
   "searchPlaceholder": "Start your search...",
+  "searchDestinationLabel": "Destination",
+  "searchDestinationHint": "Where in Vung Tau would you like to stay?",
+  "searchModeDates": "Dates",
+  "searchModeMonths": "Months",
+  "searchModeFlexible": "Flexible",
+  "searchFlexibleWeekend": "Weekend",
+  "searchFlexibleWeek": "1 week",
+  "searchFlexibleMonth": "1 month",
+  "searchExactDates": "Exact dates",
+  "searchPlusMinusDays": "± {days} days",
+  "@searchPlusMinusDays": {
+    "placeholders": {
+      "days": { "type": "int" }
+    }
+  },
+  "searchAdults": "Adults",
+  "searchAdultsDesc": "Ages 13 or above",
+  "searchChildren": "Children",
+  "searchChildrenDesc": "Ages 2 – 12",
+  "searchInfants": "Infants",
+  "searchInfantsDesc": "Under 2",
+  "searchPets": "Pets",
+  "searchPetsDesc": "Bringing a companion animal",
+  "searchFilterTitle": "Filters",
+  "searchSortNewest": "Newest",
+  "searchSortPriceAsc": "Price: low to high",
+  "searchSortPriceDesc": "Price: high to low",
+  "searchSortRatingDesc": "Highest rated",
+  "aiSearchTitle": "AI Semantic Search",
+  "aiSearchPlaceholder": "Describe your ideal stay (e.g. Beachfront villa in Back Beach for 15 guests with saltwater pool and BBQ)...",
+  "aiSearchAction": "Search with AI",
   "navDiscover": "Discover",
   "navZalo": "Zalo",
   "navHotline": "Hotline",
   "navFavorites": "Wishlist",
+  "navTrips": "Trips",
+  "navAccount": "Account",
   "navSettings": "Settings",
-  "bedroomsCount": "{count} bedrooms",
+  "navStays": "Stays",
+  "navBlog": "Travel Guide",
+  "navContact": "Contact",
+  "navMessages": "Messages",
+  "navNotifications": "Notifications",
+  "navBookingQueue": "Booking queue",
+  "navBecomeHost": "Become a Host",
+  "navHostPortal": "Host Portal",
+  "navAdminPortal": "Admin Portal",
+  "bedroomsCount": "{count, plural, =1{1 bedroom} other{{count} bedrooms}}",
   "@bedroomsCount": {
     "placeholders": {
       "count": { "type": "int" }
     }
   },
-  "bedsCount": "{count} beds",
+  "bedsCount": "{count, plural, =1{1 bed} other{{count} beds}}",
   "@bedsCount": {
     "placeholders": {
       "count": { "type": "int" }
     }
   },
-  "guestsCapacity": "{count} guests",
+  "guestsCapacity": "{count, plural, =1{1 guest} other{{count} guests}}",
   "@guestsCapacity": {
     "placeholders": {
       "count": { "type": "int" }
     }
   },
-  "bathroomsCount": "{count} baths",
+  "guestsCount": "{count, plural, =1{1 guest} other{{count} guests}}",
+  "@guestsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "adultsCount": "{count, plural, =1{1 adult} other{{count} adults}}",
+  "@adultsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "childrenCount": "{count, plural, =1{1 child} other{{count} children}}",
+  "@childrenCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "infantsCount": "{count, plural, =1{1 infant} other{{count} infants}}",
+  "@infantsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "petsCount": "{count, plural, =1{1 pet} other{{count} pets}}",
+  "@petsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "bathroomsCount": "{count, plural, =1{1 bath} other{{count} baths}}",
   "@bathroomsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "nightsCount": "{count, plural, =1{1 night} other{{count} nights}}",
+  "@nightsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "reviewsCount": "{count, plural, =0{No reviews yet} =1{1 review} other{{count} reviews}}",
+  "@reviewsCount": {
     "placeholders": {
       "count": { "type": "int" }
     }
@@ -44,13 +142,22 @@
       "price": { "type": "String" }
     }
   },
+  "pricePerNightUnit": "/ night",
   "saturdayPrice": "Sat: {price}",
   "@saturdayPrice": {
     "placeholders": {
       "price": { "type": "String" }
     }
   },
+  "totalNightsWithFee": "{nights, plural, =1{Total for 1 night • Fees included} other{Total for {nights} nights • Fees included}}",
+  "@totalNightsWithFee": {
+    "placeholders": {
+      "nights": { "type": "int" }
+    }
+  },
   "contactForPrice": "Contact for pricing",
+  "statusAvailable": "Available",
+  "statusBooked": "Booked",
   "badgeFeatured": "Featured",
   "badgeNew": "New",
   "badgeNearBeach": "Near Beach",
@@ -59,25 +166,138 @@
   "ctaContactZalo": "Chat on Zalo",
   "ctaCallHotline": "Call Hotline",
   "ctaBookNow": "Inquire Booking",
+  "ctaBookInstant": "Book now",
+  "ctaRequestBooking": "Request to book",
+  "ctaAddToQueue": "Add to booking queue",
   "ctaViewDetail": "View Details",
   "ctaCopyLink": "Copy Link",
   "ctaCopied": "Link copied to clipboard",
+  "ctaZaloCopied": "Inquiry copied and opening Zalo",
   "ctaRetry": "Retry",
   "ctaResetFilter": "Reset Filters",
-  "loadingText": "Loading villas...",
-  "emptyList": "No villas match your search",
-  "emptyListDesc": "Try adjusting your filters or date selection.",
+  "ctaBack": "Back",
+  "ctaBackHome": "Back to home",
+  "ctaClose": "Close",
+  "ctaCancel": "Cancel",
+  "ctaConfirm": "Confirm",
+  "ctaSave": "Save changes",
+  "ctaPrevPage": "Previous",
+  "ctaNextPage": "Next",
+  "paginationPageOf": "Page {page} of {totalPages}",
+  "@paginationPageOf": {
+    "placeholders": {
+      "page": { "type": "int" },
+      "totalPages": { "type": "int" }
+    }
+  },
+  "loadingText": "Loading data...",
+  "loadingVillas": "Loading properties...",
+  "loadingVillaDetail": "Loading villa details...",
+  "loadingFavorites": "Loading your wishlist...",
+  "emptyList": "No matching villas found",
+  "emptyListDesc": "Try adjusting your search filters or stay dates.",
   "errorOccurred": "Something went wrong",
-  "errorTryAgain": "Please check your network connection and try again.",
+  "errorTryAgain": "Unable to complete the request right now. Please try again.",
+  "errorOfflineTitle": "No internet connection",
+  "errorOfflineMessage": "No internet connection or unstable network. Please check your connection and try again.",
+  "errorServerTitle": "Server error",
+  "errorServerMessage": "The server is temporarily unavailable. Please try again later.",
+  "errorUnauthorizedMessage": "Your session has expired. Please sign in again.",
+  "errorForbiddenMessage": "You do not have permission to access this feature.",
+  "errorNotFoundTitle": "404 — Page not found",
+  "errorNotFoundMessage": "The page you are looking for does not exist or has been moved.",
+  "errorVillaNotFoundTitle": "Villa not found",
+  "errorVillaNotFoundMessage": "The villa you are looking for does not exist or is no longer available.",
+  "errorRateLimitMessage": "Too many requests. Please wait a moment and try again.",
+  "errorValidationMessage": "The submitted information is invalid. Please check and try again.",
   "dateBooked": "This date is booked",
   "checkInDate": "Check-in",
   "checkOutDate": "Check-out",
   "guestCount": "Guests",
   "priceBreakdown": "Nightly Price Breakdown",
+  "dailyPriceBreakdownTitle": "Nightly rate breakdown",
+  "specCapacityLabel": "Capacity",
+  "specBedroomsLabel": "Bedrooms",
+  "specBedsLabel": "Beds",
+  "specBathroomsLabel": "Bathrooms",
+  "specHighlightsTitle": "Key amenities & location",
+  "specExpandAction": "Show detailed specifications",
+  "specCollapseAction": "Hide detailed specifications",
+  "specPrivatePool": "Private pool",
+  "specNoPool": "No pool",
+  "specBbqKitchen": "Full kitchen & BBQ grill",
+  "specBasicKitchen": "Basic kitchen",
+  "specParking": "Car parking available",
+  "specSelfParking": "Off-site parking",
+  "specNearCenter": "Near city center",
+  "hostDefaultName": "VungTauStay Host",
+  "hostDefaultBio": "Local host in Vung Tau assisting with stay details and check-in.",
+  "bookingInstantConfirm": "Instant booking confirmation",
+  "bookingSupport247": "24/7 Booking Support",
   "faqTitle": "Frequently Asked Questions",
+  "rulesAndFaqTitle": "House Rules & FAQ",
+  "faqCheckInTitle": "What are the check-in and check-out times?",
+  "faqCheckInBody": "Standard check-in is from 14:00 and check-out is before 12:00 the next day. Early check-in or late check-out requests are subject to availability.",
+  "faqNoiseTitle": "What are the noise and karaoke regulations?",
+  "faqNoiseBody": "Per Vung Tau municipal rules, outdoor audio and karaoke operate until 22:00. After 22:00, please keep activities indoors so neighboring villas are not disturbed.",
+  "faqKitchenTitle": "Is the villa equipped with cooking utensils and BBQ gear?",
+  "faqKitchenBody": "The kitchen and BBQ area are equipped with tableware, pots, pans, induction/gas stove, and grilling racks. Guests only need to prepare fresh ingredients and charcoal.",
+  "faqDepositTitle": "What is the deposit and cancellation policy?",
+  "faqDepositBody": "A 50% deposit is required to secure your villa reservation, with the remaining balance payable upon check-in. Date changes are supported with at least 7 days advance notice.",
   "settingsLanguage": "Language",
   "settingsEnvironment": "Environment",
   "settingsVersion": "Version",
   "favoritesEmpty": "No saved villas yet",
-  "favoritesEmptyDesc": "Tap the heart icon on any villa card to save it to your wishlist."
+  "favoritesEmptyDesc": "Tap the heart icon on any villa card to save it to your wishlist.",
+  "bookingStatusPendingPayment": "Pending payment",
+  "bookingStatusPaymentExpired": "Payment expired",
+  "bookingStatusPaid": "Paid",
+  "bookingStatusConfirmed": "Confirmed",
+  "bookingStatusCheckedIn": "Checked in",
+  "bookingStatusCheckedOut": "Checked out",
+  "bookingStatusCompleted": "Completed",
+  "bookingStatusCancelledByGuest": "Cancelled by guest",
+  "bookingStatusCancelledByHost": "Cancelled by host",
+  "bookingStatusCancelledByAdmin": "Cancelled by admin",
+  "bookingStatusRejected": "Rejected",
+  "bookingStatusRefundPending": "Refund pending",
+  "bookingStatusRefunded": "Refunded",
+  "paymentUnverifiedTitle": "Transaction not yet verified",
+  "paymentUnverifiedDesc": "Unable to verify transaction status with the server right now. Please check your connection and retry verification.",
+  "paymentRecheckStatus": "Re-verify status",
+  "authLoginTitle": "Sign in",
+  "authRegisterTitle": "Create account",
+  "authForgotPasswordTitle": "Forgot password",
+  "authGoogleSignIn": "Continue with Google",
+  "authLogout": "Sign out",
+  "profileVerified": "Verified",
+  "profileUnverified": "Unverified",
+  "hostOnboardingTitle": "Become a Host at Minh Thanh Villa",
+  "hostKycTitle": "Host Registration & KYC Verification",
+  "hostKycStatusTitle": "Host Application Status",
+  "hostTabOverview": "Overview",
+  "hostTabProperties": "Listings",
+  "hostTabNewProperty": "Add listing",
+  "hostTabBookings": "Bookings",
+  "hostTabCalendar": "Calendar",
+  "hostTabGuests": "Guests",
+  "hostTabMessages": "Messages",
+  "hostTabPayouts": "Payouts",
+  "hostTabReviews": "Reviews",
+  "hostTabReports": "Revenue reports",
+  "hostTabSupport": "Support",
+  "hostTabSettings": "Host settings",
+  "hostListingDraft": "Draft",
+  "hostListingPendingApproval": "Pending approval",
+  "hostListingPublished": "Published",
+  "hostListingHidden": "Hidden",
+  "hostListingRejected": "Rejected",
+  "adminTabOverview": "Overview",
+  "adminTabUsers": "Users",
+  "adminTabModeration": "Listing moderation",
+  "adminTabHostApplications": "Host applications",
+  "adminTabRoles": "Role management",
+  "adminUserStatusActive": "Active",
+  "adminUserStatusSuspended": "Suspended",
+  "adminUserStatusInactive": "Inactive"
 }

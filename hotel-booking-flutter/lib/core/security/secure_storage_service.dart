@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:intl/intl.dart';
 import '../constants/app_constants.dart';
 
 class SecureStorageService {
@@ -106,6 +107,7 @@ class SecureStorageService {
   Future<void> syncRefreshCookieFromHeaders(
     List<String>? setCookieHeaders, {
     bool isWebOverride = kIsWeb,
+    DateTime? now,
   }) async {
     if (isWebOverride || setCookieHeaders == null || setCookieHeaders.isEmpty) {
       return;
@@ -131,16 +133,27 @@ class SecureStorageService {
       }
 
       var isExpired = cookieValue.isEmpty;
+      int? maxAge;
+      DateTime? expires;
       for (final attr in segments.skip(1)) {
         final lower = attr.toLowerCase();
         if (lower.startsWith('max-age=')) {
-          final maxAge =
-              int.tryParse(lower.substring('max-age='.length).trim());
-          if (maxAge != null && maxAge <= 0) {
-            isExpired = true;
+          maxAge = int.tryParse(lower.substring('max-age='.length).trim());
+        } else if (lower.startsWith('expires=')) {
+          try {
+            expires = DateFormat('EEE, dd MMM yyyy HH:mm:ss', 'en_US')
+                .parseUtc(attr.substring('expires='.length).trim());
+          } on FormatException {
+            // Ignore malformed expiry attributes, as a browser cookie jar does.
           }
         }
       }
+      // RFC 6265: a valid Max-Age takes precedence over Expires.
+      isExpired = isExpired ||
+          (maxAge != null
+              ? maxAge <= 0
+              : expires != null &&
+                  !expires.isAfter((now ?? DateTime.now()).toUtc()));
 
       if (isExpired) {
         await deleteRefreshCookie();

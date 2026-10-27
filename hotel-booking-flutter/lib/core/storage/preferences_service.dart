@@ -4,6 +4,57 @@ import '../constants/app_constants.dart';
 
 enum BookingQueueAddStatus { added, exists, full }
 
+int _safeInt(dynamic value, [int fallback = 0]) {
+  if (value == null) return fallback;
+  if (value is int) return value;
+  if (value is num) {
+    if (value.isNaN || value.isInfinite) return fallback;
+    return value.toInt();
+  }
+  if (value is String) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return fallback;
+    final parsedInt = int.tryParse(trimmed);
+    if (parsedInt != null) return parsedInt;
+    final parsedDouble = double.tryParse(trimmed);
+    if (parsedDouble != null &&
+        !parsedDouble.isNaN &&
+        !parsedDouble.isInfinite) {
+      return parsedDouble.toInt();
+    }
+  }
+  return fallback;
+}
+
+double _safeDouble(dynamic value, [double fallback = 0.0]) {
+  if (value == null) return fallback;
+  if (value is num) {
+    if (value.isNaN || value.isInfinite) return fallback;
+    return value.toDouble();
+  }
+  if (value is String) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return fallback;
+    final parsed = double.tryParse(trimmed);
+    if (parsed != null && !parsed.isNaN && !parsed.isInfinite) {
+      return parsed;
+    }
+  }
+  return fallback;
+}
+
+bool _safeBool(dynamic value, [bool fallback = false]) {
+  if (value == null) return fallback;
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  if (value is String) {
+    final lower = value.trim().toLowerCase();
+    if (lower == 'true' || lower == '1') return true;
+    if (lower == 'false' || lower == '0') return false;
+  }
+  return fallback;
+}
+
 class BookingQueuePriceEstimate {
   final int nights;
   final int weekdayNights;
@@ -204,33 +255,35 @@ class BookingQueueItem {
   }
 
   factory BookingQueueItem.fromJson(Map<String, dynamic> json) {
-    final price = (json['pricePerNight'] as num?)?.toInt() ??
-        (json['basePrice'] as num?)?.toInt() ??
-        0;
-    final gCount = (json['guestsCount'] as num?)?.toInt() ??
-        (json['guests'] as num?)?.toInt() ??
-        2;
+    final price = _safeInt(
+      json['pricePerNight'] ?? json['basePrice'],
+      0,
+    );
+    final gCount = _safeInt(
+      json['guestsCount'] ?? json['guests'],
+      2,
+    );
     return BookingQueueItem(
-      listingId: json['listingId']?.toString() ?? '',
+      listingId: json['listingId']?.toString().trim() ?? '',
       title: json['title']?.toString() ?? '',
       imageUrl: json['imageUrl']?.toString() ?? '',
       basePrice: price,
       pricePerNight: price,
-      weekendPrice: (json['weekendPrice'] as num?)?.toInt() ?? 0,
-      weekendSurcharge: (json['weekendSurcharge'] as num?)?.toInt() ?? 0,
-      cleaningFee: (json['cleaningFee'] as num?)?.toInt() ?? 0,
-      serviceFee: (json['serviceFee'] as num?)?.toInt() ?? 0,
-      surchargeAmount: (json['surchargeAmount'] as num?)?.toInt() ?? 0,
-      extraGuestFee: (json['extraGuestFee'] as num?)?.toInt() ?? 0,
-      includedGuests: (json['includedGuests'] as num?)?.toInt() ?? 10,
-      maxGuests: (json['maxGuests'] as num?)?.toInt() ?? 20,
+      weekendPrice: _safeInt(json['weekendPrice'], 0),
+      weekendSurcharge: _safeInt(json['weekendSurcharge'], 0),
+      cleaningFee: _safeInt(json['cleaningFee'], 0),
+      serviceFee: _safeInt(json['serviceFee'], 0),
+      surchargeAmount: _safeInt(json['surchargeAmount'], 0),
+      extraGuestFee: _safeInt(json['extraGuestFee'], 0),
+      includedGuests: _safeInt(json['includedGuests'], 10),
+      maxGuests: _safeInt(json['maxGuests'], 20),
       location: json['location']?.toString() ?? 'Vũng Tàu',
       checkIn: json['checkIn']?.toString(),
       checkOut: json['checkOut']?.toString(),
       guests: gCount,
       guestsCount: gCount,
       guestSummary: json['guestSummary']?.toString(),
-      instantBook: json['instantBook'] == true,
+      instantBook: _safeBool(json['instantBook'], false),
       couponCode: json['couponCode']?.toString(),
     );
   }
@@ -288,15 +341,15 @@ class RecentlyViewedItem {
 
   factory RecentlyViewedItem.fromJson(Map<String, dynamic> json) {
     return RecentlyViewedItem(
-      id: json['id']?.toString() ?? '',
+      id: (json['id'] ?? json['listingId'])?.toString().trim() ?? '',
       title: json['title']?.toString() ?? '',
       imageUrl: json['imageUrl']?.toString() ?? '',
       location: json['location']?.toString() ?? '',
-      pricePerNight: (json['pricePerNight'] as num?)?.toInt() ?? 0,
-      rating: (json['rating'] as num?)?.toDouble() ?? 5.0,
-      reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
-      bedrooms: (json['bedrooms'] as num?)?.toInt() ?? 0,
-      maxGuests: (json['maxGuests'] as num?)?.toInt() ?? 0,
+      pricePerNight: _safeInt(json['pricePerNight'] ?? json['basePrice'], 0),
+      rating: _safeDouble(json['rating'], 5.0),
+      reviewCount: _safeInt(json['reviewCount'], 0),
+      bedrooms: _safeInt(json['bedrooms'], 0),
+      maxGuests: _safeInt(json['maxGuests'], 0),
       viewedAtIso: json['viewedAtIso']?.toString(),
     );
   }
@@ -313,6 +366,55 @@ class RecentlyViewedItem {
         'maxGuests': maxGuests,
         if (viewedAtIso != null) 'viewedAtIso': viewedAtIso,
       };
+}
+
+class _InMemoryPrefsBacking {
+  final Map<String, Object?> _data = <String, Object?>{};
+
+  _InMemoryPrefsBacking([Map<String, Object?>? initial]) {
+    if (initial != null) {
+      for (final entry in initial.entries) {
+        final v = entry.value;
+        if (v is List) {
+          _data[entry.key] = v.map((e) => e.toString()).toList();
+        } else {
+          _data[entry.key] = v;
+        }
+      }
+    }
+  }
+
+  String? getString(String key) => _data[key] as String?;
+
+  Future<bool> setString(String key, String value) async {
+    _data[key] = value;
+    return true;
+  }
+
+  bool? getBool(String key) => _data[key] as bool?;
+
+  Future<bool> setBool(String key, bool value) async {
+    _data[key] = value;
+    return true;
+  }
+
+  List<String>? getStringList(String key) {
+    final val = _data[key];
+    if (val is List) {
+      return val.map((e) => e.toString()).toList();
+    }
+    return null;
+  }
+
+  Future<bool> setStringList(String key, List<String> value) async {
+    _data[key] = List<String>.from(value);
+    return true;
+  }
+
+  Future<bool> remove(String key) async {
+    _data.remove(key);
+    return true;
+  }
 }
 
 class PreferencesService {
@@ -337,19 +439,76 @@ class PreferencesService {
   /// guest-to-authenticated wishlist migration and session cleanup safely.
   static PreferencesService? activeInstance;
 
-  final SharedPreferences _prefs;
+  final SharedPreferences? _prefs;
+  final _InMemoryPrefsBacking? _memory;
+  final Set<void Function()> _sessionStateListeners = <void Function()>{};
   bool _isAuthenticatedSession = false;
   List<String>? _justSyncedAuthoritativeIds;
 
-  PreferencesService(this._prefs) {
+  PreferencesService(SharedPreferences prefs)
+      : _prefs = prefs,
+        _memory = null {
     activeInstance = this;
-    _isAuthenticatedSession = _prefs.getBool(_keyWishlistSynced) == true;
+    _isAuthenticatedSession = _getBool(_keyWishlistSynced) == true;
+  }
+
+  PreferencesService._inMemory([Map<String, Object?>? initialValues])
+      : _prefs = null,
+        _memory = _InMemoryPrefsBacking(initialValues) {
+    activeInstance = this;
+    _isAuthenticatedSession = _getBool(_keyWishlistSynced) == true;
+  }
+
+  /// Creates an in-memory [PreferencesService] suitable for unit/widget tests
+  /// or fallback environments without native SharedPreferences channels.
+  factory PreferencesService.inMemory([Map<String, Object?>? initialValues]) {
+    return PreferencesService._inMemory(initialValues);
   }
 
   static Future<PreferencesService> create() async {
     final prefs = await SharedPreferences.getInstance();
     return PreferencesService(prefs);
   }
+
+  void addSessionStateListener(void Function() listener) {
+    _sessionStateListeners.add(listener);
+  }
+
+  void removeSessionStateListener(void Function() listener) {
+    _sessionStateListeners.remove(listener);
+  }
+
+  void _notifySessionStateChanged() {
+    for (final listener in List<void Function()>.from(_sessionStateListeners)) {
+      try {
+        listener();
+      } catch (_) {}
+    }
+  }
+
+  String? _getString(String key) =>
+      _prefs != null ? _prefs.getString(key) : _memory!.getString(key);
+
+  Future<bool> _setString(String key, String value) => _prefs != null
+      ? _prefs.setString(key, value)
+      : _memory!.setString(key, value);
+
+  bool? _getBool(String key) =>
+      _prefs != null ? _prefs.getBool(key) : _memory!.getBool(key);
+
+  Future<bool> _setBool(String key, bool value) => _prefs != null
+      ? _prefs.setBool(key, value)
+      : _memory!.setBool(key, value);
+
+  List<String>? _getStringList(String key) =>
+      _prefs != null ? _prefs.getStringList(key) : _memory!.getStringList(key);
+
+  Future<bool> _setStringList(String key, List<String> value) => _prefs != null
+      ? _prefs.setStringList(key, value)
+      : _memory!.setStringList(key, value);
+
+  Future<bool> _remove(String key) =>
+      _prefs != null ? _prefs.remove(key) : _memory!.remove(key);
 
   /// Normalizes and deduplicates listing IDs while preserving order.
   static List<String> normalizeListingIds(Iterable<String> rawIds) {
@@ -375,17 +534,17 @@ class PreferencesService {
 
   // --- Locale ---
   String getLocale() {
-    return _prefs.getString(AppConstants.storageLocaleKey) ?? 'vi';
+    return _getString(AppConstants.storageLocaleKey) ?? 'vi';
   }
 
   Future<bool> setLocale(String languageCode) {
-    return _prefs.setString(AppConstants.storageLocaleKey, languageCode);
+    return _setString(AppConstants.storageLocaleKey, languageCode.trim());
   }
 
   // --- Favorites / Wishlist (with Guest -> Auth Migration & Account Isolation) ---
   List<String> getFavorites() {
     final raw =
-        _prefs.getStringList(AppConstants.storageFavoritesKey) ?? const [];
+        _getStringList(AppConstants.storageFavoritesKey) ?? const <String>[];
     final invalid = getInvalidWishlistIds().toSet();
     return normalizeListingIds(raw)
         .where((id) => !invalid.contains(id))
@@ -396,8 +555,7 @@ class PreferencesService {
     if (_justSyncedAuthoritativeIds != null) {
       final authoritative = _justSyncedAuthoritativeIds!;
       _justSyncedAuthoritativeIds = null;
-      return _prefs.setStringList(
-          AppConstants.storageFavoritesKey, authoritative);
+      return _setStringList(AppConstants.storageFavoritesKey, authoritative);
     }
 
     final invalid = _isAuthenticatedSession
@@ -408,38 +566,37 @@ class PreferencesService {
         .toList(growable: false);
 
     if (!_isAuthenticatedSession) {
-      await _prefs.setStringList(_keyGuestFavorites, normalized);
-      await _prefs.setBool(_keyWishlistSynced, false);
+      await _setStringList(_keyGuestFavorites, normalized);
+      await _setBool(_keyWishlistSynced, false);
     }
-    return _prefs.setStringList(AppConstants.storageFavoritesKey, normalized);
+    return _setStringList(AppConstants.storageFavoritesKey, normalized);
   }
 
   /// Returns local guest favorites that have not yet been migrated to the server.
   List<String> getPendingGuestFavorites() {
-    if (_prefs.getBool(_keyWishlistSynced) == true) {
-      final guestList = _prefs.getStringList(_keyGuestFavorites) ?? const [];
+    if (_getBool(_keyWishlistSynced) == true) {
+      final guestList = _getStringList(_keyGuestFavorites) ?? const <String>[];
       return normalizeListingIds(guestList)
           .where(isValidListingId)
           .toList(growable: false);
     }
-    final guestExplicit = _prefs.getStringList(_keyGuestFavorites);
+    final guestExplicit = _getStringList(_keyGuestFavorites);
     final source = guestExplicit ??
-        (_prefs.getString(_keyWishlistSyncedUserId) == null
-            ? (_prefs.getStringList(AppConstants.storageFavoritesKey) ??
-                const [])
+        (_getString(_keyWishlistSyncedUserId) == null
+            ? (_getStringList(AppConstants.storageFavoritesKey) ??
+                const <String>[])
             : const <String>[]);
     return normalizeListingIds(source)
         .where(isValidListingId)
         .toList(growable: false);
   }
 
-  bool get isWishlistSynced => _prefs.getBool(_keyWishlistSynced) == true;
+  bool get isWishlistSynced => _getBool(_keyWishlistSynced) == true;
 
-  String? get syncedWishlistUserId =>
-      _prefs.getString(_keyWishlistSyncedUserId);
+  String? get syncedWishlistUserId => _getString(_keyWishlistSyncedUserId);
 
   List<String> getInvalidWishlistIds() {
-    return _prefs.getStringList(_keyWishlistInvalidIds) ?? const [];
+    return _getStringList(_keyWishlistInvalidIds) ?? const <String>[];
   }
 
   /// Called only after guest wishlist migration + backend GET /api/wishlist succeeds.
@@ -450,7 +607,7 @@ class PreferencesService {
     List<String> invalidIds = const [],
     String? userId,
   }) async {
-    final previousUserId = _prefs.getString(_keyWishlistSyncedUserId);
+    final previousUserId = _getString(_keyWishlistSyncedUserId);
     final isDifferentUser = userId != null &&
         userId.isNotEmpty &&
         previousUserId != null &&
@@ -474,35 +631,37 @@ class PreferencesService {
 
     _isAuthenticatedSession = true;
     _justSyncedAuthoritativeIds = merged;
-    await _prefs.setBool(_keyWishlistSynced, true);
+    await _setBool(_keyWishlistSynced, true);
     if (userId != null && userId.isNotEmpty) {
-      await _prefs.setString(_keyWishlistSyncedUserId, userId);
+      await _setString(_keyWishlistSyncedUserId, userId);
     } else if (isDifferentUser) {
-      await _prefs.remove(_keyWishlistSyncedUserId);
+      await _remove(_keyWishlistSyncedUserId);
     }
-    await _prefs.remove(_keyGuestFavorites);
-    await _prefs.setStringList(
+    await _remove(_keyGuestFavorites);
+    await _setStringList(
       _keyWishlistInvalidIds,
       invalidSet.toList(growable: false),
     );
-    await _prefs.setStringList(AppConstants.storageFavoritesKey, merged);
+    await _setStringList(AppConstants.storageFavoritesKey, merged);
+    _notifySessionStateChanged();
     return merged;
   }
 
   /// Ensures failed server sync never marks guest favorites as synced.
   Future<void> markWishlistSyncFailed() async {
-    await _prefs.setBool(_keyWishlistSynced, false);
+    await _setBool(_keyWishlistSynced, false);
   }
 
   // --- Recently Viewed Listings (max 8) ---
   List<RecentlyViewedItem> getRecentlyViewed() {
-    final raw = _prefs.getString(_keyRecentlyViewed);
+    final raw = _getString(_keyRecentlyViewed);
     if (raw == null || raw.isEmpty) return const [];
     try {
-      final list = jsonDecode(raw) as List<dynamic>;
+      final list = jsonDecode(raw);
+      if (list is! List) return const [];
       return list
-          .whereType<Map<String, dynamic>>()
-          .map(RecentlyViewedItem.fromJson)
+          .whereType<Map<Object?, Object?>>()
+          .map((m) => RecentlyViewedItem.fromJson(Map<String, dynamic>.from(m)))
           .where((item) => item.id.isNotEmpty)
           .toList(growable: false);
     } catch (_) {
@@ -517,7 +676,7 @@ class PreferencesService {
         .where((existing) => existing.id != item.id)
         .toList();
     final updated = [item, ...current].take(maxRecentlyViewed).toList();
-    await _prefs.setString(
+    await _setString(
       _keyRecentlyViewed,
       jsonEncode(updated.map((e) => e.toJson()).toList()),
     );
@@ -528,12 +687,12 @@ class PreferencesService {
       recordRecentlyViewed(item);
 
   Future<void> clearRecentlyViewed() async {
-    await _prefs.remove(_keyRecentlyViewed);
+    await _remove(_keyRecentlyViewed);
   }
 
   // --- Search History (max 8) ---
   List<String> getSearchHistory() {
-    return _prefs.getStringList(_keySearchHistory) ?? const [];
+    return _getStringList(_keySearchHistory) ?? const [];
   }
 
   Future<List<String>> addSearchHistory(String query) async {
@@ -543,7 +702,7 @@ class PreferencesService {
         .where((e) => e.toLowerCase() != trimmed.toLowerCase())
         .toList();
     final updated = [trimmed, ...current].take(maxSearchHistory).toList();
-    await _prefs.setStringList(_keySearchHistory, updated);
+    await _setStringList(_keySearchHistory, updated);
     return updated;
   }
 
@@ -552,23 +711,24 @@ class PreferencesService {
     final updated = getSearchHistory()
         .where((e) => e.toLowerCase() != trimmed.toLowerCase())
         .toList();
-    await _prefs.setStringList(_keySearchHistory, updated);
+    await _setStringList(_keySearchHistory, updated);
     return updated;
   }
 
   Future<void> clearSearchHistory() async {
-    await _prefs.remove(_keySearchHistory);
+    await _remove(_keySearchHistory);
   }
 
   // --- Booking Queue / MultiBooking (max 5) ---
   List<BookingQueueItem> getBookingQueue() {
-    final raw = _prefs.getString(_keyBookingQueue);
+    final raw = _getString(_keyBookingQueue);
     if (raw == null || raw.isEmpty) return const [];
     try {
-      final list = jsonDecode(raw) as List<dynamic>;
+      final list = jsonDecode(raw);
+      if (list is! List) return const [];
       return list
-          .whereType<Map<String, dynamic>>()
-          .map(BookingQueueItem.fromJson)
+          .whereType<Map<Object?, Object?>>()
+          .map((m) => BookingQueueItem.fromJson(Map<String, dynamic>.from(m)))
           .where((item) => item.listingId.isNotEmpty)
           .toList(growable: false);
     } catch (_) {
@@ -623,11 +783,11 @@ class PreferencesService {
       removeBookingQueueItem(listingId);
 
   Future<void> clearBookingQueue() async {
-    await _prefs.remove(_keyBookingQueue);
+    await _remove(_keyBookingQueue);
   }
 
   Future<void> _saveBookingQueue(List<BookingQueueItem> items) async {
-    await _prefs.setString(
+    await _setString(
       _keyBookingQueue,
       jsonEncode(items.map((e) => e.toJson()).toList()),
     );
@@ -638,7 +798,7 @@ class PreferencesService {
     final key = (userId != null && userId.isNotEmpty)
         ? '${_keyAccountProfile}_$userId'
         : _keyAccountProfile;
-    final raw = _prefs.getString(key) ?? _prefs.getString(_keyAccountProfile);
+    final raw = _getString(key) ?? _getString(_keyAccountProfile);
     if (raw == null || raw.isEmpty) return <String, dynamic>{};
     try {
       final decoded = jsonDecode(raw);
@@ -657,52 +817,61 @@ class PreferencesService {
       final key = profileOrUserId.isNotEmpty
           ? '${_keyAccountProfile}_$profileOrUserId'
           : _keyAccountProfile;
-      await _prefs.setString(key, jsonEncode(profileData));
-      await _prefs.setString(_keyAccountProfile, jsonEncode(profileData));
-    } else if (profileOrUserId is Map<String, dynamic>) {
-      await _prefs.setString(_keyAccountProfile, jsonEncode(profileOrUserId));
+      await _setString(key, jsonEncode(profileData));
+      await _setString(_keyAccountProfile, jsonEncode(profileData));
+    } else if (profileOrUserId is Map) {
+      await _setString(
+        _keyAccountProfile,
+        jsonEncode(Map<String, dynamic>.from(profileOrUserId)),
+      );
     }
   }
 
   // --- AI Search Last Query ---
   String getLastAiSearchQuery() {
-    return _prefs.getString(_keyLastAiQuery) ?? '';
+    return _getString(_keyLastAiQuery) ?? '';
   }
 
   Future<void> setLastAiSearchQuery(String query) async {
-    await _prefs.setString(_keyLastAiQuery, query.trim());
+    await _setString(_keyLastAiQuery, query.trim());
   }
 
   // --- Pending Booking Intent (when unauthenticated user clicks "Đặt ngay") ---
   Map<String, dynamic>? getPendingBookingIntent() {
-    final raw = _prefs.getString(_keyPendingBookingIntent);
+    final raw = _getString(_keyPendingBookingIntent);
     if (raw == null || raw.isEmpty) return null;
     try {
-      return jsonDecode(raw) as Map<String, dynamic>;
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+      return null;
     } catch (_) {
       return null;
     }
   }
 
   Future<void> setPendingBookingIntent(Map<String, dynamic> intent) async {
-    await _prefs.setString(_keyPendingBookingIntent, jsonEncode(intent));
+    await _setString(_keyPendingBookingIntent, jsonEncode(intent));
   }
 
   Future<void> clearPendingBookingIntent() async {
-    await _prefs.remove(_keyPendingBookingIntent);
+    await _remove(_keyPendingBookingIntent);
   }
 
   /// Clears session-scoped storage on logout matching `authService.ts`
   Future<void> clearSessionData() async {
     _isAuthenticatedSession = false;
-    await _prefs.remove(AppConstants.storageFavoritesKey);
-    await _prefs.remove(_keyGuestFavorites);
-    await _prefs.remove(_keyWishlistSynced);
-    await _prefs.remove(_keyWishlistSyncedUserId);
-    await _prefs.remove(_keyWishlistInvalidIds);
-    await _prefs.remove(_keyBookingQueue);
-    await _prefs.remove(_keySearchHistory);
-    await _prefs.remove(_keyLastAiQuery);
-    await _prefs.remove(_keyPendingBookingIntent);
+    _justSyncedAuthoritativeIds = null;
+    await _remove(AppConstants.storageFavoritesKey);
+    await _remove(_keyGuestFavorites);
+    await _remove(_keyWishlistSynced);
+    await _remove(_keyWishlistSyncedUserId);
+    await _remove(_keyWishlistInvalidIds);
+    await _remove(_keyBookingQueue);
+    await _remove(_keySearchHistory);
+    await _remove(_keyLastAiQuery);
+    await _remove(_keyPendingBookingIntent);
+    _notifySessionStateChanged();
   }
 }

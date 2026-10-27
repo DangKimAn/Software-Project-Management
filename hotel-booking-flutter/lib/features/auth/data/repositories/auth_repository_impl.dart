@@ -17,6 +17,7 @@ class AuthRepositoryImpl implements AuthRepository {
     Response<Map<String, dynamic>> response,
   ) async {
     final body = response.data;
+    DioClient.unwrapEnvelope(body);
     final data = (body?['data'] as Map<String, dynamic>?) ?? body ?? {};
     final session = AuthSession.fromJson(data);
 
@@ -27,6 +28,8 @@ class AuthRepositoryImpl implements AuthRepository {
       );
     }
 
+    // Do not inherit refresh credentials from a previous account.
+    await _storage.clearAuthSession();
     await _storage.saveAuthToken(session.token);
     if (session.refreshToken != null && session.refreshToken!.isNotEmpty) {
       await _storage.saveRefreshToken(session.refreshToken!);
@@ -112,7 +115,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> forgotPassword({required String identifier}) async {
     try {
-      await _client.dio.post<Map<String, dynamic>>(
+      final response = await _client.dio.post<Map<String, dynamic>>(
         '/api/auth/forgot-password',
         data: {
           'identifier': identifier.trim(),
@@ -120,6 +123,7 @@ class AuthRepositoryImpl implements AuthRepository {
         options:
             Options(extra: const <String, dynamic>{'skipAuthRefresh': true}),
       );
+      DioClient.unwrapEnvelope(response.data);
     } catch (e) {
       throw DioClient.handleError(e);
     }
@@ -132,7 +136,7 @@ class AuthRepositoryImpl implements AuthRepository {
     required String newPassword,
   }) async {
     try {
-      await _client.dio.post<Map<String, dynamic>>(
+      final response = await _client.dio.post<Map<String, dynamic>>(
         '/api/auth/reset-password',
         data: {
           'identifier': identifier.trim(),
@@ -142,6 +146,7 @@ class AuthRepositoryImpl implements AuthRepository {
         options:
             Options(extra: const <String, dynamic>{'skipAuthRefresh': true}),
       );
+      DioClient.unwrapEnvelope(response.data);
     } catch (e) {
       throw DioClient.handleError(e);
     }
@@ -171,13 +176,19 @@ class AuthRepositoryImpl implements AuthRepository {
       final response =
           await _client.dio.get<Map<String, dynamic>>('/api/auth/me');
       final body = response.data;
+      DioClient.unwrapEnvelope(body);
       final data = (body?['data'] as Map<String, dynamic>?) ?? body;
-      if (data == null) return null;
+      if (data == null) {
+        throw const ServerFailure(
+            'Máy chủ trả về thông tin phiên không hợp lệ.',
+            code: 'INVALID_AUTH_USER');
+      }
       final userJson = (data['user'] as Map<String, dynamic>?) ?? data;
       var user = User.fromJson(userJson);
       if (user.id.trim().isEmpty) {
-        await _storage.clearAuthSession();
-        return null;
+        throw const ServerFailure(
+            'Máy chủ trả về thông tin phiên không hợp lệ.',
+            code: 'INVALID_AUTH_USER');
       }
 
       try {
@@ -200,10 +211,11 @@ class AuthRepositoryImpl implements AuthRepository {
       return user;
     } catch (e) {
       final mapped = DioClient.handleError(e);
-      if (mapped is AuthFailure) {
+      if (mapped is AuthFailure && mapped.statusCode == 401) {
         await _storage.clearAuthSession();
+        return null;
       }
-      return null;
+      throw mapped;
     }
   }
 

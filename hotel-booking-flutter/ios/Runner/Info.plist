@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>hotel_booking_flutter</string>
+	<string>Minh Thanh Villa</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -65,13 +65,22 @@
 		</dict>
 	</array>
 
-	<!-- Schemes for url_launcher to support Zalo, Hotline and External URLs -->
+	<!-- Schemes for url_launcher to support Zalo, Hotline, Email and External URLs -->
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>https</string>
 		<string>http</string>
 		<string>tel</string>
+		<string>mailto</string>
 		<string>zalo</string>
 	</array>
+
+	<!-- Purpose strings required for Host KYC, Listing Photos & Avatar uploads (image_picker / file_picker) -->
+	<key>NSCameraUsageDescription</key>
+	<string>Minh Thanh Villa cần quyền truy cập Camera để chụp ảnh giấy tờ xác minh Chủ nhà (KYC), ảnh biệt thự và ảnh đại diện hồ sơ.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Minh Thanh Villa cần quyền truy cập Thư viện ảnh để tải lên ảnh biệt thự, tài liệu xác minh Chủ nhà (KYC) và ảnh đại diện hồ sơ.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Minh Thanh Villa cần quyền lưu ảnh vào Thư viện ảnh khi bạn tải xuống thông tin hoặc xác nhận đặt phòng.</string>
 </dict>
 </plist>

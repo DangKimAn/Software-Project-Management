@@ -86,10 +86,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       } else {
         _socket?.disconnect();
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
       if (!mounted || epoch != _authOpEpoch) return;
       _socket?.disconnect();
-      state = const AsyncValue.data(null);
+      state = AsyncValue.error(error, stackTrace);
     }
   }
 
@@ -123,12 +123,17 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
   /// Invoked when `DioClient` detects an unrecoverable 401/403 during token refresh.
   Future<void> handleSessionExpired() async {
-    _authOpEpoch++;
+    final epoch = ++_authOpEpoch;
     _socket?.disconnect();
-    await _prefs?.clearSessionData();
-    await _googleAuthService.signOut();
     if (mounted) {
       state = const AsyncValue.data(null);
+    }
+    try {
+      await _prefs?.clearSessionData();
+    } finally {
+      if (mounted && epoch == _authOpEpoch) {
+        await _googleAuthService.signOut();
+      }
     }
   }
 
@@ -148,11 +153,22 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
               ? refreshed.lastName
               : existing.lastName,
           phone: refreshed.phone ?? existing.phone,
-          role: refreshed.role,
-          roles: refreshed.roles.isNotEmpty ? refreshed.roles : existing.roles,
-          status: refreshed.status,
-          isVerified: refreshed.isVerified || existing.isVerified,
-          isHostVerified: refreshed.isHostVerified || existing.isHostVerified,
+          role: userJson.containsKey('role') || userJson.containsKey('roles')
+              ? refreshed.role
+              : existing.role,
+          roles: userJson.containsKey('role') || userJson.containsKey('roles')
+              ? refreshed.roles
+              : existing.roles,
+          status: userJson.containsKey('status')
+              ? refreshed.status
+              : existing.status,
+          isVerified: userJson.containsKey('isVerified')
+              ? refreshed.isVerified
+              : existing.isVerified,
+          isHostVerified: userJson.containsKey('isHostVerified') ||
+                  userJson.containsKey('is_host_verified')
+              ? refreshed.isHostVerified
+              : existing.isHostVerified,
         ),
       );
     } else {
@@ -276,17 +292,23 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   }
 
   Future<void> logout() async {
-    _authOpEpoch++;
+    final epoch = ++_authOpEpoch;
     _socket?.disconnect();
     // Immediately clear authenticated user state so protected screens stop
     // issuing authenticated requests while logout completes.
     if (mounted) {
       state = const AsyncValue.data(null);
     }
-    await _prefs?.clearSessionData();
-    await _googleAuthService.signOut();
-    await _repository.logout();
-    if (mounted) {
+    try {
+      await _prefs?.clearSessionData();
+    } finally {
+      try {
+        await _googleAuthService.signOut();
+      } finally {
+        await _repository.logout();
+      }
+    }
+    if (mounted && epoch == _authOpEpoch) {
       state = const AsyncValue.data(null);
     }
   }

@@ -3,13 +3,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/security/secure_storage_service.dart';
+import '../../auth/presentation/view_models/auth_notifier.dart';
 import '../domain/host_models.dart';
 import '../services/host_file_picker_service.dart';
 
-final hostCurrentUserRoleProvider = Provider<String?>((ref) => 'host');
+final hostCurrentUserRoleProvider = Provider<String?>((ref) {
+  try {
+    final authState = ref.watch(authNotifierProvider);
+    final user = authState.valueOrNull;
+    if (user != null && user.role.trim().isNotEmpty) {
+      return user.role;
+    }
+  } catch (_) {
+    // Fallback when authNotifierProvider is not initialized in isolated widget tests
+  }
+  return 'host';
+});
 
 final hostRepositoryProvider = Provider<HostRepository>((ref) {
-  return HostRepository(HostRepository.createDefaultDio());
+  return HostRepository(
+    HostRepository.createDefaultDio(),
+    roleResolver: () => ref.read(hostCurrentUserRoleProvider),
+  );
 });
 
 class _HostDioHolder {
@@ -20,12 +35,15 @@ class _HostDioHolder {
 class HostRepository {
   final _HostDioHolder _client;
   final HostR2DirectUploader _r2Uploader;
+  final String? Function()? _roleResolver;
 
   HostRepository(
     dynamic clientOrDio, {
     HostR2DirectUploader? r2Uploader,
+    String? Function()? roleResolver,
   })  : _client = _HostDioHolder(_extractDio(clientOrDio)),
-        _r2Uploader = r2Uploader ?? HostR2DirectUploader();
+        _r2Uploader = r2Uploader ?? HostR2DirectUploader(),
+        _roleResolver = roleResolver;
 
   Dio get dio => _client.dio;
 
@@ -129,9 +147,13 @@ class HostRepository {
     return <Map<String, dynamic>>[];
   }
 
+  HostErrorInfo classifyError(Object error, [String? fallback]) {
+    return classifyHostError(error, fallback);
+  }
+
   String extractErrorMessage(
     Object error, [
-    String fallback = 'Đã xảy ra lỗi khi kết nối máy chủ.',
+    String fallback = 'Đã xảy ra lỗi khi xử lý yêu cầu.',
   ]) {
     if (error is ArgumentError) {
       return error.message?.toString() ?? fallback;
@@ -139,41 +161,39 @@ class HostRepository {
     if (error is FormatException) {
       return error.message;
     }
+    if (error is HostAuthorizationException) {
+      return error.message;
+    }
     if (error is DioException) {
-      final data = error.response?.data;
-      if (data is Map<Object?, Object?>) {
-        final msg = data['message'] ?? data['error'];
-        if (msg != null && msg.toString().trim().isNotEmpty) {
-          return msg.toString().trim();
-        }
-        final errors = data['errors'];
-        if (errors is List && errors.isNotEmpty) {
-          final first = errors.first;
-          if (first is Map<Object?, Object?> && first['msg'] != null) {
-            return first['msg'].toString();
-          }
-          return first.toString();
-        }
+      final info = classifyHostError(error);
+      if (info.message.trim().isNotEmpty) {
+        return info.message.trim();
       }
       if (error.message != null && error.message!.trim().isNotEmpty) {
         return error.message!.trim();
       }
+      return fallback;
     }
     final text = error.toString();
     if (text.startsWith('Exception: ')) {
       return text.substring('Exception: '.length);
+    }
+    if (text.startsWith('Bad state: ')) {
+      return text.substring('Bad state: '.length);
     }
     return text.isNotEmpty ? text : fallback;
   }
 
   /// Ensures only authorized roles (`host` or `admin`) can execute Host Portal
   /// mutations when user role metadata is provided.
-  void assertHostRoleAuthorized(String? userRole) {
-    if (userRole == null) return;
-    final normalized = userRole.trim().toLowerCase();
-    if (normalized != 'host' && normalized != 'admin') {
-      throw StateError(
-        'Tài khoản "$userRole" không có quyền thực hiện thao tác dành riêng cho Chủ nhà (Host).',
+  void assertHostRoleAuthorized([String? userRole]) {
+    final effectiveRole = userRole ?? _roleResolver?.call();
+    if (effectiveRole == null) return;
+    if (!isApprovedHostRole(effectiveRole)) {
+      throw HostAuthorizationException(
+        'Tài khoản "$effectiveRole" không có quyền thực hiện thao tác dành riêng cho Chủ nhà (Host).',
+        statusCode: 403,
+        userRole: effectiveRole,
       );
     }
   }
@@ -304,8 +324,10 @@ class HostRepository {
 
   /// `POST /api/host/listings`
   Future<Map<String, dynamic>> createHostListing(
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    String? userRole,
+  }) async {
+    assertHostRoleAuthorized(userRole);
     final payload = _sanitizeCreateListingPayload(data);
     final response = await _client.dio.post<dynamic>(
       '/api/host/listings',
@@ -321,8 +343,10 @@ class HostRepository {
   /// `PATCH /api/host/listings/:listingId`
   Future<Map<String, dynamic>> updateHostListing(
     String id,
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    String? userRole,
+  }) async {
+    assertHostRoleAuthorized(userRole);
     final payload = _sanitizeUpdateListingPayload(data);
     final response = await _client.dio.patch<dynamic>(
       '/api/host/listings/$id',
@@ -351,7 +375,8 @@ class HostRepository {
   }
 
   /// `DELETE /api/host/listings/:listingId`
-  Future<void> deleteHostListing(String id) async {
+  Future<void> deleteHostListing(String id, {String? userRole}) async {
+    assertHostRoleAuthorized(userRole);
     await _client.dio.delete<dynamic>('/api/host/listings/$id');
   }
 
@@ -813,14 +838,23 @@ class HostRepository {
     int? minNightsOverride,
     bool includeNullMinNightsOverride = false,
     String? notes,
+    List<HostCalendarDay>? currentCalendarDays,
+    String? todayVietnam,
+    String? userRole,
   }) async {
-    final validDates = dates
-        .map((d) => d.trim().split('T').first)
-        .where((d) => RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(d))
-        .toSet()
-        .toList()
-      ..sort();
+    assertHostRoleAuthorized(userRole);
+    final normalizedRawDates =
+        dates.map((d) => d.trim().split('T').first).toList();
+    final validation = validateCalendarBulkDates(
+      normalizedRawDates,
+      calendarDays: currentCalendarDays ?? const [],
+      todayVietnam: todayVietnam,
+    );
+    if (validation.hasUnauthorizedDates) {
+      throw StateError(validation.errorMessage!);
+    }
 
+    final validDates = validation.editableDates;
     if (validDates.isEmpty) {
       throw ArgumentError(
           'Vui lòng chọn ít nhất một ngày hợp lệ (YYYY-MM-DD).');
@@ -1013,37 +1047,46 @@ class HostRepository {
   Future<List<Map<String, dynamic>>> getPayoutAccounts() async {
     final response =
         await _client.dio.get<dynamic>('/api/host/payout-accounts');
-    return _extractList(
+    final raw = _extractList(
       response.data,
       const ['items', 'accounts', 'payoutAccounts', 'data'],
     );
+    return raw.map(maskSensitivePayoutMap).toList();
   }
 
   /// `POST /api/host/payout-accounts`
   Future<Map<String, dynamic>> createPayoutAccount(
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    String? userRole,
+  }) async {
+    assertHostRoleAuthorized(userRole);
     final response = await _client.dio.post<dynamic>(
       '/api/host/payout-accounts',
       data: data,
     );
-    return _unwrapMap(response.data);
+    return maskSensitivePayoutMap(_unwrapMap(response.data));
   }
 
   /// `PATCH /api/host/payout-accounts/:payoutAccountId`
   Future<Map<String, dynamic>> updatePayoutAccount(
     String payoutAccountId,
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    String? userRole,
+  }) async {
+    assertHostRoleAuthorized(userRole);
     final response = await _client.dio.patch<dynamic>(
       '/api/host/payout-accounts/$payoutAccountId',
       data: data,
     );
-    return _unwrapMap(response.data);
+    return maskSensitivePayoutMap(_unwrapMap(response.data));
   }
 
   /// `DELETE /api/host/payout-accounts/:payoutAccountId`
-  Future<void> deletePayoutAccount(String payoutAccountId) async {
+  Future<void> deletePayoutAccount(
+    String payoutAccountId, {
+    String? userRole,
+  }) async {
+    assertHostRoleAuthorized(userRole);
     await _client.dio.delete<dynamic>(
       '/api/host/payout-accounts/$payoutAccountId',
     );
@@ -1069,7 +1112,8 @@ class HostRepository {
         'limit': safeLimit,
       },
     );
-    return _extractList(response.data, const ['items', 'payouts', 'data']);
+    final raw = _extractList(response.data, const ['items', 'payouts', 'data']);
+    return raw.map(maskSensitivePayoutMap).toList();
   }
 
   // ===========================================================================
@@ -1094,7 +1138,8 @@ class HostRepository {
           'from': effectiveFrom,
         if (effectiveTo != null && effectiveTo.isNotEmpty) 'to': effectiveTo,
         if (group != null && group.isNotEmpty) 'group': group,
-        if (listingId != null && listingId.isNotEmpty) 'listingId': listingId,
+        if (listingId != null && listingId.isNotEmpty && listingId != 'all')
+          'listingId': listingId,
       },
     );
     return _unwrapMap(response.data);
@@ -1104,33 +1149,49 @@ class HostRepository {
   /// and fetches `HostRevenueReport`.
   Future<HostRevenueReport> getTypedRevenueReport({
     String rangeKey = '30d',
+    String? groupOverride,
+    String? listingId,
+    String? from,
+    String? to,
     DateTime? now,
   }) async {
     final toDate =
         (now ?? DateTime.now()).toUtc().add(const Duration(hours: 7));
     late final DateTime fromDate;
-    late final String group;
+    late final String defaultGroup;
 
     if (rangeKey == '90d') {
       fromDate = toDate.subtract(const Duration(days: 89));
-      group = 'day';
+      defaultGroup = 'day';
     } else if (rangeKey == 'year') {
       fromDate = DateTime(toDate.year - 1, toDate.month, toDate.day);
-      group = 'month';
+      defaultGroup = 'month';
     } else {
       fromDate = toDate.subtract(const Duration(days: 29));
-      group = 'day';
+      defaultGroup = 'day';
     }
 
     String fmt(DateTime d) =>
         '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+    final effectiveGroup =
+        (groupOverride != null && groupOverride.trim().isNotEmpty)
+            ? groupOverride.trim()
+            : defaultGroup;
+    final effectiveListingId =
+        (listingId != null && listingId.trim().isNotEmpty && listingId != 'all')
+            ? listingId.trim()
+            : null;
+
     final raw = await getRevenueReport(
-      from: fmt(fromDate),
-      to: fmt(toDate),
-      group: group,
+      from: (from != null && from.trim().isNotEmpty)
+          ? from.trim()
+          : fmt(fromDate),
+      to: (to != null && to.trim().isNotEmpty) ? to.trim() : fmt(toDate),
+      group: effectiveGroup,
+      listingId: effectiveListingId,
     );
-    return HostRevenueReport.fromJson(raw);
+    return HostRevenueReport.fromJson(raw, listingId: effectiveListingId);
   }
 
   // ===========================================================================

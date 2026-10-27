@@ -1,0 +1,3 @@
+PRODUCT_BUNDLE_IDENTIFIER = com.bronc3.hotel_booking_flutter.dev
+APP_DISPLAY_NAME = Minh Thanh Villa DEV
+FLUTTER_TARGET = lib/main_dev.dart

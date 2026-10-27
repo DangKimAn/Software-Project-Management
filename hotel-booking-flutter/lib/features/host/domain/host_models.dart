@@ -531,16 +531,41 @@ enum HostListingStatus {
     final normalized = (raw?.toString() ?? '').trim().toLowerCase();
     switch (normalized) {
       case 'pending_approval':
+      case 'pending':
         return HostListingStatus.pendingApproval;
       case 'published':
+      case 'active':
+      case 'approved':
         return HostListingStatus.published;
       case 'hidden':
+      case 'inactive':
+      case 'suspended':
         return HostListingStatus.hidden;
       case 'rejected':
         return HostListingStatus.rejected;
       case 'draft':
       default:
         return HostListingStatus.draft;
+    }
+  }
+
+  bool canTransitionTo(HostListingStatus target, {bool isAdmin = false}) {
+    if (isAdmin) return true;
+    switch (this) {
+      case HostListingStatus.draft:
+        return target == HostListingStatus.draft ||
+            target == HostListingStatus.pendingApproval;
+      case HostListingStatus.pendingApproval:
+        return target == HostListingStatus.draft ||
+            target == HostListingStatus.pendingApproval;
+      case HostListingStatus.published:
+        return target == HostListingStatus.published ||
+            target == HostListingStatus.hidden;
+      case HostListingStatus.hidden:
+        return target == HostListingStatus.published ||
+            target == HostListingStatus.hidden;
+      case HostListingStatus.rejected:
+        return target == HostListingStatus.draft;
     }
   }
 }
@@ -1537,6 +1562,9 @@ class HostCalendarDay {
   final int? minNightsOverride;
   final bool isAvailable;
   final bool isBlockedByHost;
+  final bool isBooked;
+  final bool isPast;
+  final bool canEdit;
   final String? bookingStatus;
   final int? bookingId;
   final String? guestName;
@@ -1548,13 +1576,26 @@ class HostCalendarDay {
     required this.effectivePrice,
     this.priceOverride,
     this.minNightsOverride,
-    required this.isAvailable,
-    required this.isBlockedByHost,
+    this.isAvailable = true,
+    this.isBlockedByHost = false,
+    this.isBooked = false,
+    this.isPast = false,
+    this.canEdit = true,
     this.bookingStatus,
     this.bookingId,
     this.guestName,
     this.notes,
   });
+
+  bool isEditable({String? todayVietnam}) {
+    if (!canEdit || isBooked || isPast) return false;
+    if (todayVietnam != null &&
+        date.isNotEmpty &&
+        date.compareTo(todayVietnam) < 0) {
+      return false;
+    }
+    return true;
+  }
 
   factory HostCalendarDay.fromJson(Map<String, dynamic> json) {
     double toDoubleVal(dynamic v, [double fallback = 0]) {
@@ -1562,13 +1603,23 @@ class HostCalendarDay {
       return double.tryParse('${v ?? ''}') ?? fallback;
     }
 
-    final base = toDoubleVal(json['basePrice'] ?? json['price']);
+    final base = toDoubleVal(
+      json['basePrice'] ?? json['defaultPrice'] ?? json['price'],
+    );
     final override = json['priceOverride'] != null
         ? toDoubleVal(json['priceOverride'])
         : null;
     final effective = json['effectivePrice'] != null
         ? toDoubleVal(json['effectivePrice'])
-        : (override ?? base);
+        : (override ??
+            (json['price'] != null ? toDoubleVal(json['price']) : base));
+
+    final rawBookingStatus = json['bookingStatus']?.toString();
+    final hasBookingStatus =
+        rawBookingStatus != null && rawBookingStatus.trim().isNotEmpty;
+    final booked = (json['isBooked'] as bool?) ?? hasBookingStatus;
+    final past = (json['isPast'] as bool?) ?? false;
+    final editable = (json['canEdit'] as bool?) ?? (!booked && !past);
 
     return HostCalendarDay(
       date: (json['date'] ?? '').toString().split('T').first,
@@ -1580,7 +1631,10 @@ class HostCalendarDay {
           : int.tryParse('${json['minNightsOverride'] ?? ''}'),
       isAvailable: json['isAvailable'] != false,
       isBlockedByHost: json['isBlockedByHost'] == true,
-      bookingStatus: json['bookingStatus']?.toString(),
+      isBooked: booked,
+      isPast: past,
+      canEdit: editable,
+      bookingStatus: rawBookingStatus ?? (booked ? 'booked' : null),
       bookingId: json['bookingId'] is num
           ? (json['bookingId'] as num).toInt()
           : int.tryParse('${json['bookingId'] ?? ''}'),
@@ -1588,6 +1642,334 @@ class HostCalendarDay {
       notes: json['notes']?.toString(),
     );
   }
+}
+
+class CalendarDateSelectionValidation {
+  final List<String> editableDates;
+  final List<String> bookedDates;
+  final List<String> pastDates;
+  final List<String> invalidFormatDates;
+
+  const CalendarDateSelectionValidation({
+    this.editableDates = const [],
+    this.bookedDates = const [],
+    this.pastDates = const [],
+    this.invalidFormatDates = const [],
+  });
+
+  bool get hasUnauthorizedDates =>
+      bookedDates.isNotEmpty ||
+      pastDates.isNotEmpty ||
+      invalidFormatDates.isNotEmpty;
+
+  bool get isAllValid => !hasUnauthorizedDates && editableDates.isNotEmpty;
+
+  String? get errorMessage {
+    if (invalidFormatDates.isNotEmpty) {
+      return 'Định dạng ngày không hợp lệ: ${invalidFormatDates.join(', ')}';
+    }
+    if (bookedDates.isNotEmpty) {
+      return 'Không thể thay đổi ngày đã có khách đặt: ${bookedDates.join(', ')}';
+    }
+    if (pastDates.isNotEmpty) {
+      return 'Không thể thay đổi ngày trong quá khứ: ${pastDates.join(', ')}';
+    }
+    return null;
+  }
+}
+
+CalendarDateSelectionValidation validateCalendarBulkDates(
+  List<String> dates, {
+  List<HostCalendarDay> calendarDays = const [],
+  List<HostCalendarDay>? currentCalendarDays,
+  String? todayVietnam,
+}) {
+  final effectiveCalendarDays = currentCalendarDays ?? calendarDays;
+  final dayByDate = <String, HostCalendarDay>{
+    for (final d in effectiveCalendarDays) d.date: d,
+  };
+  final editable = <String>[];
+  final booked = <String>[];
+  final past = <String>[];
+  final invalid = <String>[];
+  final isoRegex = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+
+  for (final raw in dates.map((e) => e.trim()).toSet()) {
+    if (!isoRegex.hasMatch(raw)) {
+      invalid.add(raw);
+      continue;
+    }
+    final known = dayByDate[raw];
+    if (known != null && known.isBooked) {
+      booked.add(raw);
+      continue;
+    }
+    if ((known != null && known.isPast) ||
+        (todayVietnam != null && raw.compareTo(todayVietnam) < 0)) {
+      past.add(raw);
+      continue;
+    }
+    if (known != null && !known.canEdit) {
+      booked.add(raw);
+      continue;
+    }
+    editable.add(raw);
+  }
+
+  editable.sort();
+  booked.sort();
+  past.sort();
+  invalid.sort();
+
+  return CalendarDateSelectionValidation(
+    editableDates: editable,
+    bookedDates: booked,
+    pastDates: past,
+    invalidFormatDates: invalid,
+  );
+}
+
+/// Deterministic masking of sensitive bank account numbers so raw digits are
+/// never exposed in payout lists or account summaries (`****1234`).
+String maskBankAccountNumber(dynamic rawAccountNumber) {
+  final raw = (rawAccountNumber ?? '').toString().trim();
+  if (raw.isEmpty) return '—';
+  if (raw.startsWith('****') && raw.length <= 8) {
+    return raw;
+  }
+  final digitsOnly = raw.replaceAll(RegExp(r'[^0-9A-Za-z]'), '');
+  if (digitsOnly.isEmpty) return '****';
+  if (digitsOnly.length <= 4) {
+    return '****$digitsOnly';
+  }
+  final last4 = digitsOnly.substring(digitsOnly.length - 4);
+  return '****$last4';
+}
+
+/// Ensures payout account or batch maps always have `accountNumberMasked`
+/// populated and any raw `accountNumber` masked before display.
+Map<String, dynamic> maskSensitivePayoutMap(Map<String, dynamic> source) {
+  final copy = Map<String, dynamic>.from(source);
+  final rawAcc = copy['accountNumber'] ??
+      copy['account_number'] ??
+      copy['accountNumberMasked'] ??
+      copy['account_number_masked'] ??
+      copy['accountNumberLast4'];
+  if (rawAcc != null && rawAcc.toString().trim().isNotEmpty) {
+    final masked = maskBankAccountNumber(rawAcc);
+    copy['accountNumberMasked'] = masked;
+    if (copy.containsKey('accountNumber')) {
+      copy['accountNumber'] = masked;
+    }
+  }
+  return copy;
+}
+
+/// Returns true if the given role is an approved Host or Admin allowed to
+/// access Host Portal and perform Host mutations.
+bool isApprovedHostRole(String? role) {
+  final normalized = (role ?? '').trim().toLowerCase();
+  return normalized == 'host' || normalized == 'admin';
+}
+
+class HostAuthorizationException extends StateError {
+  final int statusCode;
+  final String? userRole;
+
+  HostAuthorizationException(
+    super.message, {
+    this.statusCode = 403,
+    this.userRole,
+  });
+}
+
+enum HostErrorType {
+  offline,
+  authExpired,
+  forbidden,
+  validation,
+  notFound,
+  conflict,
+  server,
+  unknown,
+}
+
+class HostErrorInfo {
+  final HostErrorType type;
+  final int? statusCode;
+  final String message;
+  final Map<String, String> fieldErrors;
+
+  const HostErrorInfo({
+    required this.type,
+    required this.message,
+    this.statusCode,
+    this.fieldErrors = const {},
+  });
+
+  bool get isOffline => type == HostErrorType.offline;
+  bool get isAuthExpired => type == HostErrorType.authExpired;
+  bool get isForbidden => type == HostErrorType.forbidden;
+  bool get isValidation => type == HostErrorType.validation;
+  bool get isRetryable =>
+      type == HostErrorType.offline ||
+      type == HostErrorType.server ||
+      type == HostErrorType.unknown;
+}
+
+HostErrorInfo classifyHostError(Object error, [String? fallback]) {
+  if (error is HostAuthorizationException) {
+    return HostErrorInfo(
+      type: HostErrorType.forbidden,
+      statusCode: error.statusCode,
+      message: error.message,
+    );
+  }
+  if (error is DioException) {
+    final statusCode = error.response?.statusCode;
+    final data = error.response?.data;
+    final fieldErrors = <String, String>{};
+    String? serverMsg;
+
+    if (data is Map) {
+      final rawMsg = data['message'] ?? data['error'];
+      if (rawMsg is String && rawMsg.trim().isNotEmpty) {
+        serverMsg = rawMsg.trim();
+      }
+      final errorsRaw = data['errors'];
+      final msgs = <String>[];
+      if (errorsRaw is List && errorsRaw.isNotEmpty) {
+        for (final item in errorsRaw) {
+          if (item is Map) {
+            final path =
+                (item['path'] ?? item['field'] ?? '').toString().trim();
+            final m = (item['msg'] ?? item['message'] ?? '').toString().trim();
+            if (m.isNotEmpty) {
+              msgs.add(m);
+              if (path.isNotEmpty && !fieldErrors.containsKey(path)) {
+                fieldErrors[path] = m;
+              }
+            }
+          }
+        }
+      } else if (errorsRaw is Map && errorsRaw.isNotEmpty) {
+        errorsRaw.forEach((key, value) {
+          final path = key.toString().trim();
+          String m = '';
+          if (value is List && value.isNotEmpty) {
+            m = value
+                .map((e) => e.toString().trim())
+                .where((e) => e.isNotEmpty)
+                .join(', ');
+          } else if (value != null) {
+            m = value.toString().trim();
+          }
+          if (m.isNotEmpty) {
+            msgs.add(m);
+            if (path.isNotEmpty && !fieldErrors.containsKey(path)) {
+              fieldErrors[path] = m;
+            }
+          }
+        });
+      }
+      if (msgs.isNotEmpty) {
+        if (serverMsg == null ||
+            serverMsg.toLowerCase() == 'validation error') {
+          serverMsg = msgs.join('; ');
+        } else {
+          serverMsg = '$serverMsg: ${msgs.join('; ')}';
+        }
+      }
+    }
+
+    if (statusCode == null) {
+      if (error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.sendTimeout) {
+        return const HostErrorInfo(
+          type: HostErrorType.offline,
+          message:
+              'Không thể kết nối máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.',
+        );
+      }
+      return HostErrorInfo(
+        type: HostErrorType.unknown,
+        message: serverMsg ?? 'Đã xảy ra lỗi không xác định. Vui lòng thử lại.',
+      );
+    }
+
+    if (statusCode == 401) {
+      return HostErrorInfo(
+        type: HostErrorType.authExpired,
+        statusCode: 401,
+        message: serverMsg ??
+            'Phiên đăng nhập đã hết hạn (401). Vui lòng đăng nhập lại.',
+      );
+    }
+    if (statusCode == 403) {
+      return HostErrorInfo(
+        type: HostErrorType.forbidden,
+        statusCode: 403,
+        message: serverMsg ??
+            'Bạn không có quyền Chủ nhà để thực hiện thao tác này (403).',
+      );
+    }
+    if (statusCode == 404) {
+      return HostErrorInfo(
+        type: HostErrorType.notFound,
+        statusCode: 404,
+        message: serverMsg ?? 'Không tìm thấy dữ liệu yêu cầu (404).',
+      );
+    }
+    if (statusCode == 409) {
+      return HostErrorInfo(
+        type: HostErrorType.conflict,
+        statusCode: 409,
+        message: serverMsg ?? 'Dữ liệu bị xung đột trạng thái (409).',
+      );
+    }
+    if (statusCode == 400 || statusCode == 422) {
+      return HostErrorInfo(
+        type: HostErrorType.validation,
+        statusCode: statusCode,
+        message: serverMsg ?? 'Dữ liệu gửi lên không hợp lệ ($statusCode).',
+        fieldErrors: fieldErrors,
+      );
+    }
+    if (statusCode >= 500) {
+      return HostErrorInfo(
+        type: HostErrorType.server,
+        statusCode: statusCode,
+        message: serverMsg ??
+            'Máy chủ đang gặp sự cố ($statusCode). Vui lòng thử lại sau.',
+      );
+    }
+    return HostErrorInfo(
+      type: HostErrorType.unknown,
+      statusCode: statusCode,
+      message: serverMsg ?? 'Yêu cầu thất bại ($statusCode).',
+      fieldErrors: fieldErrors,
+    );
+  }
+
+  if (error is ArgumentError) {
+    return HostErrorInfo(
+      type: HostErrorType.validation,
+      message: error.message?.toString() ?? 'Dữ liệu không hợp lệ.',
+    );
+  }
+  if (error is StateError) {
+    return HostErrorInfo(
+      type: HostErrorType.validation,
+      message: error.message,
+    );
+  }
+
+  return HostErrorInfo(
+    type: HostErrorType.unknown,
+    message: error.toString(),
+  );
 }
 
 class VietnamBank {
@@ -1641,6 +2023,8 @@ class HostBankAccount {
     required this.accountHolderName,
     this.branchName,
   });
+
+  String get accountNumberMasked => maskBankAccountNumber(accountNumber);
 
   factory HostBankAccount.fromJson(Map<String, dynamic> json) {
     return HostBankAccount(
@@ -1728,6 +2112,7 @@ class HostRevenueReport {
   final String from;
   final String to;
   final String group;
+  final String? listingId;
   final double grossRevenue;
   final double platformRevenue;
   final double hostRevenue;
@@ -1739,6 +2124,7 @@ class HostRevenueReport {
     this.from = '',
     this.to = '',
     this.group = 'day',
+    this.listingId,
     this.grossRevenue = 0,
     this.platformRevenue = 0,
     this.hostRevenue = 0,
@@ -1747,7 +2133,10 @@ class HostRevenueReport {
     this.series = const [],
   });
 
-  factory HostRevenueReport.fromJson(Map<String, dynamic> json) {
+  factory HostRevenueReport.fromJson(
+    Map<String, dynamic> json, {
+    String? listingId,
+  }) {
     final range = json['range'] is Map<Object?, Object?>
         ? Map<String, dynamic>.from(json['range'] as Map<Object?, Object?>)
         : const <String, dynamic>{};
@@ -1767,6 +2156,7 @@ class HostRevenueReport {
       from: (range['from'] ?? json['from'] ?? '').toString(),
       to: (range['to'] ?? json['to'] ?? '').toString(),
       group: (json['group'] ?? 'day').toString(),
+      listingId: listingId ?? json['listingId']?.toString(),
       grossRevenue: toD(totals['grossRevenue']),
       platformRevenue: toD(totals['platformRevenue']),
       hostRevenue: toD(totals['hostRevenue']),

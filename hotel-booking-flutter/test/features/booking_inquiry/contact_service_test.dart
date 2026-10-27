@@ -3,6 +3,10 @@ import 'package:hotel_booking_flutter/core/date/booking_date.dart';
 import 'package:hotel_booking_flutter/features/booking_inquiry/domain/services/contact_service.dart';
 
 void main() {
+  tearDown(() {
+    ContactService.resetTestOverrides();
+  });
+
   group('ContactService Tests', () {
     test(
         'buildZaloInquiryMessage constructs correct text including villa code and dates',
