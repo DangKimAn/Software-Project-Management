@@ -11,13 +11,18 @@ $RECYCLE.BIN/
 
 # IDE and Editor files
 .idea/
+**/.idea/
 .vscode/
+**/.vscode/
 *.swp
 *.swo
 *~
 *.iml
+**/*.iml
 *.ipr
+**/*.ipr
 *.iws
+**/*.iws
 
 # Strict protection: Reference source code & archives (DO NOT COMMIT)
 Source goc/
@@ -71,6 +76,8 @@ app.*.map.txt
 # Android build artifacts & keystores
 **/.gradle/
 **/android/.gradle/
+**/.kotlin/
+**/android/.kotlin/
 **/android/.cxx/
 **/android/captures/
 **/android/gradlew
@@ -84,6 +91,9 @@ app.*.map.txt
 *.apk
 *.aab
 *.ap_
+*.hprof
+hs_err_pid*.log
+replay_pid*.log
 
 # iOS / macOS / Linux / Windows ephemeral and pods
 **/ios/Flutter/ephemeral/

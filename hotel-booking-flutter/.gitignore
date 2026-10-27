@@ -61,6 +61,8 @@ lib/generated_plugin_registrant.dart
 # Android Studio / Android specific
 **/android/**/gradle-wrapper.jar
 **/android/.gradle
+**/android/.kotlin/
+.kotlin/
 **/android/captures/
 **/android/gradlew
 **/android/gradlew.bat
@@ -72,6 +74,9 @@ lib/generated_plugin_registrant.dart
 *.apk
 *.aab
 *.ap_
+*.hprof
+hs_err_pid*.log
+replay_pid*.log
 
 # Android Security & Signing Keys (NEVER COMMIT)
 *.jks

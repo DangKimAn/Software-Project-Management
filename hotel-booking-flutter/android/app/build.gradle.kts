@@ -42,7 +42,7 @@ val hasReleaseSigning =
 
 android {
     namespace = "com.bronc3.hotel_booking_flutter"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -122,4 +122,8 @@ gradle.taskGraph.whenReady {
 
 flutter {
     source = "../.."
+}
+
+tasks.matching { it.name.startsWith("copyFlutterAssets") }.configureEach {
+    doNotTrackState("Avoid Gradle 9 state tracking error when flutter_assets are recreated")
 }
