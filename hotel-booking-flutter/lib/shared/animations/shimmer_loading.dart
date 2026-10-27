@@ -2,80 +2,13 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_radii.dart';
 
-/// Shimmer effect that animates a soft gradient across placeholder widgets.
-class ShimmerLoading extends StatefulWidget {
+/// Static semantic skeleton: no gradient, halo, or perpetual animation.
+/// The name remains compatible with existing callers.
+class ShimmerLoading extends StatelessWidget {
   final Widget child;
-
-  const ShimmerLoading({
-    super.key,
-    required this.child,
-  });
-
+  const ShimmerLoading({super.key, required this.child});
   @override
-  State<ShimmerLoading> createState() => _ShimmerLoadingState();
-}
-
-class _ShimmerLoadingState extends State<ShimmerLoading>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (MediaQuery.disableAnimationsOf(context)) {
-      return widget.child;
-    }
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return ShaderMask(
-          blendMode: BlendMode.srcATop,
-          shaderCallback: (bounds) {
-            return LinearGradient(
-              begin: const Alignment(-1.5, -0.3),
-              end: const Alignment(1.5, 0.3),
-              stops: const [0.1, 0.4, 0.6, 0.9],
-              colors: [
-                Colors.black.withValues(alpha: 0.08),
-                Colors.black.withValues(alpha: 0.18),
-                Colors.black.withValues(alpha: 0.18),
-                Colors.black.withValues(alpha: 0.08),
-              ],
-              transform:
-                  _SlidingGradientTransform(slidePercent: _controller.value),
-            ).createShader(bounds);
-          },
-          child: child,
-        );
-      },
-      child: widget.child,
-    );
-  }
-}
-
-class _SlidingGradientTransform extends GradientTransform {
-  final double slidePercent;
-  const _SlidingGradientTransform({required this.slidePercent});
-
-  @override
-  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
-    return Matrix4.translationValues(
-        bounds.width * (slidePercent * 2 - 1), 0.0, 0.0);
-  }
+  Widget build(BuildContext context) => ExcludeSemantics(child: child);
 }
 
 /// A luxury placeholder skeleton card matching the exact dimensions of PropertyCard.
@@ -98,7 +31,7 @@ class ShimmerPropertyCard extends StatelessWidget {
             // Image skeleton
             AspectRatio(
               aspectRatio: 4 / 3,
-              child: Container(color: AppColors.surfaceMuted),
+              child: Container(color: AppColors.skeleton),
             ),
             Padding(
               padding: const EdgeInsets.all(16.0),
@@ -109,19 +42,21 @@ class ShimmerPropertyCard extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
+                      Flexible(
+                          child: Container(
                         height: 20,
                         width: 180,
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceMuted,
+                          color: AppColors.skeleton,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                      ),
+                      )),
+                      const SizedBox(width: 12),
                       Container(
                         height: 18,
                         width: 48,
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceMuted,
+                          color: AppColors.skeleton,
                           borderRadius: BorderRadius.circular(6),
                         ),
                       ),
@@ -133,7 +68,7 @@ class ShimmerPropertyCard extends StatelessWidget {
                     height: 14,
                     width: 120,
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceMuted,
+                      color: AppColors.skeleton,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -143,7 +78,7 @@ class ShimmerPropertyCard extends StatelessWidget {
                     height: 14,
                     width: 200,
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceMuted,
+                      color: AppColors.skeleton,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -153,7 +88,7 @@ class ShimmerPropertyCard extends StatelessWidget {
                     height: 22,
                     width: 140,
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceMuted,
+                      color: AppColors.skeleton,
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),
