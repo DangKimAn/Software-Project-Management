@@ -2,7 +2,7 @@ import 'package:intl/intl.dart';
 
 /// Immutable value object representing a calendar booking date.
 ///
-/// Complies with MINH THANH VILLA BUSINESS RULES:
+/// Complies with THE PALM VILLA BUSINESS RULES:
 /// - Calendar dates are treated as pure dates (YYYY-MM-DD) in `Asia/Ho_Chi_Minh`.
 /// - Avoids UTC conversion drift (`DateTime.toUtc().toIso8601String()` is forbidden for calendar days).
 /// - The stay duration follows the half-open interval `[checkIn, checkOut)`.

@@ -78,18 +78,16 @@ android {
         create("dev") {
             dimension = "env"
             applicationIdSuffix = ".dev"
-            versionNameSuffix = "-dev"
-            resValue("string", "app_name", "Minh Thanh Villa DEV")
+            resValue("string", "app_name", "The Palm Villa DEV")
         }
         create("staging") {
             dimension = "env"
             applicationIdSuffix = ".staging"
-            versionNameSuffix = "-staging"
-            resValue("string", "app_name", "Minh Thanh Villa STAGING")
+            resValue("string", "app_name", "The Palm Villa STAGING")
         }
         create("prod") {
             dimension = "env"
-            resValue("string", "app_name", "Minh Thanh Villa")
+            resValue("string", "app_name", "The Palm Villa")
         }
     }
 

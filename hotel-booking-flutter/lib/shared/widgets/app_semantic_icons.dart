@@ -117,14 +117,14 @@ class AppSemanticIcons {
   }
 }
 
-/// Monochrome neutral stroke brand icons for Minh Thanh Villa, Google, TikTok,
+/// Monochrome neutral stroke brand icons for The Palm Villa, Google, TikTok,
 /// Threads, YouTube, Facebook, and Instagram.
 class AppBrandIcon extends StatelessWidget {
   final _BrandType _type;
   final double size;
   final Color color;
 
-  /// Minh Thanh Villa architectural crest mark (`logo_mau.svg`) rendered in
+  /// The Palm Villa architectural crest mark (`logo_mau.svg`) rendered in
   /// clean monochrome stroke.
   const AppBrandIcon.minhThanhLogo({
     super.key,

@@ -243,11 +243,8 @@ class _ContactScreenState extends State<ContactScreen> {
     final copied = await ContactService.copyTextToClipboard(draft);
     if (!mounted) return;
     setState(() {
-      _generatedDraft = draft;
-      _isFeedbackError = !copied;
-      _feedbackBannerMessage = copied
-          ? 'Đã tạo và sao chép bản nháp tư vấn vào bộ nhớ tạm. Zalo không hỗ trợ tự điền tin nhắn — bạn hãy dán (Paste) nội dung này khi mở cuộc trò chuyện.'
-          : 'Đã tạo bản nháp bên dưới nhưng không thể tự động sao chép vào bộ nhớ tạm.';
+      _sentMessage =
+          'Cảm ơn bạn, The Palm Villa đã ghi nhận thông tin và sẽ phản hồi sớm nhất.';
     });
     _showStatusSnackBar(_feedbackBannerMessage);
   }
@@ -384,10 +381,10 @@ class _ContactScreenState extends State<ContactScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'LIÊN HỆ MINH THANH VILLA',
-          style: AppTypography.caption.copyWith(
-            fontSize: 12,
+        const Text(
+          'LIÊN HỆ THE PALM VILLA',
+          style: TextStyle(
+            fontSize: 13,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.8,
             color: AppColors.primary,
@@ -401,12 +398,13 @@ class _ContactScreenState extends State<ContactScreen> {
             color: AppColors.textStrong,
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
-        Text(
-          'Kết nối trực tiếp qua Hotline hoặc Zalo OA chính thức. Bạn cũng có thể tạo sẵn bản nháp nội dung tư vấn bên dưới để sao chép và gửi nhanh theo nhu cầu.',
-          style: AppTypography.bodyLarge.copyWith(
-            color: AppColors.textSecondary,
-            height: 1.6,
+        const SizedBox(height: 20),
+        const Text(
+          'Gửi nhu cầu của bạn cho đội ngũ The Palm Villa. Chúng tôi hỗ trợ chọn căn phù hợp, kiểm tra lịch trống, báo giá và giải đáp các câu hỏi trước chuyến đi.',
+          style: TextStyle(
+            fontSize: 16,
+            height: 1.75,
+            color: Color(0xFF475569),
           ),
         ),
         const SizedBox(height: AppSpacing.xl),
