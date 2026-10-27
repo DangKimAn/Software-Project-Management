@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../app/theme/app_colors.dart';
-import '../../app/theme/app_typography.dart';
+
 import 'app_button.dart';
 
 class AppEmptyView extends StatelessWidget {
@@ -23,8 +23,9 @@ class AppEmptyView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 32.0),
+      child: SingleChildScrollView(
+          child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -38,13 +39,14 @@ class AppEmptyView extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: AppTypography.sectionHeading,
+              style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 8),
             Text(
               description,
               textAlign: TextAlign.center,
-              style: AppTypography.bodyMuted,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
             if (onAction != null && actionText != null) ...[
               const SizedBox(height: 24),
@@ -56,7 +58,7 @@ class AppEmptyView extends StatelessWidget {
             ],
           ],
         ),
-      ),
+      )),
     );
   }
 }
