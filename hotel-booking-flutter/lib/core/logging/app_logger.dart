@@ -29,25 +29,25 @@ abstract final class AppLogger {
         );
   }
 
-  static void d(String message, {String tag = 'MinhThanhVilla'}) {
+  static void d(String message, {String tag = 'ThePalmVilla'}) {
     if (AppConfig.enableLogging) {
       developer.log('[DEBUG] ${sanitize(message)}', name: tag);
     }
   }
 
-  static void i(String message, {String tag = 'MinhThanhVilla'}) {
+  static void i(String message, {String tag = 'ThePalmVilla'}) {
     if (AppConfig.enableLogging) {
       developer.log('[INFO] ${sanitize(message)}', name: tag);
     }
   }
 
-  static void w(String message, {String tag = 'MinhThanhVilla'}) {
+  static void w(String message, {String tag = 'ThePalmVilla'}) {
     developer.log('[WARN] ${sanitize(message)}', name: tag);
   }
 
   static void e(
     String message, {
-    String tag = 'MinhThanhVilla',
+    String tag = 'ThePalmVilla',
     Object? error,
     StackTrace? stackTrace,
   }) {

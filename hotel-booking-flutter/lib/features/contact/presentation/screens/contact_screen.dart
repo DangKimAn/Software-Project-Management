@@ -385,7 +385,7 @@ class _ContactScreenState extends State<ContactScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'LIÊN HỆ MINH THANH VILLA',
+          'LIÊN HỆ THE PALM VILLA',
           style: AppTypography.caption.copyWith(
             fontSize: 12,
             fontWeight: FontWeight.w700,

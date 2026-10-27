@@ -303,7 +303,7 @@ abstract final class ContactService {
     final safeVillaName = _sanitizeLine(villaName);
     final safeVillaCode = _sanitizeLine(villaCode);
     final buffer = StringBuffer();
-    buffer.writeln('Xin chào Minh Thanh Villa, tôi muốn tư vấn đặt biệt thự:');
+    buffer.writeln('Xin chào The Palm Villa, tôi muốn tư vấn đặt biệt thự:');
     buffer.writeln('• Biệt thự: $safeVillaName (Mã: $safeVillaCode)');
 
     if (checkIn != null && checkOut != null) {

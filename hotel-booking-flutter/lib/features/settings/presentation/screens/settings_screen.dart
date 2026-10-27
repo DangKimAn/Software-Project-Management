@@ -1005,12 +1005,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: RefreshIndicator(
           color: AppColors.primary,
           onRefresh: _handleRetrySync,
-          child: ListView(
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.s16,
               vertical: AppSpacing.s12,
             ),
-            children: [
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               // Async Error / Offline / 401-403 Status Banner
               if (activeSyncState.isOffline ||
                   activeSyncState.isError ||
@@ -1297,7 +1300,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
 
               const SizedBox(height: AppSpacing.s32),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1762,48 +1766,51 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    return ListTile(
-      key: tileKey,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.s16,
-        vertical: AppSpacing.s4,
-      ),
-      leading: SizedBox(
-        width: 48,
-        height: 48,
-        child: Center(
-          child: Icon(
-            icon,
-            size: 20,
-            color: AppColors.iconStrong,
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        key: tileKey,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.s16,
+          vertical: AppSpacing.s4,
+        ),
+        leading: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Icon(
+              icon,
+              size: 20,
+              color: AppColors.iconStrong,
+            ),
           ),
         ),
-      ),
-      title: Text(
-        title,
-        style: AppTypography.bodyLarge.copyWith(
-          fontWeight: FontWeight.w600,
-          color: AppColors.textStrong,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: AppTypography.caption.copyWith(
-          color: AppColors.textSecondary,
-        ),
-      ),
-      trailing: const SizedBox(
-        width: 48,
-        height: 48,
-        child: Center(
-          child: Icon(
-            LucideIcons.chevronRight,
-            size: 18,
-            color: AppColors.iconMuted,
+        title: Text(
+          title,
+          style: AppTypography.bodyLarge.copyWith(
+            fontWeight: FontWeight.w600,
+            color: AppColors.textStrong,
           ),
         ),
+        subtitle: Text(
+          subtitle,
+          style: AppTypography.caption.copyWith(
+            color: AppColors.textSecondary,
+          ),
+        ),
+        trailing: const SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Icon(
+              LucideIcons.chevronRight,
+              size: 18,
+              color: AppColors.iconMuted,
+            ),
+          ),
+        ),
+        onTap: onTap,
       ),
-      onTap: onTap,
     );
   }
 
@@ -1814,34 +1821,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    return ListTile(
-      key: tileKey,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.s16,
-        vertical: AppSpacing.s4,
-      ),
-      title: Text(
-        title,
-        style: AppTypography.bodyLarge.copyWith(
-          fontWeight: FontWeight.w600,
-          color: AppColors.textStrong,
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        key: tileKey,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.s16,
+          vertical: AppSpacing.s4,
         ),
-      ),
-      subtitle: Text(subtitle, style: AppTypography.caption),
-      trailing: isSelected
-          ? const SizedBox(
-              width: 48,
-              height: 48,
-              child: Center(
-                child: Icon(
-                  LucideIcons.check,
-                  color: AppColors.iconStrong,
-                  size: 20,
+        title: Text(
+          title,
+          style: AppTypography.bodyLarge.copyWith(
+            fontWeight: FontWeight.w600,
+            color: AppColors.textStrong,
+          ),
+        ),
+        subtitle: Text(subtitle, style: AppTypography.caption),
+        trailing: isSelected
+            ? const SizedBox(
+                width: 48,
+                height: 48,
+                child: Center(
+                  child: Icon(
+                    LucideIcons.check,
+                    color: AppColors.iconStrong,
+                    size: 20,
+                  ),
                 ),
-              ),
-            )
-          : null,
-      onTap: onTap,
+              )
+            : null,
+        onTap: onTap,
+      ),
     );
   }
 

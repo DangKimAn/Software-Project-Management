@@ -318,7 +318,7 @@ class AdminPortalScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'minh thanh villa',
+                            'the palm villa',
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w800,
@@ -803,26 +803,30 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                   _load();
                                 },
                         ),
-                      DropdownButton<String>(
-                        value: _group,
-                        underline: const SizedBox.shrink(),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'day',
-                            child: Text('Theo ngày'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'month',
-                            child: Text('Theo tháng'),
-                          ),
-                        ],
-                        onChanged: _loading
-                            ? null
-                            : (next) {
-                                if (next == null || next == _group) return;
-                                setState(() => _group = next);
-                                _load();
-                              },
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: DropdownButton<String>(
+                          value: _group,
+                          underline: const SizedBox.shrink(),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'day',
+                              child: Text('Theo ngày'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'month',
+                              child: Text('Theo tháng'),
+                            ),
+                          ],
+                          onChanged: _loading
+                              ? null
+                              : (next) {
+                                  if (next == null || next == _group) return;
+                                  setState(() => _group = next);
+                                  _load();
+                                },
+                        ),
                       ),
                       OutlinedButton.icon(
                         style: _kPillOutlinedStyle,
@@ -1560,69 +1564,77 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                         ),
                       ),
                     ),
-                    DropdownButton<String>(
-                      value: _roleFilter,
-                      underline: const SizedBox.shrink(),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'all',
-                          child: Text('Mọi vai trò'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'guest',
-                          child: Text('Guest'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'host',
-                          child: Text('Host'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'moderator',
-                          child: Text('Moderator'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'admin',
-                          child: Text('Admin'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() {
-                          _roleFilter = value;
-                          _page = 1;
-                        });
-                        _fetchUsers();
-                      },
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: DropdownButton<String>(
+                        value: _roleFilter,
+                        underline: const SizedBox.shrink(),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'all',
+                            child: Text('Mọi vai trò'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'guest',
+                            child: Text('Guest'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'host',
+                            child: Text('Host'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'moderator',
+                            child: Text('Moderator'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'admin',
+                            child: Text('Admin'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() {
+                            _roleFilter = value;
+                            _page = 1;
+                          });
+                          _fetchUsers();
+                        },
+                      ),
                     ),
-                    DropdownButton<String>(
-                      value: _status,
-                      underline: const SizedBox.shrink(),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'all',
-                          child: Text('Mọi trạng thái'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'active',
-                          child: Text('Active (Hoạt động)'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'suspended',
-                          child: Text('Suspended (Tạm khóa)'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'inactive',
-                          child: Text('Inactive'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() {
-                          _status = value;
-                          _page = 1;
-                        });
-                        _fetchUsers();
-                      },
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: DropdownButton<String>(
+                        value: _status,
+                        underline: const SizedBox.shrink(),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'all',
+                            child: Text('Mọi trạng thái'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'active',
+                            child: Text('Active (Hoạt động)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'suspended',
+                            child: Text('Suspended (Tạm khóa)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'inactive',
+                            child: Text('Inactive'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() {
+                            _status = value;
+                            _page = 1;
+                          });
+                          _fetchUsers();
+                        },
+                      ),
                     ),
                     OutlinedButton.icon(
                       style: _kPillOutlinedStyle,
@@ -3746,32 +3758,36 @@ class _AdminHostApplicationsTabState
                 runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  DropdownButton<String>(
-                    value: _verificationStatus,
-                    underline: const SizedBox.shrink(),
-                    items: const [
-                      DropdownMenuItem(value: 'all', child: Text('Tất cả')),
-                      DropdownMenuItem(
-                        value: 'pending',
-                        child: Text('Chờ duyệt'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'approved',
-                        child: Text('Đã duyệt'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'rejected',
-                        child: Text('Từ chối'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() {
-                        _verificationStatus = value;
-                        _verificationPage = 1;
-                      });
-                      _fetchVerifications();
-                    },
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: DropdownButton<String>(
+                      value: _verificationStatus,
+                      underline: const SizedBox.shrink(),
+                      items: const [
+                        DropdownMenuItem(value: 'all', child: Text('Tất cả')),
+                        DropdownMenuItem(
+                          value: 'pending',
+                          child: Text('Chờ duyệt'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'approved',
+                          child: Text('Đã duyệt'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'rejected',
+                          child: Text('Từ chối'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() {
+                          _verificationStatus = value;
+                          _verificationPage = 1;
+                        });
+                        _fetchVerifications();
+                      },
+                    ),
                   ),
                   OutlinedButton.icon(
                     style: _kPillOutlinedStyle,
@@ -3953,37 +3969,41 @@ class _AdminHostApplicationsTabState
                     runSpacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      DropdownButton<String>(
-                        value: _status,
-                        underline: const SizedBox.shrink(),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'pending',
-                            child: Text('Chờ duyệt'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'approved',
-                            child: Text('Đã duyệt'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'rejected',
-                            child: Text('Từ chối'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'all',
-                            child: Text('Tất cả'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() {
-                            _status = value;
-                            _appPage = 1;
-                            _selectedId = null;
-                            _detail = null;
-                          });
-                          _fetchApplications();
-                        },
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: DropdownButton<String>(
+                          value: _status,
+                          underline: const SizedBox.shrink(),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'pending',
+                              child: Text('Chờ duyệt'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'approved',
+                              child: Text('Đã duyệt'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'rejected',
+                              child: Text('Từ chối'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'all',
+                              child: Text('Tất cả'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() {
+                              _status = value;
+                              _appPage = 1;
+                              _selectedId = null;
+                              _detail = null;
+                            });
+                            _fetchApplications();
+                          },
+                        ),
                       ),
                       OutlinedButton.icon(
                         style: _kPillOutlinedStyle,
@@ -4429,37 +4449,41 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                    DropdownButton<String>(
-                                      value: _supportedRoles.contains(draftRole)
-                                          ? draftRole
-                                          : 'guest',
-                                      items: const [
-                                        DropdownMenuItem(
-                                          value: 'guest',
-                                          child: Text('Guest'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'host',
-                                          child: Text('Host'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'moderator',
-                                          child: Text('Moderator'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'admin',
-                                          child: Text('Admin'),
-                                        ),
-                                      ],
-                                      onChanged: !canManageRoles
-                                          ? null
-                                          : (next) {
-                                              if (next == null) return;
-                                              setState(
-                                                () =>
-                                                    _draftRoles[userId] = next,
-                                              );
-                                            },
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: DropdownButton<String>(
+                                        value: _supportedRoles.contains(draftRole)
+                                            ? draftRole
+                                            : 'guest',
+                                        items: const [
+                                          DropdownMenuItem(
+                                            value: 'guest',
+                                            child: Text('Guest'),
+                                          ),
+                                          DropdownMenuItem(
+                                            value: 'host',
+                                            child: Text('Host'),
+                                          ),
+                                          DropdownMenuItem(
+                                            value: 'moderator',
+                                            child: Text('Moderator'),
+                                          ),
+                                          DropdownMenuItem(
+                                            value: 'admin',
+                                            child: Text('Admin'),
+                                          ),
+                                        ],
+                                        onChanged: !canManageRoles
+                                            ? null
+                                            : (next) {
+                                                if (next == null) return;
+                                                setState(
+                                                  () =>
+                                                      _draftRoles[userId] = next,
+                                                );
+                                              },
+                                      ),
                                     ),
                                     Wrap(
                                       spacing: 8,

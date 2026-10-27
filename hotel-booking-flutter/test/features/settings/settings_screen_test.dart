@@ -169,14 +169,23 @@ class FakeAuthRepository implements AuthRepository {
 }
 
 class ControlledAuthNotifier extends AuthNotifier {
+  bool _initialized = false;
+
   ControlledAuthNotifier(
     super.repository, {
     super.prefs,
     AsyncValue<User?>? initialState,
   }) {
+    _initialized = true;
     if (initialState != null) {
       state = initialState;
     }
+  }
+
+  @override
+  Future<void> checkCurrentUser() async {
+    if (!_initialized) return;
+    await super.checkCurrentUser();
   }
 
   void emitState(AsyncValue<User?> next) {

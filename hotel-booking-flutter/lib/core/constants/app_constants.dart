@@ -1,5 +1,5 @@
 abstract final class AppConstants {
-  static const appName = 'Minh Thanh Villa';
+  static const appName = 'The Palm Villa';
   static const appTagline = 'Biệt thự nghỉ dưỡng Vũng Tàu';
 
   // Network timeouts in milliseconds

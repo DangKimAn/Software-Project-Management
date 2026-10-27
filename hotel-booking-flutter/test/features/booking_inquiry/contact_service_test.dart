@@ -15,7 +15,7 @@ void main() {
         final checkOut = BookingDate.parse('2026-10-17');
 
         final message = ContactService.buildZaloInquiryMessage(
-          villaName: 'Minh Thanh Luxury Sea Villa 01 <script>alert(1)</script>',
+          villaName: 'The Palm Luxury Sea Villa 01 <script>alert(1)</script>',
           villaCode: 'MTV-01',
           checkIn: checkIn,
           checkOut: checkOut,
@@ -23,7 +23,7 @@ void main() {
           additionalNotes: 'Cần phòng xông hơi <b>sạch</b>',
         );
 
-        expect(message.contains('Minh Thanh Luxury Sea Villa 01'), isTrue);
+        expect(message.contains('The Palm Luxury Sea Villa 01'), isTrue);
         expect(message.contains('<script>'), isFalse);
         expect(message.contains('<b>'), isFalse);
         expect(message.contains('MTV-01'), isTrue);

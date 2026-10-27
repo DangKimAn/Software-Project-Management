@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Centralized Design System Colors for Minh Thanh Villa.
+/// Centralized Design System Colors for The Palm Villa.
 ///
 /// Strictly adheres to FLUTTER_RULES.md & Source goc palette tokens.
 /// Hardcoding random hex colors across screens is strictly forbidden.

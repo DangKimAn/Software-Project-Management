@@ -6,14 +6,14 @@ import 'di/providers.dart';
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
 
-class MinhThanhVillaApp extends ConsumerStatefulWidget {
-  const MinhThanhVillaApp({super.key});
+class ThePalmVillaApp extends ConsumerStatefulWidget {
+  const ThePalmVillaApp({super.key});
 
   @override
-  ConsumerState<MinhThanhVillaApp> createState() => _MinhThanhVillaAppState();
+  ConsumerState<ThePalmVillaApp> createState() => _ThePalmVillaAppState();
 }
 
-class _MinhThanhVillaAppState extends ConsumerState<MinhThanhVillaApp>
+class _ThePalmVillaAppState extends ConsumerState<ThePalmVillaApp>
     with WidgetsBindingObserver {
   @override
   void initState() {
@@ -40,7 +40,7 @@ class _MinhThanhVillaAppState extends ConsumerState<MinhThanhVillaApp>
     final currentLanguageCode = ref.watch(localeProvider);
 
     return MaterialApp.router(
-      title: 'Minh Thanh Villa',
+      title: 'The Palm Villa',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: router,

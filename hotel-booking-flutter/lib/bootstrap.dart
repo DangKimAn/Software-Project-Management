@@ -29,7 +29,7 @@ Future<void> bootstrap({String? expectedEnvironment}) async {
   }
 
   AppLogger.i(
-    'Starting Minh Thanh Villa Mobile in [$resolvedExpectedEnv] environment.',
+    'Starting The Palm Villa Mobile in [$resolvedExpectedEnv] environment.',
   );
 
   // 2. Initialize local preferences with graceful fallback
@@ -49,7 +49,7 @@ Future<void> bootstrap({String? expectedEnvironment}) async {
       overrides: [
         preferencesServiceProvider.overrideWithValue(prefsService),
       ],
-      child: const MinhThanhVillaApp(),
+      child: const ThePalmVillaApp(),
     ),
   );
 }

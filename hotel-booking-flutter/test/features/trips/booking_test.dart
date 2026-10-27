@@ -17,7 +17,7 @@ void main() {
         'guestCount': 8,
         'status': 'confirmed',
         'listing': {
-          'title': 'Minh Thanh Luxury Ocean Villa',
+          'title': 'The Palm Luxury Ocean Villa',
           'addressLine': '15 Thuy Van, Vung Tau',
           'coverImageUrl': 'https://example.com/cover.jpg',
         },
@@ -27,7 +27,7 @@ void main() {
 
       expect(booking.id, '456');
       expect(booking.listingId, '12');
-      expect(booking.propertyName, 'Minh Thanh Luxury Ocean Villa');
+      expect(booking.propertyName, 'The Palm Luxury Ocean Villa');
       expect(booking.checkInDate, '2026-10-15');
       expect(booking.checkOutDate, '2026-10-18');
       expect(booking.nights, 3);

@@ -317,8 +317,10 @@ void main() {
         final requestedGroups = <String>[];
         final dio = Dio();
         dio.httpClientAdapter = _MockDioAdapter((options) {
-          if (options.path == '/api/admin/reports/revenue') {
+          if (options.path == '/api/users') {
             callBatch += 1;
+          }
+          if (options.path == '/api/admin/reports/revenue') {
             requestedGroups.add('${options.queryParameters['group']}');
           }
           // First batch: simulate offline network error

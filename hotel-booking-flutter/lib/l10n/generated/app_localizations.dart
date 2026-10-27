@@ -103,7 +103,7 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In vi, this message translates to:
-  /// **'Minh Thanh Villa'**
+  /// **'The Palm Villa'**
   String get appTitle;
 
   /// No description provided for @appTagline.
