@@ -128,7 +128,7 @@ class _MockAuthRepository extends Mock implements AuthRepository {}
 class _MockGoogleAuthService extends Mock implements GoogleAuthService {}
 
 void main() {
-  group('Terminal 08 form and lifecycle interactions', () {
+  group('Auth form and lifecycle interactions', () {
     testWidgets('login field errors preserve input and allow real retry',
         (tester) async {
       final repo = _MockAuthRepository();
@@ -279,7 +279,7 @@ void main() {
       }
     }
   });
-  group('Terminal 08 regressions', () {
+  group('Auth validation regressions', () {
     test('backend validation: optional VN phone, email, password and username',
         () {
       expect(AuthValidation.phone(''), isNull);
@@ -808,7 +808,7 @@ void main() {
     });
   });
 
-  group('Terminal 08: UX Polish, Accessibility & Field Errors Clearing', () {
+  group('Auth UX Polish, Accessibility & Field Errors Clearing', () {
     testWidgets(
         'LoginScreen leading button has >=48x48 hit area, tooltip and clears fieldErrors on typing',
         (tester) async {

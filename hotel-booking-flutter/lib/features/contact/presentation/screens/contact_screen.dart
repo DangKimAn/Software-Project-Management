@@ -1,15 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_radii.dart';
+import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_typography.dart';
+import '../../../../core/config/app_config.dart';
+import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
-import '../../../../shared/widgets/app_image.dart';
-import '../../../../shared/widgets/app_semantic_icons.dart';
+import '../../../blog/presentation/screens/blog_screen.dart';
+import '../../../booking_inquiry/domain/services/contact_service.dart';
 
-/// Port of `Source goc/frontend/src/views/pages/Contact/ContactPage.tsx` and `NotFoundPage.tsx`.
+/// Payload for consultation inquiry / draft creation.
+class ContactInquiryPayload {
+  final String fullName;
+  final String phone;
+  final String email;
+  final String topic;
+  final String message;
+  final bool userConsented;
+
+  const ContactInquiryPayload({
+    required this.fullName,
+    required this.phone,
+    required this.email,
+    required this.topic,
+    required this.message,
+    required this.userConsented,
+  });
+}
+
+/// Port of `Source goc/frontend/src/views/pages/Contact/ContactPage.tsx`
+/// adhering to Minh Thanh Villa Light Luxury Design System (FLUTTER_RULES.md):
+/// - Validates Hotline & Zalo OA from [AppConfig] and never claims sample/example numbers (`0901234567`) are real.
+/// - `tel:` launcher falls back to copying the phone number to clipboard when dialer cannot open.
+/// - Zalo OA only opens verified official `https://zalo.me/...` / `https://oa.zalo.me/...` URLs without pretending
+///   to auto-fill message text.
+/// - When no backend contact submission endpoint is configured, provides a consent-based Consultation Draft Builder
+///   to copy/share without ever faking server submission success.
 class ContactScreen extends StatefulWidget {
-  const ContactScreen({super.key});
+  final String? hotlineOverride;
+  final String? zaloOaUrlOverride;
+  final Future<void> Function(ContactInquiryPayload payload)?
+      onSubmitInquiryEndpoint;
+
+  const ContactScreen({
+    super.key,
+    this.hotlineOverride,
+    this.zaloOaUrlOverride,
+    this.onSubmitInquiryEndpoint,
+  });
 
   @override
   State<ContactScreen> createState() => _ContactScreenState();
@@ -26,180 +66,374 @@ class _ContactScreenState extends State<ContactScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
   final _messageCtrl = TextEditingController();
-  String _sentMessage = '';
+
+  String _selectedTopic = _supportTopics.first;
+  bool _userConsented = false;
+  bool _isSubmitting = false;
+
+  String _generatedDraft = '';
+  String _feedbackBannerMessage = '';
+  bool _isFeedbackError = false;
+
+  String get _effectiveHotline =>
+      (widget.hotlineOverride ?? AppConfig.hotlineNumber).trim();
+
+  String get _effectiveZaloUrl =>
+      (widget.zaloOaUrlOverride ?? AppConfig.zaloOaUrl).trim();
+
+  bool get _hasRealEndpoint => widget.onSubmitInquiryEndpoint != null;
 
   @override
   void dispose() {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
+    _emailCtrl.dispose();
     _messageCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _openHref(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri != null) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+  void _showStatusSnackBar(String message) {
+    if (!mounted || message.trim().isEmpty) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(message),
+          duration: const Duration(seconds: 3),
+        ),
+      );
   }
 
-  void _submit() {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+  Future<void> _handleCallHotline() async {
+    final result = await ContactService.callHotlineDetailed(
+      customNumber: _effectiveHotline,
+      rejectPlaceholder: true,
+      copyOnPlaceholder: false,
+    );
+    if (!mounted) return;
     setState(() {
-      _sentMessage =
-          'Cảm ơn bạn, Minh Thanh Villa đã ghi nhận thông tin và sẽ phản hồi sớm nhất.';
+      _feedbackBannerMessage = result.message;
+      _isFeedbackError =
+          result.status == ContactActionStatus.unverifiedConfig ||
+              result.status == ContactActionStatus.invalidInput ||
+              result.status == ContactActionStatus.failed;
     });
-    _nameCtrl.clear();
-    _phoneCtrl.clear();
-    _messageCtrl.clear();
+    _showStatusSnackBar(result.message);
+  }
+
+  Future<void> _handleCopyHotline() async {
+    if (!ContactService.isVerifiedHotline(_effectiveHotline)) {
+      const msg =
+          'Số hotline hiện tại là cấu hình mẫu chưa xác minh thực tế nên không sao chép.';
+      setState(() {
+        _feedbackBannerMessage = msg;
+        _isFeedbackError = true;
+      });
+      _showStatusSnackBar(msg);
+      return;
+    }
+    final clean = ContactService.normalizePhone(_effectiveHotline);
+    final copied = await ContactService.copyTextToClipboard(clean);
+    if (!mounted) return;
+    final msg = copied
+        ? 'Đã sao chép số hotline ${ContactService.formatDisplayPhone(clean)} vào bộ nhớ tạm.'
+        : 'Không thể sao chép số hotline trên thiết bị này.';
+    setState(() {
+      _feedbackBannerMessage = msg;
+      _isFeedbackError = !copied;
+    });
+    _showStatusSnackBar(msg);
+  }
+
+  Future<void> _handleOpenZalo() async {
+    final hasDraftToCopy = _userConsented && _generatedDraft.trim().isNotEmpty;
+    final result = await ContactService.openZaloInquiryDetailed(
+      customZaloUrl: _effectiveZaloUrl,
+      messageText: hasDraftToCopy ? _generatedDraft : null,
+      userConsentedToCopyDraft: hasDraftToCopy,
+      rejectPlaceholder: true,
+    );
+    if (!mounted) return;
+    setState(() {
+      _feedbackBannerMessage = result.message;
+      _isFeedbackError =
+          result.status == ContactActionStatus.unverifiedConfig ||
+              result.status == ContactActionStatus.invalidInput ||
+              result.status == ContactActionStatus.failed;
+    });
+    _showStatusSnackBar(result.message);
+  }
+
+  Future<void> _handleOpenOfficeMap() async {
+    final result = await ContactService.openExternalHttpsUrl(
+      'https://www.google.com/maps/search/?api=1&query=28%20Thi%20Sach%20Vung%20Tau',
+      fallbackCopyText: '28 Thi Sách, TP. Vũng Tàu',
+    );
+    if (!mounted) return;
+    setState(() {
+      _feedbackBannerMessage = result.message;
+      _isFeedbackError = result.status == ContactActionStatus.invalidInput ||
+          result.status == ContactActionStatus.failed;
+    });
+    _showStatusSnackBar(result.message);
+  }
+
+  Future<void> _handleFormAction() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    if (!_userConsented) {
+      const msg =
+          'Vui lòng tích chọn đồng ý trước khi tạo hoặc chia sẻ nội dung tư vấn.';
+      setState(() {
+        _feedbackBannerMessage = msg;
+        _isFeedbackError = true;
+      });
+      _showStatusSnackBar(msg);
+      return;
+    }
+
+    final draft = ContactService.buildConsultationDraftMessage(
+      fullName: _nameCtrl.text,
+      phone: _phoneCtrl.text,
+      email: _emailCtrl.text,
+      topic: _selectedTopic,
+      messageContent: _messageCtrl.text,
+    );
+
+    if (_hasRealEndpoint) {
+      setState(() {
+        _isSubmitting = true;
+        _feedbackBannerMessage = '';
+        _isFeedbackError = false;
+      });
+      try {
+        await widget.onSubmitInquiryEndpoint!(
+          ContactInquiryPayload(
+            fullName: _nameCtrl.text.trim(),
+            phone: ContactService.normalizePhone(_phoneCtrl.text),
+            email: _emailCtrl.text.trim(),
+            topic: _selectedTopic,
+            message: _messageCtrl.text.trim(),
+            userConsented: _userConsented,
+          ),
+        );
+        if (!mounted) return;
+        setState(() {
+          _isSubmitting = false;
+          _generatedDraft = draft;
+          _feedbackBannerMessage =
+              'Yêu cầu tư vấn đã được gửi tới hệ thống thành công.';
+          _isFeedbackError = false;
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _isSubmitting = false;
+          _feedbackBannerMessage = 'Không thể gửi yêu cầu: $e';
+          _isFeedbackError = true;
+        });
+      }
+      return;
+    }
+
+    // Consent-based draft generation & clipboard copy (no fake backend submission)
+    final copied = await ContactService.copyTextToClipboard(draft);
+    if (!mounted) return;
+    setState(() {
+      _generatedDraft = draft;
+      _isFeedbackError = !copied;
+      _feedbackBannerMessage = copied
+          ? 'Đã tạo và sao chép bản nháp tư vấn vào bộ nhớ tạm. Zalo không hỗ trợ tự điền tin nhắn — bạn hãy dán (Paste) nội dung này khi mở cuộc trò chuyện.'
+          : 'Đã tạo bản nháp bên dưới nhưng không thể tự động sao chép vào bộ nhớ tạm.';
+    });
+    _showStatusSnackBar(_feedbackBannerMessage);
   }
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final isDesktop = width >= 1024;
+    final horizontalPad = width >= 640
+        ? AppSpacing.xl
+        : (width < 360 ? AppSpacing.sm : AppSpacing.md);
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Column(
-        children: [
-          const AppTopHeader(currentPath: '/lien-he'),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  // Top Section (`ContactPage.tsx` lines 48-82)
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1280),
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          width >= 640 ? 24 : 16,
-                          32,
-                          width >= 640 ? 24 : 16,
-                          48,
-                        ),
-                        child: isDesktop
-                            ? Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Expanded(
-                                    flex: 95,
-                                    child: _buildHeroInfo(context),
-                                  ),
-                                  const SizedBox(width: 32),
-                                  Expanded(
-                                    flex: 105,
-                                    child: _buildHeroImage(height: 420),
-                                  ),
-                                ],
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildHeroInfo(context),
-                                  const SizedBox(height: 24),
-                                  _buildHeroImage(
-                                    height: width >= 640 ? 380 : 280,
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ),
-                  ),
-
-                  // Bottom Section (`ContactPage.tsx` lines 84-176)
-                  Container(
-                    width: double.infinity,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      border: Border(
-                        top: BorderSide(color: AppColors.divider),
-                      ),
-                    ),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: width >= 640 ? 24 : 16,
-                      vertical: 48,
-                    ),
-                    child: Center(
+      backgroundColor: AppColors.surfaceBase,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            const AppTopHeader(currentPath: '/lien-he'),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(bottom: bottomInset),
+                child: Column(
+                  children: [
+                    Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 1280),
-                        child: isDesktop
-                            ? Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    flex: 72,
-                                    child: _buildSupportAside(),
-                                  ),
-                                  const SizedBox(width: 32),
-                                  Expanded(
-                                    flex: 128,
-                                    child: _buildConsultationForm(context),
-                                  ),
-                                ],
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  _buildSupportAside(),
-                                  const SizedBox(height: 24),
-                                  _buildConsultationForm(context),
-                                ],
-                              ),
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            horizontalPad,
+                            AppSpacing.xxl,
+                            horizontalPad,
+                            AppSpacing.xxl,
+                          ),
+                          child: isDesktop
+                              ? Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: 105,
+                                      child: _buildHeroInfo(context),
+                                    ),
+                                    const SizedBox(width: AppSpacing.xxl),
+                                    Expanded(
+                                      flex: 95,
+                                      child: _buildHeroImage(),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildHeroInfo(context),
+                                    const SizedBox(height: AppSpacing.xl),
+                                    _buildHeroImage(),
+                                  ],
+                                ),
+                        ),
                       ),
                     ),
-                  ),
-
-                  const AppFooter(),
-                ],
+                    Container(
+                      width: double.infinity,
+                      decoration: const BoxDecoration(
+                        color: AppColors.surfaceBase,
+                        border: Border(
+                          top: BorderSide(color: AppColors.divider),
+                        ),
+                      ),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: horizontalPad,
+                        vertical: AppSpacing.xxl,
+                      ),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1280),
+                          child: isDesktop
+                              ? Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: 75,
+                                      child: _buildSupportAside(),
+                                    ),
+                                    const SizedBox(width: AppSpacing.xxl),
+                                    Expanded(
+                                      flex: 125,
+                                      child: _buildConsultationCard(context),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _buildSupportAside(),
+                                    const SizedBox(height: AppSpacing.xl),
+                                    _buildConsultationCard(context),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ),
+                    const AppFooter(),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildHeroInfo(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final hotlineVerified = ContactService.isVerifiedHotline(_effectiveHotline);
+    final hotlineValidFormat =
+        ContactService.isValidPhoneFormat(_effectiveHotline);
+    final zaloVerified = ContactService.isVerifiedZaloUrl(_effectiveZaloUrl);
+    final normalizedZaloUri =
+        ContactService.parseAndValidateZaloUri(_effectiveZaloUrl);
+
+    final hotlineDisplayValue = hotlineVerified
+        ? ContactService.formatDisplayPhone(_effectiveHotline)
+        : (hotlineValidFormat
+            ? 'Chưa cấu hình số thực (mẫu: $_effectiveHotline)'
+            : 'Chưa cấu hình số hotline hợp lệ');
+
+    final zaloDisplayValue = zaloVerified && normalizedZaloUri != null
+        ? '${normalizedZaloUri.host}/${normalizedZaloUri.pathSegments.first}'
+        : 'Chưa cấu hình Zalo OA xác thực (đang ở chế độ mẫu)';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'LIÊN HỆ MINH THANH VILLA',
-          style: TextStyle(
-            fontSize: 13,
+          style: AppTypography.caption.copyWith(
+            fontSize: 12,
             fontWeight: FontWeight.w700,
-            letterSpacing: 2.2,
-            color: Color(0xFF0891B2),
+            letterSpacing: 1.8,
+            color: AppColors.primary,
           ),
         ),
-        const SizedBox(height: 16),
-        const Text(
+        const SizedBox(height: AppSpacing.sm),
+        Text(
           'Cần tư vấn villa hoặc hỗ trợ đặt phòng?',
-          style: TextStyle(
-            fontSize: 36,
-            fontWeight: FontWeight.w700,
-            height: 1.18,
-            letterSpacing: -0.6,
-            color: Color(0xFF020617),
+          style: AppTypography.displayLarge.copyWith(
+            fontSize: screenWidth < 360 ? 24 : 32,
+            color: AppColors.textStrong,
           ),
         ),
-        const SizedBox(height: 20),
-        const Text(
-          'Gửi nhu cầu của bạn cho đội ngũ Minh Thanh Villa. Chúng tôi hỗ trợ chọn căn phù hợp, kiểm tra lịch trống, báo giá và giải đáp các câu hỏi trước chuyến đi.',
-          style: TextStyle(
-            fontSize: 16,
-            height: 1.75,
-            color: Color(0xFF475569),
+        const SizedBox(height: AppSpacing.md),
+        Text(
+          'Kết nối trực tiếp qua Hotline hoặc Zalo OA chính thức. Bạn cũng có thể tạo sẵn bản nháp nội dung tư vấn bên dưới để sao chép và gửi nhanh theo nhu cầu.',
+          style: AppTypography.bodyLarge.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.6,
           ),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: AppSpacing.xl),
+        if (!hotlineVerified || !zaloVerified)
+          Container(
+            key: const ValueKey('contact-config-warning-banner'),
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.md),
+            margin: const EdgeInsets.only(bottom: AppSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.warningSoft,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.borderSoft),
+            ),
+            child: Text(
+              'Lưu ý: Môi trường hiện tại đang dùng số điện thoại/Zalo OA mẫu trong cấu hình và chưa được xác minh là kênh liên hệ thực tế.',
+              style: AppTypography.caption.copyWith(
+                color: AppColors.textStrong,
+                fontWeight: FontWeight.w600,
+                height: 1.45,
+              ),
+            ),
+          ),
         LayoutBuilder(
           builder: (context, constraints) {
-            final cols = constraints.maxWidth >= 560 ? 3 : 1;
-            const gap = 12.0;
+            final cols = constraints.maxWidth >= 680 ? 3 : 1;
+            const gap = AppSpacing.md;
             final cardWidth = (constraints.maxWidth - gap * (cols - 1)) / cols;
 
             return Wrap(
@@ -208,31 +442,61 @@ class _ContactScreenState extends State<ContactScreen> {
               children: [
                 SizedBox(
                   width: cardWidth,
-                  child: _ContactInfoCard(
+                  child: _ContactChannelCard(
+                    cardKey: const ValueKey('contact-card-hotline'),
+                    primaryActionKey:
+                        const ValueKey('contact-call-hotline-btn'),
                     icon: LucideIcons.phone,
-                    title: 'Hotline',
-                    value: '0929.399.893',
-                    onTap: () => _openHref('tel:0929399893'),
-                  ),
-                ),
-                SizedBox(
-                  width: cardWidth,
-                  child: _ContactInfoCard(
-                    icon: LucideIcons.mail,
-                    title: 'Email',
-                    value: 'bookingvillavtdl@gmail.com',
-                    onTap: () => _openHref('mailto:bookingvillavtdl@gmail.com'),
-                  ),
-                ),
-                SizedBox(
-                  width: cardWidth,
-                  child: _ContactInfoCard(
-                    icon: LucideIcons.mapPin,
-                    title: 'Địa chỉ',
-                    value: '28 Thi Sách, Vũng Tàu',
-                    onTap: () => _openHref(
-                      'https://www.google.com/maps/search/?api=1&query=28%20Thi%20Sach%20Vung%20Tau',
+                    title: 'Hotline tư vấn',
+                    value: hotlineDisplayValue,
+                    badgeText: hotlineVerified
+                        ? 'Đã xác minh cấu hình'
+                        : 'Cấu hình mẫu — Chưa xác minh',
+                    isVerified: hotlineVerified,
+                    primaryActionLabel:
+                        hotlineVerified ? 'Gọi ngay' : 'Kiểm tra hotline',
+                    onPrimaryTap: _handleCallHotline,
+                    trailingIconButton: AppIconButton(
+                      key: const ValueKey('contact-copy-hotline-btn'),
+                      tooltip: 'Sao chép số hotline',
+                      icon: const Icon(
+                        LucideIcons.copy,
+                        size: 18,
+                        color: AppColors.iconStrong,
+                      ),
+                      onPressed: _handleCopyHotline,
                     ),
+                  ),
+                ),
+                SizedBox(
+                  width: cardWidth,
+                  child: _ContactChannelCard(
+                    cardKey: const ValueKey('contact-card-zalo'),
+                    primaryActionKey: const ValueKey('contact-card-zalo-btn'),
+                    icon: LucideIcons.messageCircle,
+                    title: 'Zalo OA',
+                    value: zaloDisplayValue,
+                    badgeText: zaloVerified
+                        ? 'Đã xác minh cấu hình'
+                        : 'Cấu hình mẫu — Chưa xác minh',
+                    isVerified: zaloVerified,
+                    primaryActionLabel:
+                        zaloVerified ? 'Mở Zalo OA' : 'Kiểm tra Zalo OA',
+                    onPrimaryTap: _handleOpenZalo,
+                  ),
+                ),
+                SizedBox(
+                  width: cardWidth,
+                  child: _ContactChannelCard(
+                    cardKey: const ValueKey('contact-card-address'),
+                    primaryActionKey: const ValueKey('contact-card-map-btn'),
+                    icon: LucideIcons.mapPin,
+                    title: 'Văn phòng Vũng Tàu',
+                    value: '28 Thi Sách, TP. Vũng Tàu',
+                    badgeText: 'Hỗ trợ 08:00 – 22:00',
+                    isVerified: true,
+                    primaryActionLabel: 'Xem bản đồ',
+                    onPrimaryTap: _handleOpenOfficeMap,
                   ),
                 ),
               ],
@@ -243,137 +507,146 @@ class _ContactScreenState extends State<ContactScreen> {
     );
   }
 
-  Widget _buildHeroImage({required double height}) {
-    return Container(
-      height: height,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: const AppImage(
-        url: 'assets/images/NDT05929-HDR1.jpg',
-        fit: BoxFit.cover,
-      ),
+  Widget _buildHeroImage() {
+    return const BlogCoverImage(
+      rawUrl: 'assets/images/NDT05929-HDR1.jpg',
+      aspectRatio: 16 / 10,
+      borderRadius: AppRadii.roundedCard,
     );
   }
 
   Widget _buildSupportAside() {
+    final screenWidth = MediaQuery.sizeOf(context).width;
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: AppColors.divider),
-        ),
+      padding: EdgeInsets.all(
+        screenWidth < 360 ? AppSpacing.md : AppSpacing.xl,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: AppRadii.roundedCard,
+        border: Border.all(color: AppColors.borderSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Thông tin hỗ trợ',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF020617),
+            style: AppTypography.sectionHeading.copyWith(
+              fontSize: 20,
+              color: AppColors.textStrong,
             ),
           ),
-          const SizedBox(height: 20),
-          const Row(
+          const SizedBox(height: AppSpacing.md),
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: EdgeInsets.only(top: 2),
-                child: Icon(
-                  LucideIcons.clock,
-                  size: 20,
-                  color: AppColors.iconStrong,
+              const SizedBox(
+                width: 48,
+                height: 48,
+                child: Center(
+                  child: Icon(
+                    LucideIcons.clock,
+                    size: 20,
+                    color: AppColors.iconStrong,
+                  ),
                 ),
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Thời gian phản hồi',
-                      style: TextStyle(
-                        fontSize: 15,
+                      style: AppTypography.bodyLarge.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF020617),
+                        color: AppColors.textStrong,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: AppSpacing.xxs),
                     Text(
-                      '08:00 - 22:00 hằng ngày, ưu tiên khách có lịch nhận phòng gần.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.55,
-                        color: Color(0xFF475569),
-                      ),
+                      '08:00 - 22:00 hằng ngày, ưu tiên hỗ trợ khách có lịch nhận phòng gần.',
+                      style: AppTypography.bodyMuted.copyWith(height: 1.5),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          for (final topic in _supportTopics)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 4,
-                vertical: 12,
-              ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(
-                  bottom: BorderSide(color: AppColors.divider),
-                ),
-              ),
-              child: Text(
-                topic,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF334155),
-                ),
-              ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Chủ đề tư vấn nhanh',
+            style: AppTypography.bodyMedium.copyWith(
+              fontWeight: FontWeight.w700,
+              color: AppColors.textStrong,
             ),
-          const SizedBox(height: 8),
-          InkWell(
-            onTap: () =>
-                _openHref('https://www.facebook.com/villavungtauuytin'),
-            borderRadius: BorderRadius.circular(999),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 12,
-              ),
-              decoration: BoxDecoration(
-                color: const Color(0xFF020617),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AppBrandIcon.facebook(
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Nhắn qua Facebook',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
+            children: _supportTopics.map((topic) {
+              final selected = _selectedTopic == topic;
+              return Semantics(
+                button: true,
+                selected: selected,
+                label: 'Chủ đề $topic',
+                child: InkWell(
+                  key: ValueKey('contact-topic-$topic'),
+                  onTap: () => setState(() => _selectedTopic = topic),
+                  borderRadius: AppRadii.roundedPill,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? AppColors.textStrong
+                            : AppColors.surfaceBase,
+                        borderRadius: AppRadii.roundedPill,
+                        border: Border.all(
+                          color: selected
+                              ? AppColors.textStrong
+                              : AppColors.borderSoft,
+                        ),
+                      ),
+                      child: Text(
+                        topic,
+                        style: AppTypography.bodyMedium.copyWith(
+                          fontSize: 13,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500,
+                          color: selected
+                              ? AppColors.textInverse
+                              : AppColors.textStrong,
+                        ),
+                      ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          OutlinedButton.icon(
+            onPressed: () => context.push('/tim-kiem'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(48, 48),
+              shape: const StadiumBorder(),
+              side: const BorderSide(color: AppColors.border),
+            ),
+            icon: const Icon(
+              LucideIcons.search,
+              size: 16,
+              color: AppColors.iconStrong,
+            ),
+            label: const Text(
+              'Xem danh sách villa',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -381,38 +654,39 @@ class _ContactScreenState extends State<ContactScreen> {
     );
   }
 
-  Widget _buildConsultationForm(BuildContext context) {
+  Widget _buildConsultationCard(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: AppColors.divider),
-        ),
+      padding: EdgeInsets.all(
+        screenWidth < 360 ? AppSpacing.md : AppSpacing.xl,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: AppRadii.roundedCard,
+        border: Border.all(color: AppColors.borderSoft),
       ),
       child: Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Gửi yêu cầu tư vấn',
-              style: TextStyle(
+            Text(
+              _hasRealEndpoint
+                  ? 'Gửi yêu cầu tư vấn'
+                  : 'Soạn bản nháp nội dung tư vấn',
+              style: AppTypography.sectionHeading.copyWith(
                 fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF020617),
+                color: AppColors.textStrong,
               ),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Điền thông tin cơ bản để đội ngũ hỗ trợ gợi ý căn phù hợp hơn.',
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.6,
-                color: Color(0xFF64748B),
-              ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              _hasRealEndpoint
+                  ? 'Điền thông tin liên hệ để gửi trực tiếp tới hệ thống hỗ trợ Minh Thanh Villa.'
+                  : 'Ứng dụng không tự động gửi tin nhắn ngầm khi chưa có xác nhận. Hãy điền nhu cầu bên dưới để tạo bản nháp chuẩn, sau đó chủ động sao chép và dán vào Zalo OA hoặc đọc khi gọi Hotline.',
+              style: AppTypography.bodyMuted.copyWith(height: 1.55),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.xl),
             LayoutBuilder(
               builder: (context, constraints) {
                 final twoCols = constraints.maxWidth >= 520;
@@ -421,7 +695,7 @@ class _ContactScreenState extends State<ContactScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(child: _buildNameField()),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: AppSpacing.md),
                       Expanded(child: _buildPhoneField()),
                     ],
                   );
@@ -429,99 +703,254 @@ class _ContactScreenState extends State<ContactScreen> {
                 return Column(
                   children: [
                     _buildNameField(),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.md),
                     _buildPhoneField(),
                   ],
                 );
               },
             ),
-            const SizedBox(height: 16),
-            const Text(
+            const SizedBox(height: AppSpacing.md),
+            _buildEmailField(),
+            const SizedBox(height: AppSpacing.md),
+            Text(
               'Nhu cầu của bạn',
-              style: TextStyle(
-                fontSize: 14,
+              style: AppTypography.bodyMedium.copyWith(
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF334155),
+                color: AppColors.textStrong,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.xs),
             TextFormField(
+              key: const ValueKey('contact-message-input'),
               controller: _messageCtrl,
               maxLines: 5,
-              decoration: const InputDecoration(
+              textInputAction: TextInputAction.newline,
+              decoration: InputDecoration(
                 hintText:
                     'Ví dụ: nhóm 10 khách, cần villa hồ bơi gần Bãi Sau, đi 2 ngày 1 đêm...',
+                filled: true,
+                fillColor: AppColors.surfaceBase,
+                contentPadding: const EdgeInsets.all(AppSpacing.md),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: const BorderSide(
+                    color: AppColors.borderFocus,
+                    width: 1.5,
+                  ),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: const BorderSide(color: AppColors.errorRed),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: const BorderSide(
+                    color: AppColors.errorRed,
+                    width: 1.5,
+                  ),
+                ),
               ),
               validator: (v) => (v == null || v.trim().isEmpty)
-                  ? 'Vui lòng nhập nhu cầu của bạn'
+                  ? 'Vui lòng nhập nội dung cần hỗ trợ'
                   : null,
             ),
-            const SizedBox(height: 16),
-            if (_sentMessage.isNotEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 12,
+            const SizedBox(height: AppSpacing.md),
+            // Explicit User Consent Toggle (>=48dp touch height)
+            Semantics(
+              checked: _userConsented,
+              label:
+                  'Tôi đồng ý tạo và sao chép bản nháp thông tin trên để chủ động liên hệ tư vấn',
+              child: InkWell(
+                key: const ValueKey('contact-consent-checkbox'),
+                onTap: () => setState(() => _userConsented = !_userConsented),
+                borderRadius: BorderRadius.circular(16),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.xs,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: Center(
+                            child: Icon(
+                              _userConsented
+                                  ? LucideIcons.squareCheck
+                                  : LucideIcons.square,
+                              size: 20,
+                              color: AppColors.iconStrong,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Expanded(
+                          child: Text(
+                            'Tôi đồng ý tạo bản nháp từ thông tin đã nhập để tự sao chép/chia sẻ khi liên hệ.',
+                            style: AppTypography.bodyMedium.copyWith(
+                              color: AppColors.textStrong,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  border: Border(
-                    bottom: BorderSide(color: AppColors.divider),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            if (_feedbackBannerMessage.isNotEmpty)
+              Container(
+                key: const ValueKey('contact-feedback-banner'),
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.md),
+                margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: _isFeedbackError
+                      ? AppColors.errorSoft
+                      : AppColors.surfaceWarmSand,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _isFeedbackError
+                        ? AppColors.errorRed
+                        : AppColors.borderSoft,
                   ),
                 ),
                 child: Text(
-                  _sentMessage,
-                  style: const TextStyle(
-                    fontSize: 14,
+                  _feedbackBannerMessage,
+                  style: AppTypography.bodyMedium.copyWith(
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF0891B2),
+                    color: AppColors.textStrong,
                   ),
                 ),
               ),
+            if (_generatedDraft.isNotEmpty)
+              Container(
+                key: const ValueKey('contact-draft-preview'),
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.md),
+                margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceMuted,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.borderSoft),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Bản nháp đã tạo:',
+                            style: AppTypography.caption.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textStrong,
+                            ),
+                          ),
+                        ),
+                        AppIconButton(
+                          key: const ValueKey('contact-copy-draft-again-btn'),
+                          tooltip: 'Sao chép lại bản nháp',
+                          icon: const Icon(
+                            LucideIcons.copy,
+                            size: 18,
+                            color: AppColors.iconStrong,
+                          ),
+                          onPressed: () async {
+                            final copied =
+                                await ContactService.copyTextToClipboard(
+                              _generatedDraft,
+                            );
+                            if (copied) {
+                              _showStatusSnackBar(
+                                'Đã sao chép lại bản nháp vào bộ nhớ tạm.',
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xxs),
+                    SelectableText(
+                      _generatedDraft,
+                      style: AppTypography.bodyMedium.copyWith(
+                        height: 1.5,
+                        color: AppColors.textStrong,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Wrap(
-              spacing: 16,
-              runSpacing: 12,
+              spacing: AppSpacing.md,
+              runSpacing: AppSpacing.sm,
               crossAxisAlignment: WrapCrossAlignment.center,
-              alignment: WrapAlignment.spaceBetween,
               children: [
                 FilledButton.icon(
-                  onPressed: _submit,
+                  key: const ValueKey('contact-submit-button'),
+                  onPressed: _isSubmitting ? null : _handleFormAction,
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF06B6D4),
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
+                    minimumSize: const Size(48, 48),
                     shape: const StadiumBorder(),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
+                    padding: EdgeInsets.symmetric(
+                      horizontal:
+                          screenWidth < 360 ? AppSpacing.md : AppSpacing.xl,
                       vertical: 14,
                     ),
                   ),
-                  icon: const Icon(
-                    LucideIcons.send,
+                  icon: Icon(
+                    _hasRealEndpoint ? LucideIcons.send : LucideIcons.copy,
                     size: 16,
                     color: Colors.white,
                   ),
-                  label: const Text(
-                    'Gửi yêu cầu',
-                    style: TextStyle(
+                  label: Text(
+                    _hasRealEndpoint
+                        ? 'Gửi yêu cầu'
+                        : 'Tạo & Sao chép bản nháp',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-                InkWell(
-                  onTap: () => context.push('/tim-kiem'),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Xem danh sách villa',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF0891B2),
-                      ),
+                OutlinedButton.icon(
+                  key: const ValueKey('contact-open-zalo-btn'),
+                  onPressed: _handleOpenZalo,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    shape: const StadiumBorder(),
+                    side: const BorderSide(color: AppColors.border),
+                    padding: EdgeInsets.symmetric(
+                      horizontal:
+                          screenWidth < 360 ? AppSpacing.md : AppSpacing.lg,
+                      vertical: 14,
                     ),
+                  ),
+                  icon: const Icon(
+                    LucideIcons.messageCircle,
+                    size: 16,
+                    color: AppColors.iconStrong,
+                  ),
+                  label: const Text(
+                    'Mở Zalo OA',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -532,24 +961,56 @@ class _ContactScreenState extends State<ContactScreen> {
     );
   }
 
+  InputDecoration _buildPillInputDecoration(String hintText) {
+    return InputDecoration(
+      hintText: hintText,
+      filled: true,
+      fillColor: AppColors.surfaceBase,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: 14,
+      ),
+      border: const OutlineInputBorder(
+        borderRadius: AppRadii.roundedPill,
+        borderSide: BorderSide(color: AppColors.border),
+      ),
+      enabledBorder: const OutlineInputBorder(
+        borderRadius: AppRadii.roundedPill,
+        borderSide: BorderSide(color: AppColors.border),
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderRadius: AppRadii.roundedPill,
+        borderSide: BorderSide(color: AppColors.borderFocus, width: 1.5),
+      ),
+      errorBorder: const OutlineInputBorder(
+        borderRadius: AppRadii.roundedPill,
+        borderSide: BorderSide(color: AppColors.errorRed),
+      ),
+      focusedErrorBorder: const OutlineInputBorder(
+        borderRadius: AppRadii.roundedPill,
+        borderSide: BorderSide(color: AppColors.errorRed, width: 1.5),
+      ),
+    );
+  }
+
   Widget _buildNameField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Họ và tên',
-          style: TextStyle(
-            fontSize: 14,
+          style: AppTypography.bodyMedium.copyWith(
             fontWeight: FontWeight.w600,
-            color: Color(0xFF334155),
+            color: AppColors.textStrong,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.xs),
         TextFormField(
+          key: const ValueKey('contact-name-input'),
           controller: _nameCtrl,
-          decoration: const InputDecoration(
-            hintText: 'Tên của bạn',
-          ),
+          autofillHints: const [AutofillHints.name],
+          textInputAction: TextInputAction.next,
+          decoration: _buildPillInputDecoration('Tên của bạn'),
           validator: (v) => (v == null || v.trim().isEmpty)
               ? 'Vui lòng nhập họ và tên'
               : null,
@@ -562,200 +1023,307 @@ class _ContactScreenState extends State<ContactScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Số điện thoại',
-          style: TextStyle(
-            fontSize: 14,
+          style: AppTypography.bodyMedium.copyWith(
             fontWeight: FontWeight.w600,
-            color: Color(0xFF334155),
+            color: AppColors.textStrong,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.xs),
         TextFormField(
+          key: const ValueKey('contact-phone-input'),
           controller: _phoneCtrl,
           keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(
-            hintText: '0929...',
+          autofillHints: const [AutofillHints.telephoneNumber],
+          textInputAction: TextInputAction.next,
+          decoration: _buildPillInputDecoration('09...'),
+          validator: (v) {
+            if (v == null || v.trim().isEmpty) {
+              return 'Vui lòng nhập số điện thoại';
+            }
+            if (!ContactService.isValidPhoneFormat(v)) {
+              return 'Số điện thoại không đúng định dạng';
+            }
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmailField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _hasRealEndpoint ? 'Email liên hệ' : 'Email (tùy chọn)',
+          style: AppTypography.bodyMedium.copyWith(
+            fontWeight: FontWeight.w600,
+            color: AppColors.textStrong,
           ),
-          validator: (v) => (v == null || v.trim().isEmpty)
-              ? 'Vui lòng nhập số điện thoại'
-              : null,
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        TextFormField(
+          key: const ValueKey('contact-email-input'),
+          controller: _emailCtrl,
+          keyboardType: TextInputType.emailAddress,
+          autofillHints: const [AutofillHints.email],
+          textInputAction: TextInputAction.next,
+          decoration: _buildPillInputDecoration('ban@example.com'),
+          validator: (v) {
+            final trimmed = v?.trim() ?? '';
+            if (trimmed.isEmpty) {
+              return _hasRealEndpoint
+                  ? 'Vui lòng nhập email để nhận phản hồi'
+                  : null;
+            }
+            if (!ContactService.isValidEmail(trimmed)) {
+              return 'Email không đúng định dạng';
+            }
+            return null;
+          },
         ),
       ],
     );
   }
 }
 
-class _ContactInfoCard extends StatelessWidget {
+class _ContactChannelCard extends StatelessWidget {
+  final Key? cardKey;
+  final Key? primaryActionKey;
   final IconData icon;
   final String title;
   final String value;
-  final VoidCallback onTap;
+  final String badgeText;
+  final bool isVerified;
+  final String primaryActionLabel;
+  final VoidCallback onPrimaryTap;
+  final Widget? trailingIconButton;
 
-  const _ContactInfoCard({
+  const _ContactChannelCard({
+    this.cardKey,
+    this.primaryActionKey,
     required this.icon,
     required this.title,
     required this.value,
-    required this.onTap,
+    required this.badgeText,
+    required this.isVerified,
+    required this.primaryActionLabel,
+    required this.onPrimaryTap,
+    this.trailingIconButton,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(
-            bottom: BorderSide(color: AppColors.divider),
+    return Container(
+      key: cardKey,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: AppRadii.roundedCard,
+        border: Border.all(color: AppColors.borderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              // Bare Lucide icon in a 48x48 transparent hit box (no circle/halo background)
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: AppColors.iconStrong,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isVerified
+                          ? AppColors.surfaceWarmSand
+                          : AppColors.warningSoft,
+                      borderRadius: AppRadii.roundedPill,
+                    ),
+                    child: Text(
+                      badgeText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.caption.copyWith(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textStrong,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (trailingIconButton != null) trailingIconButton!,
+            ],
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 18, color: AppColors.iconStrong),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF020617),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            title,
+            style: AppTypography.cardTitle.copyWith(
+              fontSize: 16,
+              color: AppColors.textStrong,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xxs),
+          Text(
+            value,
+            style: AppTypography.bodyMuted.copyWith(
+              height: 1.45,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              key: primaryActionKey,
+              onPressed: onPrimaryTap,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                shape: const StadiumBorder(),
+                side: const BorderSide(color: AppColors.border),
+              ),
+              child: Text(
+                primaryActionLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 14,
-                height: 1.5,
-                color: Color(0xFF64748B),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Port of `NotFoundPage.tsx`.
+/// Port of `NotFoundPage.tsx` (kept backward-compatible for any direct imports).
 class NotFoundScreen extends StatelessWidget {
   const NotFoundScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Column(
-        children: [
-          const AppTopHeader(),
-          Expanded(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 620),
-                  child: Container(
-                    padding: const EdgeInsets.all(32),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      border: Border(
-                        bottom: BorderSide(color: AppColors.divider),
+      backgroundColor: AppColors.surfaceBase,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            const AppTopHeader(),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 620),
+                    child: Container(
+                      padding: const EdgeInsets.all(AppSpacing.xxl),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceBase,
+                        borderRadius: AppRadii.roundedCard,
+                        border: Border.all(color: AppColors.borderSoft),
                       ),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            LucideIcons.compass,
+                            size: 32,
+                            color: AppColors.iconMuted,
                           ),
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            border: Border(
-                              bottom: BorderSide(color: AppColors.divider),
-                            ),
-                          ),
-                          child: const Text(
-                            '404 / ĐIỀU HƯỚNG LẠC NHỊP',
-                            style: TextStyle(
-                              fontSize: 12,
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            '404 — KHÔNG TÌM THẤY TRANG',
+                            textAlign: TextAlign.center,
+                            style: AppTypography.caption.copyWith(
                               fontWeight: FontWeight.w700,
-                              letterSpacing: 2.0,
-                              color: Color(0xFF0891B2),
+                              letterSpacing: 1.6,
+                              color: AppColors.primary,
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'Xin lỗi, chúng tôi không tìm thấy trang bạn cần.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w700,
-                            height: 1.2,
-                            color: Color(0xFF083344),
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            'Xin lỗi, chúng tôi không tìm thấy trang bạn cần.',
+                            textAlign: TextAlign.center,
+                            style: AppTypography.displayMedium.copyWith(
+                              color: AppColors.textStrong,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 14),
-                        const Text(
-                          'Liên kết này có thể đã thay đổi hoặc không còn tồn tại. Bạn có thể quay về trang chủ hoặc tiếp tục khám phá các chỗ ở đang mở để không bị ngắt mạch trải nghiệm.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 15,
-                            height: 1.65,
-                            color: Color(0xFF0891B2),
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            'Liên kết này có thể đã thay đổi hoặc không còn tồn tại. Bạn có thể quay về trang chủ hoặc tiếp tục khám phá các chỗ ở đang mở.',
+                            textAlign: TextAlign.center,
+                            style: AppTypography.bodyMuted.copyWith(
+                              height: 1.6,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 24),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            FilledButton(
-                              onPressed: () => context.go('/'),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFF06B6D4),
-                                foregroundColor: Colors.white,
-                                shape: const StadiumBorder(),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 14,
+                          const SizedBox(height: AppSpacing.xl),
+                          Wrap(
+                            spacing: AppSpacing.sm,
+                            runSpacing: AppSpacing.sm,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              FilledButton(
+                                onPressed: () => context.go('/'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size(48, 48),
+                                  shape: const StadiumBorder(),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.xl,
+                                    vertical: 14,
+                                  ),
                                 ),
+                                child: const Text('Về trang chủ'),
                               ),
-                              child: const Text('Về trang chủ'),
-                            ),
-                            OutlinedButton(
-                              onPressed: () {
-                                if (context.canPop()) {
-                                  context.pop();
-                                } else {
-                                  context.go('/');
-                                }
-                              },
-                              style: OutlinedButton.styleFrom(
-                                shape: const StadiumBorder(),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 14,
+                              OutlinedButton(
+                                onPressed: () {
+                                  if (context.canPop()) {
+                                    context.pop();
+                                  } else {
+                                    context.go('/');
+                                  }
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(48, 48),
+                                  shape: const StadiumBorder(),
+                                  side: const BorderSide(
+                                    color: AppColors.border,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.xl,
+                                    vertical: 14,
+                                  ),
                                 ),
+                                child: const Text('Quay lại trang trước'),
                               ),
-                              child: const Text('Quay lại trang trước'),
-                            ),
-                          ],
-                        ),
-                      ],
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -791,6 +791,7 @@ void main() {
   // ===========================================================================
   group('Responsive Widget Tests (320px–600px)', () {
     late HostRepository testRepo;
+    late HostOnboardingApiService testOnboardingApi;
     late FakeTestFilePickerService fakePicker;
 
     setUp(() {
@@ -844,6 +845,7 @@ void main() {
       );
       final client = DioClient()..dio.httpClientAdapter = adapter;
       testRepo = HostRepository(client);
+      testOnboardingApi = HostOnboardingApiService(dio: client.dio);
       fakePicker = FakeTestFilePickerService();
     });
 
@@ -857,6 +859,7 @@ void main() {
         ProviderScope(
           overrides: [
             hostRepositoryProvider.overrideWithValue(testRepo),
+            hostOnboardingApiProvider.overrideWithValue(testOnboardingApi),
             hostFilePickerProvider.overrideWithValue(fakePicker),
           ],
           child: const MaterialApp(
@@ -916,6 +919,827 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Thêm chỗ nghỉ mới'), findsWidgets);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  // ===========================================================================
+  // 6. HOST QA: AUTHORIZATION, 422/403 CRUD, UPLOAD RETRY, CALENDAR,
+  //    WEEKEND PRICE, PAYOUT MASKING, REPORT FILTERS & RESPONSIVE 320/768
+  // ===========================================================================
+  group('Host Authorization, Error Classification & CRUD Guards', () {
+    test(
+        'HostRepository blocks non-host roles on mutations and classifies 422/403/500/offline accurately',
+        () async {
+      final apiAdapter = FakeRecordingHttpClientAdapter(
+        responder: (options) {
+          if (options.path == '/api/host/listings' &&
+              options.method == 'POST') {
+            return jsonResponse({
+              'message': 'Dữ liệu chỗ nghỉ không hợp lệ',
+              'errors': {
+                'title': ['Tiêu đề chỗ nghỉ đã tồn tại'],
+                'basePrice': 'Giá mỗi đêm phải lớn hơn 100.000đ',
+              },
+            }, statusCode: 422);
+          }
+          if (options.path == '/api/host/listings/99' &&
+              options.method == 'DELETE') {
+            return jsonResponse({
+              'message': 'Bạn không phải chủ sở hữu chỗ nghỉ này.',
+            }, statusCode: 403);
+          }
+          if (options.path == '/api/host/reports/revenue') {
+            return jsonResponse({
+              'message': 'Internal database timeout',
+            }, statusCode: 500);
+          }
+          return jsonResponse({});
+        },
+      );
+
+      final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+      final guestRepo = HostRepository(client, roleResolver: () => 'guest');
+      final hostRepo = HostRepository(client, roleResolver: () => 'host');
+
+      // 1. Non-host role blocked before network call
+      expect(
+        () => guestRepo.createHostListing({'title': 'Test'}),
+        throwsA(isA<HostAuthorizationException>()),
+      );
+      expect(
+        () => guestRepo.deleteHostListing('99'),
+        throwsA(isA<HostAuthorizationException>()),
+      );
+      expect(apiAdapter.requests, isEmpty);
+
+      // 2. 422 Validation error extracts field errors without misclassifying as offline
+      try {
+        await hostRepo.createHostListing({'title': 'Dup'});
+        fail('Expected 422 DioException');
+      } catch (e) {
+        final info = hostRepo.classifyError(e, 'Fallback');
+        expect(info.type, HostErrorType.validation);
+        expect(info.isOffline, isFalse);
+        expect(info.message, contains('Tiêu đề chỗ nghỉ đã tồn tại'));
+        expect(info.fieldErrors['basePrice'], contains('100.000đ'));
+      }
+
+      // 3. 403 Forbidden error classified as forbidden
+      try {
+        await hostRepo.deleteHostListing('99');
+        fail('Expected 403 DioException');
+      } catch (e) {
+        final info = hostRepo.classifyError(e, 'Fallback');
+        expect(info.type, HostErrorType.forbidden);
+        expect(info.isForbidden, isTrue);
+        expect(info.isOffline, isFalse);
+        expect(info.message, contains('không phải chủ sở hữu'));
+      }
+
+      // 4. 500 Server error is NEVER misclassified as offline
+      try {
+        await hostRepo.getRevenueReport();
+        fail('Expected 500 DioException');
+      } catch (e) {
+        final info = hostRepo.classifyError(e, 'Fallback');
+        expect(info.type, HostErrorType.server);
+        expect(info.isOffline, isFalse);
+      }
+    });
+
+    testWidgets(
+        'HostPortalScreen and ThemChoNghiScreen render role guard when user role is guest',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final client = DioClient()
+        ..dio.httpClientAdapter = FakeRecordingHttpClientAdapter(
+          responder: (_) => jsonResponse({'items': <dynamic>[]}),
+        );
+      final repo = HostRepository(client, roleResolver: () => 'guest');
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostCurrentUserRoleProvider.overrideWithValue('guest'),
+          ],
+          child: const MaterialApp(
+            home: HostPortalScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('host_portal_unauthorized_guard')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('host_portal_go_onboarding_btn')),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostCurrentUserRoleProvider.overrideWithValue('guest'),
+          ],
+          child: const MaterialApp(
+            home: ThemChoNghiScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('listing_form_unauthorized_guard')),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('Payout Masking, Calendar Validation & Revenue Filters', () {
+    test('maskBankAccountNumber and getPayoutAccounts mask sensitive digits',
+        () async {
+      expect(maskBankAccountNumber('0123456789'), '****6789');
+      expect(maskBankAccountNumber('9704 3600 1234 5678'), '****5678');
+      expect(maskBankAccountNumber('****9988'), '****9988');
+
+      final apiAdapter = FakeRecordingHttpClientAdapter(
+        responder: (options) {
+          if (options.path == '/api/host/payout-accounts') {
+            return jsonResponse({
+              'items': [
+                {
+                  'id': 1,
+                  'bankName': 'Vietcombank',
+                  'accountHolderName': 'NGUYEN VAN HOST',
+                  'accountNumber': '0071001234567',
+                },
+              ],
+            });
+          }
+          if (options.path == '/api/host/payouts') {
+            return jsonResponse({
+              'items': [
+                {
+                  'payoutId': 55,
+                  'amount': 9500000,
+                  'status': 'paid',
+                  'accountNumber': '0071001234567',
+                  'transferReference': 'VCB-55',
+                  'createdAt': '2026-10-20T08:00:00Z',
+                },
+              ],
+            });
+          }
+          return jsonResponse({});
+        },
+      );
+
+      final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+      final repo = HostRepository(client);
+
+      final accounts = await repo.getPayoutAccounts();
+      expect(accounts.single['accountNumber'], '****4567');
+      expect(accounts.single['accountNumberMasked'], '****4567');
+
+      final payouts = await repo.getPayouts();
+      expect(payouts.single['accountNumber'], '****4567');
+      expect(payouts.single['accountNumberMasked'], '****4567');
+    });
+
+    test(
+        'bulkUpdateListingCalendar rejects booked or past dates before network call',
+        () async {
+      final apiAdapter = FakeRecordingHttpClientAdapter(
+        responder: (_) => jsonResponse({'updated': 1}),
+      );
+      final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+      final repo = HostRepository(client);
+
+      const calendarDays = [
+        HostCalendarDay(
+          date: '2026-10-10',
+          basePrice: 2000000,
+          effectivePrice: 2000000,
+          isPast: true,
+          canEdit: false,
+        ),
+        HostCalendarDay(
+          date: '2026-10-28',
+          basePrice: 2000000,
+          effectivePrice: 2000000,
+          isBooked: true,
+          bookingStatus: 'confirmed',
+          canEdit: false,
+        ),
+        HostCalendarDay(
+          date: '2026-10-29',
+          basePrice: 2000000,
+          effectivePrice: 2000000,
+          isAvailable: true,
+          canEdit: true,
+        ),
+      ];
+
+      // Attempt to update booked date -> throws StateError and makes 0 HTTP requests
+      expect(
+        () => repo.bulkUpdateListingCalendar(
+          '10',
+          dates: ['2026-10-28', '2026-10-29'],
+          isAvailable: false,
+          isBlockedByHost: true,
+          currentCalendarDays: calendarDays,
+        ),
+        throwsStateError,
+      );
+      expect(apiAdapter.requests, isEmpty);
+
+      // Attempt to update past date -> throws StateError and makes 0 HTTP requests
+      expect(
+        () => repo.bulkUpdateListingCalendar(
+          '10',
+          dates: ['2026-10-10'],
+          isAvailable: false,
+          isBlockedByHost: true,
+          currentCalendarDays: calendarDays,
+        ),
+        throwsStateError,
+      );
+      expect(apiAdapter.requests, isEmpty);
+
+      // Valid editable date succeeds
+      await repo.bulkUpdateListingCalendar(
+        '10',
+        dates: ['2026-10-29'],
+        isAvailable: false,
+        isBlockedByHost: true,
+        currentCalendarDays: calendarDays,
+      );
+      expect(apiAdapter.requests.length, 1);
+    });
+
+    test(
+        'getTypedRevenueReport forwards rangeKey, groupOverride, and listingId query params',
+        () async {
+      final apiAdapter = FakeRecordingHttpClientAdapter(
+        responder: (options) {
+          return jsonResponse({
+            'range': {'from': '2026-07-01', 'to': '2026-10-01'},
+            'group': options.queryParameters['group'] ?? 'month',
+            'totals': {
+              'grossRevenue': 50000000,
+              'platformRevenue': 5000000,
+              'hostRevenue': 45000000,
+              'bookingCount': 8,
+              'paymentCount': 8,
+            },
+            'series': [
+              {
+                'period': '2026-09',
+                'grossRevenue': 50000000,
+                'platformRevenue': 5000000,
+                'hostRevenue': 45000000,
+                'bookingCount': 8,
+              },
+            ],
+          });
+        },
+      );
+      final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+      final repo = HostRepository(client);
+
+      final report = await repo.getTypedRevenueReport(
+        rangeKey: '90d',
+        groupOverride: 'day',
+        listingId: '15',
+      );
+      expect(report.hostRevenue, 45000000);
+      expect(report.group, 'day');
+      expect(report.listingId, '15');
+
+      final req = apiAdapter.requests.single;
+      expect(req.path, '/api/host/reports/revenue');
+      expect(req.queryParameters['group'], 'day');
+      expect(req.queryParameters['listingId'], '15');
+    });
+  });
+
+  group(
+      'Host Widget Tests: Weekend Price, Upload Retry, Calendar Confirm & 320/768dp Responsive',
+      () {
+    testWidgets(
+        'ThemChoNghiScreen auto-syncs weekendPrice with basePrice until manually overridden, and surfaces amenity/rule errors without swallowing',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(430, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      var failRules = true;
+      final apiAdapter = FakeRecordingHttpClientAdapter(
+        responder: (options) {
+          if (options.path == '/api/amenities') {
+            return jsonResponse({
+              'items': [
+                {
+                  'amenityId': 1,
+                  'name': 'Wifi tốc độ cao',
+                  'category': 'Cơ bản'
+                },
+              ],
+            });
+          }
+          if (options.method == 'POST' &&
+              options.path == '/api/host/listings') {
+            return jsonResponse({
+              'listingId': 88,
+              ...Map<String, dynamic>.from(options.data as Map),
+            }, statusCode: 201);
+          }
+          if (options.method == 'PATCH' &&
+              options.path == '/api/host/listings/88') {
+            return jsonResponse({
+              'listingId': 88,
+              ...Map<String, dynamic>.from(options.data as Map),
+            });
+          }
+          if (options.path == '/api/uploads/presign') {
+            return jsonResponse({
+              'uploadUrl': 'https://r2.example.com/upload/img1.png',
+              'publicUrl': 'https://cdn.example.com/listings/88/img1.png',
+              'key': 'listings/88/img1.png',
+            });
+          }
+          if (options.path == '/api/host/listings/88/images' &&
+              options.method == 'POST') {
+            return jsonResponse({
+              'imageId': 901,
+              'url': 'https://cdn.example.com/listings/88/img1.png',
+              'isCover': true,
+              'sortOrder': 0,
+            }, statusCode: 201);
+          }
+          if (options.path == '/api/host/listings/88/amenities') {
+            return jsonResponse({
+              'amenityIds': [1]
+            });
+          }
+          if (options.path == '/api/host/listings/88/rules') {
+            if (failRules) {
+              return jsonResponse({
+                'message': 'Giờ nhận phòng không hợp lệ từ máy chủ',
+              }, statusCode: 422);
+            }
+            return jsonResponse({'ok': true});
+          }
+          if (options.path == '/api/host/listings/88/images/analysis') {
+            return jsonResponse({
+              'listingId': 88,
+              'tagTaxonomies': kDefaultImageTagTaxonomies
+                  .map((t) => {
+                        'code': t.code,
+                        'labelVi': t.labelVi,
+                        'category': t.category,
+                      })
+                  .toList(),
+              'images': [
+                {
+                  'imageId': 901,
+                  'url': 'https://cdn.example.com/listings/88/img1.png',
+                  'isCover': true,
+                  'sortOrder': 0,
+                  'aiAnalysisStatus': 'pending',
+                },
+              ],
+            });
+          }
+          return jsonResponse({});
+        },
+      );
+
+      final r2Adapter = FakeRecordingHttpClientAdapter(
+        responder: (_) => ResponseBody.fromString('', 200),
+      );
+      final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+      final cleanR2 = Dio()..httpClientAdapter = r2Adapter;
+      final repo = HostRepository(
+        client,
+        r2Uploader: HostR2DirectUploader(cleanDio: cleanR2),
+      );
+      final fakePicker = FakeTestFilePickerService()
+        ..nextListingImages = [createValidImageFile(name: 'cover.png')];
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostFilePickerProvider.overrideWithValue(fakePicker),
+          ],
+          child: const MaterialApp(
+            home: ThemChoNghiScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 1. Base price auto-syncs weekend price until weekend price is edited
+      final baseInput = find.byKey(const Key('listing_base_price_input'));
+      final weekendInput = find.byKey(const Key('listing_weekend_price_input'));
+      await tester.enterText(baseInput, '3200000');
+      await tester.pump();
+
+      final weekendFieldBefore = tester.widget<TextFormField>(weekendInput);
+      expect(weekendFieldBefore.controller?.text, '3200000');
+
+      // Manual override on weekend price
+      await tester.enterText(weekendInput, '4500000');
+      await tester.pump();
+      await tester.enterText(baseInput, '3500000');
+      await tester.pump();
+      expect(
+        tester.widget<TextFormField>(weekendInput).controller?.text,
+        '4500000',
+      );
+
+      // Fill required fields and pick 1 image
+      await tester.enterText(
+        find.byKey(const Key('listing_title_input')),
+        'Villa Hồ Bơi Bãi Sau',
+      );
+      await tester.enterText(
+        find.byKey(const Key('listing_description_input')),
+        'Villa rộng rãi sát biển Bãi Sau, có hồ bơi riêng và BBQ.',
+      );
+      await tester.enterText(
+        find.byKey(const Key('listing_address_input')),
+        '120 Phan Chu Trinh',
+      );
+
+      final pickBtn = find.byKey(const Key('listing_pick_images_btn'));
+      await tester.ensureVisible(pickBtn);
+      await tester.tap(pickBtn);
+      await tester.pumpAndSettle();
+
+      // Submit form -> rules endpoint returns 422 -> error MUST be surfaced, not swallowed!
+      final saveBtn = find.byKey(const Key('listing_save_btn'));
+      await tester.ensureVisible(saveBtn);
+      await tester.tap(saveBtn);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Giờ nhận phòng không hợp lệ từ máy chủ'),
+        findsOneWidget,
+      );
+
+      // Now fix rules on server and retry -> updates existing listing #88 without re-creating
+      failRules = false;
+      await tester.ensureVisible(saveBtn);
+      await tester.tap(saveBtn);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Đã cập nhật chỗ nghỉ thành công.'),
+        findsOneWidget,
+      );
+      final postCreateCalls = apiAdapter.requests
+          .where((r) => r.method == 'POST' && r.path == '/api/host/listings')
+          .length;
+      expect(postCreateCalls, 1);
+    });
+
+    testWidgets(
+        'HostPortalScreen Calendar requires confirmation before bulk update and blocks booked/past dates',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(430, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final apiAdapter = FakeRecordingHttpClientAdapter(
+        responder: (options) {
+          if (options.path == '/api/host/listings/mine') {
+            return jsonResponse({
+              'items': [
+                {
+                  'listingId': 10,
+                  'title': 'Villa Biển Vũng Tàu',
+                  'propertyType': 'villa',
+                  'basePrice': 3000000,
+                  'maxGuests': 10,
+                  'status': 'published',
+                },
+              ],
+            });
+          }
+          if (options.path == '/api/host/listings/10/calendar' &&
+              options.method == 'GET') {
+            return jsonResponse({
+              'listingId': 10,
+              'days': [
+                {
+                  'date': '2026-10-28',
+                  'basePrice': 3000000,
+                  'effectivePrice': 3000000,
+                  'isAvailable': false,
+                  'isBooked': true,
+                  'bookingStatus': 'confirmed',
+                  'canEdit': false,
+                },
+                {
+                  'date': '2026-10-29',
+                  'basePrice': 3000000,
+                  'effectivePrice': 3000000,
+                  'isAvailable': true,
+                  'isBooked': false,
+                  'isPast': false,
+                  'canEdit': true,
+                },
+              ],
+            });
+          }
+          if (options.path == '/api/host/listings/10/calendar/bulk' &&
+              options.method == 'PATCH') {
+            return jsonResponse({'updated': 1});
+          }
+          return jsonResponse({'items': <dynamic>[]});
+        },
+      );
+
+      final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+      final repo = HostRepository(client);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+          ],
+          child: const MaterialApp(
+            home: HostPortalScreen(
+              initialSection: HostPortalSection.calendar,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 1. Tapping booked date 2026-10-28 shows error and does NOT select it
+      final bookedDay = find.byKey(const Key('calendar_day_2026-10-28'));
+      await tester.ensureVisible(bookedDay);
+      await tester.tap(bookedDay);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('đã có khách đặt phòng, không thể chỉnh sửa'),
+        findsOneWidget,
+      );
+
+      // 2. Tapping editable date 2026-10-29 selects it
+      final editableDay = find.byKey(const Key('calendar_day_2026-10-29'));
+      await tester.tap(editableDay);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('(1 ngày đã chọn)'),
+        findsOneWidget,
+      );
+
+      // 3. Tapping "Khóa ngày đã chọn" opens confirmation dialog first
+      final lockBtn = find.byKey(const Key('calendar_lock_btn'));
+      await tester.ensureVisible(lockBtn);
+      await tester.tap(lockBtn);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('calendar_bulk_confirm_dialog')),
+        findsOneWidget,
+      );
+
+      // Confirm dialog -> sends PATCH /api/host/listings/10/calendar/bulk and refreshes
+      await tester
+          .tap(find.byKey(const Key('calendar_bulk_confirm_submit_btn')));
+      await tester.pumpAndSettle();
+
+      final patchCalls = apiAdapter.requests.where(
+        (r) =>
+            r.method == 'PATCH' &&
+            r.path == '/api/host/listings/10/calendar/bulk',
+      );
+      expect(patchCalls.length, 1);
+      expect(patchCalls.single.data['dates'], equals(['2026-10-29']));
+      expect(
+        find.textContaining('Đã cập nhật lịch lưu trú thành công'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'HostPortalScreen renders cleanly at 320dp and 768dp with textScale 1.3 and masks payout bank numbers',
+        (tester) async {
+      final apiAdapter = FakeRecordingHttpClientAdapter(
+        responder: (options) {
+          if (options.path == '/api/host/payout-accounts') {
+            return jsonResponse({
+              'items': [
+                {
+                  'id': 1,
+                  'bankName': 'Vietcombank',
+                  'accountHolderName': 'NGUYEN VAN A',
+                  'accountNumber': '0071009876543',
+                },
+              ],
+            });
+          }
+          if (options.path == '/api/host/payouts') {
+            return jsonResponse({
+              'items': [
+                {
+                  'payoutId': 101,
+                  'amount': 12000000,
+                  'status': 'paid',
+                  'accountNumber': '0071009876543',
+                  'transferReference': 'VCB-101',
+                  'createdAt': '2026-10-22',
+                },
+              ],
+            });
+          }
+          return jsonResponse({'items': <dynamic>[]});
+        },
+      );
+      final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+      final repo = HostRepository(client);
+
+      for (final width in [320.0, 360.0, 390.0, 430.0, 768.0]) {
+        for (final scale in [1.0, 1.3, 1.6]) {
+          await tester.binding.setSurfaceSize(Size(width, 900));
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                hostRepositoryProvider.overrideWithValue(repo),
+              ],
+              child: MediaQuery(
+                data: MediaQueryData(
+                  size: Size(width, 900),
+                  textScaler: TextScaler.linear(scale),
+                ),
+                child: const MaterialApp(
+                  home: HostPortalScreen(
+                    initialSection: HostPortalSection.payouts,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          // Masked account number is shown; raw full account number is NEVER shown
+          expect(find.textContaining('****6543'), findsWidgets);
+          expect(find.textContaining('0071009876543'), findsNothing);
+          expect(tester.takeException(), isNull);
+        }
+      }
+
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+    });
+
+    testWidgets(
+        'ThemChoNghiScreen retries failed addListingImages without duplicate R2 PUT when uploadedPublicUrl exists',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      var failAttachOnce = true;
+      var r2PutCount = 0;
+
+      final apiAdapter = FakeRecordingHttpClientAdapter(
+        responder: (options) {
+          if (options.path == '/api/host/listings/99' &&
+              options.method == 'GET') {
+            return jsonResponse({
+              'listingId': 99,
+              'title': 'Villa Đồi Ngọc Tước',
+              'description': 'Mô tả chi tiết villa',
+              'addressLine': '20 Thi Sách',
+              'ward': 'Phường Thắng Tam',
+              'city': 'Vũng Tàu',
+              'latitude': 10.34,
+              'longitude': 107.09,
+              'propertyType': 'villa',
+              'roomType': 'entire_place',
+              'maxGuests': 8,
+              'bedrooms': 4,
+              'beds': 4,
+              'bathrooms': 4,
+              'basePrice': 3000000,
+              'weekendPrice': 3500000,
+              'status': 'draft',
+              'images': <dynamic>[],
+              'amenities': <dynamic>[],
+            });
+          }
+          if (options.path == '/api/host/listings/99' &&
+              options.method == 'PATCH') {
+            return jsonResponse({'listingId': 99, 'status': 'draft'});
+          }
+          if (options.path == '/api/host/listings/99/amenities') {
+            return jsonResponse({'ok': true});
+          }
+          if (options.path == '/api/host/listings/99/rules') {
+            return jsonResponse({'ok': true});
+          }
+          if (options.path == '/api/uploads/presign') {
+            return jsonResponse({
+              'uploadUrl': 'https://r2.vt.vn/put-99',
+              'publicUrl': 'https://cdn.vt.vn/listings/99/photo.png',
+              'key': 'listings/99/photo.png',
+            });
+          }
+          if (options.path == '/api/host/listings/99/images' &&
+              options.method == 'POST') {
+            if (failAttachOnce) {
+              return jsonResponse(
+                {'message': 'Lỗi tạm thời khi gắn ảnh vào listing.'},
+                statusCode: 500,
+              );
+            }
+            return jsonResponse({
+              'items': [
+                {
+                  'imageId': 701,
+                  'imageUrl': 'https://cdn.vt.vn/listings/99/photo.png',
+                  'isCover': true,
+                  'sortOrder': 0,
+                  'tags': <dynamic>[],
+                },
+              ],
+            });
+          }
+          if (options.path == '/api/host/listings/99/images/701/analyze') {
+            return jsonResponse(
+              {'message': 'AI Vision tạm quá tải'},
+              statusCode: 503,
+            );
+          }
+          return jsonResponse({'items': <dynamic>[]});
+        },
+      );
+
+      final r2Adapter = FakeRecordingHttpClientAdapter(
+        responder: (_) {
+          r2PutCount++;
+          return ResponseBody.fromString('', 200);
+        },
+      );
+      final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+      final cleanR2 = Dio()..httpClientAdapter = r2Adapter;
+      final repo = HostRepository(
+        client,
+        r2Uploader: HostR2DirectUploader(cleanDio: cleanR2),
+      );
+      final fakePicker = FakeTestFilePickerService()
+        ..nextListingImages = [createValidImageFile(name: 'pool.png')];
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostFilePickerProvider.overrideWithValue(fakePicker),
+          ],
+          child: const MaterialApp(
+            home: ThemChoNghiScreen(listingId: '99'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Pick 1 image and save -> R2 PUT succeeds, POST /images fails (500)
+      final pickBtn = find.byKey(const Key('listing_pick_images_btn'));
+      await tester.ensureVisible(pickBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(pickBtn);
+      await tester.pumpAndSettle();
+
+      final saveBtn = find.byKey(const Key('listing_save_btn'));
+      await tester.ensureVisible(saveBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(saveBtn);
+      await tester.pumpAndSettle();
+
+      expect(r2PutCount, 1);
+      expect(
+        find.textContaining('một số ảnh tải lên R2 thất bại'),
+        findsOneWidget,
+      );
+
+      // Now allow POST /images to succeed, tap per-image retry -> reuses uploadedPublicUrl without 2nd R2 PUT!
+      failAttachOnce = false;
+      final retryBtn = find.widgetWithText(TextButton, 'Thử lại').first;
+      await tester.ensureVisible(retryBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(retryBtn);
+      await tester.pumpAndSettle();
+
+      expect(r2PutCount, 1);
+      expect(find.textContaining('AI Vision tạm quá tải'), findsWidgets);
     });
   });
 }

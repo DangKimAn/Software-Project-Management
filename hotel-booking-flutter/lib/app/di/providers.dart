@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/date/booking_date.dart';
 import '../../core/network/dio_client.dart';
@@ -34,10 +35,10 @@ final socketServiceProvider = Provider<SocketService>((ref) {
   return service;
 });
 
-/// Overridden in bootstrap when initialized
+/// Overridden in bootstrap when initialized; falls back to active or in-memory
+/// PreferencesService in isolated widget/unit test containers.
 final preferencesServiceProvider = Provider<PreferencesService>((ref) {
-  throw UnimplementedError(
-      'preferencesServiceProvider must be overridden in bootstrap');
+  return PreferencesService.activeInstance ?? PreferencesService.inMemory();
 });
 
 // --- Repository Provider (Production REST API - Zero Mock / Zero Seed) ---
@@ -82,9 +83,17 @@ class FavoritesNotifier extends StateNotifier<Set<String>> {
   final PreferencesService _prefs;
   final WishlistRepository? _wishlistRepo;
   final bool _isAuthenticated;
+  late final void Function() _sessionListener;
 
   FavoritesNotifier(this._prefs, this._wishlistRepo, this._isAuthenticated)
       : super(_prefs.getFavorites().toSet()) {
+    _sessionListener = () {
+      if (mounted) {
+        state = _prefs.getFavorites().toSet();
+      }
+    };
+    _prefs.addSessionStateListener(_sessionListener);
+
     if (_isAuthenticated && _wishlistRepo != null) {
       _syncFromBackend();
     }
@@ -93,9 +102,10 @@ class FavoritesNotifier extends StateNotifier<Set<String>> {
   Future<void> _syncFromBackend() async {
     try {
       final backendIds = await _wishlistRepo!.getWishlistListingIds();
-      final merged = Set<String>.from(state)..addAll(backendIds);
-      state = merged;
-      await _prefs.setFavorites(merged.toList());
+      if (!mounted) return;
+      final synced = backendIds.toSet();
+      state = synced;
+      await _prefs.setFavorites(synced.toList());
     } catch (_) {
       // Keep offline preferences if network is unavailable
     }
@@ -126,14 +136,26 @@ class FavoritesNotifier extends StateNotifier<Set<String>> {
   }
 
   bool isFavorite(String villaId) => state.contains(villaId);
+
+  @override
+  void dispose() {
+    _prefs.removeSessionStateListener(_sessionListener);
+    super.dispose();
+  }
 }
 
 final favoritesProvider =
     StateNotifierProvider<FavoritesNotifier, Set<String>>((ref) {
   final prefs = ref.watch(preferencesServiceProvider);
   final wishlistRepo = ref.watch(wishlistRepositoryProvider);
-  final authUser = ref.watch(authNotifierProvider).valueOrNull;
-  return FavoritesNotifier(prefs, wishlistRepo, authUser != null);
+  final authUserId = ref.watch(
+    authNotifierProvider.select((state) => state.valueOrNull?.id),
+  );
+  return FavoritesNotifier(
+    prefs,
+    wishlistRepo,
+    authUserId != null && authUserId.isNotEmpty,
+  );
 });
 
 /// Recently Viewed Notifier (max 8 items, synced to PreferencesService)
@@ -175,8 +197,16 @@ final recentlyViewedProvider =
 /// Search History Notifier (max 8 items)
 class SearchHistoryNotifier extends StateNotifier<List<String>> {
   final PreferencesService _prefs;
+  late final void Function() _sessionListener;
 
-  SearchHistoryNotifier(this._prefs) : super(_prefs.getSearchHistory());
+  SearchHistoryNotifier(this._prefs) : super(_prefs.getSearchHistory()) {
+    _sessionListener = () {
+      if (mounted) {
+        state = _prefs.getSearchHistory();
+      }
+    };
+    _prefs.addSessionStateListener(_sessionListener);
+  }
 
   Future<void> addTerm(String term) async {
     await _prefs.addSearchHistory(term);
@@ -192,19 +222,34 @@ class SearchHistoryNotifier extends StateNotifier<List<String>> {
     await _prefs.clearSearchHistory();
     state = const [];
   }
+
+  @override
+  void dispose() {
+    _prefs.removeSessionStateListener(_sessionListener);
+    super.dispose();
+  }
 }
 
 final searchHistoryProvider =
     StateNotifierProvider<SearchHistoryNotifier, List<String>>((ref) {
   final prefs = ref.watch(preferencesServiceProvider);
+  ref.watch(authNotifierProvider.select((state) => state.valueOrNull?.id));
   return SearchHistoryNotifier(prefs);
 });
 
 /// Booking Queue (Giỏ chờ đặt — MultiBooking) Notifier (max 5 items)
 class BookingQueueNotifier extends StateNotifier<List<BookingQueueItem>> {
   final PreferencesService _prefs;
+  late final void Function() _sessionListener;
 
-  BookingQueueNotifier(this._prefs) : super(_prefs.getBookingQueue());
+  BookingQueueNotifier(this._prefs) : super(_prefs.getBookingQueue()) {
+    _sessionListener = () {
+      if (mounted) {
+        state = _prefs.getBookingQueue();
+      }
+    };
+    _prefs.addSessionStateListener(_sessionListener);
+  }
 
   Future<String> addItem(BookingQueueItem item) async {
     final status = await _prefs.addToBookingQueue(item);
@@ -226,11 +271,18 @@ class BookingQueueNotifier extends StateNotifier<List<BookingQueueItem>> {
     await _prefs.clearBookingQueue();
     state = const [];
   }
+
+  @override
+  void dispose() {
+    _prefs.removeSessionStateListener(_sessionListener);
+    super.dispose();
+  }
 }
 
 final bookingQueueProvider =
     StateNotifierProvider<BookingQueueNotifier, List<BookingQueueItem>>((ref) {
   final prefs = ref.watch(preferencesServiceProvider);
+  ref.watch(authNotifierProvider.select((state) => state.valueOrNull?.id));
   return BookingQueueNotifier(prefs);
 });
 
@@ -382,6 +434,68 @@ class VillaFilterState {
       exactnessDays: exactnessDays ?? this.exactnessDays,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is VillaFilterState &&
+        other.searchQuery == searchQuery &&
+        other.locationGroup == locationGroup &&
+        other.lat == lat &&
+        other.lng == lng &&
+        other.radius == radius &&
+        other.propertyType == propertyType &&
+        other.priceMin == priceMin &&
+        other.priceMax == priceMax &&
+        other.minGuests == minGuests &&
+        other.adults == adults &&
+        other.children == children &&
+        other.infants == infants &&
+        other.pets == pets &&
+        other.bedrooms == bedrooms &&
+        other.beds == beds &&
+        other.bathrooms == bathrooms &&
+        listEquals(other.amenities, amenities) &&
+        other.checkIn == checkIn &&
+        other.checkOut == checkOut &&
+        other.sort == sort &&
+        other.page == page &&
+        other.limit == limit &&
+        other.dateMode == dateMode &&
+        listEquals(other.selectedMonths, selectedMonths) &&
+        other.flexDuration == flexDuration &&
+        other.exactnessDays == exactnessDays;
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+        searchQuery,
+        locationGroup,
+        lat,
+        lng,
+        radius,
+        propertyType,
+        priceMin,
+        priceMax,
+        minGuests,
+        adults,
+        children,
+        infants,
+        pets,
+        bedrooms,
+        beds,
+        bathrooms,
+        Object.hashAll(amenities),
+        checkIn,
+        checkOut,
+        sort,
+        page,
+        limit,
+        dateMode,
+        Object.hashAll(selectedMonths),
+        flexDuration,
+        exactnessDays,
+      ]);
 }
 
 final villaFilterProvider = StateProvider<VillaFilterState>((ref) {

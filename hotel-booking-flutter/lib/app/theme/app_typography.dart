@@ -12,6 +12,8 @@ abstract final class AppTypography {
     'SF Pro Text',
     'SF Pro Rounded',
     'SF Pro',
+    'Apple SD Gothic Neo',
+    'Noto Sans KR',
     'Be Vietnam Pro',
     'Roboto',
     'sans-serif',

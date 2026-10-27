@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
 import 'package:hotel_booking_flutter/core/formatters/currency_formatter.dart';
 import 'package:hotel_booking_flutter/features/admin/data/admin_repository.dart';
+import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
 import 'package:hotel_booking_flutter/features/auth/presentation/view_models/auth_notifier.dart';
 import 'package:hotel_booking_flutter/shared/animations/fade_slide_in.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_dialog.dart';
@@ -74,6 +76,209 @@ const List<AdminNavItem> kAdminNavItems = [
   ),
 ];
 
+bool _isActorAdmin(User? actor) {
+  if (actor == null) return true;
+  if (actor.role.toLowerCase() == 'admin') return true;
+  return actor.roles.any((r) => r.toLowerCase() == 'admin');
+}
+
+bool _isActorModeratorOrAdmin(User? actor) {
+  if (actor == null) return true;
+  if (_isActorAdmin(actor)) return true;
+  if (actor.role.toLowerCase() == 'moderator') return true;
+  return actor.roles.any((r) => r.toLowerCase() == 'moderator');
+}
+
+double _responsivePagePadding(BuildContext context) {
+  final width = MediaQuery.sizeOf(context).width;
+  if (width < 380) return 12;
+  if (width < 640) return 16;
+  return 24;
+}
+
+final ButtonStyle _kPillOutlinedStyle = OutlinedButton.styleFrom(
+  minimumSize: const Size(48, 48),
+  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+  shape: const StadiumBorder(),
+);
+
+final ButtonStyle _kPillElevatedStyle = ElevatedButton.styleFrom(
+  minimumSize: const Size(48, 48),
+  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+  shape: const StadiumBorder(),
+);
+
+InputDecoration _multilineInputDecoration({
+  String? hintText,
+  String? labelText,
+}) {
+  final borderRadius = BorderRadius.circular(20);
+  return InputDecoration(
+    hintText: hintText,
+    labelText: labelText,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    border: OutlineInputBorder(
+      borderRadius: borderRadius,
+      borderSide: const BorderSide(color: AppColors.border),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: borderRadius,
+      borderSide: const BorderSide(color: AppColors.border),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: borderRadius,
+      borderSide: const BorderSide(color: AppColors.textPrimary, width: 1.4),
+    ),
+  );
+}
+
+class _AdminErrorBanner extends StatelessWidget {
+  const _AdminErrorBanner({
+    required this.message,
+    this.isOffline = false,
+    this.onRetry,
+  });
+
+  final String message;
+  final bool isOffline;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isOffline ? AppColors.warningSoft : AppColors.errorSoft,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: isOffline ? AppColors.warning : AppColors.error,
+          ),
+        ),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  isOffline ? LucideIcons.wifiOff : LucideIcons.circleAlert,
+                  size: 18,
+                  color: AppColors.iconStrong,
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isOffline)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 2),
+                          child: Text(
+                            'Mất kết nối tới máy chủ',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      Text(
+                        message,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isOffline
+                              ? AppColors.textPrimary
+                              : AppColors.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (onRetry != null)
+              OutlinedButton.icon(
+                style: _kPillOutlinedStyle,
+                onPressed: onRetry,
+                icon: const Icon(
+                  LucideIcons.refreshCw,
+                  size: 15,
+                  color: AppColors.iconStrong,
+                ),
+                label: const Text('Thử lại'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminPaginationBar extends StatelessWidget {
+  const _AdminPaginationBar({
+    required this.page,
+    required this.totalPages,
+    required this.total,
+    required this.unitLabel,
+    required this.loading,
+    required this.onPrev,
+    required this.onNext,
+  });
+
+  final int page;
+  final int totalPages;
+  final int total;
+  final String unitLabel;
+  final bool loading;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(
+          'Trang $page / $totalPages · Tổng $total $unitLabel',
+          style: const TextStyle(
+            fontSize: 13,
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton(
+              style: _kPillOutlinedStyle,
+              onPressed: loading || page <= 1 ? null : onPrev,
+              child: const Text('Trang trước'),
+            ),
+            OutlinedButton(
+              style: _kPillOutlinedStyle,
+              onPressed: loading || page >= totalPages ? null : onNext,
+              child: const Text('Trang sau'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class AdminPortalScreen extends ConsumerWidget {
   const AdminPortalScreen({
     super.key,
@@ -94,7 +299,7 @@ class AdminPortalScreen extends ConsumerWidget {
 
     Widget buildSidebarContent({bool inDrawer = false}) {
       return Container(
-        width: 272,
+        width: inDrawer ? math.min(272, width * 0.86) : 272,
         color: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         child: Column(
@@ -103,65 +308,79 @@ class AdminPortalScreen extends ConsumerWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                InkWell(
-                  onTap: () => context.go('/admin'),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'minh thanh villa',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.errorSoft,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const Text(
-                          'Admin Panel',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.error,
+                Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => context.go('/admin'),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'minh thanh villa',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.errorSoft,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text(
+                              'Admin Panel',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.error,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
                 if (inDrawer)
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => Navigator.of(context).pop(),
-                    child: const SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: Center(
-                        child: Icon(
-                          LucideIcons.x,
-                          size: 18,
-                          color: AppColors.iconStrong,
+                  Semantics(
+                    button: true,
+                    label: 'Đóng menu điều hướng',
+                    child: Tooltip(
+                      message: 'Đóng menu',
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => Navigator.of(context).pop(),
+                        child: const SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: Center(
+                            child: Icon(
+                              LucideIcons.x,
+                              size: 18,
+                              color: AppColors.iconStrong,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
               ],
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
             Expanded(
               child: ListView(
                 children: kAdminNavItems.map((item) {
                   final selected = item.id == activeTab;
                   return InkWell(
+                    borderRadius: BorderRadius.circular(999),
                     onTap: () {
                       if (inDrawer) Navigator.of(context).pop();
                       context.go(item.route);
@@ -169,7 +388,7 @@ class AdminPortalScreen extends ConsumerWidget {
                     child: Container(
                       constraints: const BoxConstraints(minHeight: 48),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
+                        horizontal: 14,
                         vertical: 12,
                       ),
                       margin: const EdgeInsets.only(bottom: 4),
@@ -177,14 +396,7 @@ class AdminPortalScreen extends ConsumerWidget {
                         color: selected
                             ? AppColors.surfaceWarmSand
                             : Colors.transparent,
-                        border: Border(
-                          left: BorderSide(
-                            color: selected
-                                ? AppColors.textPrimary
-                                : Colors.transparent,
-                            width: 2.5,
-                          ),
-                        ),
+                        borderRadius: BorderRadius.circular(999),
                       ),
                       child: Row(
                         children: [
@@ -216,10 +428,10 @@ class AdminPortalScreen extends ConsumerWidget {
               ),
             ),
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.surfaceVariant,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: AppColors.border),
               ),
               child: Column(
@@ -245,6 +457,7 @@ class AdminPortalScreen extends ConsumerWidget {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton(
+                      style: _kPillOutlinedStyle,
                       onPressed: () => context.go('/'),
                       child: const Text('Về trang khách'),
                     ),
@@ -253,19 +466,21 @@ class AdminPortalScreen extends ConsumerWidget {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton(
+                      style: _kPillOutlinedStyle,
                       onPressed: () async {
                         await ref.read(authNotifierProvider.notifier).logout();
                         if (context.mounted) context.go('/dang-nhap');
                       },
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      child: const Wrap(
+                        spacing: 8,
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Icon(
                             LucideIcons.logOut,
                             size: 15,
                             color: AppColors.iconStrong,
                           ),
-                          SizedBox(width: 8),
                           Text('Đăng xuất'),
                         ],
                       ),
@@ -284,6 +499,7 @@ class AdminPortalScreen extends ConsumerWidget {
       drawer: isDesktop
           ? null
           : Drawer(
+              width: math.min(288, width * 0.88),
               backgroundColor: Colors.white,
               child: SafeArea(child: buildSidebarContent(inDrawer: true)),
             ),
@@ -303,9 +519,9 @@ class AdminPortalScreen extends ConsumerWidget {
               child: Column(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 14,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: width < 380 ? 12 : 20,
+                      vertical: 12,
                     ),
                     decoration: const BoxDecoration(
                       color: Colors.white,
@@ -317,17 +533,24 @@ class AdminPortalScreen extends ConsumerWidget {
                       children: [
                         if (!isDesktop)
                           Builder(
-                            builder: (ctx) => GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () => Scaffold.of(ctx).openDrawer(),
-                              child: const SizedBox(
-                                width: 48,
-                                height: 48,
-                                child: Center(
-                                  child: Icon(
-                                    LucideIcons.menu,
-                                    size: 20,
-                                    color: AppColors.iconStrong,
+                            builder: (ctx) => Semantics(
+                              button: true,
+                              label: 'Mở menu điều hướng Admin',
+                              child: Tooltip(
+                                message: 'Mở menu',
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => Scaffold.of(ctx).openDrawer(),
+                                  child: const SizedBox(
+                                    width: 48,
+                                    height: 48,
+                                    child: Center(
+                                      child: Icon(
+                                        LucideIcons.menu,
+                                        size: 20,
+                                        color: AppColors.iconStrong,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -411,6 +634,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
   AdminOverviewStats? _stats;
   bool _loading = true;
   String? _error;
+  bool _isOffline = false;
   int _rangeDays = 30;
   String _group = 'day';
 
@@ -424,6 +648,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
     setState(() {
       _loading = true;
       _error = null;
+      _isOffline = false;
     });
     try {
       final stats = await ref.read(adminRepositoryProvider).getOverviewStats(
@@ -434,10 +659,13 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
       setState(() {
         _stats = stats;
         _loading = false;
+        _isOffline = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _stats = null;
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Không thể tải tổng quan admin.',
@@ -451,6 +679,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
   Widget build(BuildContext context) {
     final stats = _stats;
     final rangeLabel = '$_rangeDays ngày';
+    final pagePad = _responsivePagePadding(context);
     final cards = [
       (
         label: 'Tổng người dùng',
@@ -514,7 +743,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
     );
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(pagePad),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1200),
@@ -551,7 +780,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                     ],
                   ),
                   Wrap(
-                    spacing: 10,
+                    spacing: 8,
                     runSpacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
@@ -560,6 +789,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                           label: Text('$daysOption ngày'),
                           selected: _rangeDays == daysOption,
                           selectedColor: AppColors.surfaceWarmSand,
+                          shape: const StadiumBorder(),
                           onSelected: _loading
                               ? null
                               : (selected) {
@@ -595,6 +825,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                               },
                       ),
                       OutlinedButton.icon(
+                        style: _kPillOutlinedStyle,
                         onPressed: _loading ? null : _load,
                         icon: const Icon(
                           LucideIcons.refreshCw,
@@ -609,16 +840,32 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
               ),
               if (_error != null) ...[
                 const SizedBox(height: 16),
+                _AdminErrorBanner(
+                  message: _error!,
+                  isOffline: _isOffline,
+                  onRetry: _loading ? null : _load,
+                ),
+              ],
+              if (!_loading &&
+                  _error == null &&
+                  stats != null &&
+                  !stats.hasAnyActivity) ...[
+                const SizedBox(height: 16),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppColors.errorSoft,
-                    borderRadius: BorderRadius.circular(16),
+                    color: AppColors.surfaceWarmSand,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: AppColors.border),
                   ),
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(color: AppColors.error),
+                  child: const Text(
+                    'Chưa có phát sinh dữ liệu trong kỳ báo cáo này.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ),
               ],
@@ -646,12 +893,12 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                             onTap: card.route != null
                                 ? () => context.go(card.route!)
                                 : null,
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(24),
                             child: Container(
-                              padding: const EdgeInsets.all(22),
+                              padding: const EdgeInsets.all(20),
                               decoration: BoxDecoration(
                                 color: Colors.white,
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(24),
                                 border: Border.all(color: AppColors.border),
                               ),
                               child: Row(
@@ -675,7 +922,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                         Text(
                                           card.value,
                                           style: const TextStyle(
-                                            fontSize: 26,
+                                            fontSize: 24,
                                             fontWeight: FontWeight.w800,
                                             color: AppColors.textPrimary,
                                           ),
@@ -691,6 +938,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                       ],
                                     ),
                                   ),
+                                  const SizedBox(width: 12),
                                   Icon(
                                     card.icon,
                                     size: 22,
@@ -709,10 +957,10 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
               const SizedBox(height: 24),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(22),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Column(
@@ -762,6 +1010,26 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                         padding: EdgeInsets.symmetric(vertical: 32),
                         child: Center(child: CircularProgressIndicator()),
                       )
+                    else if (_error != null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 20,
+                          horizontal: 16,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceVariant,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          'Không thể hiển thị biểu đồ doanh thu do lỗi tải số liệu.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      )
                     else if (series.isEmpty)
                       Container(
                         width: double.infinity,
@@ -771,7 +1039,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                         ),
                         decoration: BoxDecoration(
                           color: AppColors.surfaceWarmSand,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(20),
                         ),
                         child: const Text(
                           'Chưa có dữ liệu chuỗi doanh thu trong khoảng thời gian đã chọn.',
@@ -783,65 +1051,132 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                         ),
                       )
                     else
-                      Column(
-                        children: series.take(14).map((point) {
-                          final ratio = maxRevenue > 0
-                              ? (point.grossRevenue / maxRevenue)
-                                  .clamp(0.04, 1.0)
-                              : 0.04;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Row(
-                              children: [
-                                SizedBox(
-                                  width: 88,
-                                  child: Text(
-                                    point.period,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textSecondary,
-                                    ),
+                      LayoutBuilder(
+                        builder: (context, chartConstraints) {
+                          final textScale =
+                              MediaQuery.textScalerOf(context).scale(1);
+                          final compactChart =
+                              chartConstraints.maxWidth < 460 ||
+                                  textScale > 1.25;
+                          return Column(
+                            children: series.take(14).map((point) {
+                              final ratio = maxRevenue > 0
+                                  ? (point.grossRevenue / maxRevenue)
+                                      .clamp(0.04, 1.0)
+                                  : 0.04;
+                              final amountLabel =
+                                  '${CurrencyFormatter.formatVnd(point.grossRevenue.round(), fallback: '0 ₫')} (${point.bookingCount} đơn)';
+                              if (compactChart) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 4,
+                                        alignment: WrapAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            point.period,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ),
+                                          Text(
+                                            amountLabel,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                        child: Container(
+                                          height: 10,
+                                          color: AppColors.surfaceMuted,
+                                          alignment: Alignment.centerLeft,
+                                          child: FractionallySizedBox(
+                                            widthFactor: ratio,
+                                            child: Container(
+                                              height: 10,
+                                              decoration: BoxDecoration(
+                                                color: AppColors.textPrimary,
+                                                borderRadius:
+                                                    BorderRadius.circular(999),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                                Expanded(
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(999),
-                                    child: Container(
-                                      height: 12,
-                                      color: AppColors.surfaceMuted,
-                                      alignment: Alignment.centerLeft,
-                                      child: FractionallySizedBox(
-                                        widthFactor: ratio,
+                                );
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 88,
+                                      child: Text(
+                                        point.period,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(999),
                                         child: Container(
                                           height: 12,
-                                          decoration: BoxDecoration(
-                                            color: AppColors.textPrimary,
-                                            borderRadius:
-                                                BorderRadius.circular(999),
+                                          color: AppColors.surfaceMuted,
+                                          alignment: Alignment.centerLeft,
+                                          child: FractionallySizedBox(
+                                            widthFactor: ratio,
+                                            child: Container(
+                                              height: 12,
+                                              decoration: BoxDecoration(
+                                                color: AppColors.textPrimary,
+                                                borderRadius:
+                                                    BorderRadius.circular(999),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                SizedBox(
-                                  width: 132,
-                                  child: Text(
-                                    '${CurrencyFormatter.formatVnd(point.grossRevenue.round(), fallback: '0 ₫')} (${point.bookingCount} đơn)',
-                                    textAlign: TextAlign.right,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.textPrimary,
+                                    const SizedBox(width: 12),
+                                    SizedBox(
+                                      width: 148,
+                                      child: Text(
+                                        amountLabel,
+                                        textAlign: TextAlign.right,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              );
+                            }).toList(),
                           );
-                        }).toList(),
+                        },
                       ),
                   ],
                 ),
@@ -875,6 +1210,7 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
   List<Map<String, dynamic>> _users = const [];
   bool _loading = true;
   String? _error;
+  bool _isOffline = false;
   String? _actionUserId;
 
   @override
@@ -902,10 +1238,13 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
     });
   }
 
-  Future<void> _fetchUsers() async {
+  Future<void> _fetchUsers({bool preserveError = false}) async {
     setState(() {
       _loading = true;
-      _error = null;
+      if (!preserveError) {
+        _error = null;
+        _isOffline = false;
+      }
     });
     try {
       final result =
@@ -927,6 +1266,7 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Không thể tải danh sách người dùng.',
@@ -941,6 +1281,13 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
     if (userId.isEmpty) return;
 
     final currentActor = ref.read(authNotifierProvider).valueOrNull;
+    if (!_isActorAdmin(currentActor)) {
+      setState(() {
+        _error =
+            'Chỉ Quản trị viên (Admin) mới có quyền khóa hoặc mở khóa tài khoản.';
+      });
+      return;
+    }
     if (currentActor != null && currentActor.id == userId) {
       setState(() {
         _error = 'Bạn không thể tự khóa tài khoản của chính mình.';
@@ -950,12 +1297,51 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
 
     final currentStatus = '${user['status'] ?? 'active'}'.toLowerCase();
     final isLocked = ['blocked', 'suspended', 'locked'].contains(currentStatus);
-    // Backend DB schema enum uses 'suspended' for locked accounts
     final nextStatus = isLocked ? 'active' : 'suspended';
+    final displayName =
+        '${user['fullName'] ?? user['name'] ?? user['email'] ?? '#$userId'}';
+    final reasonCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AppModal(
+        title:
+            isLocked ? 'Xác nhận mở khóa tài khoản' : 'Xác nhận khóa tài khoản',
+        subtitle: isLocked
+            ? 'Kích hoạt lại tài khoản $displayName (#$userId)?'
+            : 'Tạm khóa (suspended) tài khoản $displayName (#$userId)?',
+        maxWidth: 460,
+        actions: [
+          OutlinedButton(
+            style: _kPillOutlinedStyle,
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            style: _kPillElevatedStyle,
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(isLocked ? 'Xác nhận mở khóa' : 'Xác nhận khóa'),
+          ),
+        ],
+        child: TextField(
+          controller: reasonCtrl,
+          maxLines: 2,
+          decoration: _multilineInputDecoration(
+            hintText: isLocked
+                ? 'Ghi chú mở khóa (tùy chọn)...'
+                : 'Lý do khóa tài khoản (ví dụ: vi phạm chính sách)...',
+          ),
+        ),
+      ),
+    );
+    reasonCtrl.dispose();
+
+    if (confirmed != true) return;
 
     setState(() {
       _actionUserId = userId;
       _error = null;
+      _isOffline = false;
     });
     try {
       await ref
@@ -972,11 +1358,18 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
       await _fetchUsers();
     } catch (e) {
       if (!mounted) return;
+      final status = AdminRepository.extractStatusCode(e);
       final msg = AdminRepository.extractErrorMessage(
         e,
         'Không thể cập nhật trạng thái người dùng.',
       );
-      setState(() => _error = msg);
+      setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
+        _error = msg;
+      });
+      if (status == 409) {
+        await _fetchUsers(preserveError: true);
+      }
     } finally {
       if (mounted) setState(() => _actionUserId = null);
     }
@@ -985,6 +1378,16 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
   Future<void> _openEditUserDialog(Map<String, dynamic> user) async {
     final userId = '${user['userId'] ?? user['id'] ?? ''}';
     if (userId.isEmpty) return;
+
+    final currentActor = ref.read(authNotifierProvider).valueOrNull;
+    if (!_isActorAdmin(currentActor)) {
+      setState(() {
+        _error =
+            'Chỉ Quản trị viên (Admin) mới có quyền chỉnh sửa thông tin người dùng.';
+      });
+      return;
+    }
+
     final nameCtrl = TextEditingController(
       text: '${user['fullName'] ?? user['name'] ?? ''}',
     );
@@ -1000,10 +1403,12 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
         maxWidth: 460,
         actions: [
           OutlinedButton(
+            style: _kPillOutlinedStyle,
             onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Hủy'),
           ),
           ElevatedButton(
+            style: _kPillElevatedStyle,
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Lưu thay đổi'),
           ),
@@ -1029,16 +1434,22 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
       ),
     );
 
+    final nextName = nameCtrl.text.trim();
+    final nextPhone = phoneCtrl.text.trim();
+    nameCtrl.dispose();
+    phoneCtrl.dispose();
+
     if (confirmed != true) return;
 
     setState(() {
       _actionUserId = userId;
       _error = null;
+      _isOffline = false;
     });
     try {
       await ref.read(adminRepositoryProvider).updateAdminUser(userId, {
-        if (nameCtrl.text.trim().isNotEmpty) 'fullName': nameCtrl.text.trim(),
-        'phone': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+        if (nextName.isNotEmpty) 'fullName': nextName,
+        'phone': nextPhone.isEmpty ? null : nextPhone,
       });
       if (!mounted) return;
       AppToast.show(
@@ -1050,6 +1461,7 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Không thể cập nhật thông tin người dùng.',
@@ -1062,8 +1474,12 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
 
   @override
   Widget build(BuildContext context) {
+    final actor = ref.watch(authNotifierProvider).valueOrNull;
+    final canManageUsers = _isActorAdmin(actor);
+    final pagePad = _responsivePagePadding(context);
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(pagePad),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1200),
@@ -1084,18 +1500,32 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                 style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 16),
-              if (_error != null) ...[
+              if (!canManageUsers) ...[
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: AppColors.errorSoft,
-                    borderRadius: BorderRadius.circular(16),
+                    color: AppColors.warningSoft,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: AppColors.warning),
                   ),
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(color: AppColors.error),
+                  child: const Text(
+                    'Chỉ Quản trị viên (Admin) mới có quyền chỉnh sửa hoặc khóa tài khoản người dùng.',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+              if (_error != null) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: _AdminErrorBanner(
+                    message: _error!,
+                    isOffline: _isOffline,
+                    onRetry: _loading ? null : _fetchUsers,
                   ),
                 ),
               ],
@@ -1103,7 +1533,7 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Wrap(
@@ -1111,19 +1541,22 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                   runSpacing: 12,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    SizedBox(
-                      width: 300,
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 320),
                       child: TextField(
                         controller: _searchCtrl,
                         onChanged: _onSearchChanged,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: 'Tìm email, số điện thoại, tên...',
-                          prefixIcon: Icon(
+                          prefixIcon: const Icon(
                             LucideIcons.search,
                             size: 16,
                             color: AppColors.iconMuted,
                           ),
                           isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(999),
+                          ),
                         ),
                       ),
                     ),
@@ -1192,6 +1625,7 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                       },
                     ),
                     OutlinedButton.icon(
+                      style: _kPillOutlinedStyle,
                       onPressed: _loading ? null : _fetchUsers,
                       icon: const Icon(
                         LucideIcons.refreshCw,
@@ -1207,7 +1641,7 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: AppColors.border),
                 ),
                 child: _loading
@@ -1254,8 +1688,9 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                                   alignment: WrapAlignment.spaceBetween,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    SizedBox(
-                                      width: 260,
+                                    ConstrainedBox(
+                                      constraints:
+                                          const BoxConstraints(maxWidth: 260),
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
@@ -1277,59 +1712,71 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                                         ],
                                       ),
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.surfaceVariant,
-                                        borderRadius:
-                                            BorderRadius.circular(999),
-                                      ),
-                                      child: Text(
-                                        role,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.surfaceVariant,
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                          ),
+                                          child: Text(
+                                            role,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: locked
-                                            ? AppColors.errorSoft
-                                            : AppColors.successSoft,
-                                        borderRadius:
-                                            BorderRadius.circular(999),
-                                      ),
-                                      child: Text(
-                                        status,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: locked
-                                              ? AppColors.error
-                                              : AppColors.success,
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: locked
+                                                ? AppColors.errorSoft
+                                                : AppColors.successSoft,
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                          ),
+                                          child: Text(
+                                            status,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: locked
+                                                  ? AppColors.error
+                                                  : AppColors.success,
+                                            ),
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ),
                                     Wrap(
                                       spacing: 8,
                                       runSpacing: 8,
                                       children: [
                                         OutlinedButton(
-                                          onPressed: _actionUserId == userId
+                                          style: _kPillOutlinedStyle,
+                                          onPressed: !canManageUsers ||
+                                                  _actionUserId == userId
                                               ? null
                                               : () => _openEditUserDialog(u),
                                           child: const Text('Sửa'),
                                         ),
                                         OutlinedButton(
-                                          onPressed: _actionUserId == userId
+                                          style: _kPillOutlinedStyle,
+                                          onPressed: !canManageUsers ||
+                                                  _actionUserId == userId
                                               ? null
                                               : () => _toggleUserStatus(u),
                                           child: Text(
@@ -1345,45 +1792,20 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                           ),
               ),
               const SizedBox(height: 14),
-              Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    'Trang $_page / $_totalPages · Tổng $_total người dùng',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      OutlinedButton(
-                        onPressed: _loading || _page <= 1
-                            ? null
-                            : () {
-                                setState(() => _page -= 1);
-                                _fetchUsers();
-                              },
-                        child: const Text('Trang trước'),
-                      ),
-                      const SizedBox(width: 8),
-                      OutlinedButton(
-                        onPressed: _loading || _page >= _totalPages
-                            ? null
-                            : () {
-                                setState(() => _page += 1);
-                                _fetchUsers();
-                              },
-                        child: const Text('Trang sau'),
-                      ),
-                    ],
-                  ),
-                ],
+              _AdminPaginationBar(
+                page: _page,
+                totalPages: _totalPages,
+                total: _total,
+                unitLabel: 'người dùng',
+                loading: _loading,
+                onPrev: () {
+                  setState(() => _page -= 1);
+                  _fetchUsers();
+                },
+                onNext: () {
+                  setState(() => _page += 1);
+                  _fetchUsers();
+                },
               ),
             ],
           ),
@@ -1404,10 +1826,15 @@ class _AdminModerationTab extends ConsumerStatefulWidget {
 
 class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
   List<Map<String, dynamic>> _listings = const [];
+  int _page = 1;
+  final int _limit = 20;
+  int _total = 0;
+  int _totalPages = 1;
   bool _loading = true;
   String? _processingId;
   bool _modalActionLoading = false;
   String? _error;
+  bool _isOffline = false;
   final Set<String> _viewedListingIds = <String>{};
 
   @override
@@ -1416,23 +1843,32 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
     _fetchPending();
   }
 
-  Future<void> _fetchPending() async {
+  Future<void> _fetchPending({bool preserveError = false}) async {
     setState(() {
       _loading = true;
-      _error = null;
+      if (!preserveError) {
+        _error = null;
+        _isOffline = false;
+      }
     });
     try {
-      final list = await ref
-          .read(adminRepositoryProvider)
-          .getPendingListings(page: 1, limit: 50);
+      final paginated =
+          await ref.read(adminRepositoryProvider).getPendingListingsPaginated(
+                page: _page,
+                limit: _limit,
+              );
       if (!mounted) return;
       setState(() {
-        _listings = list;
+        _listings = paginated.items;
+        _page = paginated.page;
+        _total = paginated.total;
+        _totalPages = paginated.totalPages;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Không thể tải bài chờ duyệt.',
@@ -1460,6 +1896,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
     setState(() {
       _modalActionLoading = true;
       _error = null;
+      _isOffline = false;
     });
     try {
       final detail = await ref
@@ -1474,6 +1911,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Không tải được chi tiết căn.',
@@ -1484,8 +1922,16 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
   }
 
   Future<void> _handleApprove(String listingId) async {
+    final actor = ref.read(authNotifierProvider).valueOrNull;
+    if (!_isActorModeratorOrAdmin(actor)) {
+      setState(() {
+        _error = 'Bạn không có quyền kiểm duyệt bài đăng (403).';
+      });
+      return;
+    }
+
     // Business rule from Source goc KiemDuyetBaiDang/index.jsx:
-    // Admin MUST view listing detail before approving!
+    // Moderator/Admin MUST view listing detail before approving or rejecting!
     if (!_viewedListingIds.contains(listingId)) {
       setState(() {
         _error = 'Vui lòng xem chi tiết căn trước khi duyệt.';
@@ -1498,6 +1944,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
       _processingId = listingId;
       _modalActionLoading = true;
       _error = null;
+      _isOffline = false;
     });
     try {
       await ref.read(adminRepositoryProvider).approveListing(listingId);
@@ -1510,9 +1957,14 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
       await _fetchPending();
     } catch (e) {
       if (!mounted) return;
+      final statusCode = AdminRepository.extractStatusCode(e);
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(e, 'Duyệt căn thất bại.');
       });
+      if (statusCode == 409) {
+        await _fetchPending(preserveError: true);
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -1524,7 +1976,22 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
   }
 
   Future<void> _openRejectDialog(Map<String, dynamic> listing) async {
+    final actor = ref.read(authNotifierProvider).valueOrNull;
+    if (!_isActorModeratorOrAdmin(actor)) {
+      setState(() {
+        _error = 'Bạn không có quyền kiểm duyệt bài đăng (403).';
+      });
+      return;
+    }
+
     final listingId = '${listing['listingId'] ?? listing['id'] ?? ''}';
+    if (!_viewedListingIds.contains(listingId)) {
+      setState(() {
+        _error = 'Vui lòng xem chi tiết căn trước khi từ chối.';
+      });
+      return;
+    }
+
     final reasonCtrl = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1533,11 +2000,13 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
         subtitle: 'Nhập lý do từ chối để host biết cần chỉnh sửa gì.',
         maxWidth: 480,
         actions: [
-          TextButton(
+          OutlinedButton(
+            style: _kPillOutlinedStyle,
             onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Hủy'),
           ),
           ElevatedButton(
+            style: _kPillElevatedStyle,
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Xác nhận từ chối'),
           ),
@@ -1545,7 +2014,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
         child: TextField(
           controller: reasonCtrl,
           maxLines: 4,
-          decoration: const InputDecoration(
+          decoration: _multilineInputDecoration(
             hintText:
                 'Ví dụ: Ảnh chưa rõ, thiếu thông tin địa chỉ, giá chưa hợp lệ...',
           ),
@@ -1553,8 +2022,10 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
       ),
     );
 
-    if (confirmed != true) return;
     final reason = reasonCtrl.text.trim();
+    reasonCtrl.dispose();
+
+    if (confirmed != true) return;
     if (reason.isEmpty) {
       setState(() => _error = 'Vui lòng nhập lý do từ chối.');
       return;
@@ -1564,6 +2035,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
       _processingId = listingId;
       _modalActionLoading = true;
       _error = null;
+      _isOffline = false;
     });
     try {
       await ref.read(adminRepositoryProvider).rejectListing(listingId, reason);
@@ -1576,12 +2048,17 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
       await _fetchPending();
     } catch (e) {
       if (!mounted) return;
+      final statusCode = AdminRepository.extractStatusCode(e);
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Từ chối căn thất bại.',
         );
       });
+      if (statusCode == 409) {
+        await _fetchPending(preserveError: true);
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -1616,6 +2093,9 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
     String? reanalyzingImageId;
     String? modalFeedback;
     bool modalFeedbackIsError = false;
+    final actor = ref.read(authNotifierProvider).valueOrNull;
+    final canAnalyzeAi = _isActorAdmin(actor);
+    final canModerate = _isActorModeratorOrAdmin(actor);
 
     await showDialog<void>(
       context: context,
@@ -1635,6 +2115,14 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
               : const <dynamic>[];
 
           Future<void> handleReanalyzeAll() async {
+            if (!canAnalyzeAi) {
+              setModalState(() {
+                modalFeedback =
+                    'Chỉ Quản trị viên (Admin) mới có quyền chạy lại phân tích AI.';
+                modalFeedbackIsError = true;
+              });
+              return;
+            }
             setModalState(() {
               reanalyzingAll = true;
               modalFeedback = null;
@@ -1657,7 +2145,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                 reanalyzingAll = false;
                 modalFeedback = AdminRepository.extractErrorMessage(
                   e,
-                  'Không thể phân tích lại AI toàn bộ ảnh.',
+                  'Dịch vụ phân tích ảnh AI hiện không khả dụng.',
                 );
                 modalFeedbackIsError = true;
               });
@@ -1666,6 +2154,14 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
 
           Future<void> handleReanalyzeSingle(String imageId) async {
             if (imageId.isEmpty) return;
+            if (!canAnalyzeAi) {
+              setModalState(() {
+                modalFeedback =
+                    'Chỉ Quản trị viên (Admin) mới có quyền chạy lại phân tích AI.';
+                modalFeedbackIsError = true;
+              });
+              return;
+            }
             setModalState(() {
               reanalyzingImageId = imageId;
               modalFeedback = null;
@@ -1695,8 +2191,20 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
             }
           }
 
+          final viewInsets = MediaQuery.viewInsetsOf(ctx);
+
           return Dialog(
-            insetPadding: const EdgeInsets.all(16),
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(32),
+            ),
+            insetPadding: EdgeInsets.fromLTRB(
+              12,
+              16,
+              12,
+              math.max(16, viewInsets.bottom + 12),
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 880, maxHeight: 760),
               child: Padding(
@@ -1704,10 +2212,14 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Expanded(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 620),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1740,6 +2252,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                           ),
                         ),
                         OutlinedButton(
+                          style: _kPillOutlinedStyle,
                           onPressed: () => Navigator.of(ctx).pop(),
                           child: const Text('Đóng'),
                         ),
@@ -1755,7 +2268,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                           color: modalFeedbackIsError
                               ? AppColors.errorSoft
                               : AppColors.successSoft,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
                           modalFeedback!,
@@ -1770,371 +2283,430 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                       ),
                     ],
                     Expanded(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
-                              spacing: 16,
-                              runSpacing: 16,
-                              children: [
-                                Container(
-                                  width: 380,
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: AppColors.border),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Thông tin host',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Họ tên: ${host['fullName'] ?? 'Chưa có'}',
-                                      ),
-                                      Text(
-                                        'Email: ${host['email'] ?? 'Chưa có'}',
-                                      ),
-                                      Text(
-                                        'SĐT: ${host['phone'] ?? 'Chưa có'}',
-                                      ),
-                                      Text(
-                                        'Xác minh host: ${host['isHostVerified'] == true ? 'Đã xác minh' : 'Chưa xác minh'}',
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  width: 380,
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: AppColors.border),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Giá & sức chứa',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Giá thường: ${CurrencyFormatter.formatVnd((double.tryParse('${currentDetail['basePrice'] ?? 0}') ?? 0).round(), fallback: '0 ₫')}',
-                                      ),
-                                      Text(
-                                        'Giá cuối tuần: ${CurrencyFormatter.formatVnd((double.tryParse('${currentDetail['weekendPrice'] ?? 0}') ?? 0).round(), fallback: '0 ₫')}',
-                                      ),
-                                      Text(
-                                        'Phí dọn dẹp: ${CurrencyFormatter.formatVnd((double.tryParse('${currentDetail['cleaningFee'] ?? 0}') ?? 0).round(), fallback: '0 ₫')}',
-                                      ),
-                                      Text(
-                                        'Khách tối đa: ${currentDetail['maxGuests'] ?? 0} · Phòng ngủ: ${currentDetail['bedrooms'] ?? 0} · Giường: ${currentDetail['beds'] ?? 0} · Phòng tắm: ${currentDetail['bathrooms'] ?? 0}',
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Mô tả',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '${currentDetail['description'] ?? 'Chưa có mô tả'}',
-                            ),
-                            const SizedBox(height: 16),
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 8,
-                              alignment: WrapAlignment.spaceBetween,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                const Text(
-                                  'Ảnh căn & AI Image Analysis',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                                OutlinedButton.icon(
-                                  onPressed: reanalyzingAll
-                                      ? null
-                                      : handleReanalyzeAll,
-                                  icon: const Icon(
-                                    LucideIcons.sparkles,
-                                    size: 15,
-                                    color: AppColors.iconStrong,
-                                  ),
-                                  label: Text(
-                                    reanalyzingAll
-                                        ? 'Đang phân tích AI...'
-                                        : 'Phân tích lại AI toàn bộ ảnh',
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            if (images.isEmpty)
-                              const Text(
-                                'Căn chưa có ảnh đính kèm.',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                ),
-                              )
-                            else
-                              Wrap(
-                                spacing: 12,
-                                runSpacing: 12,
-                                children: images.map((rawImg) {
-                                  final img = rawImg is Map
-                                      ? Map<String, dynamic>.from(rawImg)
-                                      : <String, dynamic>{'url': '$rawImg'};
-                                  final url =
-                                      '${img['url'] ?? img['imageUrl'] ?? img['image_url'] ?? ''}';
-                                  final imageId =
-                                      '${img['imageId'] ?? img['id'] ?? img['listingImageId'] ?? ''}';
-                                  final aiStatus =
-                                      '${img['aiAnalysisStatus'] ?? 'pending'}';
-                                  final aiImageType =
-                                      '${img['aiImageType'] ?? img['displayTitle'] ?? ''}';
-                                  final aiConfidence = _formatAiConfidence(
-                                    img['aiConfidence'],
-                                  );
-                                  final sceneTags = _parseStringList(
-                                    img['aiSceneTags'],
-                                  );
-                                  final amenityTags = _parseStringList(
-                                    img['aiAmenityTags'],
-                                  );
-                                  final warnings = _parseStringList(
-                                    img['aiQualityWarnings'],
-                                  );
-                                  final aiError =
-                                      '${img['aiErrorMessage'] ?? ''}'.trim();
-                                  final allLabels = [
-                                    ...sceneTags,
-                                    ...amenityTags,
-                                  ];
+                      child: LayoutBuilder(
+                        builder: (ctx, bodyConstraints) {
+                          final infoWidth = bodyConstraints.maxWidth >= 780
+                              ? (bodyConstraints.maxWidth - 16) / 2
+                              : bodyConstraints.maxWidth;
+                          final imageCardWidth = bodyConstraints.maxWidth >= 560
+                              ? 260.0
+                              : bodyConstraints.maxWidth;
 
-                                  return Container(
-                                    width: 260,
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: warnings.isNotEmpty ||
-                                                aiError.isNotEmpty
-                                            ? AppColors.warning
-                                            : AppColors.border,
-                                      ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        if (url.isNotEmpty)
-                                          ClipRRect(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            child: AppImage(
-                                              imageUrl: url,
-                                              width: 240,
-                                              height: 140,
-                                            ),
-                                          ),
-                                        const SizedBox(height: 8),
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 2,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: aiStatus == 'completed'
-                                                    ? AppColors.successSoft
-                                                    : aiStatus == 'failed'
-                                                        ? AppColors.errorSoft
-                                                        : AppColors
-                                                            .surfaceWarmSand,
-                                                borderRadius:
-                                                    BorderRadius.circular(999),
-                                              ),
-                                              child: Text(
-                                                'AI: $aiStatus',
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                ),
-                                              ),
-                                            ),
-                                            Text(
-                                              'Độ tin cậy: $aiConfidence',
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w700,
-                                                color: AppColors.textSecondary,
-                                              ),
-                                            ),
-                                          ],
+                          return SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Wrap(
+                                  spacing: 16,
+                                  runSpacing: 16,
+                                  children: [
+                                    Container(
+                                      width: infoWidth,
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: AppColors.border,
                                         ),
-                                        if (aiImageType.isNotEmpty) ...[
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            'Phân loại: $aiImageType',
-                                            style: const TextStyle(
-                                              fontSize: 12,
+                                        borderRadius: BorderRadius.circular(24),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Thông tin host',
+                                            style: TextStyle(
                                               fontWeight: FontWeight.w700,
                                             ),
                                           ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Họ tên: ${host['fullName'] ?? 'Chưa có'}',
+                                          ),
+                                          Text(
+                                            'Email: ${host['email'] ?? 'Chưa có'}',
+                                          ),
+                                          Text(
+                                            'SĐT: ${host['phone'] ?? 'Chưa có'}',
+                                          ),
+                                          Text(
+                                            'Xác minh host: ${host['isHostVerified'] == true ? 'Đã xác minh' : 'Chưa xác minh'}',
+                                          ),
                                         ],
-                                        if (allLabels.isNotEmpty) ...[
-                                          const SizedBox(height: 6),
-                                          Wrap(
-                                            spacing: 4,
-                                            runSpacing: 4,
-                                            children:
-                                                allLabels.take(6).map((tag) {
-                                              return Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 2,
+                                      ),
+                                    ),
+                                    Container(
+                                      width: infoWidth,
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: AppColors.border,
+                                        ),
+                                        borderRadius: BorderRadius.circular(24),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Giá & sức chứa',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Giá thường: ${CurrencyFormatter.formatVnd((double.tryParse('${currentDetail['basePrice'] ?? 0}') ?? 0).round(), fallback: '0 ₫')}',
+                                          ),
+                                          Text(
+                                            'Giá cuối tuần: ${CurrencyFormatter.formatVnd((double.tryParse('${currentDetail['weekendPrice'] ?? 0}') ?? 0).round(), fallback: '0 ₫')}',
+                                          ),
+                                          Text(
+                                            'Phí dọn dẹp: ${CurrencyFormatter.formatVnd((double.tryParse('${currentDetail['cleaningFee'] ?? 0}') ?? 0).round(), fallback: '0 ₫')}',
+                                          ),
+                                          Text(
+                                            'Khách tối đa: ${currentDetail['maxGuests'] ?? 0} · Phòng ngủ: ${currentDetail['bedrooms'] ?? 0} · Giường: ${currentDetail['beds'] ?? 0} · Phòng tắm: ${currentDetail['bathrooms'] ?? 0}',
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Mô tả',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '${currentDetail['description'] ?? 'Chưa có mô tả'}',
+                                ),
+                                const SizedBox(height: 16),
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 8,
+                                  alignment: WrapAlignment.spaceBetween,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    const Text(
+                                      'Ảnh căn & AI Image Analysis',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    OutlinedButton.icon(
+                                      style: _kPillOutlinedStyle,
+                                      onPressed: reanalyzingAll || !canAnalyzeAi
+                                          ? null
+                                          : handleReanalyzeAll,
+                                      icon: const Icon(
+                                        LucideIcons.sparkles,
+                                        size: 15,
+                                        color: AppColors.iconStrong,
+                                      ),
+                                      label: Text(
+                                        reanalyzingAll
+                                            ? 'Đang phân tích AI...'
+                                            : 'Phân tích lại AI toàn bộ ảnh',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                if (images.isEmpty)
+                                  const Text(
+                                    'Căn chưa có ảnh đính kèm.',
+                                    style: TextStyle(
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  )
+                                else
+                                  Wrap(
+                                    spacing: 12,
+                                    runSpacing: 12,
+                                    children: images.map((rawImg) {
+                                      final img = rawImg is Map
+                                          ? Map<String, dynamic>.from(rawImg)
+                                          : <String, dynamic>{'url': '$rawImg'};
+                                      final url =
+                                          '${img['url'] ?? img['imageUrl'] ?? img['image_url'] ?? ''}';
+                                      final imageId =
+                                          '${img['imageId'] ?? img['id'] ?? img['listingImageId'] ?? ''}';
+                                      final aiStatus =
+                                          '${img['aiAnalysisStatus'] ?? 'pending'}';
+                                      final aiImageType =
+                                          '${img['aiImageType'] ?? img['displayTitle'] ?? ''}';
+                                      final aiConfidence = _formatAiConfidence(
+                                        img['aiConfidence'],
+                                      );
+                                      final sceneTags = _parseStringList(
+                                        img['aiSceneTags'],
+                                      );
+                                      final amenityTags = _parseStringList(
+                                        img['aiAmenityTags'],
+                                      );
+                                      final warnings = _parseStringList(
+                                        img['aiQualityWarnings'],
+                                      );
+                                      final aiError =
+                                          '${img['aiErrorMessage'] ?? ''}'
+                                              .trim();
+                                      final allLabels = [
+                                        ...sceneTags,
+                                        ...amenityTags,
+                                      ];
+
+                                      return Container(
+                                        width: imageCardWidth,
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius:
+                                              BorderRadius.circular(24),
+                                          border: Border.all(
+                                            color: warnings.isNotEmpty ||
+                                                    aiError.isNotEmpty
+                                                ? AppColors.warning
+                                                : AppColors.border,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            if (url.isNotEmpty)
+                                              ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(18),
+                                                child: AppImage(
+                                                  imageUrl: url,
+                                                  width: imageCardWidth - 24,
+                                                  height: 140,
                                                 ),
-                                                decoration: BoxDecoration(
-                                                  color: AppColors.surfaceMuted,
-                                                  borderRadius:
-                                                      BorderRadius.circular(6),
-                                                ),
-                                                child: Text(
-                                                  tag,
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
+                                              ),
+                                            const SizedBox(height: 8),
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 4,
+                                              alignment:
+                                                  WrapAlignment.spaceBetween,
+                                              crossAxisAlignment:
+                                                  WrapCrossAlignment.center,
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: aiStatus ==
+                                                            'completed'
+                                                        ? AppColors.successSoft
+                                                        : aiStatus == 'failed'
+                                                            ? AppColors
+                                                                .errorSoft
+                                                            : AppColors
+                                                                .surfaceWarmSand,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            999),
+                                                  ),
+                                                  child: Text(
+                                                    'AI: $aiStatus',
+                                                    style: const TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
                                                   ),
                                                 ),
-                                              );
-                                            }).toList(),
-                                          ),
-                                        ],
-                                        if (warnings.isNotEmpty ||
-                                            aiError.isNotEmpty) ...[
-                                          const SizedBox(height: 6),
-                                          Container(
-                                            width: double.infinity,
-                                            padding: const EdgeInsets.all(6),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.warningSoft,
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
+                                                Text(
+                                                  'Độ tin cậy: $aiConfidence',
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w700,
+                                                    color:
+                                                        AppColors.textSecondary,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                            child: Text(
-                                              [
-                                                ...warnings,
-                                                if (aiError.isNotEmpty) aiError,
-                                              ].join(' · '),
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
-                                                color: AppColors.textPrimary,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                        if (imageId.isNotEmpty) ...[
-                                          const SizedBox(height: 8),
-                                          SizedBox(
-                                            width: double.infinity,
-                                            child: OutlinedButton.icon(
-                                              onPressed: reanalyzingImageId ==
-                                                          imageId ||
-                                                      reanalyzingAll
-                                                  ? null
-                                                  : () => handleReanalyzeSingle(
-                                                        imageId,
-                                                      ),
-                                              icon: const Icon(
-                                                LucideIcons.refreshCw,
-                                                size: 13,
-                                                color: AppColors.iconStrong,
-                                              ),
-                                              label: Text(
-                                                reanalyzingImageId == imageId
-                                                    ? 'Đang phân tích...'
-                                                    : 'Phân tích lại AI',
+                                            if (aiImageType.isNotEmpty) ...[
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                'Phân loại: $aiImageType',
                                                 style: const TextStyle(
                                                   fontSize: 12,
+                                                  fontWeight: FontWeight.w700,
                                                 ),
                                               ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            if (amenities.isNotEmpty) ...[
-                              const SizedBox(height: 16),
-                              const Text(
-                                'Tiện ích',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: amenities.map((a) {
-                                  final label = a is Map
-                                      ? '${a['name'] ?? a['code'] ?? ''}'
-                                      : '$a';
-                                  return Chip(label: Text(label));
-                                }).toList(),
-                              ),
-                            ],
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Nội quy',
-                              style: TextStyle(fontWeight: FontWeight.w700),
+                                            ],
+                                            if (allLabels.isNotEmpty) ...[
+                                              const SizedBox(height: 6),
+                                              Wrap(
+                                                spacing: 4,
+                                                runSpacing: 4,
+                                                children: allLabels
+                                                    .take(6)
+                                                    .map((tag) {
+                                                  return Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 2,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: AppColors
+                                                          .surfaceMuted,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              999),
+                                                    ),
+                                                    child: Text(
+                                                      tag,
+                                                      style: const TextStyle(
+                                                        fontSize: 11,
+                                                      ),
+                                                    ),
+                                                  );
+                                                }).toList(),
+                                              ),
+                                            ],
+                                            if (warnings.isNotEmpty ||
+                                                aiError.isNotEmpty) ...[
+                                              const SizedBox(height: 6),
+                                              Container(
+                                                width: double.infinity,
+                                                padding:
+                                                    const EdgeInsets.all(8),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.warningSoft,
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  [
+                                                    ...warnings,
+                                                    if (aiError.isNotEmpty)
+                                                      aiError,
+                                                  ].join(' · '),
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color:
+                                                        AppColors.textPrimary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                            if (imageId.isNotEmpty) ...[
+                                              const SizedBox(height: 8),
+                                              SizedBox(
+                                                width: double.infinity,
+                                                child: OutlinedButton.icon(
+                                                  style: _kPillOutlinedStyle,
+                                                  onPressed: reanalyzingImageId ==
+                                                              imageId ||
+                                                          reanalyzingAll ||
+                                                          !canAnalyzeAi
+                                                      ? null
+                                                      : () =>
+                                                          handleReanalyzeSingle(
+                                                            imageId,
+                                                          ),
+                                                  icon: const Icon(
+                                                    LucideIcons.refreshCw,
+                                                    size: 13,
+                                                    color: AppColors.iconStrong,
+                                                  ),
+                                                  label: Text(
+                                                    reanalyzingImageId ==
+                                                            imageId
+                                                        ? 'Đang phân tích...'
+                                                        : 'Phân tích lại AI',
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                if (amenities.isNotEmpty) ...[
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    'Tiện ích',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.w700),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: amenities.map((a) {
+                                      final label = a is Map
+                                          ? '${a['name'] ?? a['code'] ?? ''}'
+                                          : '$a';
+                                      return Chip(
+                                        shape: const StadiumBorder(),
+                                        label: Text(label),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Nội quy',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Nhận phòng: ${rules['checkInFrom'] ?? '14:00'} · Trả phòng: ${rules['checkOutBefore'] ?? '12:00'} · Hút thuốc: ${rules['smokingAllowed'] == true ? 'Cho phép' : 'Không'} · Thú cưng: ${rules['petsAllowed'] == true ? 'Cho phép' : 'Không'} · Tiệc: ${rules['partyAllowed'] == true ? 'Cho phép' : 'Không'}',
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Nhận phòng: ${rules['checkInFrom'] ?? '14:00'} · Trả phòng: ${rules['checkOutBefore'] ?? '12:00'} · Hút thuốc: ${rules['smokingAllowed'] == true ? 'Cho phép' : 'Không'} · Thú cưng: ${rules['petsAllowed'] == true ? 'Cho phép' : 'Không'} · Tiệc: ${rules['partyAllowed'] == true ? 'Cho phép' : 'Không'}',
-                            ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
                     ),
                     const Divider(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.end,
                       children: [
                         OutlinedButton(
+                          style: _kPillOutlinedStyle,
                           onPressed: () => Navigator.of(ctx).pop(),
                           child: const Text('Đóng'),
                         ),
-                        const SizedBox(width: 12),
+                        OutlinedButton(
+                          style: _kPillOutlinedStyle,
+                          onPressed: !canModerate
+                              ? null
+                              : () async {
+                                  Navigator.of(ctx).pop();
+                                  await _openRejectDialog({
+                                    ...currentDetail,
+                                    'listingId': listingId,
+                                  });
+                                },
+                          child: const Text('Từ chối căn này'),
+                        ),
                         ElevatedButton(
-                          onPressed: () async {
-                            Navigator.of(ctx).pop();
-                            await _handleApprove(listingId);
-                          },
+                          style: _kPillElevatedStyle,
+                          onPressed: !canModerate
+                              ? null
+                              : () async {
+                                  Navigator.of(ctx).pop();
+                                  await _handleApprove(listingId);
+                                },
                           child: const Text('Duyệt căn này'),
                         ),
                       ],
@@ -2151,16 +2723,23 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
 
   @override
   Widget build(BuildContext context) {
+    final actor = ref.watch(authNotifierProvider).valueOrNull;
+    final canModerate = _isActorModeratorOrAdmin(actor);
+    final pagePad = _responsivePagePadding(context);
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(pagePad),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1200),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                spacing: 16,
+                runSpacing: 12,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2175,7 +2754,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                       ),
                       SizedBox(height: 4),
                       Text(
-                        'Duyệt hoặc từ chối các chỗ nghỉ host đã gửi lên.',
+                        'Xem chi tiết nội dung & ảnh AI trước khi duyệt hoặc từ chối chỗ nghỉ.',
                         style: TextStyle(
                           fontSize: 13,
                           color: AppColors.textSecondary,
@@ -2184,6 +2763,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                     ],
                   ),
                   OutlinedButton.icon(
+                    style: _kPillOutlinedStyle,
                     onPressed: _loading ? null : _fetchPending,
                     icon: const Icon(
                       LucideIcons.refreshCw,
@@ -2194,29 +2774,38 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                   ),
                 ],
               ),
-              if (_error != null) ...[
+              if (!canModerate) ...[
                 const SizedBox(height: 16),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: AppColors.errorSoft,
-                    borderRadius: BorderRadius.circular(16),
+                    color: AppColors.warningSoft,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: AppColors.warning),
                   ),
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(
-                      color: AppColors.error,
+                  child: const Text(
+                    'Chỉ Admin hoặc Moderator mới có quyền phê duyệt / từ chối bài đăng.',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 16),
+                _AdminErrorBanner(
+                  message: _error!,
+                  isOffline: _isOffline,
+                  onRetry: _loading ? null : _fetchPending,
                 ),
               ],
               const SizedBox(height: 16),
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: AppColors.border),
                 ),
                 child: _loading
@@ -2256,8 +2845,12 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                     '${item['basePrice'] ?? 0}',
                                   ) ??
                                   0;
+                              final hasViewed =
+                                  _viewedListingIds.contains(listingId);
 
                               return Padding(
+                                key:
+                                    ValueKey('admin-moderation-row-$listingId'),
                                 padding: const EdgeInsets.all(16),
                                 child: Wrap(
                                   spacing: 16,
@@ -2265,13 +2858,16 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                   alignment: WrapAlignment.spaceBetween,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
+                                    Wrap(
+                                      spacing: 12,
+                                      runSpacing: 10,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
                                       children: [
                                         if (cover.isNotEmpty)
                                           ClipRRect(
                                             borderRadius:
-                                                BorderRadius.circular(14),
+                                                BorderRadius.circular(18),
                                             child: AppImage(
                                               imageUrl: cover,
                                               width: 112,
@@ -2286,17 +2882,16 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                             decoration: BoxDecoration(
                                               color: AppColors.surfaceVariant,
                                               borderRadius:
-                                                  BorderRadius.circular(14),
+                                                  BorderRadius.circular(18),
                                             ),
                                             child: const Text(
                                               'Chưa có ảnh',
                                               style: TextStyle(fontSize: 11),
                                             ),
                                           ),
-                                        const SizedBox(width: 12),
                                         ConstrainedBox(
                                           constraints: const BoxConstraints(
-                                            maxWidth: 320,
+                                            maxWidth: 300,
                                           ),
                                           child: Column(
                                             crossAxisAlignment:
@@ -2310,7 +2905,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                                 ),
                                               ),
                                               Text(
-                                                'ID: $listingId · ${item['propertyType'] ?? 'villa'}',
+                                                'ID: $listingId · ${item['propertyType'] ?? 'villa'}${hasViewed ? ' · Đã xem chi tiết' : ''}',
                                                 style: const TextStyle(
                                                   fontSize: 12,
                                                   color:
@@ -2346,13 +2941,16 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                       runSpacing: 8,
                                       children: [
                                         OutlinedButton(
+                                          style: _kPillOutlinedStyle,
                                           onPressed: _modalActionLoading
                                               ? null
                                               : () => _viewDetail(listingId),
                                           child: const Text('Xem chi tiết'),
                                         ),
                                         ElevatedButton(
-                                          onPressed: _processingId == listingId
+                                          style: _kPillElevatedStyle,
+                                          onPressed: !canModerate ||
+                                                  _processingId == listingId
                                               ? null
                                               : () => _handleApprove(
                                                     listingId,
@@ -2364,7 +2962,9 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                           ),
                                         ),
                                         OutlinedButton(
-                                          onPressed: _processingId == listingId
+                                          style: _kPillOutlinedStyle,
+                                          onPressed: !canModerate ||
+                                                  _processingId == listingId
                                               ? null
                                               : () => _openRejectDialog(item),
                                           child: const Text('Từ chối'),
@@ -2376,6 +2976,22 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                               );
                             },
                           ),
+              ),
+              const SizedBox(height: 14),
+              _AdminPaginationBar(
+                page: _page,
+                totalPages: _totalPages,
+                total: _total,
+                unitLabel: 'bài chờ duyệt',
+                loading: _loading,
+                onPrev: () {
+                  setState(() => _page -= 1);
+                  _fetchPending();
+                },
+                onNext: () {
+                  setState(() => _page += 1);
+                  _fetchPending();
+                },
               ),
             ],
           ),
@@ -2398,6 +3014,9 @@ class _AdminHostApplicationsTabState
     extends ConsumerState<_AdminHostApplicationsTab> {
   String _status = 'pending';
   List<Map<String, dynamic>> _applications = const [];
+  int _appPage = 1;
+  int _appTotal = 0;
+  int _appTotalPages = 1;
   String? _selectedId;
   Map<String, dynamic>? _detail;
   bool _loadingList = true;
@@ -2405,12 +3024,18 @@ class _AdminHostApplicationsTabState
   bool _actionLoading = false;
   final TextEditingController _rejectReasonCtrl = TextEditingController();
   String? _error;
+  bool _isOffline = false;
   String? _message;
 
   // Legacy Verifications state
   String _verificationStatus = 'all';
   List<Map<String, dynamic>> _verifications = const [];
+  int _verificationPage = 1;
+  int _verificationTotal = 0;
+  int _verificationTotalPages = 1;
   bool _loadingVerifications = true;
+  String? _verificationError;
+  bool _verificationOffline = false;
   String? _processingVerificationId;
 
   @override
@@ -2426,23 +3051,34 @@ class _AdminHostApplicationsTabState
     super.dispose();
   }
 
-  Future<void> _fetchApplications() async {
+  Future<void> _fetchApplications({bool preserveError = false}) async {
     setState(() {
       _loadingList = true;
-      _error = null;
+      if (!preserveError) {
+        _error = null;
+        _isOffline = false;
+      }
     });
     try {
-      final items = await ref
+      final result = await ref
           .read(adminRepositoryProvider)
-          .getAdminHostApplications(status: _status, page: 1, limit: 50);
+          .getAdminHostApplicationsPaginated(
+            status: _status,
+            page: _appPage,
+            limit: 20,
+          );
       if (!mounted) return;
       setState(() {
-        _applications = items;
+        _applications = result.items;
+        _appPage = result.page;
+        _appTotal = result.total;
+        _appTotalPages = result.totalPages;
         _loadingList = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Không thể tải danh sách hồ sơ host.',
@@ -2452,26 +3088,39 @@ class _AdminHostApplicationsTabState
     }
   }
 
-  Future<void> _fetchVerifications() async {
+  Future<void> _fetchVerifications({bool preserveError = false}) async {
     setState(() {
       _loadingVerifications = true;
+      if (!preserveError) {
+        _verificationError = null;
+        _verificationOffline = false;
+      }
     });
     try {
-      final items =
-          await ref.read(adminRepositoryProvider).getAdminVerifications(
-                status: _verificationStatus,
-                page: 1,
-                limit: 50,
-              );
+      final result = await ref
+          .read(adminRepositoryProvider)
+          .getAdminVerificationsPaginated(
+            status: _verificationStatus,
+            page: _verificationPage,
+            limit: 20,
+          );
       if (!mounted) return;
       setState(() {
-        _verifications = items;
+        _verifications = result.items;
+        _verificationPage = result.page;
+        _verificationTotal = result.total;
+        _verificationTotalPages = result.totalPages;
         _loadingVerifications = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _verifications = const [];
+        _verificationOffline = AdminRepository.isOfflineError(e);
+        _verificationError = AdminRepository.extractErrorMessage(
+          e,
+          'Không thể tải danh sách Legacy Verifications.',
+        );
         _loadingVerifications = false;
       });
     }
@@ -2479,9 +3128,18 @@ class _AdminHostApplicationsTabState
 
   Future<void> _approveVerification(String verificationId) async {
     if (verificationId.isEmpty) return;
+    final actor = ref.read(authNotifierProvider).valueOrNull;
+    if (!_isActorAdmin(actor)) {
+      setState(() {
+        _error = 'Chỉ Quản trị viên (Admin) mới có quyền duyệt xác minh (403).';
+      });
+      return;
+    }
+
     setState(() {
       _processingVerificationId = verificationId;
       _error = null;
+      _verificationError = null;
       _message = null;
     });
     try {
@@ -2498,12 +3156,17 @@ class _AdminHostApplicationsTabState
       await _fetchVerifications();
     } catch (e) {
       if (!mounted) return;
+      final status = AdminRepository.extractStatusCode(e);
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Không thể duyệt xác minh.',
         );
       });
+      if (status == 409) {
+        await _fetchVerifications(preserveError: true);
+      }
     } finally {
       if (mounted) setState(() => _processingVerificationId = null);
     }
@@ -2511,6 +3174,15 @@ class _AdminHostApplicationsTabState
 
   Future<void> _rejectVerification(String verificationId) async {
     if (verificationId.isEmpty) return;
+    final actor = ref.read(authNotifierProvider).valueOrNull;
+    if (!_isActorAdmin(actor)) {
+      setState(() {
+        _error =
+            'Chỉ Quản trị viên (Admin) mới có quyền từ chối xác minh (403).';
+      });
+      return;
+    }
+
     final reasonCtrl = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
@@ -2520,10 +3192,12 @@ class _AdminHostApplicationsTabState
         maxWidth: 440,
         actions: [
           OutlinedButton(
+            style: _kPillOutlinedStyle,
             onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Hủy'),
           ),
           ElevatedButton(
+            style: _kPillElevatedStyle,
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Từ chối'),
           ),
@@ -2531,14 +3205,16 @@ class _AdminHostApplicationsTabState
         child: TextField(
           controller: reasonCtrl,
           maxLines: 3,
-          decoration: const InputDecoration(
+          decoration: _multilineInputDecoration(
             hintText: 'Ví dụ: Ảnh giấy tờ bị mờ hoặc hết hạn...',
           ),
         ),
       ),
     );
-    if (confirmed != true) return;
     final reason = reasonCtrl.text.trim();
+    reasonCtrl.dispose();
+
+    if (confirmed != true) return;
     if (reason.isEmpty) {
       setState(() => _error = 'Vui lòng nhập lý do từ chối xác minh.');
       return;
@@ -2547,6 +3223,7 @@ class _AdminHostApplicationsTabState
     setState(() {
       _processingVerificationId = verificationId;
       _error = null;
+      _verificationError = null;
       _message = null;
     });
     try {
@@ -2558,12 +3235,17 @@ class _AdminHostApplicationsTabState
       await _fetchVerifications();
     } catch (e) {
       if (!mounted) return;
+      final status = AdminRepository.extractStatusCode(e);
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Không thể từ chối xác minh.',
         );
       });
+      if (status == 409) {
+        await _fetchVerifications(preserveError: true);
+      }
     } finally {
       if (mounted) setState(() => _processingVerificationId = null);
     }
@@ -2574,6 +3256,7 @@ class _AdminHostApplicationsTabState
       _selectedId = applicationId;
       _loadingDetail = true;
       _error = null;
+      _isOffline = false;
       _message = null;
       _rejectReasonCtrl.clear();
     });
@@ -2589,6 +3272,7 @@ class _AdminHostApplicationsTabState
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Không thể tải chi tiết hồ sơ host.',
@@ -2602,9 +3286,20 @@ class _AdminHostApplicationsTabState
   Future<void> _runApprove() async {
     final appId = '${_detail?['applicationId'] ?? _detail?['id'] ?? ''}';
     if (appId.isEmpty) return;
+
+    final actor = ref.read(authNotifierProvider).valueOrNull;
+    if (!_isActorAdmin(actor)) {
+      setState(() {
+        _error =
+            'Chỉ Quản trị viên (Admin) mới có quyền phê duyệt hồ sơ host (403).';
+      });
+      return;
+    }
+
     setState(() {
       _actionLoading = true;
       _error = null;
+      _isOffline = false;
       _message = null;
     });
     try {
@@ -2620,12 +3315,17 @@ class _AdminHostApplicationsTabState
       await _fetchDetail(appId);
     } catch (e) {
       if (!mounted) return;
+      final status = AdminRepository.extractStatusCode(e);
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Không thể duyệt hồ sơ.',
         );
       });
+      if (status == 409) {
+        await _fetchApplications(preserveError: true);
+      }
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
@@ -2634,6 +3334,16 @@ class _AdminHostApplicationsTabState
   Future<void> _runReject() async {
     final appId = '${_detail?['applicationId'] ?? _detail?['id'] ?? ''}';
     if (appId.isEmpty) return;
+
+    final actor = ref.read(authNotifierProvider).valueOrNull;
+    if (!_isActorAdmin(actor)) {
+      setState(() {
+        _error =
+            'Chỉ Quản trị viên (Admin) mới có quyền từ chối hồ sơ host (403).';
+      });
+      return;
+    }
+
     final reason = _rejectReasonCtrl.text.trim();
     if (reason.isEmpty) {
       setState(() => _error = 'Vui lòng nhập lý do từ chối.');
@@ -2642,6 +3352,7 @@ class _AdminHostApplicationsTabState
     setState(() {
       _actionLoading = true;
       _error = null;
+      _isOffline = false;
       _message = null;
     });
     try {
@@ -2659,12 +3370,17 @@ class _AdminHostApplicationsTabState
       await _fetchDetail(appId);
     } catch (e) {
       if (!mounted) return;
+      final status = AdminRepository.extractStatusCode(e);
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Không thể từ chối hồ sơ.',
         );
       });
+      if (status == 409) {
+        await _fetchApplications(preserveError: true);
+      }
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
@@ -2673,99 +3389,134 @@ class _AdminHostApplicationsTabState
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width >= 1100;
+    final actor = ref.watch(authNotifierProvider).valueOrNull;
+    final canManageHostApps = _isActorAdmin(actor);
+    final pagePad = _responsivePagePadding(context);
 
-    final listSection = Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: _loadingList
-          ? const Padding(
-              padding: EdgeInsets.all(40),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          : _applications.isEmpty
+    final listSection = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: _loadingList
               ? const Padding(
                   padding: EdgeInsets.all(40),
-                  child: Center(child: Text('Không có hồ sơ host phù hợp.')),
+                  child: Center(child: CircularProgressIndicator()),
                 )
-              : ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _applications.length,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final app = _applications[index];
-                    final appId = '${app['applicationId'] ?? app['id'] ?? ''}';
-                    final user = app['user'] is Map
-                        ? Map<String, dynamic>.from(app['user'] as Map)
-                        : const <String, dynamic>{};
-                    final name =
-                        '${user['name'] ?? app['contactName'] ?? 'Host #$appId'}';
-                    final email =
-                        '${user['email'] ?? app['contactEmail'] ?? '-'}';
-                    final phone = '${app['phone'] ?? user['phone'] ?? '-'}';
-                    final status = '${app['status'] ?? 'pending'}';
-                    final selected = appId == _selectedId;
+              : _applications.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(40),
+                      child:
+                          Center(child: Text('Không có hồ sơ host phù hợp.')),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _applications.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final app = _applications[index];
+                        final appId =
+                            '${app['applicationId'] ?? app['id'] ?? ''}';
+                        final user = app['user'] is Map
+                            ? Map<String, dynamic>.from(app['user'] as Map)
+                            : const <String, dynamic>{};
+                        final name =
+                            '${user['name'] ?? app['contactName'] ?? 'Host #$appId'}';
+                        final email =
+                            '${user['email'] ?? app['contactEmail'] ?? '-'}';
+                        final phone = '${app['phone'] ?? user['phone'] ?? '-'}';
+                        final status = '${app['status'] ?? 'pending'}';
+                        final selected = appId == _selectedId;
 
-                    return InkWell(
-                      onTap: () => _fetchDetail(appId),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        color: selected
-                            ? AppColors.surfaceWarmSand
-                            : Colors.transparent,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                    ),
+                        return InkWell(
+                          onTap: () => _fetchDetail(appId),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            color: selected
+                                ? AppColors.surfaceWarmSand
+                                : Colors.transparent,
+                            child: Wrap(
+                              spacing: 12,
+                              runSpacing: 8,
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 280),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      Text(
+                                        '$email · $phone',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Trạng thái: $status · Giấy tờ: ${app['documentCount'] ?? 0}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  Text(
-                                    '$email · $phone',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Trạng thái: $status · Giấy tờ: ${app['documentCount'] ?? 0}',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                                OutlinedButton(
+                                  style: _kPillOutlinedStyle,
+                                  onPressed: () => _fetchDetail(appId),
+                                  child: const Text('Chi tiết'),
+                                ),
+                              ],
                             ),
-                            OutlinedButton(
-                              onPressed: () => _fetchDetail(appId),
-                              child: const Text('Chi tiết'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                          ),
+                        );
+                      },
+                    ),
+        ),
+        if (_appTotalPages > 1 || _applications.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _AdminPaginationBar(
+            page: _appPage,
+            totalPages: _appTotalPages,
+            total: _appTotal,
+            unitLabel: 'hồ sơ',
+            loading: _loadingList,
+            onPrev: () {
+              setState(() => _appPage -= 1);
+              _fetchApplications();
+            },
+            onNext: () {
+              setState(() => _appPage += 1);
+              _fetchApplications();
+            },
+          ),
+        ],
+      ],
     );
 
     final detailSection = Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.border),
       ),
       child: _selectedId == null
@@ -2804,6 +3555,17 @@ class _AdminHostApplicationsTabState
                             color: AppColors.textSecondary,
                           ),
                         ),
+                        if (_detail!['idNumber'] != null ||
+                            _detail!['idNumberMasked'] != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Số định danh (KYC): ${AdminRepository.maskKycIdentifier('${_detail!['idNumberMasked'] ?? _detail!['idNumber'] ?? ''}')}',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 4),
                         Text(
                           'Địa chỉ kinh doanh: ${_detail!['businessAddress'] ?? '-'}',
@@ -2821,7 +3583,7 @@ class _AdminHostApplicationsTabState
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
                               color: AppColors.errorSoft,
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(16),
                             ),
                             child: Text(
                               'Lý do từ chối trước đó: ${_detail!['rejectReason']}',
@@ -2851,7 +3613,7 @@ class _AdminHostApplicationsTabState
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 border: Border.all(color: AppColors.border),
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(20),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2866,7 +3628,7 @@ class _AdminHostApplicationsTabState
                                   if (signedUrl.isNotEmpty &&
                                       mimeType != 'application/pdf')
                                     ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(16),
                                       child: AppImage(
                                         imageUrl: signedUrl,
                                         height: 180,
@@ -2876,6 +3638,7 @@ class _AdminHostApplicationsTabState
                                   if (signedUrl.isNotEmpty) ...[
                                     const SizedBox(height: 8),
                                     OutlinedButton(
+                                      style: _kPillOutlinedStyle,
                                       onPressed: () async {
                                         final uri = Uri.tryParse(signedUrl);
                                         if (uri != null) {
@@ -2907,32 +3670,33 @@ class _AdminHostApplicationsTabState
                         TextField(
                           controller: _rejectReasonCtrl,
                           maxLines: 3,
-                          decoration: const InputDecoration(
+                          decoration: _multilineInputDecoration(
                             hintText:
                                 'Nhập lý do nếu bạn muốn từ chối hồ sơ này...',
                           ),
                         ),
                         const SizedBox(height: 12),
-                        Row(
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 8,
                           children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: _actionLoading ||
-                                        _detail!['status'] == 'approved'
-                                    ? null
-                                    : _runApprove,
-                                child: const Text('Phê duyệt hồ sơ'),
-                              ),
+                            ElevatedButton(
+                              style: _kPillElevatedStyle,
+                              onPressed: !canManageHostApps ||
+                                      _actionLoading ||
+                                      _detail!['status'] == 'approved'
+                                  ? null
+                                  : _runApprove,
+                              child: const Text('Phê duyệt hồ sơ'),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: _actionLoading ||
-                                        _detail!['status'] == 'rejected'
-                                    ? null
-                                    : _runReject,
-                                child: const Text('Từ chối'),
-                              ),
+                            OutlinedButton(
+                              style: _kPillOutlinedStyle,
+                              onPressed: !canManageHostApps ||
+                                      _actionLoading ||
+                                      _detail!['status'] == 'rejected'
+                                  ? null
+                                  : _runReject,
+                              child: const Text('Từ chối'),
                             ),
                           ],
                         ),
@@ -2944,7 +3708,7 @@ class _AdminHostApplicationsTabState
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -2977,8 +3741,10 @@ class _AdminHostApplicationsTabState
                   ),
                 ],
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   DropdownButton<String>(
                     value: _verificationStatus,
@@ -3000,12 +3766,15 @@ class _AdminHostApplicationsTabState
                     ],
                     onChanged: (value) {
                       if (value == null) return;
-                      setState(() => _verificationStatus = value);
+                      setState(() {
+                        _verificationStatus = value;
+                        _verificationPage = 1;
+                      });
                       _fetchVerifications();
                     },
                   ),
-                  const SizedBox(width: 8),
                   OutlinedButton.icon(
+                    style: _kPillOutlinedStyle,
                     onPressed:
                         _loadingVerifications ? null : _fetchVerifications,
                     icon: const Icon(
@@ -3020,12 +3789,22 @@ class _AdminHostApplicationsTabState
             ],
           ),
           const SizedBox(height: 12),
+          if (_verificationError != null) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _AdminErrorBanner(
+                message: _verificationError!,
+                isOffline: _verificationOffline,
+                onRetry: _loadingVerifications ? null : _fetchVerifications,
+              ),
+            ),
+          ],
           if (_loadingVerifications)
             const Padding(
               padding: EdgeInsets.all(24),
               child: Center(child: CircularProgressIndicator()),
             )
-          else if (_verifications.isEmpty)
+          else if (_verifications.isEmpty && _verificationError == null)
             const Padding(
               padding: EdgeInsets.all(20),
               child: Text(
@@ -3033,7 +3812,7 @@ class _AdminHostApplicationsTabState
                 style: TextStyle(color: AppColors.textSecondary),
               ),
             )
-          else
+          else if (_verifications.isNotEmpty)
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -3048,6 +3827,11 @@ class _AdminHostApplicationsTabState
                 final vType =
                     '${v['verificationType'] ?? v['documentType'] ?? 'identity'}';
                 final vStatus = '${v['status'] ?? 'pending'}';
+                final rawIdNum =
+                    '${v['idNumberMasked'] ?? v['idNumber'] ?? ''}'.trim();
+                final maskedIdNum = rawIdNum.isNotEmpty
+                    ? ' · Định danh: ${AdminRepository.maskKycIdentifier(rawIdNum)}'
+                    : '';
                 final isProcessing =
                     _processingVerificationId == verificationId;
 
@@ -3070,7 +3854,7 @@ class _AdminHostApplicationsTabState
                             ),
                           ),
                           Text(
-                            'Loại: $vType · Trạng thái: $vStatus',
+                            'Loại: $vType · Trạng thái: $vStatus$maskedIdNum',
                             style: const TextStyle(
                               fontSize: 12,
                               color: AppColors.textSecondary,
@@ -3080,15 +3864,22 @@ class _AdminHostApplicationsTabState
                       ),
                       Wrap(
                         spacing: 8,
+                        runSpacing: 8,
                         children: [
                           ElevatedButton(
-                            onPressed: isProcessing || vStatus == 'approved'
+                            style: _kPillElevatedStyle,
+                            onPressed: !canManageHostApps ||
+                                    isProcessing ||
+                                    vStatus == 'approved'
                                 ? null
                                 : () => _approveVerification(verificationId),
                             child: const Text('Duyệt xác minh'),
                           ),
                           OutlinedButton(
-                            onPressed: isProcessing || vStatus == 'rejected'
+                            style: _kPillOutlinedStyle,
+                            onPressed: !canManageHostApps ||
+                                    isProcessing ||
+                                    vStatus == 'rejected'
                                 ? null
                                 : () => _rejectVerification(verificationId),
                             child: const Text('Từ chối'),
@@ -3100,20 +3891,41 @@ class _AdminHostApplicationsTabState
                 );
               },
             ),
+          if (_verificationTotalPages > 1) ...[
+            const SizedBox(height: 12),
+            _AdminPaginationBar(
+              page: _verificationPage,
+              totalPages: _verificationTotalPages,
+              total: _verificationTotal,
+              unitLabel: 'bản ghi xác minh',
+              loading: _loadingVerifications,
+              onPrev: () {
+                setState(() => _verificationPage -= 1);
+                _fetchVerifications();
+              },
+              onNext: () {
+                setState(() => _verificationPage += 1);
+                _fetchVerifications();
+              },
+            ),
+          ],
         ],
       ),
     );
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(pagePad),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1300),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                spacing: 16,
+                runSpacing: 12,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -3136,7 +3948,10 @@ class _AdminHostApplicationsTabState
                       ),
                     ],
                   ),
-                  Row(
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       DropdownButton<String>(
                         value: _status,
@@ -3163,14 +3978,15 @@ class _AdminHostApplicationsTabState
                           if (value == null) return;
                           setState(() {
                             _status = value;
+                            _appPage = 1;
                             _selectedId = null;
                             _detail = null;
                           });
                           _fetchApplications();
                         },
                       ),
-                      const SizedBox(width: 12),
                       OutlinedButton.icon(
+                        style: _kPillOutlinedStyle,
                         onPressed: _fetchApplications,
                         icon: const Icon(
                           LucideIcons.refreshCw,
@@ -3183,19 +3999,31 @@ class _AdminHostApplicationsTabState
                   ),
                 ],
               ),
-              if (_error != null) ...[
+              if (!canManageHostApps) ...[
                 const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: AppColors.errorSoft,
-                    borderRadius: BorderRadius.circular(14),
+                    color: AppColors.warningSoft,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: AppColors.warning),
                   ),
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(color: AppColors.error),
+                  child: const Text(
+                    'Chỉ Quản trị viên (Admin) mới có quyền phê duyệt hoặc từ chối hồ sơ đăng ký Host.',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                _AdminErrorBanner(
+                  message: _error!,
+                  isOffline: _isOffline,
+                  onRetry: _loadingList ? null : _fetchApplications,
                 ),
               ],
               if (_message != null) ...[
@@ -3205,7 +4033,7 @@ class _AdminHostApplicationsTabState
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: AppColors.successSoft,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     _message!,
@@ -3254,10 +4082,20 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
     'admin',
   ];
 
+  final TextEditingController _searchCtrl = TextEditingController();
+  Timer? _debounce;
+  String _debouncedSearch = '';
+  String _roleFilter = 'all';
+  int _page = 1;
+  final int _limit = 50;
+  int _total = 0;
+  int _totalPages = 1;
+
   List<Map<String, dynamic>> _users = const [];
   final Map<String, String> _draftRoles = {};
   bool _loading = true;
   String? _error;
+  bool _isOffline = false;
   String? _savingUserId;
 
   @override
@@ -3266,16 +4104,43 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
     _fetchUsers();
   }
 
-  Future<void> _fetchUsers() async {
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      setState(() {
+        _debouncedSearch = value.trim();
+        _page = 1;
+      });
+      _fetchUsers();
+    });
+  }
+
+  Future<void> _fetchUsers({bool preserveError = false}) async {
     setState(() {
       _loading = true;
-      _error = null;
+      if (!preserveError) {
+        _error = null;
+        _isOffline = false;
+      }
     });
     try {
-      final list = await ref
-          .read(adminRepositoryProvider)
-          .getAdminUsers(page: 1, limit: 100);
+      final paginated =
+          await ref.read(adminRepositoryProvider).getAdminUsersPaginated(
+                page: _page,
+                limit: _limit,
+                search: _debouncedSearch,
+                role: _roleFilter,
+              );
       if (!mounted) return;
+      final list = paginated.items;
       final drafts = <String, String>{};
       for (final u in list) {
         final id = '${u['userId'] ?? u['id'] ?? ''}';
@@ -3285,6 +4150,9 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
       }
       setState(() {
         _users = list;
+        _page = paginated.page;
+        _total = paginated.total;
+        _totalPages = paginated.totalPages;
         _draftRoles
           ..clear()
           ..addAll(drafts);
@@ -3293,6 +4161,7 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Không thể tải phân quyền.',
@@ -3310,11 +4179,16 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
     }
 
     final actor = ref.read(authNotifierProvider).valueOrNull;
-    final isActorAdmin =
-        actor == null || actor.role == 'admin' || actor.roles.contains('admin');
+    final isActorAdmin = _isActorAdmin(actor);
     if (!isActorAdmin) {
       setState(() {
         _error = 'Chỉ Quản trị viên (Admin) mới có quyền thay đổi vai trò.';
+      });
+      return;
+    }
+    if (actor != null && actor.id == userId && role != 'admin') {
+      setState(() {
+        _error = 'Bạn không thể tự hạ quyền Admin của chính mình.';
       });
       return;
     }
@@ -3322,6 +4196,7 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
     setState(() {
       _savingUserId = userId;
       _error = null;
+      _isOffline = false;
     });
     try {
       await ref
@@ -3336,12 +4211,17 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
       await _fetchUsers();
     } catch (e) {
       if (!mounted) return;
+      final status = AdminRepository.extractStatusCode(e);
       setState(() {
+        _isOffline = AdminRepository.isOfflineError(e);
         _error = AdminRepository.extractErrorMessage(
           e,
           'Không thể cập nhật vai trò người dùng.',
         );
       });
+      if (status == 409) {
+        await _fetchUsers(preserveError: true);
+      }
     } finally {
       if (mounted) setState(() => _savingUserId = null);
     }
@@ -3350,11 +4230,11 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
   @override
   Widget build(BuildContext context) {
     final actor = ref.watch(authNotifierProvider).valueOrNull;
-    final canManageRoles =
-        actor == null || actor.role == 'admin' || actor.roles.contains('admin');
+    final canManageRoles = _isActorAdmin(actor);
+    final pagePad = _responsivePagePadding(context);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(pagePad),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1200),
@@ -3378,10 +4258,11 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                 const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: AppColors.warningSoft,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: AppColors.warning),
                   ),
                   child: const Text(
                     'Tài khoản của bạn không có quyền Admin để thay đổi vai trò hệ thống.',
@@ -3394,24 +4275,87 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
               ],
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.errorSoft,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(color: AppColors.error),
-                  ),
+                _AdminErrorBanner(
+                  message: _error!,
+                  isOffline: _isOffline,
+                  onRetry: _loading ? null : _fetchUsers,
                 ),
               ],
               const SizedBox(height: 16),
               Container(
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 320),
+                      child: TextField(
+                        controller: _searchCtrl,
+                        onChanged: _onSearchChanged,
+                        decoration: InputDecoration(
+                          hintText: 'Tìm người dùng phân quyền...',
+                          prefixIcon: const Icon(
+                            LucideIcons.search,
+                            size: 16,
+                            color: AppColors.iconMuted,
+                          ),
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                      ),
+                    ),
+                    for (final roleOption in const [
+                      ('all', 'Mọi vai trò'),
+                      ('guest', 'Guest'),
+                      ('host', 'Host'),
+                      ('moderator', 'Moderator'),
+                      ('admin', 'Admin'),
+                    ])
+                      ChoiceChip(
+                        label: Text(roleOption.$2),
+                        selected: _roleFilter == roleOption.$1,
+                        selectedColor: AppColors.surfaceWarmSand,
+                        shape: const StadiumBorder(),
+                        onSelected: _loading
+                            ? null
+                            : (selected) {
+                                if (!selected || _roleFilter == roleOption.$1) {
+                                  return;
+                                }
+                                setState(() {
+                                  _roleFilter = roleOption.$1;
+                                  _page = 1;
+                                });
+                                _fetchUsers();
+                              },
+                      ),
+                    OutlinedButton.icon(
+                      style: _kPillOutlinedStyle,
+                      onPressed: _loading ? null : _fetchUsers,
+                      icon: const Icon(
+                        LucideIcons.refreshCw,
+                        size: 15,
+                        color: AppColors.iconStrong,
+                      ),
+                      label: const Text('Tải lại'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: AppColors.border),
                 ),
                 child: _loading
@@ -3447,6 +4391,7 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                               final isChanged = draftRole != currentRole;
 
                               return Padding(
+                                key: ValueKey('admin-role-row-$userId'),
                                 padding: const EdgeInsets.all(16),
                                 child: Wrap(
                                   spacing: 16,
@@ -3454,8 +4399,9 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                                   alignment: WrapAlignment.spaceBetween,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    SizedBox(
-                                      width: 260,
+                                    ConstrainedBox(
+                                      constraints:
+                                          const BoxConstraints(maxWidth: 260),
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
@@ -3515,10 +4461,12 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                                               );
                                             },
                                     ),
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
                                       children: [
                                         ElevatedButton(
+                                          style: _kPillElevatedStyle,
                                           onPressed: !canManageRoles ||
                                                   !isChanged ||
                                                   _savingUserId == userId
@@ -3530,9 +4478,9 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                                                 : 'Lưu',
                                           ),
                                         ),
-                                        if (isChanged) ...[
-                                          const SizedBox(width: 8),
+                                        if (isChanged)
                                           OutlinedButton(
+                                            style: _kPillOutlinedStyle,
                                             onPressed: () {
                                               setState(() {
                                                 _draftRoles[userId] =
@@ -3541,7 +4489,6 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                                             },
                                             child: const Text('Hủy'),
                                           ),
-                                        ],
                                       ],
                                     ),
                                   ],
@@ -3549,6 +4496,22 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                               );
                             },
                           ),
+              ),
+              const SizedBox(height: 14),
+              _AdminPaginationBar(
+                page: _page,
+                totalPages: _totalPages,
+                total: _total,
+                unitLabel: 'tài khoản',
+                loading: _loading,
+                onPrev: () {
+                  setState(() => _page -= 1);
+                  _fetchUsers();
+                },
+                onNext: () {
+                  setState(() => _page += 1);
+                  _fetchUsers();
+                },
               ),
             ],
           ),

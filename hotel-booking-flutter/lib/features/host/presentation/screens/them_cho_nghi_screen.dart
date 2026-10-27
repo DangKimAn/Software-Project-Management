@@ -500,6 +500,17 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
     });
   }
 
+  void _moveQueuedImage(int index, int delta) {
+    final targetIndex = index + delta;
+    if (targetIndex < 0 || targetIndex >= _queuedImages.length) return;
+    setState(() {
+      final list = List<QueuedListingImage>.from(_queuedImages);
+      final moved = list.removeAt(index);
+      list.insert(targetIndex, moved);
+      _queuedImages = list;
+    });
+  }
+
   void _updateQueuedImage(
     String id,
     QueuedListingImage Function(QueuedListingImage current) updater,
@@ -545,12 +556,15 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
     int successCount = 0;
 
     final initialExistingCount = _existingImages.length;
-    final baseSortOrder = _existingImages.isEmpty
+    var nextSortOrder = _existingImages.isEmpty
         ? 0
         : (_existingImages
                 .map((e) => e.sortOrder)
                 .reduce((a, b) => a > b ? a : b) +
             1);
+    if (nextSortOrder < _existingImages.length) {
+      nextSortOrder = _existingImages.length;
+    }
 
     for (var i = 0; i < imagesToProcess.length; i++) {
       final item = imagesToProcess[i];
@@ -570,25 +584,43 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
       );
 
       try {
-        final uploaded = await repo.uploadFileToR2(
-          item.file,
-          folder: 'listings',
-          listingId: listingId,
-          onSendProgress: (sent, total) {
-            if (!mounted || total <= 0) return;
-            _updateQueuedImage(
-              item.id,
-              (cur) => cur.copyWith(progress: (sent / total).clamp(0.0, 1.0)),
-            );
-          },
-        );
+        String publicUrl;
+        String? objectKey;
+        if (item.uploadedPublicUrl != null &&
+            item.uploadedPublicUrl!.trim().isNotEmpty) {
+          publicUrl = item.uploadedPublicUrl!.trim();
+          objectKey = item.uploadedKey;
+        } else {
+          final uploaded = await repo.uploadFileToR2(
+            item.file,
+            folder: 'listings',
+            listingId: listingId,
+            onSendProgress: (sent, total) {
+              if (!mounted || total <= 0) return;
+              _updateQueuedImage(
+                item.id,
+                (cur) => cur.copyWith(progress: (sent / total).clamp(0.0, 1.0)),
+              );
+            },
+          );
+          publicUrl = uploaded.publicUrl;
+          objectKey = uploaded.key;
+          _updateQueuedImage(
+            item.id,
+            (cur) => cur.copyWith(
+              uploadedPublicUrl: publicUrl,
+              uploadedKey: objectKey,
+            ),
+          );
+        }
 
+        final assignedSortOrder = nextSortOrder++;
         final savedImages = await repo.addListingImages(
           listingId,
           [
             {
-              'url': uploaded.publicUrl,
-              'key': uploaded.key,
+              'url': publicUrl,
+              'key': objectKey,
               'originalFilename': item.file.name,
               'displayTitle': null,
               'altText': _titleController.text.trim().isNotEmpty
@@ -596,7 +628,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                   : 'Ảnh chỗ nghỉ',
               'caption': null,
               'isCover': initialExistingCount == 0 && successCount == 0,
-              'sortOrder': baseSortOrder + i,
+              'sortOrder': assignedSortOrder,
             },
           ],
           taxonomies: _tagTaxonomies,
@@ -613,8 +645,8 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
           (cur) => cur.copyWith(
             status: QueuedImageUploadStatus.success,
             progress: 1.0,
-            uploadedPublicUrl: uploaded.publicUrl,
-            uploadedKey: uploaded.key,
+            uploadedPublicUrl: publicUrl,
+            uploadedKey: objectKey,
             savedImageId: createdImage?.imageId,
           ),
         );
@@ -659,6 +691,12 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
               'Phân tích lỗi, thử lại.',
             );
             analysisFailures.add('${item.file.name}: $msg');
+            _mergeExistingImage(
+              createdImage.copyWith(
+                aiAnalysisStatus: 'failed',
+                aiErrorMessage: msg,
+              ),
+            );
             _updateQueuedImage(
               item.id,
               (cur) => cur.copyWith(
@@ -742,6 +780,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         title: const Text('Xóa ảnh chỗ nghỉ'),
         content: const Text('Bạn có chắc chắn muốn xóa ảnh này khỏi chỗ nghỉ?'),
         actions: [
@@ -753,6 +792,9 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFBE123C),
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Xóa ảnh'),
@@ -785,17 +827,23 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
     }
   }
 
-  void _moveExistingImage(int index, int delta) {
+  Future<void> _moveExistingImage(int index, int delta) async {
     final targetIndex = index + delta;
     if (targetIndex < 0 || targetIndex >= _existingImages.length) return;
+    final list = List<ExistingListingImage>.from(_existingImages);
+    final moved = list.removeAt(index);
+    list.insert(targetIndex, moved);
     setState(() {
-      final list = List<ExistingListingImage>.from(_existingImages);
-      final moved = list.removeAt(index);
-      list.insert(targetIndex, moved);
       _existingImages = [
         for (var i = 0; i < list.length; i++) list[i].copyWith(sortOrder: i),
       ];
     });
+    if (targetIndex == 0 &&
+        _isEditMode &&
+        !moved.isCover &&
+        moved.imageId > 0) {
+      await _handleSetCoverImage(moved.imageId);
+    }
   }
 
   Future<void> _handleAnalyzeSingleImage(int imageId) async {
@@ -818,16 +866,27 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
       setState(() {
         _aiStatusMessage = result.aiAnalysisStatus == 'analyzed'
             ? 'Đã gắn tag AI cho ảnh.'
-            : 'Phân tích lỗi, vui lòng thử lại.';
+            : 'Phân tích AI chưa hoàn tất. Bạn có thể chọn tag thủ công bên dưới.';
       });
     } catch (e) {
       if (!mounted) return;
+      final msg = repo.extractErrorMessage(
+        e,
+        'Không thể phân tích ảnh bằng AI.',
+      );
       setState(() {
-        _aiStatusMessage = null;
-        _errorMessage = repo.extractErrorMessage(
-          e,
-          'Không thể phân tích ảnh bằng AI.',
-        );
+        _existingImages = _existingImages
+            .map(
+              (img) => img.imageId == imageId
+                  ? img.copyWith(
+                      aiAnalysisStatus: 'failed',
+                      aiErrorMessage: msg,
+                    )
+                  : img,
+            )
+            .toList();
+        _aiStatusMessage =
+            'Phân tích AI tạm thời gián đoạn ($msg). Bạn vẫn có thể gắn tag thủ công và lưu chỗ nghỉ.';
       });
     } finally {
       if (mounted) {
@@ -874,16 +933,17 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
           _existingImages = refreshed.images;
         }
         _aiStatusMessage =
-            'Đã phân tích ${result.analyzedCount} ảnh${result.failedCount > 0 ? ', ${result.failedCount} ảnh lỗi' : ''}.';
+            'Đã phân tích ${result.analyzedCount} ảnh${result.failedCount > 0 ? ', ${result.failedCount} ảnh lỗi (có thể gắn tag thủ công)' : ''}.';
       });
     } catch (e) {
       if (!mounted) return;
+      final msg = repo.extractErrorMessage(
+        e,
+        'Không thể phân tích ảnh bằng AI.',
+      );
       setState(() {
-        _aiStatusMessage = null;
-        _errorMessage = repo.extractErrorMessage(
-          e,
-          'Không thể phân tích ảnh bằng AI.',
-        );
+        _aiStatusMessage =
+            'Phân tích AI tạm thời gián đoạn ($msg). Bạn vẫn có thể gắn tag thủ công từ 22 nhãn có sẵn.';
       });
     } finally {
       if (mounted) {
@@ -1023,6 +1083,15 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
       _uploadStatusMessage = null;
     });
 
+    final currentRole = ref.read(hostCurrentUserRoleProvider);
+    if (!isApprovedHostRole(currentRole)) {
+      setState(() {
+        _errorMessage =
+            'Tài khoản chưa được cấp quyền Chủ nhà (Host) để tạo hoặc cập nhật chỗ nghỉ (403).';
+      });
+      return;
+    }
+
     final dto = _buildValidatedDto(overrideStatus: targetStatus);
     if (dto == null) return;
 
@@ -1038,16 +1107,22 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
         )
         .toList();
 
+    final wasAlreadyEditMode = _isEditMode;
+
     try {
       String listingId;
-      if (_isEditMode) {
+      if (wasAlreadyEditMode) {
         listingId = _activeListingId!;
         await repo.updateHostListing(
           listingId,
           dto.toUpdateJson(nextStatus: targetStatus),
+          userRole: currentRole,
         );
       } else {
-        final created = await repo.createHostListing(dto.toCreateJson());
+        final created = await repo.createHostListing(
+          dto.toCreateJson(),
+          userRole: currentRole,
+        );
         listingId =
             (created['listingId'] ?? created['id'] ?? '').toString().trim();
         if (listingId.isEmpty) {
@@ -1056,22 +1131,43 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
         _activeListingId = listingId;
       }
 
-      // Sync amenities (`PUT /api/host/listings/:id/amenities`)
-      if (_selectedAmenityIds.isNotEmpty || _isEditMode) {
-        await repo
-            .updateListingAmenities(listingId, _selectedAmenityIds.toList())
-            .catchError((_) {});
+      // Sync amenities (`PUT /api/host/listings/:id/amenities`) - NEVER swallow errors!
+      if (_selectedAmenityIds.isNotEmpty || wasAlreadyEditMode) {
+        try {
+          await repo.updateListingAmenities(
+            listingId,
+            _selectedAmenityIds.toList(),
+          );
+        } catch (amenityErr) {
+          final msg = repo.extractErrorMessage(
+            amenityErr,
+            'Cập nhật tiện nghi thất bại.',
+          );
+          throw StateError(
+            'Đã lưu thông tin cơ bản (#$listingId) nhưng cập nhật tiện nghi thất bại: $msg',
+          );
+        }
       }
 
-      // Sync rules (`PATCH /api/host/listings/:id/rules`)
-      await repo.updateListingRules(listingId, {
-        'checkInFrom': _checkInFrom,
-        'checkOutBefore': _checkOutBefore,
-        'smokingAllowed': _smokingAllowed,
-        'petsAllowed': _petsAllowed,
-        'partyAllowed': _partyAllowed,
-        'quietHours': _quietHoursController.text.trim(),
-      }).catchError((_) {});
+      // Sync rules (`PATCH /api/host/listings/:id/rules`) - NEVER swallow errors!
+      try {
+        await repo.updateListingRules(listingId, {
+          'checkInFrom': _checkInFrom,
+          'checkOutBefore': _checkOutBefore,
+          'smokingAllowed': _smokingAllowed,
+          'petsAllowed': _petsAllowed,
+          'partyAllowed': _partyAllowed,
+          'quietHours': _quietHoursController.text.trim(),
+        });
+      } catch (rulesErr) {
+        final msg = repo.extractErrorMessage(
+          rulesErr,
+          'Cập nhật nội quy thất bại.',
+        );
+        throw StateError(
+          'Đã lưu thông tin cơ bản (#$listingId) nhưng cập nhật nội quy thất bại: $msg',
+        );
+      }
 
       // Upload queued images to R2 & run AI analysis
       final uploadResult = pendingUploads.isNotEmpty
@@ -1099,7 +1195,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
         _saving = false;
         _successMessage = uploadResult.analysisFailures.isNotEmpty
             ? 'Đã lưu chỗ nghỉ. Một số ảnh phân tích AI lỗi: ${uploadResult.analysisFailures.join("; ")}'
-            : (_isEditMode
+            : (wasAlreadyEditMode
                 ? 'Đã cập nhật chỗ nghỉ thành công.'
                 : 'Đã tạo chỗ nghỉ thành công.');
       });
@@ -1119,11 +1215,79 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentRole = ref.watch(hostCurrentUserRoleProvider);
+    if (!isApprovedHostRole(currentRole)) {
+      final unauthorizedView = Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Container(
+              key: const Key('listing_form_unauthorized_guard'),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceBase,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    LucideIcons.shieldAlert,
+                    size: 36,
+                    color: AppColors.iconStrong,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Yêu cầu quyền Chủ nhà (Host)',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textStrong,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tài khoản hiện tại (${currentRole ?? 'guest'}) chưa được phê duyệt làm Chủ nhà nên không thể đăng hoặc sửa chỗ nghỉ.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(180, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    onPressed: () => context.go('/tro-thanh-host/trang-thai'),
+                    child: const Text('Kiểm tra hồ sơ Host'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      if (widget.embedded) return unauthorizedView;
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(child: unauthorizedView),
+      );
+    }
+
     final content = _loadingInitial
         ? const Center(
             child: Padding(
               padding: EdgeInsets.all(48),
-              child: CircularProgressIndicator(),
+              child: CircularProgressIndicator(color: AppColors.iconStrong),
             ),
           )
         : SingleChildScrollView(
@@ -1161,19 +1325,20 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                       const SizedBox(height: 12),
                       _buildStatusBanner(
                         text: _uploadStatusMessage!,
-                        bg: const Color(0xFFECFEFF),
-                        border: const Color(0xFFA5F3FC),
-                        fg: const Color(0xFF0E7490),
+                        bg: AppColors.surfaceWarmSand,
+                        border: AppColors.border,
+                        fg: AppColors.textStrong,
                         icon: LucideIcons.cloudUpload,
                       ),
                     ],
                     if (_aiStatusMessage != null) ...[
                       const SizedBox(height: 12),
                       _buildStatusBanner(
+                        key: const Key('listing_form_ai_banner'),
                         text: _aiStatusMessage!,
-                        bg: const Color(0xFFF5F3FF),
-                        border: const Color(0xFFDDD6FE),
-                        fg: const Color(0xFF6D28D9),
+                        bg: AppColors.surfaceWarmSand,
+                        border: AppColors.border,
+                        fg: AppColors.textStrong,
                         icon: LucideIcons.sparkles,
                       ),
                     ],
@@ -1301,11 +1466,15 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
               foregroundColor: AppColors.textPrimary,
               side: const BorderSide(color: AppColors.border),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(999),
               ),
             ),
             onPressed: widget.onCancel,
-            icon: const Icon(LucideIcons.arrowLeft, size: 16),
+            icon: const Icon(
+              LucideIcons.arrowLeft,
+              size: 16,
+              color: AppColors.iconStrong,
+            ),
             label: const Text('Quay lại danh sách'),
           ),
       ],
@@ -1740,20 +1909,23 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
           controlAffinity: ListTileControlAffinity.leading,
         ),
         Wrap(
-          spacing: 16,
+          spacing: 12,
           runSpacing: 8,
           children: [
             FilterChip(
+              shape: const StadiumBorder(),
               label: const Text('Cho phép hút thuốc'),
               selected: _smokingAllowed,
               onSelected: (v) => setState(() => _smokingAllowed = v),
             ),
             FilterChip(
+              shape: const StadiumBorder(),
               label: const Text('Cho phép thú cưng'),
               selected: _petsAllowed,
               onSelected: (v) => setState(() => _petsAllowed = v),
             ),
             FilterChip(
+              shape: const StadiumBorder(),
               label: const Text('Cho phép tổ chức tiệc / BBQ'),
               selected: _partyAllowed,
               onSelected: (v) => setState(() => _partyAllowed = v),
@@ -1788,6 +1960,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
               final selected = _selectedAmenityIds.contains(id);
               return FilterChip(
                 key: Key('listing_amenity_chip_$id'),
+                shape: const StadiumBorder(),
                 label: Text(name),
                 selected: selected,
                 onSelected: (val) {
@@ -1812,20 +1985,24 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
       children: [
         InkWell(
           key: const Key('listing_pick_images_btn'),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
           onTap: _saving ? null : _pickImagesFromDevice,
           child: Container(
             constraints: const BoxConstraints(minHeight: 96),
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(16),
+              color: AppColors.surfaceWarmSand,
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(color: AppColors.border),
             ),
             child: const Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(LucideIcons.imagePlus, size: 24, color: AppColors.primary),
+                Icon(
+                  LucideIcons.imagePlus,
+                  size: 24,
+                  color: AppColors.iconStrong,
+                ),
                 SizedBox(height: 8),
                 Text(
                   'Chọn ảnh thật từ thiết bị',
@@ -1870,15 +2047,19 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                   key: const Key('listing_analyze_all_ai_btn'),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(180, 48),
-                    foregroundColor: const Color(0xFF6D28D9),
-                    side: const BorderSide(color: Color(0xFFDDD6FE)),
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(999),
                     ),
                   ),
                   onPressed:
                       _analyzingAllAi ? null : _handleAnalyzeAllImagesWithAi,
-                  icon: const Icon(LucideIcons.sparkles, size: 16),
+                  icon: const Icon(
+                    LucideIcons.sparkles,
+                    size: 16,
+                    color: AppColors.iconStrong,
+                  ),
                   label: Text(
                     _analyzingAllAi
                         ? 'Đang phân tích ảnh...'
@@ -1932,10 +2113,14 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
               TextButton.icon(
                 style: TextButton.styleFrom(
                   minimumSize: const Size(140, 48),
-                  foregroundColor: const Color(0xFFBE123C),
+                  foregroundColor: AppColors.textPrimary,
                 ),
                 onPressed: _saving ? null : _clearAllQueuedImages,
-                icon: const Icon(LucideIcons.trash2, size: 16),
+                icon: const Icon(
+                  LucideIcons.trash2,
+                  size: 16,
+                  color: AppColors.iconStrong,
+                ),
                 label: const Text('Xóa toàn bộ ảnh mới đã chọn'),
               ),
             ],
@@ -1980,7 +2165,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
     Color statusColor = AppColors.textSecondary;
     if (isAnalyzing || image.aiAnalysisStatus == 'analyzing') {
       statusLabel = 'Đang phân tích ảnh bằng AI...';
-      statusColor = const Color(0xFF6D28D9);
+      statusColor = AppColors.textStrong;
     } else if (image.aiAnalysisStatus == 'failed' ||
         image.aiAnalysisStatus == 'analysis_failed') {
       statusLabel = 'Phân tích lỗi, thử lại';
@@ -1994,7 +2179,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
       key: Key('existing_image_card_${image.imageId}'),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: image.isCover ? AppColors.primary : AppColors.border,
           width: image.isCover ? 1.5 : 1,
@@ -2004,18 +2189,18 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(23)),
             child: Image.network(
               image.url,
               height: 140,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => Container(
                 height: 140,
-                color: const Color(0xFFF1F5F9),
+                color: AppColors.surfaceMuted,
                 alignment: Alignment.center,
                 child: const Icon(
                   LucideIcons.image,
-                  color: AppColors.textSecondary,
+                  color: AppColors.iconMuted,
                 ),
               ),
             ),
@@ -2047,7 +2232,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFECFEFF),
+                          color: AppColors.brandSoft,
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: const Text(
@@ -2109,6 +2294,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                     children: image.tags.map((tag) {
                       return InputChip(
                         key: Key('image_${image.imageId}_tag_${tag.tag}'),
+                        shape: const StadiumBorder(),
                         label: Text(
                           tag.labelVi,
                           style: const TextStyle(fontSize: 11),
@@ -2130,11 +2316,11 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                 InputDecorator(
                   decoration: InputDecoration(
                     contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 10,
+                      horizontal: 12,
                       vertical: 8,
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(20),
                     ),
                   ),
                   child: DropdownButtonHideUnderline(
@@ -2210,19 +2396,29 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                       ),
                     if (index > 0)
                       IconButton(
+                        key: Key('image_${image.imageId}_move_left_btn'),
                         constraints:
                             const BoxConstraints(minWidth: 48, minHeight: 48),
                         tooltip: 'Chuyển lên trước',
                         onPressed: () => _moveExistingImage(index, -1),
-                        icon: const Icon(LucideIcons.arrowLeft, size: 16),
+                        icon: const Icon(
+                          LucideIcons.arrowLeft,
+                          size: 16,
+                          color: AppColors.iconStrong,
+                        ),
                       ),
                     if (index < _existingImages.length - 1)
                       IconButton(
+                        key: Key('image_${image.imageId}_move_right_btn'),
                         constraints:
                             const BoxConstraints(minWidth: 48, minHeight: 48),
                         tooltip: 'Chuyển ra sau',
                         onPressed: () => _moveExistingImage(index, 1),
-                        icon: const Icon(LucideIcons.arrowRight, size: 16),
+                        icon: const Icon(
+                          LucideIcons.arrowRight,
+                          size: 16,
+                          color: AppColors.iconStrong,
+                        ),
                       ),
                     TextButton(
                       key: Key('image_${image.imageId}_delete_btn'),
@@ -2247,29 +2443,33 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
   }
 
   Widget _buildQueuedImageCard(QueuedListingImage item, int index) {
+    final isFutureCover = _existingImages.isEmpty && index == 0;
     return Container(
       key: Key('queued_image_card_${item.id}'),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isFutureCover ? AppColors.primary : AppColors.border,
+          width: isFutureCover ? 1.5 : 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(23)),
             child: Image.memory(
               item.file.bytes,
               height: 130,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => Container(
                 height: 130,
-                color: const Color(0xFFF1F5F9),
+                color: AppColors.surfaceMuted,
                 alignment: Alignment.center,
                 child: const Icon(
                   LucideIcons.image,
-                  color: AppColors.textSecondary,
+                  color: AppColors.iconMuted,
                 ),
               ),
             ),
@@ -2279,14 +2479,39 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${item.file.name} (${item.file.formattedSize})',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${item.file.name} (${item.file.formattedSize})',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isFutureCover)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandSoft,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Ảnh bìa',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -2317,16 +2542,44 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                 ],
                 const SizedBox(height: 6),
                 Wrap(
-                  spacing: 8,
+                  spacing: 4,
+                  runSpacing: 4,
                   children: [
                     if (item.status == QueuedImageUploadStatus.failed &&
                         _isEditMode)
                       TextButton(
+                        key: Key('queued_image_retry_${item.id}'),
                         style: TextButton.styleFrom(
                           minimumSize: const Size(72, 48),
                         ),
                         onPressed: () => _retryFailedQueuedImage(item),
                         child: const Text('Thử lại'),
+                      ),
+                    if (index > 0)
+                      IconButton(
+                        key: Key('queued_image_move_left_${item.id}'),
+                        constraints:
+                            const BoxConstraints(minWidth: 48, minHeight: 48),
+                        tooltip: 'Chuyển lên trước',
+                        onPressed: () => _moveQueuedImage(index, -1),
+                        icon: const Icon(
+                          LucideIcons.arrowLeft,
+                          size: 16,
+                          color: AppColors.iconStrong,
+                        ),
+                      ),
+                    if (index < _queuedImages.length - 1)
+                      IconButton(
+                        key: Key('queued_image_move_right_${item.id}'),
+                        constraints:
+                            const BoxConstraints(minWidth: 48, minHeight: 48),
+                        tooltip: 'Chuyển ra sau',
+                        onPressed: () => _moveQueuedImage(index, 1),
+                        icon: const Icon(
+                          LucideIcons.arrowRight,
+                          size: 16,
+                          color: AppColors.iconStrong,
+                        ),
                       ),
                     if (item.status != QueuedImageUploadStatus.uploading &&
                         item.status != QueuedImageUploadStatus.analyzing)
@@ -2360,10 +2613,10 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
             key: const Key('listing_submit_approval_btn'),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(160, 48),
-              foregroundColor: AppColors.primary,
-              side: const BorderSide(color: AppColors.primary),
+              foregroundColor: AppColors.textPrimary,
+              side: const BorderSide(color: AppColors.border),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(999),
               ),
             ),
             onPressed: _saving
@@ -2371,7 +2624,11 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                 : () => _submitForm(
                       targetStatus: HostListingStatus.pendingApproval,
                     ),
-            icon: const Icon(LucideIcons.send, size: 16),
+            icon: const Icon(
+              LucideIcons.send,
+              size: 16,
+              color: AppColors.iconStrong,
+            ),
             label: const Text('Lưu & Gửi duyệt'),
           ),
         ElevatedButton.icon(
@@ -2382,7 +2639,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
             minimumSize: const Size(180, 48),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(999),
             ),
           ),
           onPressed: _saving ? null : () => _submitForm(),
@@ -2395,7 +2652,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                     color: Colors.white,
                   ),
                 )
-              : const Icon(LucideIcons.save, size: 18),
+              : const Icon(LucideIcons.save, size: 18, color: Colors.white),
           label: Text(
             _saving
                 ? 'Đang lưu...'
@@ -2412,18 +2669,18 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
       labelText: label,
       hintText: hint,
       filled: true,
-      fillColor: const Color(0xFFF8FAFC),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      fillColor: AppColors.surfaceBase,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(20),
         borderSide: const BorderSide(color: AppColors.border),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(20),
         borderSide: const BorderSide(color: AppColors.border),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(20),
         borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
       ),
     );
@@ -2439,16 +2696,16 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
   }) {
     return Container(
       key: key,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: border),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18, color: fg),
+          Icon(icon, size: 18, color: AppColors.iconStrong),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -2480,7 +2737,7 @@ class _SectionCard extends StatelessWidget {
     return Material(
       color: AppColors.surfaceBase,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         side: const BorderSide(color: AppColors.border),
       ),
       child: Padding(
