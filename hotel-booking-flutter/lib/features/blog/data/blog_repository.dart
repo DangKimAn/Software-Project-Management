@@ -751,7 +751,7 @@ class BlogPost {
       location: rawLocation.isNotEmpty ? rawLocation : 'Vũng Tàu',
       readTime: readTimeStr,
       authorName:
-          rawAuthor.isNotEmpty ? rawAuthor : 'Ban biên tập Minh Thanh Villa',
+          rawAuthor.isNotEmpty ? rawAuthor : 'Ban biên tập The Palm',
       publishedAt: _sanitizeDate(json['publishedAt'] ?? json['createdAt']),
       readTimeMinutes: mins,
       tags: parsedTags,

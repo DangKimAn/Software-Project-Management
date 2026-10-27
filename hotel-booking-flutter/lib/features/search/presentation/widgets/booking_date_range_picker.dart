@@ -78,7 +78,7 @@ class BookingDateRangePicker extends StatefulWidget {
 }
 
 class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
-  static const Color _rangeHighlightColor = Color(0xFFECFEFF);
+  static const Color _rangeHighlightColor = AppColors.rangeBackground;
 
   late DateTime _currentMonth;
   BookingDate? _checkIn;
@@ -417,7 +417,7 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
             height: 36,
             decoration: BoxDecoration(
               color: cellBg,
-              borderRadius: BorderRadius.circular(16),
+              shape: BoxShape.circle,
               border: isAllowedCheckOutBoundary && !isSelectedEnd
                   ? Border.all(
                       color: AppColors.primary.withValues(alpha: 0.45),

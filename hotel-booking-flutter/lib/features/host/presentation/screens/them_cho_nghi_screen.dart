@@ -1325,7 +1325,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                       const SizedBox(height: 12),
                       _buildStatusBanner(
                         text: _uploadStatusMessage!,
-                        bg: AppColors.surfaceWarmSand,
+                        bg: AppColors.surfaceBase,
                         border: AppColors.border,
                         fg: AppColors.textStrong,
                         icon: LucideIcons.cloudUpload,
@@ -1336,10 +1336,10 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                       _buildStatusBanner(
                         key: const Key('listing_form_ai_banner'),
                         text: _aiStatusMessage!,
-                        bg: AppColors.surfaceWarmSand,
+                        bg: AppColors.surfaceBase,
                         border: AppColors.border,
                         fg: AppColors.textStrong,
-                        icon: LucideIcons.sparkles,
+                        icon: LucideIcons.image,
                       ),
                     ],
                     const SizedBox(height: 20),
@@ -1991,7 +1991,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
             constraints: const BoxConstraints(minHeight: 96),
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppColors.surfaceWarmSand,
+              color: AppColors.surfaceBase,
               borderRadius: BorderRadius.circular(24),
               border: Border.all(color: AppColors.border),
             ),
@@ -2056,7 +2056,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                   onPressed:
                       _analyzingAllAi ? null : _handleAnalyzeAllImagesWithAi,
                   icon: const Icon(
-                    LucideIcons.sparkles,
+                    LucideIcons.image,
                     size: 16,
                     color: AppColors.iconStrong,
                   ),

@@ -1,3 +1,4 @@
+import 'payment_result_card.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -275,7 +276,7 @@ class _PaymentVerificationCardState extends State<PaymentVerificationCard>
           icon: LucideIcons.clock,
           title: 'Giao dịch đang chờ xác nhận',
           subtitle:
-              'Hệ thống đang đồng bộ kết quả từ cổng thanh toán. Trạng thái sẽ tự động cập nhật khi có phản hồi từ máy chủ.',
+              'Kết quả thanh toán sẽ tự động cập nhật sau khi được xác nhận.',
         );
       case 'unverified':
         return (
@@ -296,7 +297,7 @@ class _PaymentVerificationCardState extends State<PaymentVerificationCard>
         return (
           icon: LucideIcons.refreshCw,
           title: 'Đang xử lý hoàn tiền',
-          subtitle: _paymentRecord?.latePaymentReason ??
+          subtitle: _paymentRecord?.latePaymentReasonDisplay ??
               'Yêu cầu hoàn tiền cho đơn đặt phòng của bạn đang được xử lý về phương thức thanh toán ban đầu.',
         );
       case 'refunded':
@@ -352,159 +353,27 @@ class _PaymentVerificationCardState extends State<PaymentVerificationCard>
     final canReverify =
         _effectiveStatus == 'pending' || _effectiveStatus == 'unverified';
 
-    return Container(
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppColors.borderSoft),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            meta.icon,
-            size: 48,
-            color: AppColors.iconStrong,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            meta.title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            meta.subtitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-              height: 1.5,
-            ),
-          ),
-          if (_isVerifying) ...[
-            const SizedBox(height: 16),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                SizedBox(width: 10),
-                Flexible(
-                  child: Text(
-                    'Đang kiểm tra trạng thái từ máy chủ...',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 24),
-          const Divider(color: AppColors.divider),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              children: [
-                if (effectiveBookingId.isNotEmpty)
-                  _KvRow(
-                    label: 'Mã đơn đặt phòng',
-                    value: '#$effectiveBookingId',
-                  ),
-                if (effectivePaymentId.isNotEmpty)
-                  _KvRow(
-                    label: 'Mã giao dịch',
-                    value: effectivePaymentId,
-                  ),
-                if (effectiveMethod.isNotEmpty)
-                  _KvRow(
-                    label: 'Phương thức',
-                    value: effectiveMethod.toUpperCase(),
-                  ),
-                if (effectiveAmount > 0)
-                  _KvRow(
-                    label: 'Số tiền',
-                    value: CurrencyFormatter.formatVnd(effectiveAmount),
-                  ),
-                if (_bookingRecord != null)
-                  _KvRow(
-                    label: 'Trạng thái đơn phòng',
-                    value: _bookingRecord!.statusDisplay,
-                  ),
-              ],
-            ),
-          ),
-          const Divider(color: AppColors.divider),
-          const SizedBox(height: 24),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            alignment: WrapAlignment.center,
-            children: [
-              if (canReverify)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: OutlinedButton.icon(
-                    onPressed: _isVerifying
-                        ? null
-                        : () => _verifyTransaction(resetPollCount: true),
-                    icon: const Icon(
-                      LucideIcons.refreshCw,
-                      size: 16,
-                      color: AppColors.iconStrong,
-                    ),
-                    label: const Text('Kiểm tra lại trạng thái'),
-                  ),
-                ),
-              if (canRetryPayment && widget.onRetryPayment != null)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: ElevatedButton(
-                    onPressed: widget.onRetryPayment,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text('Thử thanh toán lại'),
-                  ),
-                ),
-              if (widget.onViewTrips != null)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: ElevatedButton(
-                    onPressed: widget.onViewTrips,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.textPrimary,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text('Xem chuyến đi của tôi'),
-                  ),
-                ),
-              if (widget.onGoHome != null)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: OutlinedButton(
-                    onPressed: widget.onGoHome,
-                    child: const Text('Về Trang chủ'),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
+    return PaymentResultCard(
+      icon: meta.icon,
+      title: meta.title,
+      subtitle: meta.subtitle,
+      isVerifying: _isVerifying,
+      details: {
+        if (effectiveBookingId.isNotEmpty)
+          'Mã đặt phòng': '#$effectiveBookingId',
+        if (effectivePaymentId.isNotEmpty) 'Mã giao dịch': effectivePaymentId,
+        if (effectiveMethod.isNotEmpty)
+          'Phương thức': effectiveMethod.toUpperCase(),
+        if (_bookingRecord != null)
+          'Đơn đặt phòng': _bookingRecord!.statusDisplay,
+        if (effectiveAmount > 0)
+          'Số tiền': CurrencyFormatter.formatVnd(effectiveAmount),
+      },
+      onRecheck:
+          canReverify ? () => _verifyTransaction(resetPollCount: true) : null,
+      onRetry: canRetryPayment ? widget.onRetryPayment : null,
+      onViewTrips: widget.onViewTrips,
+      onGoHome: widget.onGoHome,
     );
   }
 }

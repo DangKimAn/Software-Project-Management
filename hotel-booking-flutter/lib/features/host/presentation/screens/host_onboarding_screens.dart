@@ -176,7 +176,7 @@ class _TroThanhHostLandingScreenState
         child: SingleChildScrollView(
           padding: EdgeInsets.symmetric(
             horizontal: horizontalPad,
-            vertical: AppSpacing.s24,
+            vertical: AppSpacing.s16,
           ),
           child: Center(
             child: ConstrainedBox(
@@ -221,65 +221,116 @@ class _TroThanhHostLandingScreenState
                     const SizedBox(height: AppSpacing.s16),
                     _buildExistingApplicationBanner(context, _existingRecord!),
                   ],
-                  const SizedBox(height: AppSpacing.s24),
+                  const SizedBox(height: AppSpacing.s20),
                   Text(
-                    'Quy trình xét duyệt minh bạch',
-                    style: AppTypography.sectionHeading.copyWith(
+                    'Quy trình 3 bước',
+                    style: AppTypography.cardTitle.copyWith(
+                      fontWeight: FontWeight.w700,
                       color: AppColors.textStrong,
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.s16),
+                  const SizedBox(height: AppSpacing.s12),
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final isWide = constraints.maxWidth >= 680;
-                      final cards = [
-                        _buildStepCard(
+                      const steps = [
+                        (
                           step: '01',
                           icon: LucideIcons.userCheck,
-                          title: 'Kê khai thông tin & KYC',
+                          title: 'Kê khai & KYC',
                           description:
-                              'Cung cấp thông tin liên hệ, địa chỉ kinh doanh và tải lên giấy tờ định danh thật (CCCD, CMND, Hộ chiếu hoặc GPLX).',
+                              'Điền thông tin liên hệ và tải ảnh giấy tờ định danh.',
                         ),
-                        _buildStepCard(
+                        (
                           step: '02',
                           icon: LucideIcons.shieldCheck,
                           title: 'Xét duyệt hồ sơ',
                           description:
-                              'Bộ phận quản trị kiểm tra tính hợp lệ của chứng từ. Bạn có thể theo dõi trạng thái hồ sơ theo thời gian thực.',
+                              'Admin xác minh chứng từ, theo dõi tiến độ trực tiếp.',
                         ),
-                        _buildStepCard(
+                        (
                           step: '03',
                           icon: LucideIcons.housePlus,
-                          title: 'Đăng chỗ nghỉ & Đón khách',
+                          title: 'Đăng chỗ nghỉ',
                           description:
-                              'Sau khi được duyệt, truy cập Host Portal để tạo chỗ nghỉ, tải ảnh lên R2, phân tích nhãn AI và quản lý lịch đặt phòng.',
+                              'Mở khóa Host Portal để tạo chỗ nghỉ và đón khách.',
                         ),
                       ];
                       if (isWide) {
                         return Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(child: cards[0]),
+                            Expanded(
+                              child: _buildStepCard(
+                                step: steps[0].step,
+                                icon: steps[0].icon,
+                                title: steps[0].title,
+                                description: steps[0].description,
+                              ),
+                            ),
                             const SizedBox(width: AppSpacing.s16),
-                            Expanded(child: cards[1]),
+                            Expanded(
+                              child: _buildStepCard(
+                                step: steps[1].step,
+                                icon: steps[1].icon,
+                                title: steps[1].title,
+                                description: steps[1].description,
+                              ),
+                            ),
                             const SizedBox(width: AppSpacing.s16),
-                            Expanded(child: cards[2]),
+                            Expanded(
+                              child: _buildStepCard(
+                                step: steps[2].step,
+                                icon: steps[2].icon,
+                                title: steps[2].title,
+                                description: steps[2].description,
+                              ),
+                            ),
                           ],
                         );
                       }
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          cards[0],
-                          const SizedBox(height: AppSpacing.s12),
-                          cards[1],
-                          const SizedBox(height: AppSpacing.s12),
-                          cards[2],
-                        ],
+                      return Container(
+                        padding: const EdgeInsets.all(AppSpacing.s16),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceBase,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: AppColors.borderSoft),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildCompactStepRow(
+                              step: steps[0].step,
+                              icon: steps[0].icon,
+                              title: steps[0].title,
+                              description: steps[0].description,
+                            ),
+                            const Divider(
+                              height: AppSpacing.s24,
+                              color: AppColors.borderSoft,
+                            ),
+                            _buildCompactStepRow(
+                              step: steps[1].step,
+                              icon: steps[1].icon,
+                              title: steps[1].title,
+                              description: steps[1].description,
+                            ),
+                            const Divider(
+                              height: AppSpacing.s24,
+                              color: AppColors.borderSoft,
+                            ),
+                            _buildCompactStepRow(
+                              step: steps[2].step,
+                              icon: steps[2].icon,
+                              title: steps[2].title,
+                              description: steps[2].description,
+                            ),
+                          ],
+                        ),
                       );
                     },
                   ),
-                  const SizedBox(height: AppSpacing.s24),
+                  const SizedBox(height: AppSpacing.s16),
                   _buildRequirementsCard(),
                 ],
               ),
@@ -297,106 +348,158 @@ class _TroThanhHostLandingScreenState
   ) {
     final isAlreadyHost = status == HostApplicationStatus.approved;
 
+    final Widget primaryCta;
+    if (!isAuthenticated) {
+      primaryCta = _PillCtaButton.primary(
+        key: const Key('host_landing_login_btn'),
+        icon: LucideIcons.logIn,
+        label: 'Đăng nhập để đăng ký Host',
+        onPressed: () => _navigateToRoute(context, '/dang-nhap'),
+      );
+    } else if (isAlreadyHost) {
+      primaryCta = _PillCtaButton.primary(
+        key: const Key('host_landing_portal_btn'),
+        icon: LucideIcons.layoutDashboard,
+        label: 'Vào bảng điều khiển Host',
+        onPressed: () => _navigateToRoute(context, '/host', replace: true),
+      );
+    } else if (status == HostApplicationStatus.pending) {
+      primaryCta = _PillCtaButton.primary(
+        key: const Key('host_landing_pending_status_btn'),
+        icon: LucideIcons.clock,
+        label: 'Xem hồ sơ đang chờ duyệt',
+        onPressed: () =>
+            _navigateToRoute(context, '/tro-thanh-host/trang-thai'),
+      );
+    } else if (status == HostApplicationStatus.revoked) {
+      primaryCta = _PillCtaButton.primary(
+        key: const Key('host_landing_revoked_status_btn'),
+        icon: LucideIcons.shieldAlert,
+        label: 'Xem thông báo thu hồi quyền Host',
+        onPressed: () =>
+            _navigateToRoute(context, '/tro-thanh-host/trang-thai'),
+      );
+    } else {
+      primaryCta = _PillCtaButton.primary(
+        key: const Key('host_landing_register_btn'),
+        icon: LucideIcons.filePlus,
+        label: status == HostApplicationStatus.rejected ||
+                status == HostApplicationStatus.supplementRequired
+            ? 'Cập nhật & nộp lại hồ sơ'
+            : 'Đăng ký làm Host ngay',
+        onPressed: () => _navigateToRoute(context, '/tro-thanh-host/dang-ky'),
+      );
+    }
+
+    final Widget? secondaryCta = isAuthenticated
+        ? _PillCtaButton.secondary(
+            key: const Key('host_landing_check_status_btn'),
+            icon: LucideIcons.fileSearch,
+            label: 'Kiểm tra trạng thái',
+            onPressed: () =>
+                _navigateToRoute(context, '/tro-thanh-host/trang-thai'),
+          )
+        : null;
+
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.s24),
+      padding: const EdgeInsets.all(AppSpacing.s20),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(
-                LucideIcons.building2,
-                size: 20,
-                color: AppColors.iconStrong,
-              ),
-              const SizedBox(width: AppSpacing.s8),
-              Expanded(
-                child: Text(
-                  'ĐỐI TÁC CHỦ NHÀ VŨNG TÀU',
-                  style: AppTypography.caption.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.6,
-                    color: AppColors.textStrong,
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.s12,
+              vertical: 6,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceBase,
+              borderRadius: BorderRadius.circular(AppRadii.pill),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  LucideIcons.building2,
+                  size: 15,
+                  color: AppColors.iconStrong,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    'ĐỐI TÁC CHỦ NHÀ VŨNG TÀU',
+                    style: AppTypography.caption.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                      color: AppColors.textStrong,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: AppSpacing.s12),
           Text(
-            'Chia sẻ không gian nghỉ dưỡng và tối ưu doanh thu cho thuê',
-            style: AppTypography.displayMedium.copyWith(
+            'Cho thuê chỗ nghỉ & tối ưu doanh thu',
+            style: AppTypography.sectionHeading.copyWith(
+              fontSize: 22,
               color: AppColors.textStrong,
             ),
           ),
-          const SizedBox(height: AppSpacing.s8),
+          const SizedBox(height: 6),
           Text(
-            'Quản lý tập trung chỗ nghỉ, lịch trống, giá theo ngày, phân tích ảnh bằng AI, đối soát doanh thu và thanh toán minh bạch.',
+            'Quản lý lịch trống, giá theo ngày và đối soát minh bạch trên một nền tảng.',
             style: AppTypography.bodyMedium.copyWith(
               color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(height: AppSpacing.s20),
-          Wrap(
-            spacing: AppSpacing.s12,
-            runSpacing: AppSpacing.s12,
+          const SizedBox(height: AppSpacing.s12),
+          const Wrap(
+            spacing: AppSpacing.s8,
+            runSpacing: AppSpacing.s8,
             children: [
-              if (!isAuthenticated)
-                _PillCtaButton.primary(
-                  key: const Key('host_landing_login_btn'),
-                  icon: LucideIcons.logIn,
-                  label: 'Đăng nhập để đăng ký Host',
-                  onPressed: () => _navigateToRoute(context, '/dang-nhap'),
-                )
-              else if (isAlreadyHost)
-                _PillCtaButton.primary(
-                  key: const Key('host_landing_portal_btn'),
-                  icon: LucideIcons.layoutDashboard,
-                  label: 'Vào bảng điều khiển Host',
-                  onPressed: () =>
-                      _navigateToRoute(context, '/host', replace: true),
-                )
-              else if (status == HostApplicationStatus.pending)
-                _PillCtaButton.primary(
-                  key: const Key('host_landing_pending_status_btn'),
-                  icon: LucideIcons.clock,
-                  label: 'Xem hồ sơ đang chờ duyệt',
-                  onPressed: () =>
-                      _navigateToRoute(context, '/tro-thanh-host/trang-thai'),
-                )
-              else if (status == HostApplicationStatus.revoked)
-                _PillCtaButton.primary(
-                  key: const Key('host_landing_revoked_status_btn'),
-                  icon: LucideIcons.shieldAlert,
-                  label: 'Xem thông báo thu hồi quyền Host',
-                  onPressed: () =>
-                      _navigateToRoute(context, '/tro-thanh-host/trang-thai'),
-                )
-              else
-                _PillCtaButton.primary(
-                  key: const Key('host_landing_register_btn'),
-                  icon: LucideIcons.filePlus,
-                  label: status == HostApplicationStatus.rejected ||
-                          status == HostApplicationStatus.supplementRequired
-                      ? 'Cập nhật & nộp lại hồ sơ'
-                      : 'Đăng ký làm Host ngay',
-                  onPressed: () =>
-                      _navigateToRoute(context, '/tro-thanh-host/dang-ky'),
-                ),
-              if (isAuthenticated)
-                _PillCtaButton.secondary(
-                  key: const Key('host_landing_check_status_btn'),
-                  icon: LucideIcons.fileSearch,
-                  label: 'Kiểm tra trạng thái',
-                  onPressed: () =>
-                      _navigateToRoute(context, '/tro-thanh-host/trang-thai'),
-                ),
+              _HeroHighlightTag(
+                icon: LucideIcons.calendarCheck,
+                label: 'Lịch & giá theo ngày',
+              ),
+              _HeroHighlightTag(
+                icon: LucideIcons.image,
+                label: 'Quản lý hình ảnh',
+              ),
+              _HeroHighlightTag(
+                icon: LucideIcons.wallet,
+                label: 'Thanh toán minh bạch',
+              ),
             ],
+          ),
+          const SizedBox(height: AppSpacing.s16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 460) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    primaryCta,
+                    if (secondaryCta != null) ...[
+                      const SizedBox(height: AppSpacing.s8),
+                      secondaryCta,
+                    ],
+                  ],
+                );
+              }
+              return Wrap(
+                spacing: AppSpacing.s12,
+                runSpacing: AppSpacing.s12,
+                children: [
+                  primaryCta,
+                  if (secondaryCta != null) secondaryCta,
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -408,12 +511,12 @@ class _TroThanhHostLandingScreenState
     HostApplicationRecord record,
   ) {
     final status = record.status;
-    Color bgColor = AppColors.surfaceWarmSand;
+    Color bgColor = AppColors.surfaceBase;
     Color borderColor = AppColors.border;
     IconData icon = LucideIcons.info;
 
     if (status == HostApplicationStatus.pending) {
-      bgColor = AppColors.warningSoft;
+      bgColor = AppColors.surfaceBase;
       icon = LucideIcons.clock;
     } else if (status == HostApplicationStatus.approved) {
       bgColor = AppColors.successSoft;
@@ -423,7 +526,7 @@ class _TroThanhHostLandingScreenState
       bgColor = AppColors.errorSoft;
       icon = LucideIcons.circleX;
     } else if (status == HostApplicationStatus.supplementRequired) {
-      bgColor = AppColors.warningSoft;
+      bgColor = AppColors.surfaceBase;
       icon = LucideIcons.fileWarning;
     }
 
@@ -467,6 +570,65 @@ class _TroThanhHostLandingScreenState
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCompactStepRow({
+    required String step,
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceBase,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          alignment: Alignment.center,
+          child: Icon(icon, size: 18, color: AppColors.iconStrong),
+        ),
+        const SizedBox(width: AppSpacing.s12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: AppTypography.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textStrong,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s8),
+                  Text(
+                    step,
+                    style: AppTypography.caption.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -521,45 +683,102 @@ class _TroThanhHostLandingScreenState
 
   Widget _buildRequirementsCard() {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.s24),
+      padding: const EdgeInsets.all(AppSpacing.s16),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.borderSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Hồ sơ xác minh danh tính (KYC) cần chuẩn bị',
-            style: AppTypography.cardTitle.copyWith(
-              fontWeight: FontWeight.w700,
-              color: AppColors.textStrong,
-            ),
+          Row(
+            children: [
+              const Icon(
+                LucideIcons.fileCheck,
+                size: 18,
+                color: AppColors.iconStrong,
+              ),
+              const SizedBox(width: AppSpacing.s8),
+              Expanded(
+                child: Text(
+                  'Giấy tờ cần chuẩn bị',
+                  style: AppTypography.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textStrong,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.s8,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceBase,
+                  borderRadius: BorderRadius.circular(AppRadii.pill),
+                ),
+                child: Text(
+                  '<= 5MB/tệp',
+                  style: AppTypography.caption.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textStrong,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.s12),
           const _RequirementRow(
-            text: 'CCCD hoặc CMND: Bắt buộc ảnh mặt trước và mặt sau rõ nét.',
+            text: 'Cá nhân: CCCD/CMND (2 mặt), Hộ chiếu hoặc GPLX.',
           ),
-          const SizedBox(height: AppSpacing.s8),
+          const SizedBox(height: 6),
           const _RequirementRow(
-            text:
-                'Hộ chiếu (Passport): 1 tệp ảnh hoặc PDF trang thông tin cá nhân.',
+            text: 'Doanh nghiệp / Hộ KD: Kèm Giấy phép kinh doanh.',
           ),
-          const SizedBox(height: AppSpacing.s8),
+          const SizedBox(height: 6),
           const _RequirementRow(
-            text:
-                'Giấy phép lái xe (GPLX): Bắt buộc mặt trước, mặt sau tùy chọn.',
+            text: 'Định dạng: Ảnh JPG, PNG, WebP hoặc tài liệu PDF rõ nét.',
           ),
-          const SizedBox(height: AppSpacing.s8),
-          const _RequirementRow(
-            text:
-                'Đối với Doanh nghiệp / Hộ kinh doanh: Bắt buộc đính kèm Giấy phép kinh doanh.',
-          ),
-          const SizedBox(height: AppSpacing.s8),
-          const _RequirementRow(
-            text:
-                'Định dạng hỗ trợ: JPG, PNG, WebP hoặc PDF. Dung lượng tối đa 5MB mỗi tệp.',
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroHighlightTag extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _HeroHighlightTag({
+    required this.icon,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.s12,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: AppColors.iconStrong),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              style: AppTypography.caption.copyWith(
+                fontWeight: FontWeight.w600,
+                color: AppColors.textStrong,
+              ),
+            ),
           ),
         ],
       ),
@@ -580,7 +799,7 @@ class _RequirementRow extends StatelessWidget {
           padding: EdgeInsets.only(top: 2),
           child: Icon(
             LucideIcons.check,
-            size: 16,
+            size: 14,
             color: AppColors.iconStrong,
           ),
         ),
@@ -588,7 +807,7 @@ class _RequirementRow extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: AppTypography.bodyMedium.copyWith(
+            style: AppTypography.caption.copyWith(
               color: AppColors.textSecondary,
             ),
           ),
@@ -1444,7 +1663,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
               _navigateBackOrHome(context, fallbackPath: '/tro-thanh-host'),
         ),
         title: Text(
-          'Đăng ký Host & Xác minh KYC',
+          'Đăng ký Host',
           style: AppTypography.cardTitle.copyWith(
             fontWeight: FontWeight.w700,
             color: AppColors.textStrong,
@@ -1482,7 +1701,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                               key: const Key('kyc_initial_load_error_banner'),
                               message: _initialLoadError!,
                               borderColor: AppColors.border,
-                              bgColor: AppColors.warningSoft,
+                              bgColor: AppColors.surfaceBase,
                               textColor: AppColors.textStrong,
                               icon: LucideIcons.circleAlert,
                               retryKey: const Key('kyc_initial_load_retry_btn'),
@@ -1496,39 +1715,37 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                             _buildAlertBanner(
                               key: const Key('kyc_revoked_banner'),
                               message:
-                                  'Quyền Chủ nhà (Host) của tài khoản này đã bị thu hồi (${_existingApplication!.status.labelVi}). ${_existingApplication!.rejectReason ?? ''}',
+                                  'Quyền Host đã bị thu hồi (${_existingApplication!.status.labelVi}). ${_existingApplication!.rejectReason ?? ''}',
                               borderColor: AppColors.border,
                               bgColor: AppColors.errorSoft,
                               textColor: AppColors.textStrong,
                               icon: LucideIcons.shieldAlert,
                             ),
-                            const SizedBox(height: AppSpacing.s16),
+                            const SizedBox(height: AppSpacing.s12),
                           ] else if (_existingApplication != null &&
                               _existingApplication!.status ==
                                   HostApplicationStatus.pending) ...[
                             _buildAlertBanner(
                               key: const Key('kyc_existing_status_banner'),
                               message:
-                                  'Hồ sơ của bạn hiện đang ở trạng thái: ${_existingApplication!.status.labelVi}. Không tự chuyển sang Đã phê duyệt khi chưa có xác nhận từ Admin.',
+                                  'Hồ sơ hiện tại: ${_existingApplication!.status.labelVi} (chờ Admin duyệt).',
                               borderColor: AppColors.border,
-                              bgColor: AppColors.warningSoft,
+                              bgColor: AppColors.surfaceBase,
                               textColor: AppColors.textStrong,
                               icon: LucideIcons.clock,
                             ),
-                            const SizedBox(height: AppSpacing.s16),
+                            const SizedBox(height: AppSpacing.s12),
                           ],
                           if (_draftRestoredNotice) ...[
                             _buildAlertBanner(
                               key: const Key('kyc_draft_restored_banner'),
-                              message: _consentToSaveContactDraft
-                                  ? 'Đã khôi phục bản nháp thông tin liên hệ theo sự đồng ý của bạn (không lưu tệp giấy tờ nhạy cảm).'
-                                  : 'Đã khôi phục tùy chọn loại hình từ bản nháp (dữ liệu cá nhân nhạy cảm không được lưu khi chưa có sự đồng ý).',
+                              message: 'Đã khôi phục bản nháp gần nhất.',
                               borderColor: AppColors.borderSoft,
-                              bgColor: AppColors.surfaceWarmSand,
+                              bgColor: AppColors.surfaceBase,
                               textColor: AppColors.textStrong,
                               icon: LucideIcons.fileClock,
                             ),
-                            const SizedBox(height: AppSpacing.s16),
+                            const SizedBox(height: AppSpacing.s12),
                           ],
                           if (_errorMessage != null) ...[
                             _buildAlertBanner(
@@ -1541,7 +1758,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                               retryKey: const Key('kyc_submit_retry_btn'),
                               onRetry: _submitting ? null : _submitApplication,
                             ),
-                            const SizedBox(height: AppSpacing.s16),
+                            const SizedBox(height: AppSpacing.s12),
                           ],
                           if (_successMessage != null) ...[
                             _buildAlertBanner(
@@ -1552,28 +1769,28 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                               textColor: AppColors.textStrong,
                               icon: LucideIcons.circleCheck,
                             ),
-                            const SizedBox(height: AppSpacing.s16),
+                            const SizedBox(height: AppSpacing.s12),
                           ],
                           _buildContactSection(),
-                          const SizedBox(height: AppSpacing.s20),
+                          const SizedBox(height: AppSpacing.s16),
                           _buildDocumentSection(),
-                          const SizedBox(height: AppSpacing.s20),
+                          const SizedBox(height: AppSpacing.s16),
                           _buildPrivacyAndDraftCard(),
                           if (_submitting && _uploadProgress != null) ...[
-                            const SizedBox(height: AppSpacing.s16),
+                            const SizedBox(height: AppSpacing.s12),
                             Container(
                               key: const Key('kyc_upload_progress_card'),
-                              padding: const EdgeInsets.all(AppSpacing.s20),
+                              padding: const EdgeInsets.all(AppSpacing.s16),
                               decoration: BoxDecoration(
                                 color: AppColors.surfaceBase,
-                                borderRadius: BorderRadius.circular(24),
+                                borderRadius: BorderRadius.circular(18),
                                 border: Border.all(color: AppColors.border),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Đang tải hồ sơ lên máy chủ (${(_uploadProgress! * 100).toStringAsFixed(0)}%)...',
+                                    'Đang tải lên (${(_uploadProgress! * 100).toStringAsFixed(0)}%)...',
                                     style: AppTypography.bodyMedium.copyWith(
                                       fontWeight: FontWeight.w600,
                                       color: AppColors.textStrong,
@@ -1595,7 +1812,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                               ),
                             ),
                           ],
-                          const SizedBox(height: AppSpacing.s24),
+                          const SizedBox(height: AppSpacing.s20),
                           Wrap(
                             alignment: WrapAlignment.end,
                             spacing: AppSpacing.s12,
@@ -1617,7 +1834,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                                 icon: LucideIcons.send,
                                 label: _submitting
                                     ? 'Đang gửi hồ sơ...'
-                                    : 'Nộp hồ sơ xác minh',
+                                    : 'Gửi hồ sơ',
                                 onPressed:
                                     _submitting ? null : _submitApplication,
                               ),
@@ -1647,11 +1864,13 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
     return Container(
       key: const Key('kyc_step_header'),
-      padding: const EdgeInsets.all(AppSpacing.s16),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.s12,
+        vertical: AppSpacing.s8,
+      ),
       decoration: BoxDecoration(
-        color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.borderSoft),
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Wrap(
         spacing: AppSpacing.s8,
@@ -1659,21 +1878,21 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
         children: [
           _StepPillChip(
             stepNumber: '1',
-            label: 'Thông tin liên hệ',
+            label: 'Liên hệ',
             isActive: _activeStepIndex == 0,
             isCompleted: step1Done,
             onTap: () => setState(() => _activeStepIndex = 0),
           ),
           _StepPillChip(
             stepNumber: '2',
-            label: 'Chứng từ KYC',
+            label: 'Giấy tờ',
             isActive: _activeStepIndex == 1,
             isCompleted: step2Done,
             onTap: () => setState(() => _activeStepIndex = 1),
           ),
           _StepPillChip(
             stepNumber: '3',
-            label: 'Xác nhận & Gửi duyệt',
+            label: 'Gửi duyệt',
             isActive: _activeStepIndex == 2,
             isCompleted: _successMessage != null,
             onTap: () => setState(() => _activeStepIndex = 2),
@@ -1685,26 +1904,30 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
   Widget _buildContactSection() {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.s24),
+      padding: const EdgeInsets.all(AppSpacing.s20),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '1. Thông tin liên hệ & Chủ thể kinh doanh',
+            '1. Thông tin liên hệ',
             style: AppTypography.cardTitle.copyWith(
               fontWeight: FontWeight.w700,
               color: AppColors.textStrong,
             ),
           ),
-          const SizedBox(height: AppSpacing.s16),
+          const SizedBox(height: AppSpacing.s12),
           TextFormField(
             key: const Key('kyc_contact_name_input'),
             controller: _nameController,
+            style: AppTypography.bodyMedium.copyWith(
+              color: AppColors.textStrong,
+              fontWeight: FontWeight.w500,
+            ),
             textInputAction: TextInputAction.next,
             autofillHints: const [AutofillHints.name],
             onChanged: (_) {
@@ -1721,18 +1944,22 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                 _fieldServerErrors['contactName'] ??
                 HostOnboardingValidator.validateContactName(val),
             decoration: _pillInputDecoration(
-              label: 'Họ và tên người liên hệ *',
-              hint: 'Ví dụ: Nguyễn Văn A',
+              label: 'Họ và tên *',
+              hint: 'Nguyễn Văn A',
               errorText: _fieldServerErrors['contactName'],
             ),
           ),
-          const SizedBox(height: AppSpacing.s16),
+          const SizedBox(height: AppSpacing.s12),
           LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth >= 520;
               final emailField = TextFormField(
                 key: const Key('kyc_contact_email_input'),
                 controller: _emailController,
+                style: AppTypography.bodyMedium.copyWith(
+                  color: AppColors.textStrong,
+                  fontWeight: FontWeight.w500,
+                ),
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
                 autofillHints: const [AutofillHints.email],
@@ -1750,7 +1977,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                     _fieldServerErrors['contactEmail'] ??
                     HostOnboardingValidator.validateContactEmail(val),
                 decoration: _pillInputDecoration(
-                  label: 'Email liên hệ',
+                  label: 'Email',
                   hint: 'host@example.com',
                   errorText: _fieldServerErrors['contactEmail'],
                 ),
@@ -1758,6 +1985,10 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
               final phoneField = TextFormField(
                 key: const Key('kyc_phone_input'),
                 controller: _phoneController,
+                style: AppTypography.bodyMedium.copyWith(
+                  color: AppColors.textStrong,
+                  fontWeight: FontWeight.w500,
+                ),
                 keyboardType: TextInputType.phone,
                 textInputAction: TextInputAction.next,
                 autofillHints: const [AutofillHints.telephoneNumber],
@@ -1776,7 +2007,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                     HostOnboardingValidator.validatePhone(val),
                 decoration: _pillInputDecoration(
                   label: 'Số điện thoại *',
-                  hint: '0901234567 hoặc +84901234567',
+                  hint: '0901234567',
                   errorText: _fieldServerErrors['phone'],
                 ),
               );
@@ -1785,7 +2016,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(child: emailField),
-                    const SizedBox(width: AppSpacing.s16),
+                    const SizedBox(width: AppSpacing.s12),
                     Expanded(child: phoneField),
                   ],
                 );
@@ -1794,24 +2025,23 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   emailField,
-                  const SizedBox(height: AppSpacing.s16),
+                  const SizedBox(height: AppSpacing.s12),
                   phoneField,
                 ],
               );
             },
           ),
-          const SizedBox(height: AppSpacing.s16),
+          const SizedBox(height: AppSpacing.s12),
           InputDecorator(
             decoration: _pillInputDecoration(
-              label: 'Loại hình đăng ký *',
+              label: 'Loại hình *',
               errorText: _fieldServerErrors['profileType'],
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<HostProfileType>(
                 key: const Key('kyc_profile_type_dropdown'),
                 isExpanded: true,
-                isDense: false,
-                itemHeight: null,
+                isDense: true,
                 value: _profileType,
                 items: HostProfileType.values
                     .map(
@@ -1819,7 +2049,9 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                         value: item,
                         child: Text(
                           item.labelVi,
-                          style: AppTypography.bodyMedium,
+                          style: AppTypography.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
                           softWrap: true,
                         ),
                       ),
@@ -1829,11 +2061,16 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
               ),
             ),
           ),
-          const SizedBox(height: AppSpacing.s16),
+          const SizedBox(height: AppSpacing.s12),
           TextFormField(
             key: const Key('kyc_business_address_input'),
             controller: _addressController,
+            style: AppTypography.bodyMedium.copyWith(
+              color: AppColors.textStrong,
+              fontWeight: FontWeight.w500,
+            ),
             maxLines: 2,
+            minLines: 1,
             textInputAction: TextInputAction.next,
             autofillHints: const [AutofillHints.fullStreetAddress],
             onChanged: (_) {
@@ -1850,16 +2087,21 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                 _fieldServerErrors['businessAddress'] ??
                 HostOnboardingValidator.validateBusinessAddress(val),
             decoration: _multilineInputDecoration(
-              label: 'Địa chỉ kinh doanh / Chỗ nghỉ tại Vũng Tàu *',
-              hint: 'Ví dụ: 164B Phan Chu Trinh, Phường 2, TP. Vũng Tàu',
+              label: 'Địa chỉ chỗ nghỉ *',
+              hint: '164B Phan Chu Trinh, P.2, TP. Vũng Tàu',
               errorText: _fieldServerErrors['businessAddress'],
             ),
           ),
-          const SizedBox(height: AppSpacing.s16),
+          const SizedBox(height: AppSpacing.s12),
           TextFormField(
             key: const Key('kyc_note_input'),
             controller: _noteController,
-            maxLines: 3,
+            style: AppTypography.bodyMedium.copyWith(
+              color: AppColors.textStrong,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 2,
+            minLines: 1,
             textInputAction: TextInputAction.done,
             onChanged: (_) {
               if (_fieldServerErrors.containsKey('note')) {
@@ -1875,8 +2117,8 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                 _fieldServerErrors['note'] ??
                 HostOnboardingValidator.validateNote(val),
             decoration: _multilineInputDecoration(
-              label: 'Ghi chú / Giới thiệu thêm (không bắt buộc)',
-              hint: 'Thông tin bổ sung về quy mô chỗ nghỉ của bạn...',
+              label: 'Ghi chú (tùy chọn)',
+              hint: 'Quy mô chỗ nghỉ, số phòng...',
               errorText: _fieldServerErrors['note'],
             ),
           ),
@@ -1887,17 +2129,17 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
   Widget _buildDocumentSection() {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.s24),
+      padding: const EdgeInsets.all(AppSpacing.s20),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '2. Giấy tờ định danh & Pháp lý (Tệp thật từ thiết bị)',
+            '2. Giấy tờ xác minh',
             style: AppTypography.cardTitle.copyWith(
               fontWeight: FontWeight.w700,
               color: AppColors.textStrong,
@@ -1905,21 +2147,20 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
           ),
           const SizedBox(height: AppSpacing.s4),
           const Text(
-            'Định dạng hỗ trợ: JPG, PNG, WebP hoặc PDF. Tối đa 5MB mỗi tệp.',
-            style: AppTypography.bodyMuted,
+            'JPG, PNG, WebP hoặc PDF (tối đa 5MB/tệp).',
+            style: AppTypography.caption,
           ),
-          const SizedBox(height: AppSpacing.s16),
+          const SizedBox(height: AppSpacing.s12),
           InputDecorator(
             decoration: _pillInputDecoration(
-              label: 'Loại giấy tờ định danh *',
+              label: 'Loại giấy tờ *',
               errorText: _fieldServerErrors['documentType'],
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<HostDocumentType>(
                 key: const Key('kyc_document_type_dropdown'),
                 isExpanded: true,
-                isDense: false,
-                itemHeight: null,
+                isDense: true,
                 value: _documentType,
                 items: HostDocumentType.values
                     .map(
@@ -1927,7 +2168,9 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                         value: item,
                         child: Text(
                           item.labelVi,
-                          style: AppTypography.bodyMedium,
+                          style: AppTypography.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
                           softWrap: true,
                         ),
                       ),
@@ -1937,28 +2180,28 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
               ),
             ),
           ),
-          const SizedBox(height: AppSpacing.s16),
+          const SizedBox(height: AppSpacing.s12),
           if (_documentType == HostDocumentType.passport) ...[
             _buildFileSlotCard(
               slotKey: 'identitySingle',
-              title: 'Ảnh / PDF Hộ chiếu (Passport) *',
-              subtitle: 'Trang thông tin có ảnh và số hộ chiếu rõ nét.',
+              title: 'Ảnh / PDF Hộ chiếu *',
+              subtitle: 'Trang thông tin có ảnh rõ nét.',
               pickedFile: _identitySingle,
             ),
           ] else ...[
             _buildFileSlotCard(
               slotKey: 'identityFront',
-              title: 'Ảnh mặt trước ${_documentType.labelVi} *',
-              subtitle: 'Chụp rõ nét toàn bộ mặt trước, không bị lóa sáng.',
+              title: 'Mặt trước ${_documentType.labelVi} *',
+              subtitle: 'Rõ nét, không lóa sáng.',
               pickedFile: _identityFront,
             ),
             const SizedBox(height: AppSpacing.s12),
             _buildFileSlotCard(
               slotKey: 'identityBack',
               title: _documentType == HostDocumentType.driverLicense
-                  ? 'Ảnh mặt sau GPLX (Tùy chọn)'
-                  : 'Ảnh mặt sau ${_documentType.labelVi} *',
-              subtitle: 'Chụp rõ nét mặt sau giấy tờ định danh.',
+                  ? 'Mặt sau GPLX (tùy chọn)'
+                  : 'Mặt sau ${_documentType.labelVi} *',
+              subtitle: 'Rõ nét mặt sau.',
               pickedFile: _identityBack,
             ),
           ],
@@ -1966,9 +2209,8 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
             const SizedBox(height: AppSpacing.s12),
             _buildFileSlotCard(
               slotKey: 'businessLicense',
-              title: 'Giấy phép đăng ký kinh doanh *',
-              subtitle:
-                  'Bắt buộc đối với hồ sơ Doanh nghiệp / Hộ kinh doanh (Ảnh hoặc PDF).',
+              title: 'Giấy phép kinh doanh *',
+              subtitle: 'Ảnh hoặc PDF bản gốc/sao y.',
               pickedFile: _businessLicense,
             ),
           ],
@@ -1989,14 +2231,16 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
     return Container(
       key: Key('kyc_slot_$slotKey'),
-      padding: const EdgeInsets.all(AppSpacing.s20),
+      padding: const EdgeInsets.all(AppSpacing.s16),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: slotError != null
               ? AppColors.error
-              : (pickedFile != null ? AppColors.textStrong : AppColors.border),
+              : (pickedFile != null
+                  ? AppColors.textStrong
+                  : AppColors.borderSoft),
           width: pickedFile != null || slotError != null ? 1.5 : 1.0,
         ),
       ),
@@ -2017,7 +2261,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                         color: AppColors.textStrong,
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.s4),
+                    const SizedBox(height: 2),
                     Text(
                       subtitle,
                       style: AppTypography.caption.copyWith(
@@ -2040,7 +2284,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.s12),
+          const SizedBox(height: AppSpacing.s8),
           if (pickedFile == null)
             Wrap(
               spacing: AppSpacing.s8,
@@ -2049,7 +2293,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                 _PillCtaButton.secondary(
                   key: Key('kyc_pick_btn_$slotKey'),
                   icon: LucideIcons.upload,
-                  label: 'Chọn tệp từ thiết bị',
+                  label: 'Chọn tệp',
                   onPressed: _submitting
                       ? null
                       : () => _pickFileForSlot(
@@ -2065,18 +2309,18 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
               children: [
                 if (pickedFile.isImage)
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(14),
                     child: Image.memory(
                       pickedFile.bytes,
-                      height: 150,
+                      height: 132,
                       width: double.infinity,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
-                        height: 88,
+                        height: 76,
                         alignment: Alignment.center,
                         color: AppColors.surfaceMuted,
                         child: Text(
-                          'Đã chọn tệp ảnh (${pickedFile.formattedSize})',
+                          'Đã chọn ảnh (${pickedFile.formattedSize})',
                           style: AppTypography.caption,
                         ),
                       ),
@@ -2085,20 +2329,20 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                 else
                   Container(
                     key: Key('kyc_pdf_preview_$slotKey'),
-                    padding: const EdgeInsets.all(AppSpacing.s16),
+                    padding: const EdgeInsets.all(AppSpacing.s12),
                     decoration: BoxDecoration(
                       color: AppColors.surfaceMuted,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: AppColors.borderSoft),
                     ),
                     child: Row(
                       children: [
                         const Icon(
                           LucideIcons.fileText,
-                          size: 20,
+                          size: 18,
                           color: AppColors.iconStrong,
                         ),
-                        const SizedBox(width: AppSpacing.s12),
+                        const SizedBox(width: AppSpacing.s8),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2110,9 +2354,8 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                                 ),
                                 softWrap: true,
                               ),
-                              const SizedBox(height: AppSpacing.s4),
                               Text(
-                                'Tài liệu PDF • ${pickedFile.formattedSize}',
+                                'PDF • ${pickedFile.formattedSize}',
                                 style: AppTypography.caption,
                               ),
                             ],
@@ -2121,7 +2364,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                       ],
                     ),
                   ),
-                const SizedBox(height: AppSpacing.s12),
+                const SizedBox(height: AppSpacing.s8),
                 Row(
                   children: [
                     const Icon(
@@ -2159,7 +2402,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Tiến độ tải tệp: ${(progress * 100).toStringAsFixed(0)}%',
+                        'Tiến độ: ${(progress * 100).toStringAsFixed(0)}%',
                         style: AppTypography.caption,
                       ),
                       const SizedBox(height: AppSpacing.s4),
@@ -2203,7 +2446,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                       _PillCtaButton.secondary(
                         key: Key('kyc_retry_btn_$slotKey'),
                         icon: LucideIcons.rotateCcw,
-                        label: 'Thử lại tệp này',
+                        label: 'Thử lại',
                         onPressed: _submitting
                             ? null
                             : () => _retrySingleFileSlot(
@@ -2216,13 +2459,13 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
               ],
             ),
           if (slotError != null) ...[
-            const SizedBox(height: AppSpacing.s12),
+            const SizedBox(height: AppSpacing.s8),
             Container(
               key: Key('kyc_slot_error_$slotKey'),
               padding: const EdgeInsets.all(AppSpacing.s12),
               decoration: BoxDecoration(
                 color: AppColors.errorSoft,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: AppColors.border),
               ),
               child: Row(
@@ -2267,45 +2510,21 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
   Widget _buildPrivacyAndDraftCard() {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.s20),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.s16,
+        vertical: AppSpacing.s12,
+      ),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.borderSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(
-                LucideIcons.shieldCheck,
-                size: 18,
-                color: AppColors.iconStrong,
-              ),
-              const SizedBox(width: AppSpacing.s8),
-              Expanded(
-                child: Text(
-                  'Bảo mật dữ liệu cá nhân & Lưu nháp',
-                  style: AppTypography.bodyMedium.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textStrong,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.s8),
-          Text(
-            'Tệp giấy tờ định danh (CCCD/Hộ chiếu/GPKD) được tải trực tiếp lên kho lưu trữ riêng tư qua kết nối bảo mật và không bao giờ lưu plaintext lâu dài trên thiết bị.',
-            style: AppTypography.caption.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.s8),
           InkWell(
             key: const Key('kyc_draft_consent_checkbox'),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
             onTap: _submitting
                 ? null
                 : () {
@@ -2321,6 +2540,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                   Checkbox(
                     value: _consentToSaveContactDraft,
                     activeColor: AppColors.primary,
+                    visualDensity: VisualDensity.compact,
                     onChanged: _submitting
                         ? null
                         : (val) {
@@ -2332,9 +2552,10 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                   ),
                   Expanded(
                     child: Text(
-                      'Tôi đồng ý lưu nháp tạm thời thông tin liên hệ trên thiết bị này (tự động xóa sau 24 giờ hoặc ngay khi nộp hồ sơ).',
+                      'Lưu nháp thông tin liên hệ trên máy (tự xóa sau 24 giờ)',
                       style: AppTypography.caption.copyWith(
                         color: AppColors.textStrong,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -2342,14 +2563,38 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
               ),
             ),
           ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: _PillCtaButton.secondary(
-              key: const Key('kyc_clear_draft_btn'),
-              icon: LucideIcons.eraser,
-              label: 'Xóa bản nháp trên máy',
-              onPressed: _submitting ? null : _handleClearDraft,
-            ),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpacing.s8,
+            runSpacing: AppSpacing.s8,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    LucideIcons.shieldCheck,
+                    size: 14,
+                    color: AppColors.iconMuted,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      'Chứng từ KYC được mã hóa riêng tư.',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              _PillCtaButton.secondary(
+                key: const Key('kyc_clear_draft_btn'),
+                icon: LucideIcons.eraser,
+                label: 'Xóa nháp',
+                onPressed: _submitting ? null : _handleClearDraft,
+              ),
+            ],
           ),
         ],
       ),
@@ -2361,35 +2606,49 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
     String? hint,
     String? errorText,
   }) {
+    final radius = BorderRadius.circular(14);
     return InputDecoration(
       labelText: label,
       hintText: hint,
       errorText: errorText,
-      errorMaxLines: 3,
+      errorMaxLines: 2,
+      isDense: true,
       filled: true,
       fillColor: AppColors.surfaceBase,
+      labelStyle: AppTypography.bodyMedium.copyWith(
+        color: AppColors.textSecondary,
+        fontWeight: FontWeight.w400,
+      ),
+      floatingLabelStyle: AppTypography.caption.copyWith(
+        color: AppColors.textSecondary,
+        fontWeight: FontWeight.w600,
+      ),
+      hintStyle: AppTypography.bodyMedium.copyWith(
+        color: AppColors.textTertiary,
+        fontWeight: FontWeight.w400,
+      ),
       contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.s20,
-        vertical: AppSpacing.s16,
+        horizontal: AppSpacing.s16,
+        vertical: 14,
       ),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadii.pill),
+        borderRadius: radius,
         borderSide: const BorderSide(color: AppColors.border),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadii.pill),
+        borderRadius: radius,
         borderSide: const BorderSide(color: AppColors.border),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadii.pill),
+        borderRadius: radius,
         borderSide: const BorderSide(color: AppColors.borderFocus, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadii.pill),
+        borderRadius: radius,
         borderSide: const BorderSide(color: AppColors.error),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadii.pill),
+        borderRadius: radius,
         borderSide: const BorderSide(color: AppColors.error, width: 1.5),
       ),
     );
@@ -2400,37 +2659,10 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
     String? hint,
     String? errorText,
   }) {
-    return InputDecoration(
-      labelText: label,
-      hintText: hint,
+    return _pillInputDecoration(
+      label: label,
+      hint: hint,
       errorText: errorText,
-      errorMaxLines: 3,
-      filled: true,
-      fillColor: AppColors.surfaceBase,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.s20,
-        vertical: AppSpacing.s16,
-      ),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(24),
-        borderSide: const BorderSide(color: AppColors.border),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(24),
-        borderSide: const BorderSide(color: AppColors.border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(24),
-        borderSide: const BorderSide(color: AppColors.borderFocus, width: 1.5),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(24),
-        borderSide: const BorderSide(color: AppColors.error),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(24),
-        borderSide: const BorderSide(color: AppColors.error, width: 1.5),
-      ),
     );
   }
 }
@@ -2643,7 +2875,7 @@ class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
               vertical: AppSpacing.s4,
             ),
             decoration: BoxDecoration(
-              color: AppColors.surfaceWarmSand,
+              color: AppColors.surfaceBase,
               borderRadius: BorderRadius.circular(AppRadii.pill),
               border: Border.all(color: AppColors.borderSoft),
             ),
@@ -3086,11 +3318,11 @@ class _StepPillChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadii.pill),
         onTap: onTap,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 48),
+          constraints: const BoxConstraints(minHeight: 36),
           child: Container(
             padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.s16,
-              vertical: AppSpacing.s8,
+              horizontal: AppSpacing.s12,
+              vertical: 6,
             ),
             decoration: BoxDecoration(
               color: bgColor,
@@ -3103,7 +3335,7 @@ class _StepPillChip extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (isCompleted) ...[
-                  Icon(LucideIcons.check, size: 16, color: fgColor),
+                  Icon(LucideIcons.check, size: 14, color: fgColor),
                   const SizedBox(width: AppSpacing.s4),
                 ],
                 Flexible(

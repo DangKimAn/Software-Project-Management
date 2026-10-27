@@ -379,7 +379,12 @@ final notificationsProvider =
 
 /// NotificationBell widget matching `NotificationBell.tsx` with strict monochrome icon rules.
 class NotificationBell extends ConsumerWidget {
-  const NotificationBell({super.key});
+  final bool isOverlayTop;
+
+  const NotificationBell({
+    super.key,
+    this.isOverlayTop = false,
+  });
 
   String _formatNotificationTime(String raw) {
     if (raw.trim().isEmpty) return '';
@@ -472,9 +477,7 @@ class NotificationBell extends ConsumerWidget {
                                     _navigateForNotification(context, item);
                                   },
                                   child: Container(
-                                    color: item.isRead
-                                        ? Colors.white
-                                        : AppColors.surfaceWarmSand,
+                                    color: Colors.white,
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 20,
                                       vertical: 14,
@@ -573,9 +576,6 @@ class NotificationBell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authNotifierProvider).valueOrNull;
-    if (user == null) return const SizedBox.shrink();
-
     final notifState = ref.watch(notificationsProvider);
 
     return Semantics(
@@ -587,20 +587,20 @@ class NotificationBell extends ConsumerWidget {
         highlightColor: Colors.transparent,
         hoverColor: Colors.transparent,
         child: SizedBox(
-          width: 48,
+          width: 40,
           height: 48,
           child: Stack(
             alignment: Alignment.center,
             children: [
-              const Icon(
+              Icon(
                 LucideIcons.bell,
                 size: 20,
-                color: AppColors.iconStrong,
+                color: isOverlayTop ? Colors.white : AppColors.iconStrong,
               ),
               if (notifState.unreadCount > 0)
                 Positioned(
                   top: 8,
-                  right: 6,
+                  right: 4,
                   child: Text(
                     notifState.unreadCount > 99
                         ? '99+'
@@ -636,67 +636,61 @@ class AppTopHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authUser = ref.watch(authNotifierProvider).valueOrNull;
-    List<dynamic> queueItems = const [];
-    try {
-      queueItems = ref.watch(bookingQueueProvider);
-    } catch (_) {
-      queueItems = const [];
-    }
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isDesktop = screenWidth >= 900;
-    final isCompactMobile = screenWidth < 380;
+    return LayoutBuilder(builder: (context, constraints) {
+      final screenWidth = constraints.maxWidth;
+      final isDesktop = screenWidth >= 900;
+      final isCompactMobile = screenWidth < 380;
 
-    return AnimatedContainer(
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        color: isOverlayTop ? Colors.transparent : Colors.white,
-        border: isOverlayTop
-            ? null
-            : const Border(
-                bottom: BorderSide(color: Color(0xFFE4E4E7), width: 1),
-              ),
-      ),
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 40 : (isCompactMobile ? 12 : 16),
-        vertical: 12,
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Center(
-          heightFactor: 1.0,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1440),
-            child: Row(
-              children: [
-                // Left: Brand Logo (`Header.tsx` -> `logo_mau.svg`)
-                Flexible(
-                  child: InkWell(
-                    onTap: () => context.go('/'),
-                    splashColor: Colors.transparent,
-                    highlightColor: Colors.transparent,
-                    hoverColor: Colors.transparent,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          AppBrandIcon.minhThanhLogo(
-                            size: 26,
-                            color: isOverlayTop
-                                ? Colors.white
-                                : AppColors.iconStrong,
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
+      return AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          color: isOverlayTop ? Colors.transparent : Colors.white,
+          border: isOverlayTop
+              ? null
+              : const Border(
+                  bottom: BorderSide(color: Color(0xFFE4E4E7), width: 1),
+                ),
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: isDesktop ? 40 : (isCompactMobile ? 12 : 16),
+          vertical: 12,
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Center(
+            heightFactor: 1.0,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1440),
+              child: Row(
+                children: [
+                  // Left: Brand Logo + "The Palm Villa"
+                  if (isDesktop)
+                    InkWell(
+                      onTap: () => context.go('/'),
+                      splashColor: Colors.transparent,
+                      highlightColor: Colors.transparent,
+                      hoverColor: Colors.transparent,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AppBrandIcon.minhThanhLogo(
+                              size: 26,
+                              color: isOverlayTop
+                                  ? Colors.white
+                                  : AppColors.iconStrong,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
                               'The Palm Villa',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: isCompactMobile ? 16 : 19,
+                                fontSize: 19,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: -0.4,
                                 color: isOverlayTop
@@ -704,216 +698,326 @@ class AppTopHeader extends ConsumerWidget {
                                     : AppColors.textPrimary,
                               ),
                             ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: InkWell(
+                          onTap: () => context.go('/'),
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          hoverColor: Colors.transparent,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(minHeight: 48),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                AppBrandIcon.minhThanhLogo(
+                                  size: 26,
+                                  color: isOverlayTop
+                                      ? Colors.white
+                                      : AppColors.iconStrong,
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    'The Palm Villa',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: isCompactMobile ? 16 : 19,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.4,
+                                      color: isOverlayTop
+                                          ? Colors.white
+                                          : AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
 
-                if (isDesktop) const Spacer(),
-
-                // Center: 4 Navigation Links (`Navbar.tsx`) or Compact Search Trigger
-                if (centerSearchTrigger != null && isDesktop)
-                  centerSearchTrigger!
-                else if (isDesktop)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _NavTextLink(
-                        label: 'Trang chủ',
-                        isActive: currentPath == '/',
-                        isOverlayTop: isOverlayTop,
-                        onTap: () => context.go('/'),
-                      ),
-                      const SizedBox(width: 32),
-                      _NavTextLink(
-                        label: 'Nơi lưu trú',
-                        isActive: currentPath.startsWith('/search') ||
-                            currentPath.startsWith('/tim-kiem') ||
-                            currentPath.startsWith('/noi-luu-tru') ||
-                            currentPath.startsWith('/villas'),
-                        isOverlayTop: isOverlayTop,
-                        onTap: () => context.push('/tim-kiem'),
-                      ),
-                      const SizedBox(width: 32),
-                      _NavTextLink(
-                        label: 'Blog',
-                        isActive: currentPath.startsWith('/blog') ||
-                            currentPath.startsWith('/cam-nang'),
-                        isOverlayTop: isOverlayTop,
-                        onTap: () => context.push('/cam-nang'),
-                      ),
-                      const SizedBox(width: 32),
-                      _NavTextLink(
-                        label: 'Liên hệ',
-                        isActive: currentPath.startsWith('/lien-he'),
-                        isOverlayTop: isOverlayTop,
-                        onTap: () => context.push('/lien-he'),
-                      ),
-                    ],
-                  ),
-
-                if (isDesktop) const Spacer() else const SizedBox(width: 8),
-
-                // Right: "Trở thành host" (`rounded-full`) + NotificationBell + AccountMenu (`rounded-full` trigger, `rounded-3xl` menu)
-                if (screenWidth >= 640) ...[
-                  InkWell(
-                    onTap: () {
-                      if (authUser != null && authUser.isHost) {
-                        context.push('/chu-nha/cho-nghi');
-                      } else {
-                        context.push('/tro-thanh-host');
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(999),
-                    child: Container(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 9,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isOverlayTop ? Colors.transparent : Colors.white,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Row(
+                  if (isDesktop) ...[
+                    const Spacer(),
+                    // Center: 4 Navigation Links (`Navbar.tsx`) or Compact Search Trigger
+                    if (centerSearchTrigger != null)
+                      centerSearchTrigger!
+                    else
+                      Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            authUser != null && authUser.isHost
-                                ? 'Khu vực host'
-                                : 'Trở thành host',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: isOverlayTop
-                                  ? Colors.white
-                                  : const Color(0xFF18181B),
-                            ),
+                          _NavTextLink(
+                            label: 'Trang chủ',
+                            isActive: currentPath == '/',
+                            isOverlayTop: isOverlayTop,
+                            onTap: () => context.go('/'),
+                          ),
+                          const SizedBox(width: 32),
+                          _NavTextLink(
+                            label: 'Nơi lưu trú',
+                            isActive: currentPath.startsWith('/search') ||
+                                currentPath.startsWith('/tim-kiem') ||
+                                currentPath.startsWith('/noi-luu-tru') ||
+                                currentPath.startsWith('/villas'),
+                            isOverlayTop: isOverlayTop,
+                            onTap: () => context.push('/tim-kiem'),
+                          ),
+                          const SizedBox(width: 32),
+                          _NavTextLink(
+                            label: 'Blog',
+                            isActive: currentPath.startsWith('/blog') ||
+                                currentPath.startsWith('/cam-nang'),
+                            isOverlayTop: isOverlayTop,
+                            onTap: () => context.push('/cam-nang'),
+                          ),
+                          const SizedBox(width: 32),
+                          _NavTextLink(
+                            label: 'Liên hệ',
+                            isActive: currentPath.startsWith('/lien-he'),
+                            isOverlayTop: isOverlayTop,
+                            onTap: () => context.push('/lien-he'),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                ],
+                    const Spacer(),
+                  ],
 
-                // MultiBooking Queue Link (/gio-cho-dat)
-                if (queueItems.isNotEmpty) ...[
-                  InkWell(
-                    onTap: () => context.push('/gio-cho-dat'),
-                    splashColor: Colors.transparent,
-                    highlightColor: Colors.transparent,
-                    hoverColor: Colors.transparent,
-                    child: SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Icon(
-                            LucideIcons.shoppingCart,
-                            size: 20,
-                            color: isOverlayTop
-                                ? Colors.white
-                                : AppColors.iconStrong,
-                          ),
-                          Positioned(
-                            top: 8,
-                            right: 6,
-                            child: Text(
-                              '${queueItems.length}',
+                  // Right: Host action, booking queue, NotificationBell, then Menu + Account icons
+                  if (screenWidth >= 640 &&
+                      (authUser == null || !authUser.isAdmin)) ...[
+                    InkWell(
+                      onTap: () {
+                        if (authUser != null && authUser.isHost) {
+                          context.push('/chu-nha/cho-nghi');
+                        } else {
+                          context.push('/tro-thanh-host');
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(999),
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              isOverlayTop ? Colors.transparent : Colors.white,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              authUser != null && authUser.isHost
+                                  ? 'Khu vực host'
+                                  : 'Trở thành host',
                               style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
                                 color: isOverlayTop
                                     ? Colors.white
-                                    : AppColors.primary,
+                                    : const Color(0xFF18181B),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                  ],
 
-                // Notification Bell
-                const NotificationBell(),
-                const SizedBox(width: 4),
+                  // Notification Bell (Icon thông báo)
+                  NotificationBell(isOverlayTop: isOverlayTop),
+                  const SizedBox(width: 2),
 
-                // User Account Menu (`AccountMenu.tsx` + `Header.tsx`)
-                PopupMenuButton<String>(
-                  tooltip: 'Tài khoản',
-                  offset: const Offset(0, 48),
-                  color: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  onSelected: (value) async {
-                    switch (value) {
-                      case 'home':
-                        context.go('/');
-                        break;
-                      case 'login':
-                        unawaited(context.push('/dang-nhap'));
-                        break;
-                      case 'register':
-                        unawaited(context.push('/dang-ky'));
-                        break;
-                      case 'profile':
-                        unawaited(context.push('/account/profile'));
-                        break;
-                      case 'trips':
-                        unawaited(context.push('/account/trips'));
-                        break;
-                      case 'wishlist':
-                        unawaited(context.push('/yeu-thich'));
-                        break;
-                      case 'queue':
-                        unawaited(context.push('/gio-cho-dat'));
-                        break;
-                      case 'messages':
-                        unawaited(context.push('/messages'));
-                        break;
-                      case 'ai-search':
-                        unawaited(context.push('/tim-kiem-ai'));
-                        break;
-                      case 'stays':
-                        unawaited(context.push('/tim-kiem'));
-                        break;
-                      case 'blog':
-                        unawaited(context.push('/cam-nang'));
-                        break;
-                      case 'contact':
-                        unawaited(context.push('/lien-he'));
-                        break;
-                      case 'host':
-                        if (authUser != null && authUser.isHost) {
-                          unawaited(context.push('/chu-nha/cho-nghi'));
-                        } else {
-                          unawaited(context.push('/tro-thanh-host'));
-                        }
-                        break;
-                      case 'admin':
-                        unawaited(context.push('/admin'));
-                        break;
-                      case 'logout':
-                        ref
-                            .read(notificationsProvider.notifier)
-                            .clearForLogout();
-                        await ref.read(authNotifierProvider.notifier).logout();
-                        if (context.mounted) {
+                  // User Account Menu (Icon menu -> Icon tài khoản)
+                  PopupMenuButton<String>(
+                    tooltip: 'Tài khoản',
+                    offset: const Offset(0, 48),
+                    color: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    onSelected: (value) async {
+                      switch (value) {
+                        case 'home':
                           context.go('/');
-                        }
-                        break;
-                    }
-                  },
-                  itemBuilder: (context) {
-                    if (authUser == null) {
+                          break;
+                        case 'login':
+                          unawaited(context.push('/dang-nhap'));
+                          break;
+                        case 'register':
+                          unawaited(context.push('/dang-ky'));
+                          break;
+                        case 'profile':
+                          unawaited(context.push('/account/profile'));
+                          break;
+                        case 'trips':
+                          unawaited(context.push('/account/trips'));
+                          break;
+                        case 'wishlist':
+                          unawaited(context.push('/yeu-thich'));
+                          break;
+                        case 'messages':
+                          unawaited(context.push('/messages'));
+                          break;
+                        case 'ai-search':
+                          unawaited(context.push('/tim-kiem-ai'));
+                          break;
+                        case 'stays':
+                          unawaited(context.push('/tim-kiem'));
+                          break;
+                        case 'blog':
+                          unawaited(context.push('/cam-nang'));
+                          break;
+                        case 'contact':
+                          unawaited(context.push('/lien-he'));
+                          break;
+                        case 'host':
+                          if (authUser != null && authUser.isHost) {
+                            unawaited(context.push('/chu-nha/cho-nghi'));
+                          } else {
+                            unawaited(context.push('/tro-thanh-host'));
+                          }
+                          break;
+                        case 'admin':
+                          unawaited(context.push('/admin'));
+                          break;
+                        case 'logout':
+                          ref
+                              .read(notificationsProvider.notifier)
+                              .clearForLogout();
+                          await ref
+                              .read(authNotifierProvider.notifier)
+                              .logout();
+                          if (context.mounted) {
+                            context.go('/');
+                          }
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) {
+                      if (authUser == null) {
+                        return [
+                          if (!isDesktop) ...[
+                            const PopupMenuItem(
+                              value: 'home',
+                              child: _MenuItemRow(
+                                icon: LucideIcons.house,
+                                label: 'Trang chủ',
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'stays',
+                              child: _MenuItemRow(
+                                icon: LucideIcons.search,
+                                label: 'Nơi lưu trú',
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'blog',
+                              child: _MenuItemRow(
+                                icon: LucideIcons.bookOpen,
+                                label: 'Blog',
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'contact',
+                              child: _MenuItemRow(
+                                icon: LucideIcons.phone,
+                                label: 'Liên hệ',
+                              ),
+                            ),
+                            const PopupMenuDivider(),
+                          ],
+                          const PopupMenuItem(
+                            value: 'wishlist',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.heart,
+                              label: 'Danh sách yêu thích',
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'trips',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.calendarCheck,
+                              label: 'Chuyến đi',
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'messages',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.messageSquare,
+                              label: 'Tin nhắn',
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'profile',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.userRound,
+                              label: 'Hồ sơ',
+                            ),
+                          ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
+                            value: 'host',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.house,
+                              label: 'Trở thành host',
+                            ),
+                          ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
+                            value: 'login',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.logIn,
+                              label: 'Đăng nhập',
+                              isBold: true,
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'register',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.userPlus,
+                              label: 'Đăng ký',
+                            ),
+                          ),
+                        ];
+                      }
                       return [
+                        PopupMenuItem(
+                          enabled: false,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                authUser.fullName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                authUser.email,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuDivider(),
                         if (!isDesktop) ...[
                           const PopupMenuItem(
                             value: 'home',
@@ -955,7 +1059,7 @@ class AppTopHeader extends ConsumerWidget {
                         const PopupMenuItem(
                           value: 'trips',
                           child: _MenuItemRow(
-                            icon: LucideIcons.plane,
+                            icon: LucideIcons.calendarCheck,
                             label: 'Chuyến đi',
                           ),
                         ),
@@ -973,219 +1077,97 @@ class AppTopHeader extends ConsumerWidget {
                             label: 'Hồ sơ',
                           ),
                         ),
-                        const PopupMenuItem(
-                          value: 'queue',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.shoppingCart,
-                            label: 'Danh sách đặt nhiều căn',
+                        const PopupMenuDivider(),
+                        if (!authUser.isAdmin)
+                          PopupMenuItem(
+                            value: 'host',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.house,
+                              label: authUser.isHost
+                                  ? 'Khu vực host'
+                                  : 'Trở thành host',
+                            ),
                           ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'ai-search',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.sparkles,
-                            label: 'Tìm kiếm bằng AI',
+                        if (authUser.isAdmin)
+                          const PopupMenuItem(
+                            value: 'admin',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.shield,
+                              label: 'Khu vực admin',
+                              isBold: true,
+                            ),
                           ),
-                        ),
                         const PopupMenuDivider(),
                         const PopupMenuItem(
-                          value: 'host',
+                          value: 'logout',
                           child: _MenuItemRow(
-                            icon: LucideIcons.house,
-                            label: 'Trở thành host',
-                          ),
-                        ),
-                        const PopupMenuDivider(),
-                        const PopupMenuItem(
-                          value: 'login',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.logIn,
-                            label: 'Đăng nhập',
-                            isBold: true,
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'register',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.userPlus,
-                            label: 'Đăng ký',
+                            icon: LucideIcons.logOut,
+                            label: 'Đăng xuất',
                           ),
                         ),
                       ];
-                    }
-                    return [
-                      PopupMenuItem(
-                        enabled: false,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              authUser.fullName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            Text(
-                              authUser.email,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
+                    },
+                    child: Container(
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            LucideIcons.menu,
+                            size: 20,
+                            color: isOverlayTop
+                                ? Colors.white
+                                : AppColors.iconStrong,
+                          ),
+                          const SizedBox(width: 10),
+                          Icon(
+                            LucideIcons.circleUser,
+                            size: 22,
+                            color: isOverlayTop
+                                ? Colors.white
+                                : AppColors.iconStrong,
+                          ),
+                          if (authUser != null && screenWidth >= 520) ...[
+                            const SizedBox(width: 6),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 96),
+                              child: Text(
+                                authUser.firstName.isNotEmpty
+                                    ? authUser.firstName
+                                    : authUser.fullName,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: isOverlayTop
+                                      ? Colors.white
+                                      : AppColors.textPrimary,
+                                ),
                               ),
                             ),
                           ],
-                        ),
-                      ),
-                      const PopupMenuDivider(),
-                      if (!isDesktop) ...[
-                        const PopupMenuItem(
-                          value: 'home',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.house,
-                            label: 'Trang chủ',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'stays',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.search,
-                            label: 'Nơi lưu trú',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'blog',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.bookOpen,
-                            label: 'Blog',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'contact',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.phone,
-                            label: 'Liên hệ',
-                          ),
-                        ),
-                        const PopupMenuDivider(),
-                      ],
-                      const PopupMenuItem(
-                        value: 'wishlist',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.heart,
-                          label: 'Danh sách yêu thích',
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'trips',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.plane,
-                          label: 'Chuyến đi',
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'messages',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.messageSquare,
-                          label: 'Tin nhắn',
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'profile',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.userRound,
-                          label: 'Hồ sơ',
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'queue',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.shoppingCart,
-                          label: 'Danh sách đặt nhiều căn',
-                        ),
-                      ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: 'host',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.house,
-                          label: authUser.isHost
-                              ? 'Khu vực host'
-                              : 'Trở thành host',
-                        ),
-                      ),
-                      if (authUser.isAdmin)
-                        const PopupMenuItem(
-                          value: 'admin',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.shield,
-                            label: 'Khu vực admin',
-                            isBold: true,
-                          ),
-                        ),
-                      const PopupMenuDivider(),
-                      const PopupMenuItem(
-                        value: 'logout',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.logOut,
-                          label: 'Đăng xuất',
-                        ),
-                      ),
-                    ];
-                  },
-                  child: Container(
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          LucideIcons.menu,
-                          size: 16,
-                          color: AppColors.iconStrong,
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(
-                          LucideIcons.circleUser,
-                          size: 22,
-                          color: AppColors.iconMuted,
-                        ),
-                        if (authUser != null && screenWidth >= 520) ...[
-                          const SizedBox(width: 6),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 96),
-                            child: Text(
-                              authUser.firstName.isNotEmpty
-                                  ? authUser.firstName
-                                  : authUser.fullName,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ),
                         ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 }
 

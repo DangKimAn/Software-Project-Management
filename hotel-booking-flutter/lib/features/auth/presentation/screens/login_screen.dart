@@ -338,47 +338,51 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                         onPressed: _isLoading ? null : _handleGoogleLogin,
                       ),
-                      const SizedBox(height: AppSpacing.s24),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        children: [
-                          Text(
-                            'Chưa có tài khoản? ',
-                            style: AppTypography.body
-                                .copyWith(color: AppColors.textMuted),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              final redirect = widget.redirectTo?.trim();
-                              if (redirect != null &&
-                                  AuthNotifier.isSafeRedirectPath(redirect)) {
-                                context.push(
-                                  Uri(
-                                    path: '/dang-ky',
-                                    queryParameters: <String, String>{
-                                      'redirectTo': redirect,
-                                    },
-                                  ).toString(),
-                                );
-                              } else {
-                                context.push('/dang-ky');
-                              }
-                            },
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.s8,
-                              ),
-                              minimumSize: const Size(48, 48),
+                      const SizedBox(height: AppSpacing.s16),
+                      Center(
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              'Chưa có tài khoản?',
+                              style: AppTypography.body
+                                  .copyWith(color: AppColors.textMuted),
                             ),
-                            child: Text(
-                              'Đăng ký',
-                              style: AppTypography.body.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
+                            TextButton(
+                              onPressed: () {
+                                final redirect = widget.redirectTo?.trim();
+                                if (redirect != null &&
+                                    AuthNotifier.isSafeRedirectPath(redirect)) {
+                                  context.push(
+                                    Uri(
+                                      path: '/dang-ky',
+                                      queryParameters: <String, String>{
+                                        'redirectTo': redirect,
+                                      },
+                                    ).toString(),
+                                  );
+                                } else {
+                                  context.push('/dang-ky');
+                                }
+                              },
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                ),
+                                minimumSize: const Size(48, 48),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: Text(
+                                'Đăng ký',
+                                style: AppTypography.body.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   ),

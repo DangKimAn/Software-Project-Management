@@ -695,7 +695,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get profileUnverified => 'Chưa xác minh';
 
   @override
-  String get hostOnboardingTitle => 'Trở thành Chủ nhà tại Minh Thanh Villa';
+  String get hostOnboardingTitle => 'Trở thành Chủ nhà tại The Palm';
 
   @override
   String get hostKycTitle => 'Đăng ký & Xác minh Hồ sơ Chủ nhà';

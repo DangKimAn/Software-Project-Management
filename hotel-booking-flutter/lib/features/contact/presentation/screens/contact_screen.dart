@@ -31,7 +31,7 @@ class ContactInquiryPayload {
 }
 
 /// Port of `Source goc/frontend/src/views/pages/Contact/ContactPage.tsx`
-/// adhering to Minh Thanh Villa Light Luxury Design System (FLUTTER_RULES.md):
+/// adhering to The Palm Light Luxury Design System (FLUTTER_RULES.md):
 /// - Validates Hotline & Zalo OA from [AppConfig] and never claims sample/example numbers (`0901234567`) are real.
 /// - `tel:` launcher falls back to copying the phone number to clipboard when dialer cannot open.
 /// - Zalo OA only opens verified official `https://zalo.me/...` / `https://oa.zalo.me/...` URLs without pretending
@@ -275,11 +275,11 @@ class _ContactScreenState extends State<ContactScreen> {
                   children: [
                     Center(
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1280),
+                        constraints: const BoxConstraints(maxWidth: 1240),
                         child: Padding(
                           padding: EdgeInsets.fromLTRB(
                             horizontalPad,
-                            AppSpacing.xxl,
+                            isDesktop ? AppSpacing.xxl : AppSpacing.lg,
                             horizontalPad,
                             AppSpacing.xxl,
                           ),
@@ -288,53 +288,20 @@ class _ContactScreenState extends State<ContactScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Expanded(
-                                      flex: 105,
-                                      child: _buildHeroInfo(context),
-                                    ),
-                                    const SizedBox(width: AppSpacing.xxl),
-                                    Expanded(
                                       flex: 95,
-                                      child: _buildHeroImage(),
-                                    ),
-                                  ],
-                                )
-                              : Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildHeroInfo(context),
-                                    const SizedBox(height: AppSpacing.xl),
-                                    _buildHeroImage(),
-                                  ],
-                                ),
-                        ),
-                      ),
-                    ),
-                    Container(
-                      width: double.infinity,
-                      decoration: const BoxDecoration(
-                        color: AppColors.surfaceBase,
-                        border: Border(
-                          top: BorderSide(color: AppColors.divider),
-                        ),
-                      ),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: horizontalPad,
-                        vertical: AppSpacing.xxl,
-                      ),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 1280),
-                          child: isDesktop
-                              ? Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      flex: 75,
-                                      child: _buildSupportAside(),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          _buildHeroInfo(context),
+                                          const SizedBox(height: AppSpacing.lg),
+                                          _buildHeroImage(),
+                                        ],
+                                      ),
                                     ),
                                     const SizedBox(width: AppSpacing.xxl),
                                     Expanded(
-                                      flex: 125,
+                                      flex: 105,
                                       child: _buildConsultationCard(context),
                                     ),
                                   ],
@@ -343,8 +310,8 @@ class _ContactScreenState extends State<ContactScreen> {
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
                                   children: [
-                                    _buildSupportAside(),
-                                    const SizedBox(height: AppSpacing.xl),
+                                    _buildHeroInfo(context),
+                                    const SizedBox(height: AppSpacing.lg),
                                     _buildConsultationCard(context),
                                   ],
                                 ),
@@ -371,137 +338,165 @@ class _ContactScreenState extends State<ContactScreen> {
     final normalizedZaloUri =
         ContactService.parseAndValidateZaloUri(_effectiveZaloUrl);
 
+    final formattedPhone = ContactService.formatDisplayPhone(_effectiveHotline);
     final hotlineDisplayValue = hotlineVerified
-        ? ContactService.formatDisplayPhone(_effectiveHotline)
+        ? formattedPhone
         : (hotlineValidFormat
-            ? 'Chưa cấu hình số thực (mẫu: $_effectiveHotline)'
-            : 'Chưa cấu hình số hotline hợp lệ');
+            ? '$formattedPhone (Số mẫu)'
+            : 'Chưa cấu hình số hotline');
 
-    final zaloDisplayValue = zaloVerified && normalizedZaloUri != null
-        ? '${normalizedZaloUri.host}/${normalizedZaloUri.pathSegments.first}'
-        : 'Chưa cấu hình Zalo OA xác thực (đang ở chế độ mẫu)';
+    final zaloDisplayValue = normalizedZaloUri != null
+        ? (zaloVerified
+            ? '${normalizedZaloUri.host}/${normalizedZaloUri.pathSegments.first}'
+            : '${normalizedZaloUri.host}/${normalizedZaloUri.pathSegments.first} (Mẫu)')
+        : 'Chưa cấu hình Zalo OA';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'LIÊN HỆ THE PALM VILLA',
+                style: AppTypography.caption.copyWith(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.6,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () => context.push('/tim-kiem'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.textStrong,
+                minimumSize: const Size(48, 36),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+              ),
+              icon: const Icon(
+                LucideIcons.search,
+                size: 14,
+                color: AppColors.iconStrong,
+              ),
+              label: Text(
+                'Xem villa',
+                style: AppTypography.caption.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textStrong,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xxs),
         Text(
-          'LIÊN HỆ THE PALM VILLA',
-          style: AppTypography.caption.copyWith(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.8,
-            color: AppColors.primary,
+          'Liên hệ & Hỗ trợ đặt phòng',
+          style: AppTypography.displayLarge.copyWith(
+            fontSize: screenWidth < 360 ? 22 : 26,
+            color: AppColors.textStrong,
+            height: 1.2,
           ),
         ),
-        const SizedBox(height: AppSpacing.sm),
+        const SizedBox(height: AppSpacing.xs),
         Text(
-          'Cần tư vấn villa hoặc hỗ trợ đặt phòng?',
-          style: AppTypography.displayLarge.copyWith(
-            fontSize: screenWidth < 360 ? 24 : 32,
-            color: AppColors.textStrong,
+          'Kết nối nhanh qua Hotline, Zalo OA hoặc gửi yêu cầu tư vấn (08:00 – 22:00).',
+          style: AppTypography.bodyMedium.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.45,
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        Text(
-          'Kết nối trực tiếp qua Hotline hoặc Zalo OA chính thức. Bạn cũng có thể tạo sẵn bản nháp nội dung tư vấn bên dưới để sao chép và gửi nhanh theo nhu cầu.',
-          style: AppTypography.bodyLarge.copyWith(
-            color: AppColors.textSecondary,
-            height: 1.6,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xl),
         if (!hotlineVerified || !zaloVerified)
           Container(
             key: const ValueKey('contact-config-warning-banner'),
             width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.md),
-            margin: const EdgeInsets.only(bottom: AppSpacing.md),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm,
+              vertical: 10,
+            ),
+            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
             decoration: BoxDecoration(
-              color: AppColors.warningSoft,
-              borderRadius: BorderRadius.circular(20),
+              color: AppColors.surfaceBase,
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(color: AppColors.borderSoft),
             ),
-            child: Text(
-              'Lưu ý: Môi trường hiện tại đang dùng số điện thoại/Zalo OA mẫu trong cấu hình và chưa được xác minh là kênh liên hệ thực tế.',
-              style: AppTypography.caption.copyWith(
-                color: AppColors.textStrong,
-                fontWeight: FontWeight.w600,
-                height: 1.45,
-              ),
-            ),
-          ),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final cols = constraints.maxWidth >= 680 ? 3 : 1;
-            const gap = AppSpacing.md;
-            final cardWidth = (constraints.maxWidth - gap * (cols - 1)) / cols;
-
-            return Wrap(
-              spacing: gap,
-              runSpacing: gap,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                SizedBox(
-                  width: cardWidth,
-                  child: _ContactChannelCard(
-                    cardKey: const ValueKey('contact-card-hotline'),
-                    primaryActionKey:
-                        const ValueKey('contact-call-hotline-btn'),
-                    icon: LucideIcons.phone,
-                    title: 'Hotline tư vấn',
-                    value: hotlineDisplayValue,
-                    badgeText: hotlineVerified
-                        ? 'Đã xác minh cấu hình'
-                        : 'Cấu hình mẫu — Chưa xác minh',
-                    isVerified: hotlineVerified,
-                    primaryActionLabel:
-                        hotlineVerified ? 'Gọi ngay' : 'Kiểm tra hotline',
-                    onPrimaryTap: _handleCallHotline,
-                    trailingIconButton: AppIconButton(
-                      key: const ValueKey('contact-copy-hotline-btn'),
-                      tooltip: 'Sao chép số hotline',
-                      icon: const Icon(
-                        LucideIcons.copy,
-                        size: 18,
-                        color: AppColors.iconStrong,
-                      ),
-                      onPressed: _handleCopyHotline,
+                const Icon(
+                  LucideIcons.info,
+                  size: 16,
+                  color: AppColors.iconMuted,
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
+                    'Đang hiển thị cấu hình mẫu (Hotline & Zalo OA chưa xác minh).',
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w500,
+                      height: 1.35,
                     ),
                   ),
                 ),
-                SizedBox(
-                  width: cardWidth,
-                  child: _ContactChannelCard(
-                    cardKey: const ValueKey('contact-card-zalo'),
-                    primaryActionKey: const ValueKey('contact-card-zalo-btn'),
-                    icon: LucideIcons.messageCircle,
-                    title: 'Zalo OA',
-                    value: zaloDisplayValue,
-                    badgeText: zaloVerified
-                        ? 'Đã xác minh cấu hình'
-                        : 'Cấu hình mẫu — Chưa xác minh',
-                    isVerified: zaloVerified,
-                    primaryActionLabel:
-                        zaloVerified ? 'Mở Zalo OA' : 'Kiểm tra Zalo OA',
-                    onPrimaryTap: _handleOpenZalo,
-                  ),
-                ),
-                SizedBox(
-                  width: cardWidth,
-                  child: _ContactChannelCard(
-                    cardKey: const ValueKey('contact-card-address'),
-                    primaryActionKey: const ValueKey('contact-card-map-btn'),
-                    icon: LucideIcons.mapPin,
-                    title: 'Văn phòng Vũng Tàu',
-                    value: '28 Thi Sách, TP. Vũng Tàu',
-                    badgeText: 'Hỗ trợ 08:00 – 22:00',
-                    isVerified: true,
-                    primaryActionLabel: 'Xem bản đồ',
-                    onPrimaryTap: _handleOpenOfficeMap,
-                  ),
-                ),
               ],
-            );
-          },
+            ),
+          ),
+        Column(
+          children: [
+            _ContactChannelCard(
+              cardKey: const ValueKey('contact-card-hotline'),
+              primaryActionKey: const ValueKey('contact-call-hotline-btn'),
+              icon: LucideIcons.phone,
+              title: 'Hotline tư vấn',
+              value: hotlineDisplayValue,
+              badgeText: hotlineVerified
+                  ? 'Đã xác minh cấu hình'
+                  : 'Cấu hình mẫu — Chưa xác minh',
+              isVerified: hotlineVerified,
+              primaryActionLabel:
+                  hotlineVerified ? 'Gọi ngay' : 'Kiểm tra hotline',
+              onPrimaryTap: _handleCallHotline,
+              trailingIconButton: AppIconButton(
+                key: const ValueKey('contact-copy-hotline-btn'),
+                tooltip: 'Sao chép số hotline',
+                icon: const Icon(
+                  LucideIcons.copy,
+                  size: 17,
+                  color: AppColors.iconStrong,
+                ),
+                onPressed: _handleCopyHotline,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _ContactChannelCard(
+              cardKey: const ValueKey('contact-card-zalo'),
+              primaryActionKey: const ValueKey('contact-card-zalo-btn'),
+              icon: LucideIcons.messageCircle,
+              title: 'Zalo OA',
+              value: zaloDisplayValue,
+              badgeText: zaloVerified
+                  ? 'Đã xác minh cấu hình'
+                  : 'Cấu hình mẫu — Chưa xác minh',
+              isVerified: zaloVerified,
+              primaryActionLabel:
+                  zaloVerified ? 'Mở Zalo OA' : 'Kiểm tra Zalo OA',
+              onPrimaryTap: _handleOpenZalo,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _ContactChannelCard(
+              cardKey: const ValueKey('contact-card-address'),
+              primaryActionKey: const ValueKey('contact-card-map-btn'),
+              icon: LucideIcons.mapPin,
+              title: 'Văn phòng Vũng Tàu',
+              value: '28 Thi Sách, TP. Vũng Tàu',
+              badgeText: '08:00 – 22:00',
+              isVerified: true,
+              primaryActionLabel: 'Bản đồ',
+              onPrimaryTap: _handleOpenOfficeMap,
+            ),
+          ],
         ),
       ],
     );
@@ -510,147 +505,72 @@ class _ContactScreenState extends State<ContactScreen> {
   Widget _buildHeroImage() {
     return const BlogCoverImage(
       rawUrl: 'assets/images/NDT05929-HDR1.jpg',
-      aspectRatio: 16 / 10,
+      aspectRatio: 16 / 9,
       borderRadius: AppRadii.roundedCard,
     );
   }
 
-  Widget _buildSupportAside() {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    return Container(
-      padding: EdgeInsets.all(
-        screenWidth < 360 ? AppSpacing.md : AppSpacing.xl,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceBase,
-        borderRadius: AppRadii.roundedCard,
-        border: Border.all(color: AppColors.borderSoft),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Thông tin hỗ trợ',
-            style: AppTypography.sectionHeading.copyWith(
-              fontSize: 20,
-              color: AppColors.textStrong,
-            ),
+  Widget _buildTopicSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Chủ đề quan tâm',
+          style: AppTypography.bodyMedium.copyWith(
+            fontWeight: FontWeight.w600,
+            color: AppColors.textStrong,
           ),
-          const SizedBox(height: AppSpacing.md),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(
-                width: 48,
-                height: 48,
-                child: Center(
-                  child: Icon(
-                    LucideIcons.clock,
-                    size: 20,
-                    color: AppColors.iconStrong,
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Thời gian phản hồi',
-                      style: AppTypography.bodyLarge.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textStrong,
-                      ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Wrap(
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
+          children: _supportTopics.map((topic) {
+            final selected = _selectedTopic == topic;
+            return Semantics(
+              button: true,
+              selected: selected,
+              label: 'Chủ đề $topic',
+              child: InkWell(
+                key: ValueKey('contact-topic-$topic'),
+                onTap: () => setState(() => _selectedTopic = topic),
+                borderRadius: AppRadii.roundedPill,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 44),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
                     ),
-                    const SizedBox(height: AppSpacing.xxs),
-                    Text(
-                      '08:00 - 22:00 hằng ngày, ưu tiên hỗ trợ khách có lịch nhận phòng gần.',
-                      style: AppTypography.bodyMuted.copyWith(height: 1.5),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            'Chủ đề tư vấn nhanh',
-            style: AppTypography.bodyMedium.copyWith(
-              fontWeight: FontWeight.w700,
-              color: AppColors.textStrong,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Wrap(
-            spacing: AppSpacing.xs,
-            runSpacing: AppSpacing.xs,
-            children: _supportTopics.map((topic) {
-              final selected = _selectedTopic == topic;
-              return Semantics(
-                button: true,
-                selected: selected,
-                label: 'Chủ đề $topic',
-                child: InkWell(
-                  key: ValueKey('contact-topic-$topic'),
-                  onTap: () => setState(() => _selectedTopic = topic),
-                  borderRadius: AppRadii.roundedPill,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppColors.textStrong
+                          : AppColors.surfaceBase,
+                      borderRadius: AppRadii.roundedPill,
+                      border: Border.all(
                         color: selected
                             ? AppColors.textStrong
-                            : AppColors.surfaceBase,
-                        borderRadius: AppRadii.roundedPill,
-                        border: Border.all(
-                          color: selected
-                              ? AppColors.textStrong
-                              : AppColors.borderSoft,
-                        ),
+                            : AppColors.borderSoft,
                       ),
-                      child: Text(
-                        topic,
-                        style: AppTypography.bodyMedium.copyWith(
-                          fontSize: 13,
-                          fontWeight:
-                              selected ? FontWeight.w700 : FontWeight.w500,
-                          color: selected
-                              ? AppColors.textInverse
-                              : AppColors.textStrong,
-                        ),
+                    ),
+                    child: Text(
+                      topic,
+                      style: AppTypography.bodyMedium.copyWith(
+                        fontSize: 13,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w500,
+                        color: selected
+                            ? AppColors.textInverse
+                            : AppColors.textStrong,
                       ),
                     ),
                   ),
                 ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          OutlinedButton.icon(
-            onPressed: () => context.push('/tim-kiem'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(48, 48),
-              shape: const StadiumBorder(),
-              side: const BorderSide(color: AppColors.border),
-            ),
-            icon: const Icon(
-              LucideIcons.search,
-              size: 16,
-              color: AppColors.iconStrong,
-            ),
-            label: const Text(
-              'Xem danh sách villa',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
@@ -658,7 +578,7 @@ class _ContactScreenState extends State<ContactScreen> {
     final screenWidth = MediaQuery.sizeOf(context).width;
     return Container(
       padding: EdgeInsets.all(
-        screenWidth < 360 ? AppSpacing.md : AppSpacing.xl,
+        screenWidth < 360 ? AppSpacing.md : AppSpacing.lg,
       ),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
@@ -671,25 +591,25 @@ class _ContactScreenState extends State<ContactScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _hasRealEndpoint
-                  ? 'Gửi yêu cầu tư vấn'
-                  : 'Soạn bản nháp nội dung tư vấn',
+              _hasRealEndpoint ? 'Gửi yêu cầu tư vấn' : 'Soạn nội dung tư vấn',
               style: AppTypography.sectionHeading.copyWith(
-                fontSize: 22,
+                fontSize: 20,
                 color: AppColors.textStrong,
               ),
             ),
-            const SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: 4),
             Text(
               _hasRealEndpoint
-                  ? 'Điền thông tin liên hệ để gửi trực tiếp tới hệ thống hỗ trợ Minh Thanh Villa.'
-                  : 'Ứng dụng không tự động gửi tin nhắn ngầm khi chưa có xác nhận. Hãy điền nhu cầu bên dưới để tạo bản nháp chuẩn, sau đó chủ động sao chép và dán vào Zalo OA hoặc đọc khi gọi Hotline.',
-              style: AppTypography.bodyMuted.copyWith(height: 1.55),
+                  ? 'Điền thông tin liên hệ để gửi trực tiếp tới hệ thống hỗ trợ The Palm.'
+                  : 'Chọn chủ đề và điền nhu cầu để tạo nhanh bản nháp gửi qua Zalo hoặc Hotline.',
+              style: AppTypography.bodyMuted.copyWith(height: 1.45),
             ),
-            const SizedBox(height: AppSpacing.xl),
+            const SizedBox(height: AppSpacing.md),
+            _buildTopicSelector(),
+            const SizedBox(height: AppSpacing.md),
             LayoutBuilder(
               builder: (context, constraints) {
-                final twoCols = constraints.maxWidth >= 520;
+                final twoCols = constraints.maxWidth >= 480;
                 if (twoCols) {
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -723,35 +643,35 @@ class _ContactScreenState extends State<ContactScreen> {
             TextFormField(
               key: const ValueKey('contact-message-input'),
               controller: _messageCtrl,
-              maxLines: 5,
+              maxLines: 3,
               textInputAction: TextInputAction.newline,
               decoration: InputDecoration(
                 hintText:
-                    'Ví dụ: nhóm 10 khách, cần villa hồ bơi gần Bãi Sau, đi 2 ngày 1 đêm...',
+                    'Ví dụ: nhóm 10 khách, cần villa hồ bơi gần Bãi Sau, đi 2N1Đ...',
                 filled: true,
                 fillColor: AppColors.surfaceBase,
                 contentPadding: const EdgeInsets.all(AppSpacing.md),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(20),
                   borderSide: const BorderSide(color: AppColors.border),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(20),
                   borderSide: const BorderSide(color: AppColors.border),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(20),
                   borderSide: const BorderSide(
                     color: AppColors.borderFocus,
                     width: 1.5,
                   ),
                 ),
                 errorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(20),
                   borderSide: const BorderSide(color: AppColors.errorRed),
                 ),
                 focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(20),
                   borderSide: const BorderSide(
                     color: AppColors.errorRed,
                     width: 1.5,
@@ -762,7 +682,7 @@ class _ContactScreenState extends State<ContactScreen> {
                   ? 'Vui lòng nhập nội dung cần hỗ trợ'
                   : null,
             ),
-            const SizedBox(height: AppSpacing.md),
+            const SizedBox(height: AppSpacing.sm),
             // Explicit User Consent Toggle (>=48dp touch height)
             Semantics(
               checked: _userConsented,
@@ -771,56 +691,50 @@ class _ContactScreenState extends State<ContactScreen> {
               child: InkWell(
                 key: const ValueKey('contact-consent-checkbox'),
                 onTap: () => setState(() => _userConsented = !_userConsented),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(minHeight: 48),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.xs,
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: Center(
-                            child: Icon(
-                              _userConsented
-                                  ? LucideIcons.squareCheck
-                                  : LucideIcons.square,
-                              size: 20,
-                              color: AppColors.iconStrong,
-                            ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 40,
+                        height: 48,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Icon(
+                            _userConsented
+                                ? LucideIcons.squareCheck
+                                : LucideIcons.square,
+                            size: 20,
+                            color: AppColors.iconStrong,
                           ),
                         ),
-                        const SizedBox(width: AppSpacing.xs),
-                        Expanded(
-                          child: Text(
-                            'Tôi đồng ý tạo bản nháp từ thông tin đã nhập để tự sao chép/chia sẻ khi liên hệ.',
-                            style: AppTypography.bodyMedium.copyWith(
-                              color: AppColors.textStrong,
-                            ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'Đồng ý tạo bản nháp từ thông tin đã nhập để chủ động liên hệ.',
+                          style: AppTypography.bodyMedium.copyWith(
+                            fontSize: 13,
+                            color: AppColors.textStrong,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
+            const SizedBox(height: AppSpacing.sm),
             if (_feedbackBannerMessage.isNotEmpty)
               Container(
                 key: const ValueKey('contact-feedback-banner'),
                 width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.md),
-                margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                margin: const EdgeInsets.only(bottom: AppSpacing.sm),
                 decoration: BoxDecoration(
-                  color: _isFeedbackError
-                      ? AppColors.errorSoft
-                      : AppColors.surfaceWarmSand,
-                  borderRadius: BorderRadius.circular(20),
+                  color: AppColors.surfaceBase,
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: _isFeedbackError
                         ? AppColors.errorRed
@@ -830,8 +744,11 @@ class _ContactScreenState extends State<ContactScreen> {
                 child: Text(
                   _feedbackBannerMessage,
                   style: AppTypography.bodyMedium.copyWith(
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.textStrong,
+                    color: _isFeedbackError
+                        ? AppColors.errorRed
+                        : AppColors.textStrong,
                   ),
                 ),
               ),
@@ -842,8 +759,8 @@ class _ContactScreenState extends State<ContactScreen> {
                 padding: const EdgeInsets.all(AppSpacing.md),
                 margin: const EdgeInsets.only(bottom: AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceMuted,
-                  borderRadius: BorderRadius.circular(20),
+                  color: AppColors.surfaceBase,
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: AppColors.borderSoft),
                 ),
                 child: Column(
@@ -894,7 +811,7 @@ class _ContactScreenState extends State<ContactScreen> {
                 ),
               ),
             Wrap(
-              spacing: AppSpacing.md,
+              spacing: AppSpacing.sm,
               runSpacing: AppSpacing.sm,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
@@ -908,7 +825,7 @@ class _ContactScreenState extends State<ContactScreen> {
                     shape: const StadiumBorder(),
                     padding: EdgeInsets.symmetric(
                       horizontal:
-                          screenWidth < 360 ? AppSpacing.md : AppSpacing.xl,
+                          screenWidth < 360 ? AppSpacing.md : AppSpacing.lg,
                       vertical: 14,
                     ),
                   ),
@@ -1116,45 +1033,47 @@ class _ContactChannelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(14) / 14.0;
     return Container(
       key: cardKey,
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: 14,
+      ),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
-        borderRadius: AppRadii.roundedCard,
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.borderSoft),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isHorizontal = constraints.maxWidth >= 360 && textScale <= 1.25;
+
+          final infoContent = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Bare Lucide icon in a 48x48 transparent hit box (no circle/halo background)
-              SizedBox(
-                width: 48,
-                height: 48,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Icon(
-                    icon,
-                    size: 20,
-                    color: AppColors.iconStrong,
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    title,
+                    style: AppTypography.cardTitle.copyWith(
+                      fontSize: 15,
+                      color: AppColors.textStrong,
+                    ),
                   ),
-                ),
-              ),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Container(
+                  Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+                      horizontal: 8,
+                      vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: isVerified
-                          ? AppColors.surfaceWarmSand
-                          : AppColors.warningSoft,
+                      color: AppColors.surfaceBase,
                       borderRadius: AppRadii.roundedPill,
+                      border: Border.all(color: AppColors.borderSoft),
                     ),
                     child: Text(
                       badgeText,
@@ -1162,51 +1081,93 @@ class _ContactChannelCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.caption.copyWith(
                         fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textStrong,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textMuted,
                       ),
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: AppTypography.bodyMuted.copyWith(
+                  fontSize: 13,
+                  height: 1.35,
+                  color: AppColors.textSecondary,
                 ),
               ),
-              if (trailingIconButton != null) trailingIconButton!,
             ],
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            title,
-            style: AppTypography.cardTitle.copyWith(
-              fontSize: 16,
-              color: AppColors.textStrong,
+          );
+
+          final actionButton = OutlinedButton(
+            key: primaryActionKey,
+            onPressed: onPrimaryTap,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(48, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: const StadiumBorder(),
+              side: const BorderSide(color: AppColors.border),
             ),
-          ),
-          const SizedBox(height: AppSpacing.xxs),
-          Text(
-            value,
-            style: AppTypography.bodyMuted.copyWith(
-              height: 1.45,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              key: primaryActionKey,
-              onPressed: onPrimaryTap,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(48, 48),
-                shape: const StadiumBorder(),
-                side: const BorderSide(color: AppColors.border),
-              ),
-              child: Text(
-                primaryActionLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            child: Text(
+              primaryActionLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
-          ),
-        ],
+          );
+
+          if (isHorizontal) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
+                  color: AppColors.iconStrong,
+                ),
+                const SizedBox(width: 14),
+                Expanded(child: infoContent),
+                const SizedBox(width: 10),
+                if (trailingIconButton != null) ...[
+                  trailingIconButton!,
+                  const SizedBox(width: 4),
+                ],
+                actionButton,
+              ],
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(
+                      icon,
+                      size: 20,
+                      color: AppColors.iconStrong,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: infoContent),
+                  if (trailingIconButton != null) trailingIconButton!,
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              SizedBox(
+                width: double.infinity,
+                child: actionButton,
+              ),
+            ],
+          );
+        },
       ),
     );
   }

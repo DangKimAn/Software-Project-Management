@@ -322,7 +322,6 @@ class GoldenResponsiveShowcase extends StatelessWidget {
         totalCalculatedVnd: 15700000,
         selectedNights: nightlyPrices.length,
         onBookNow: () {},
-        onAddToQueue: () {},
         onCallHotline: () {},
       ),
     );

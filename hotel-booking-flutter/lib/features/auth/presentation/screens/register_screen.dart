@@ -399,51 +399,55 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         ),
                         onPressed: _handleRegister,
                       ),
-                      const SizedBox(height: AppSpacing.s24),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        children: [
-                          Text(
-                            'Bạn đã có tài khoản? ',
-                            style: AppTypography.body
-                                .copyWith(color: AppColors.textMuted),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              if (context.canPop()) {
-                                context.pop();
-                              } else {
-                                final redirect = widget.redirectTo?.trim();
-                                if (redirect != null &&
-                                    AuthNotifier.isSafeRedirectPath(redirect)) {
-                                  context.go(
-                                    Uri(
-                                      path: '/dang-nhap',
-                                      queryParameters: <String, String>{
-                                        'redirectTo': redirect,
-                                      },
-                                    ).toString(),
-                                  );
+                      const SizedBox(height: AppSpacing.s16),
+                      Center(
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              'Bạn đã có tài khoản?',
+                              style: AppTypography.body
+                                  .copyWith(color: AppColors.textMuted),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                if (context.canPop()) {
+                                  context.pop();
                                 } else {
-                                  context.go('/dang-nhap');
+                                  final redirect = widget.redirectTo?.trim();
+                                  if (redirect != null &&
+                                      AuthNotifier.isSafeRedirectPath(redirect)) {
+                                    context.go(
+                                      Uri(
+                                        path: '/dang-nhap',
+                                        queryParameters: <String, String>{
+                                          'redirectTo': redirect,
+                                        },
+                                      ).toString(),
+                                    );
+                                  } else {
+                                    context.go('/dang-nhap');
+                                  }
                                 }
-                              }
-                            },
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.s8,
+                              },
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                ),
+                                minimumSize: const Size(48, 48),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
-                              minimumSize: const Size(48, 48),
-                            ),
-                            child: Text(
-                              'Đăng nhập',
-                              style: AppTypography.body.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
+                              child: Text(
+                                'Đăng nhập',
+                                style: AppTypography.body.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.s16),
                       Row(

@@ -16,10 +16,10 @@ class VillaBadge extends StatelessWidget {
 
     switch (badgeType) {
       case VillaBadgeType.featured:
-        icon = LucideIcons.sparkles;
+        icon = LucideIcons.award;
         break;
       case VillaBadgeType.newVilla:
-        icon = LucideIcons.sparkle;
+        icon = LucideIcons.badgeCheck;
         break;
       case VillaBadgeType.nearBeach:
         icon = LucideIcons.waves;

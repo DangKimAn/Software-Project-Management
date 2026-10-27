@@ -343,7 +343,7 @@ abstract final class ContactService {
         .trim();
 
     final buffer = StringBuffer();
-    buffer.writeln('Xin chào Minh Thanh Villa, tôi cần tư vấn lưu trú:');
+    buffer.writeln('Xin chào The Palm, tôi cần tư vấn lưu trú:');
     if (safeName.isNotEmpty) {
       buffer.writeln('• Họ và tên: $safeName');
     }

@@ -482,16 +482,7 @@ class AppToast extends StatelessWidget {
   }
 
   Color _backgroundColor() {
-    switch (type) {
-      case AppToastType.success:
-        return AppColors.successSoft;
-      case AppToastType.warning:
-        return AppColors.warningSoft;
-      case AppToastType.error:
-        return AppColors.errorSoft;
-      case AppToastType.info:
-        return AppColors.surfaceWarmSand;
-    }
+    return AppColors.surfaceBase;
   }
 
   IconData _iconData() {

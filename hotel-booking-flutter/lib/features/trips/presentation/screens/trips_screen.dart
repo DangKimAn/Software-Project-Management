@@ -327,20 +327,6 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
           style: AppTypography.sectionHeading
               .copyWith(color: AppColors.textStrong),
         ),
-        actions: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48),
-            child: TextButton.icon(
-              onPressed: () => context.push('/account/profile'),
-              icon: const Icon(
-                LucideIcons.userRound,
-                size: 16,
-                color: AppColors.iconStrong,
-              ),
-              label: const Text('Hồ sơ'),
-            ),
-          ),
-        ],
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.textPrimary,
@@ -648,12 +634,12 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                               ),
                             ),
                           ),
-                        if (booking.cancellationReason != null &&
-                            booking.cancellationReason!.isNotEmpty)
+                        if (booking.cancellationReasonDisplay != null &&
+                            booking.cancellationReasonDisplay!.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
-                              'Lý do hủy: ${booking.cancellationReason}',
+                              'Lý do hủy: ${booking.cancellationReasonDisplay}',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.error,
@@ -667,85 +653,132 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
 
                 const Divider(height: AppSpacing.s24),
 
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 10,
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Tổng thanh toán',
-                          style: AppTypography.caption
-                              .copyWith(color: AppColors.textMuted),
-                        ),
-                        Text(
-                          CurrencyFormatter.formatVnd(booking.totalAmount),
-                          style: AppTypography.cardTitle
-                              .copyWith(color: AppColors.primary),
-                        ),
-                      ],
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        ConstrainedBox(
+                    Text('Tổng thanh toán',
+                        style: AppTypography.caption.copyWith(
+                            color: AppColors.textMuted,
+                            fontWeight: FontWeight.w400)),
+                    const SizedBox(height: 4),
+                    Text(CurrencyFormatter.formatVnd(booking.totalAmount),
+                        style: AppTypography.cardTitle
+                            .copyWith(color: AppColors.primary)),
+                    const SizedBox(height: 16),
+                    if (booking.canPayNow) ...[
+                      ConstrainedBox(
                           constraints: const BoxConstraints(minHeight: 48),
-                          child: TextButton(
-                            onPressed: () {
-                              setState(() {
-                                if (isExpanded) {
-                                  _expandedBookingIds.remove(booking.id);
-                                } else {
-                                  _expandedBookingIds.add(booking.id);
-                                }
-                              });
-                            },
-                            child:
-                                Text(isExpanded ? 'Ẩn chi tiết' : 'Chi tiết'),
-                          ),
-                        ),
-                        if (booking.canPayNow)
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(minHeight: 48),
-                            child: FilledButton(
+                          child: FilledButton(
                               style: FilledButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                              ),
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 12),
+                                  textStyle: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12))),
                               onPressed: () =>
                                   context.push('/thanh-toan/${booking.id}'),
-                              child: const Text('Thanh toán'),
-                            ),
-                          ),
-                        if (booking.isCompleted && !booking.hasReview)
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(minHeight: 48),
-                            child: OutlinedButton(
-                              onPressed: () => _openReviewModal(booking),
-                              child: const Text('Đánh giá'),
-                            ),
-                          ),
-                        if (booking.canCancel)
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(minHeight: 48),
-                            child: OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.primary,
-                                side:
-                                    const BorderSide(color: AppColors.primary),
+                              child: const Text('Thanh toán',
+                                  textAlign: TextAlign.center))),
+                      const SizedBox(height: 10),
+                    ],
+                    LayoutBuilder(builder: (context, constraints) {
+                      final secondaryStyle = OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textStrong,
+                          side: const BorderSide(color: AppColors.borderSoft),
+                          minimumSize: const Size(0, 48),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 12),
+                          textStyle: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)));
+                      final actions = <Widget>[
+                        TextButton(
+                            style: TextButton.styleFrom(
+                                foregroundColor: AppColors.textStrong,
+                                backgroundColor: Colors.transparent,
+                                shadowColor: Colors.transparent,
+                                surfaceTintColor: Colors.transparent,
+                                elevation: 0,
+                                side: BorderSide.none,
+                                minimumSize: const Size(0, 48),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 12),
+                                textStyle: const TextStyle(
+                                    fontSize: 14, fontWeight: FontWeight.w600),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
+                                    borderRadius: BorderRadius.circular(12))),
+                            onPressed: () => setState(() {
+                                  if (isExpanded) {
+                                    _expandedBookingIds.remove(booking.id);
+                                  } else {
+                                    _expandedBookingIds.add(booking.id);
+                                  }
+                                }),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    isExpanded ? 'Ẩn chi tiết' : 'Chi tiết',
+                                    textAlign: TextAlign.center,
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(width: 6),
+                                Icon(
+                                  isExpanded
+                                      ? LucideIcons.chevronUp
+                                      : LucideIcons.chevronDown,
+                                  size: 16,
+                                  color: AppColors.iconStrong,
+                                ),
+                              ],
+                            )),
+                        if (booking.canCancel)
+                          TextButton(
+                              style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.error,
+                                  minimumSize: const Size(0, 48),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 12),
+                                  textStyle: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12))),
                               onPressed: () => _handleCancelBooking(booking),
-                              child: const Text('Hủy phòng'),
-                            ),
-                          ),
-                      ],
-                    ),
+                              child: const Text('Hủy phòng',
+                                  textAlign: TextAlign.center)),
+                        if (booking.isCompleted && !booking.hasReview)
+                          OutlinedButton(
+                              style: secondaryStyle,
+                              onPressed: () => _openReviewModal(booking),
+                              child: const Text('Đánh giá',
+                                  textAlign: TextAlign.center)),
+                      ];
+                      if (constraints.maxWidth < 280 ||
+                          MediaQuery.textScalerOf(context).scale(14) > 21) {
+                        return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (var i = 0; i < actions.length; i++) ...[
+                                if (i > 0) const SizedBox(height: 8),
+                                actions[i]
+                              ]
+                            ]);
+                      }
+                      return Row(children: [
+                        for (var i = 0; i < actions.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 10),
+                          Expanded(child: actions[i])
+                        ]
+                      ]);
+                    }),
                   ],
                 ),
               ],

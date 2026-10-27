@@ -295,14 +295,19 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
       label: Text(
         label,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: 13,
           fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-          color: isSelected ? Colors.white : AppColors.textPrimary,
+          color: isSelected ? AppColors.primary : AppColors.textPrimary,
         ),
       ),
       selected: isSelected,
-      selectedColor: AppColors.textPrimary,
-      backgroundColor: AppColors.surfaceMuted,
+      selectedColor: AppColors.surfaceBase,
+      backgroundColor: AppColors.surfaceBase,
+      surfaceTintColor: Colors.transparent,
+      side: BorderSide(
+        color: isSelected ? AppColors.primary : AppColors.border,
+        width: isSelected ? 1.5 : 1.0,
+      ),
       showCheckmark: false,
       onSelected: (_) {
         setState(() {

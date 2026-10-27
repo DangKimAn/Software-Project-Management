@@ -188,7 +188,12 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                 children: [
                   Container(
                     width: double.infinity,
-                    color: AppColors.surfaceWarmSand,
+                    decoration: const BoxDecoration(
+                      color: AppColors.surfaceBase,
+                      border: Border(
+                        bottom: BorderSide(color: AppColors.borderSoft),
+                      ),
+                    ),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
                       vertical: 36,
@@ -202,7 +207,7 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                             const Row(
                               children: [
                                 Icon(
-                                  LucideIcons.sparkles,
+                                  LucideIcons.search,
                                   size: 20,
                                   color: AppColors.iconStrong,
                                 ),
@@ -299,7 +304,7 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                                             ? null
                                             : () => _runSearch(),
                                         icon: const Icon(
-                                          LucideIcons.sparkles,
+                                          LucideIcons.search,
                                           size: 16,
                                           color: Colors.white,
                                         ),
@@ -489,9 +494,9 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.surfaceWarmSand,
+                    color: AppColors.surfaceBase,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.borderWarm),
+                    border: Border.all(color: AppColors.borderSoft),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -528,15 +533,15 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
             margin: const EdgeInsets.only(bottom: 16),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.surfaceWarmSand,
+              color: AppColors.surfaceBase,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.borderWarm),
+              border: Border.all(color: AppColors.borderSoft),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(
-                  LucideIcons.sparkles,
+                  LucideIcons.bedDouble,
                   size: 16,
                   color: AppColors.iconStrong,
                 ),

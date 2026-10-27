@@ -1219,7 +1219,7 @@ abstract class AppLocalizations {
   /// No description provided for @hostOnboardingTitle.
   ///
   /// In vi, this message translates to:
-  /// **'Trở thành Chủ nhà tại Minh Thanh Villa'**
+  /// **'Trở thành Chủ nhà tại The Palm'**
   String get hostOnboardingTitle;
 
   /// No description provided for @hostKycTitle.

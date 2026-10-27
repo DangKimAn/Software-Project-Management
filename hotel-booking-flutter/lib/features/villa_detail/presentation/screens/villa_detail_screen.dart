@@ -7,7 +7,6 @@ import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/date/booking_date.dart';
-import '../../../../core/storage/preferences_service.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../shared/animations/animated_heart_button.dart';
 import '../../../../shared/animations/fade_slide_in.dart';
@@ -134,50 +133,6 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
         _couponMessage = e.toString();
       });
     }
-  }
-
-  Future<void> _handleAddToBookingQueue(Villa villa) async {
-    final checkInIso = (_checkIn ?? BookingDate.today().addDays(1)).toIsoDate();
-    final checkOutIso =
-        (_checkOut ?? BookingDate.today().addDays(3)).toIsoDate();
-    final item = BookingQueueItem(
-      listingId: villa.id,
-      title: villa.name,
-      location: villa.address,
-      imageUrl: villa.imageUrls.isNotEmpty
-          ? villa.imageUrls.first
-          : 'assets/images/NDT05929-HDR1.jpg',
-      pricePerNight: villa.basePriceVnd ?? 0,
-      weekendSurcharge: villa.surchargeAmountVnd,
-      cleaningFee: villa.cleaningFeeVnd,
-      serviceFee: villa.serviceFeeVnd,
-      extraGuestFee: villa.extraGuestFeeVnd,
-      includedGuests: villa.includedGuests,
-      maxGuests: villa.specs.maxGuests > 0 ? villa.specs.maxGuests : 20,
-      checkIn: checkInIso,
-      checkOut: checkOutIso,
-      guestsCount: _guestsCount,
-      instantBook: villa.instantBook,
-    );
-
-    final status = await ref.read(bookingQueueProvider.notifier).addItem(item);
-    if (!mounted) return;
-
-    final message = switch (status) {
-      'added' => 'Đã thêm "${villa.name}" vào giỏ chờ đặt phòng.',
-      'exists' => 'Đã cập nhật thông tin "${villa.name}" trong giỏ chờ.',
-      _ => 'Giỏ chờ đặt phòng tối đa 5 căn. Vui lòng kiểm tra giỏ chờ.',
-    };
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        action: SnackBarAction(
-          label: 'Mở giỏ chờ',
-          onPressed: () => context.push('/gio-cho-dat'),
-        ),
-      ),
-    );
   }
 
   Future<void> _handleBookNow(Villa villa) async {
@@ -571,28 +526,8 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                               Text('Tiện nghi có sẵn',
                                   style: AppTypography.sectionHeading
                                       .copyWith(fontSize: 18)),
-                              const SizedBox(height: 12),
-                              Wrap(
-                                spacing: 20,
-                                runSpacing: 12,
-                                children: villa.amenities.map((item) {
-                                  return Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        AppSemanticIcons.resolveAmenityIcon(
-                                          item,
-                                        ),
-                                        size: 16,
-                                        color: AppColors.iconStrong,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(item,
-                                          style: AppTypography.bodyMedium),
-                                    ],
-                                  );
-                                }).toList(),
-                              ),
+                              const SizedBox(height: 14),
+                              _buildAmenitiesGrid(context, villa.amenities),
                               const SizedBox(height: 24),
                             ],
 
@@ -711,9 +646,10 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
             villa: villa,
             totalCalculatedVnd: calc.finalTotal,
             selectedNights: calc.nights,
+            onMessageHost: () =>
+                context.push('/villa/${villa.id}/nhan-tin-host'),
             onBookNow:
                 _isSubmittingBooking ? null : () => _handleBookNow(villa),
-            onAddToQueue: () => _handleAddToBookingQueue(villa),
           ),
         );
       },
@@ -773,70 +709,6 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                     fontSize: 13,
                     color: AppColors.textSecondary,
                   ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 20,
-                  runSpacing: 8,
-                  children: [
-                    InkWell(
-                      onTap: () =>
-                          context.push('/villa/${villa.id}/nhan-tin-host'),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 48),
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                LucideIcons.messageCircle,
-                                size: 16,
-                                color: AppColors.iconStrong,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Nhắn tin cho Chủ nhà',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    InkWell(
-                      onTap: () => _handleAddToBookingQueue(villa),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 48),
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                LucideIcons.shoppingBag,
-                                size: 16,
-                                color: AppColors.iconStrong,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Thêm vào giỏ chờ đặt',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -1086,8 +958,108 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     );
   }
 
+  Widget _buildAmenitiesGrid(BuildContext context, List<String> amenities) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+        final int columns;
+        if (constraints.maxWidth < 300 || textScale >= 1.45) {
+          columns = 1;
+        } else if (constraints.maxWidth >= 680) {
+          columns = 3;
+        } else {
+          columns = 2;
+        }
+
+        final rows = <Widget>[];
+        for (var i = 0; i < amenities.length; i += columns) {
+          if (i > 0) {
+            rows.add(const SizedBox(height: 14));
+          }
+          final rowChildren = <Widget>[];
+          for (var col = 0; col < columns; col++) {
+            if (col > 0) {
+              rowChildren.add(const SizedBox(width: 16));
+            }
+            final idx = i + col;
+            if (idx < amenities.length) {
+              final item = amenities[idx];
+              rowChildren.add(
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: SizedBox(
+                          width: 20,
+                          child: Icon(
+                            AppSemanticIcons.resolveAmenityIcon(item),
+                            size: 18,
+                            color: AppColors.iconStrong,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          item,
+                          style: AppTypography.bodyMedium.copyWith(
+                            color: AppColors.textPrimary,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            } else {
+              rowChildren.add(const Expanded(child: SizedBox.shrink()));
+            }
+          }
+          rows.add(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: rowChildren,
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: rows,
+        );
+      },
+    );
+  }
+
   Widget _buildPoliciesCard(Villa villa) {
     final rules = villa.rules ?? const VillaRules();
+    final policyItems = <Widget>[
+      _PolicyItem(
+        icon: LucideIcons.clock,
+        label: 'Nhận phòng: ${rules.checkInFrom} – ${rules.checkInUntil}',
+      ),
+      _PolicyItem(
+        icon: LucideIcons.logOut,
+        label: 'Trả phòng: Trước ${rules.checkOutBefore}',
+      ),
+      if (rules.quietHours != null)
+        _PolicyItem(
+          icon: LucideIcons.volumeX,
+          label: 'Giờ yên tĩnh: ${rules.quietHours}',
+        ),
+      _PolicyItem(
+        icon: LucideIcons.pawPrint,
+        label:
+            rules.allowPets ? 'Cho phép mang thú cưng' : 'Không mang thú cưng',
+      ),
+      _PolicyItem(
+        icon: LucideIcons.shieldCheck,
+        label: villa.cancellationPolicyLabelVi,
+      ),
+    ];
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1098,36 +1070,41 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
             'Nội quy chỗ nghỉ & Chính sách hoàn hủy',
             style: AppTypography.sectionHeading.copyWith(fontSize: 18),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 24,
-            runSpacing: 10,
-            children: [
-              _PolicyItem(
-                icon: LucideIcons.clock,
-                label:
-                    'Nhận phòng: ${rules.checkInFrom} – ${rules.checkInUntil}',
-              ),
-              _PolicyItem(
-                icon: LucideIcons.logOut,
-                label: 'Trả phòng: Trước ${rules.checkOutBefore}',
-              ),
-              if (rules.quietHours != null)
-                _PolicyItem(
-                  icon: LucideIcons.volumeX,
-                  label: 'Giờ yên tĩnh: ${rules.quietHours}',
-                ),
-              _PolicyItem(
-                icon: LucideIcons.pawPrint,
-                label: rules.allowPets
-                    ? 'Cho phép mang thú cưng'
-                    : 'Không mang thú cưng',
-              ),
-              _PolicyItem(
-                icon: LucideIcons.shieldCheck,
-                label: villa.cancellationPolicyLabelVi,
-              ),
-            ],
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+              final int columns =
+                  (constraints.maxWidth < 340 || textScale >= 1.35) ? 1 : 2;
+              final rows = <Widget>[];
+              for (var i = 0; i < policyItems.length; i += columns) {
+                if (i > 0) {
+                  rows.add(const SizedBox(height: 12));
+                }
+                final rowChildren = <Widget>[];
+                for (var col = 0; col < columns; col++) {
+                  if (col > 0) {
+                    rowChildren.add(const SizedBox(width: 16));
+                  }
+                  final idx = i + col;
+                  if (idx < policyItems.length) {
+                    rowChildren.add(Expanded(child: policyItems[idx]));
+                  } else {
+                    rowChildren.add(const Expanded(child: SizedBox.shrink()));
+                  }
+                }
+                rows.add(
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: rowChildren,
+                  ),
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: rows,
+              );
+            },
           ),
           if (rules.additionalRules.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -1194,17 +1171,24 @@ class _PolicyItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: AppColors.iconStrong),
-        const SizedBox(width: 8),
-        Flexible(
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: SizedBox(
+            width: 20,
+            child: Icon(icon, size: 16, color: AppColors.iconStrong),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
           child: Text(
             label,
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
               color: AppColors.textPrimary,
+              height: 1.35,
             ),
           ),
         ),

@@ -29,29 +29,6 @@ class SourceSearchBar extends ConsumerStatefulWidget {
 }
 
 class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
-  static const List<String> _aiSearchSuggestions = [
-    'Villa gần biển có hồ bơi cho 8 người cuối tuần này',
-    'Chỗ nghỉ yên tĩnh gần Bãi Trước cho cặp đôi dưới 1tr5',
-    'Homestay có bếp và chỗ đậu xe cho gia đình 6 người',
-  ];
-
-  bool _aiOverlayOpen = false;
-  late final TextEditingController _aiQueryCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    final savedQuery =
-        ref.read(preferencesServiceProvider).getLastAiSearchQuery();
-    _aiQueryCtrl = TextEditingController(text: savedQuery);
-  }
-
-  @override
-  void dispose() {
-    _aiQueryCtrl.dispose();
-    super.dispose();
-  }
-
   void _openSearchModal(BuildContext context, {int initialTab = 0}) {
     showModalBottomSheet<void>(
       context: context,
@@ -72,14 +49,6 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
         },
       ),
     );
-  }
-
-  void _submitInlineAiSearch(BuildContext context, [String? overrideQuery]) {
-    final q = (overrideQuery ?? _aiQueryCtrl.text).trim();
-    if (q.isEmpty) return;
-    ref.read(preferencesServiceProvider).setLastAiSearchQuery(q);
-    setState(() => _aiOverlayOpen = false);
-    context.push('/tim-kiem-ai?q=${Uri.encodeComponent(q)}');
   }
 
   String _locationSummary(VillaFilterState filter) {
@@ -171,104 +140,6 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
     }
   }
 
-  Widget _buildInlineAiSearchMorph(BuildContext context) {
-    return Container(
-      key: const ValueKey<String>('inline-ai-search-morph'),
-      constraints: const BoxConstraints(maxWidth: 960),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                LucideIcons.sparkles,
-                size: 18,
-                color: AppColors.iconStrong,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _aiQueryCtrl,
-                  onSubmitted: (val) => _submitInlineAiSearch(context, val),
-                  decoration: const InputDecoration(
-                    hintText:
-                        'Mô tả chỗ nghỉ bạn tìm: gần biển, có hồ bơi, 8 người, dưới 2 triệu...',
-                    border: InputBorder.none,
-                    isDense: true,
-                  ),
-                ),
-              ),
-              Semantics(
-                button: true,
-                label: 'Tìm kiếm bằng AI',
-                child: InkWell(
-                  onTap: () => _submitInlineAiSearch(context),
-                  borderRadius: BorderRadius.circular(12),
-                  child: const SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Center(
-                      child: Icon(
-                        LucideIcons.search,
-                        size: 18,
-                        color: AppColors.iconStrong,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Semantics(
-                button: true,
-                label: 'Đóng tìm kiếm AI',
-                child: InkWell(
-                  onTap: () => setState(() => _aiOverlayOpen = false),
-                  borderRadius: BorderRadius.circular(12),
-                  child: const SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Center(
-                      child: Icon(
-                        LucideIcons.x,
-                        size: 18,
-                        color: AppColors.iconStrong,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: _aiSearchSuggestions.map((suggestion) {
-              return ActionChip(
-                label: Text(
-                  suggestion,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12),
-                ),
-                onPressed: () {
-                  _aiQueryCtrl.text = suggestion;
-                  _submitInlineAiSearch(context, suggestion);
-                },
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final filter = ref.watch(villaFilterProvider);
@@ -277,277 +148,223 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
     final disableAnimations = MediaQuery.disableAnimationsOf(context);
 
     final Widget searchBarChild;
-    if (_aiOverlayOpen) {
-      searchBarChild = _buildInlineAiSearchMorph(context);
-    } else if (!isWide) {
-      // Mobile / Compact Search Bar (`BookingWidget.tsx` mobile layout + `Tìm AI` button)
-      searchBarChild = Row(
+    if (!isWide) {
+      // Pill Search Bar matching reference design (left mapPin + content + right circular search button, no AI button)
+      searchBarChild = Container(
         key: const ValueKey<String>('compact-search-bar'),
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => _openSearchModal(context, initialTab: 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            'Địa điểm',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF0F172A),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _locationSummary(filter),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF475569),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${_dateSummary(filter)} • ${_guestSummary(filter)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFF64748B),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Semantics(
-                    button: true,
-                    label: 'Tìm kiếm',
-                    child: InkWell(
-                      onTap: () => _triggerSubmit(context),
-                      borderRadius: BorderRadius.circular(12),
-                      child: const SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Center(
-                          child: Icon(
-                            LucideIcons.search,
-                            size: 18,
-                            color: AppColors.iconStrong,
-                          ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x120F172A),
+              blurRadius: 16,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Icon(
+              LucideIcons.mapPin,
+              size: 20,
+              color: AppColors.iconStrong,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: InkWell(
+                onTap: () => _openSearchModal(context, initialTab: 0),
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _locationSummary(filter),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0F172A),
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${_dateSummary(filter)} • ${_guestSummary(filter)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          // Tìm AI button (`SearchBar.tsx`)
-          InkWell(
-            onTap: widget.onOpenAiSearch ??
-                () => setState(() => _aiOverlayOpen = true),
-            borderRadius: BorderRadius.circular(999),
-            child: Container(
-              height: 54,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    LucideIcons.sparkles,
-                    size: 16,
-                    color: AppColors.iconStrong,
+            const SizedBox(width: 8),
+            Semantics(
+              button: true,
+              label: 'Tìm kiếm',
+              child: InkWell(
+                onTap: () => _triggerSubmit(context),
+                customBorder: const CircleBorder(),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
                   ),
-                  SizedBox(width: 6),
-                  Text(
-                    'Tìm AI',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF334155),
+                  child: const Center(
+                    child: Icon(
+                      LucideIcons.search,
+                      size: 19,
+                      color: Colors.white,
                     ),
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     } else {
-      // Desktop / Wide 4-segment Search Bar (`BookingWidget.tsx` + `SearchBar.tsx`)
+      // Desktop / Wide 4-segment Pill Search Bar (without "Tìm AI")
       searchBarChild = ConstrainedBox(
         key: const ValueKey<String>('wide-search-bar'),
-        constraints: const BoxConstraints(maxWidth: 960),
-        child: Row(
-          children: [
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(28),
+        constraints: const BoxConstraints(maxWidth: 920),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x120F172A),
+                blurRadius: 18,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 6, 6, 6),
+          child: Row(
+            children: [
+              const Icon(
+                LucideIcons.mapPin,
+                size: 20,
+                color: AppColors.iconStrong,
+              ),
+              Expanded(
+                flex: 12,
+                child: _SegmentTrigger(
+                  title: 'Địa điểm',
+                  subtitle: _locationSummary(filter),
+                  onTap: () => _openSearchModal(context, initialTab: 0),
                 ),
-                padding: const EdgeInsets.all(6),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 12,
-                      child: _SegmentTrigger(
-                        title: 'Địa điểm',
-                        subtitle: _locationSummary(filter),
-                        onTap: () => _openSearchModal(context, initialTab: 0),
-                      ),
+              ),
+              Container(width: 1, height: 34, color: const Color(0xFFE2E8F0)),
+              Expanded(
+                flex: 9,
+                child: _SegmentTrigger(
+                  title: 'Nhận phòng',
+                  subtitle: _checkInSummary(filter),
+                  onTap: () => _openSearchModal(context, initialTab: 1),
+                ),
+              ),
+              Container(width: 1, height: 34, color: const Color(0xFFE2E8F0)),
+              Expanded(
+                flex: 9,
+                child: _SegmentTrigger(
+                  title: 'Trả phòng',
+                  subtitle: _checkOutSummary(filter),
+                  onTap: () => _openSearchModal(context, initialTab: 1),
+                ),
+              ),
+              Container(width: 1, height: 34, color: const Color(0xFFE2E8F0)),
+              Expanded(
+                flex: 11,
+                child: InkWell(
+                  onTap: () => _openSearchModal(context, initialTab: 2),
+                  borderRadius: BorderRadius.circular(999),
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 4,
+                      top: 4,
+                      bottom: 4,
                     ),
-                    Container(
-                        width: 1, height: 34, color: const Color(0xFFE2E8F0)),
-                    Expanded(
-                      flex: 9,
-                      child: _SegmentTrigger(
-                        title: 'Nhận phòng',
-                        subtitle: _checkInSummary(filter),
-                        onTap: () => _openSearchModal(context, initialTab: 1),
-                      ),
-                    ),
-                    Container(
-                        width: 1, height: 34, color: const Color(0xFFE2E8F0)),
-                    Expanded(
-                      flex: 9,
-                      child: _SegmentTrigger(
-                        title: 'Trả phòng',
-                        subtitle: _checkOutSummary(filter),
-                        onTap: () => _openSearchModal(context, initialTab: 1),
-                      ),
-                    ),
-                    Container(
-                        width: 1, height: 34, color: const Color(0xFFE2E8F0)),
-                    Expanded(
-                      flex: 11,
-                      child: InkWell(
-                        onTap: () => _openSearchModal(context, initialTab: 2),
-                        borderRadius: BorderRadius.circular(999),
-                        child: Padding(
-                          padding: const EdgeInsets.only(
-                            left: 16,
-                            right: 6,
-                            top: 4,
-                            bottom: 4,
-                          ),
-                          child: Row(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Text(
-                                      'Khách',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w700,
-                                        color: Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _guestSummary(filter),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: filter.effectiveGuests > 0
-                                            ? FontWeight.w600
-                                            : FontWeight.w400,
-                                        color: filter.effectiveGuests > 0
-                                            ? const Color(0xFF0F172A)
-                                            : const Color(0xFF64748B),
-                                      ),
-                                    ),
-                                  ],
+                              const Text(
+                                'Khách',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF0F172A),
                                 ),
                               ),
-                              const SizedBox(width: 4),
-                              Semantics(
-                                button: true,
-                                label: 'Tìm kiếm',
-                                child: InkWell(
-                                  onTap: () => _triggerSubmit(context),
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: const SizedBox(
-                                    width: 48,
-                                    height: 48,
-                                    child: Center(
-                                      child: Icon(
-                                        LucideIcons.search,
-                                        size: 18,
-                                        color: AppColors.iconStrong,
-                                      ),
-                                    ),
-                                  ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _guestSummary(filter),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: filter.effectiveGuests > 0
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  color: filter.effectiveGuests > 0
+                                      ? const Color(0xFF0F172A)
+                                      : const Color(0xFF64748B),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        Semantics(
+                          button: true,
+                          label: 'Tìm kiếm',
+                          child: InkWell(
+                            onTap: () => _triggerSubmit(context),
+                            customBorder: const CircleBorder(),
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Center(
+                                child: Icon(
+                                  LucideIcons.search,
+                                  size: 20,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            // Right: "Tìm AI" pill button
-            InkWell(
-              onTap: widget.onOpenAiSearch ??
-                  () => setState(() => _aiOverlayOpen = true),
-              borderRadius: BorderRadius.circular(999),
-              child: Container(
-                height: 56,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      LucideIcons.sparkles,
-                      size: 17,
-                      color: AppColors.iconStrong,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Tìm AI',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF334155),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
@@ -834,22 +651,48 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
   }
 
   Widget _buildLocationTab(VillaFilterState filter, List<String> history) {
+    final isGeoActive = filter.lat != null && filter.lng != null;
+    const groups = VungTauMapConstants.locationGroups;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Bạn muốn nghỉ dưỡng ở đâu tại Vũng Tàu?',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 12),
         TextField(
           controller: _queryCtrl,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textPrimary,
+          ),
           decoration: InputDecoration(
-            hintText: 'Nhập tên biệt thự, đường, phường hoặc khu vực...',
+            hintText: 'Tìm tên villa, đường, khu vực...',
+            hintStyle: const TextStyle(
+              fontSize: 13.5,
+              color: AppColors.textMuted,
+              fontWeight: FontWeight.w400,
+            ),
+            filled: true,
+            fillColor: Colors.white,
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(
+                color: AppColors.textPrimary,
+                width: 1.3,
+              ),
+            ),
             prefixIcon: const Icon(
               LucideIcons.search,
               size: 18,
@@ -878,14 +721,14 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                 .update((s) => s.copyWith(searchQuery: val));
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
 
-        // Quick Actions: Gần tôi & Tìm kiếm bằng bản đồ
+        // Quick Actions: Gần tôi & Chọn trên bản đồ (compact 1-line pills)
         Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () {
+              child: InkWell(
+                onTap: () {
                   ref.read(villaFilterProvider.notifier).update(
                         (s) => s.copyWith(
                           lat: VungTauMapConstants.defaultLat,
@@ -897,38 +740,107 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                       );
                   setState(() => _showMapPicker = true);
                 },
-                icon: const Icon(
-                  LucideIcons.navigation,
-                  size: 16,
-                  color: AppColors.iconStrong,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isGeoActive
+                          ? AppColors.primary
+                          : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        LucideIcons.navigation,
+                        size: 15,
+                        color: AppColors.iconStrong,
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'Gần tôi (800m)',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: isGeoActive
+                                ? AppColors.primary
+                                : AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                label: const Text('Gần tôi (800m)'),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () =>
-                    setState(() => _showMapPicker = !_showMapPicker),
-                icon: const Icon(
-                  LucideIcons.map,
-                  size: 16,
-                  color: AppColors.iconStrong,
+              child: InkWell(
+                onTap: () => setState(() => _showMapPicker = !_showMapPicker),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _showMapPicker
+                          ? AppColors.primary
+                          : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        LucideIcons.map,
+                        size: 15,
+                        color: AppColors.iconStrong,
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          _showMapPicker ? 'Ẩn bản đồ' : 'Chọn trên bản đồ',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _showMapPicker
+                                ? AppColors.primary
+                                : AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                label: Text(_showMapPicker ? 'Ẩn bản đồ' : 'Chọn trên bản đồ'),
               ),
             ),
           ],
         ),
 
         if (_showMapPicker) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           VungTauMapPicker(
             initialLat: filter.lat ?? VungTauMapConstants.defaultLat,
             initialLng: filter.lng ?? VungTauMapConstants.defaultLng,
             radiusMeters:
                 filter.radius ?? VungTauMapConstants.defaultRadiusMeters,
-            height: 280,
+            height: 260,
             onLocationChanged: (lat, lng, label) {
               ref.read(villaFilterProvider.notifier).update(
                     (s) => s.copyWith(
@@ -945,7 +857,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
 
         // Search History (`searchHistoryStorage.ts`)
         if (history.isNotEmpty) ...[
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -960,13 +872,19 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
               TextButton(
                 onPressed: () =>
                     ref.read(searchHistoryProvider.notifier).clear(),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
                 child: const Text(
-                  'Xóa lịch sử',
+                  'Xóa',
                   style: TextStyle(fontSize: 12),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 6),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -977,6 +895,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1013,15 +932,12 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                           .read(searchHistoryProvider.notifier)
                           .removeTerm(term),
                       borderRadius: BorderRadius.circular(999),
-                      child: const SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Center(
-                          child: Icon(
-                            LucideIcons.x,
-                            size: 14,
-                            color: AppColors.iconMuted,
-                          ),
+                      child: const Padding(
+                        padding: EdgeInsets.all(2),
+                        child: Icon(
+                          LucideIcons.x,
+                          size: 13,
+                          color: AppColors.iconMuted,
                         ),
                       ),
                     ),
@@ -1032,87 +948,102 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
           ),
         ],
 
-        // 8 VUNG_TAU_LOCATION_GROUPS (`Source goc/backend/src/common/vung-tau-location-groups.ts`)
-        const SizedBox(height: 20),
+        // 8 VUNG_TAU_LOCATION_GROUPS in a clean 2-column grid
+        const SizedBox(height: 18),
         const Text(
-          'Khu vực nổi bật tại Vũng Tàu',
+          'Khu vực nổi bật',
           style: TextStyle(
-            fontSize: 14,
+            fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+            color: AppColors.textSecondary,
           ),
         ),
         const SizedBox(height: 10),
-        for (final group in VungTauMapConstants.locationGroups)
-          InkWell(
-            onTap: () {
-              ref.read(villaFilterProvider.notifier).update(
-                    (s) => s.copyWith(
-                      locationGroup: group.key,
-                      searchQuery: '',
-                      clearGeo: true,
-                      page: 1,
-                    ),
-                  );
-              setState(() {
-                _queryCtrl.clear();
-                _activeTab = 1; // Advance to Date tab like Source goc
-              });
-            },
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-              decoration: BoxDecoration(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(16),
-                border: const Border(
-                  bottom: BorderSide(color: AppColors.divider),
+        for (int i = 0; i < groups.length; i += 2) ...[
+          if (i > 0) const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildAreaChipCard(groups[i], filter),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: i + 1 < groups.length
+                    ? _buildAreaChipCard(groups[i + 1], filter)
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildAreaChipCard(
+    VungTauLocationGroup group,
+    VillaFilterState filter,
+  ) {
+    final isSelected = filter.locationGroup == group.key ||
+        filter.locationGroup == group.id ||
+        filter.locationGroup == group.label;
+
+    return InkWell(
+      onTap: () {
+        ref.read(villaFilterProvider.notifier).update(
+              (s) => s.copyWith(
+                locationGroup: group.key,
+                searchQuery: '',
+                clearGeo: true,
+                page: 1,
+              ),
+            );
+        setState(() {
+          _queryCtrl.clear();
+          _activeTab = 1; // Advance to Date tab
+        });
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : const Color(0xFFE2E8F0),
+            width: isSelected ? 1.4 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              LucideIcons.mapPin,
+              size: 16,
+              color: isSelected ? AppColors.iconStrong : AppColors.iconMuted,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                group.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                  color: isSelected ? AppColors.primary : AppColors.textPrimary,
                 ),
               ),
-              child: Row(
-                children: [
-                  const Icon(
-                    LucideIcons.mapPin,
-                    size: 18,
-                    color: AppColors.iconStrong,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          group.label,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: (filter.locationGroup == group.key ||
-                                    filter.locationGroup == group.id ||
-                                    filter.locationGroup == group.label)
-                                ? FontWeight.w700
-                                : FontWeight.w600,
-                            color: (filter.locationGroup == group.key ||
-                                    filter.locationGroup == group.id ||
-                                    filter.locationGroup == group.label)
-                                ? AppColors.primary
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          group.subtitle,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
             ),
-          ),
-      ],
+            if (isSelected) ...[
+              const SizedBox(width: 4),
+              const Icon(
+                LucideIcons.check,
+                size: 14,
+                color: AppColors.iconStrong,
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -1163,24 +1094,28 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
   }
 
   Widget _buildDateTab(VillaFilterState filter) {
-    final mode = filter.dateMode;
+    final mode = filter.dateMode == 'months' ? 'months' : 'dates';
+    final currentMonth = DateTime.now().month;
+    final availableMonths = [
+      for (int m = currentMonth; m <= 12; m++) m,
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 3-mode Switcher (`Ngày` | `Tháng` | `Linh hoạt`)
+        // 2-mode Switcher (`Ngày` | `Tháng` — no `Linh hoạt`, no gray background)
         Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: AppColors.surfaceVariant,
+            color: Colors.white,
             borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
           child: Row(
             children: [
               for (final entry in const [
                 ('dates', 'Ngày'),
                 ('months', 'Tháng'),
-                ('flexible', 'Linh hoạt'),
               ])
                 Expanded(
                   child: InkWell(
@@ -1189,10 +1124,11 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       decoration: BoxDecoration(
-                        color: mode == entry.$1
-                            ? Colors.white
-                            : Colors.transparent,
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(999),
+                        border: mode == entry.$1
+                            ? Border.all(color: AppColors.primary, width: 1.4)
+                            : null,
                       ),
                       alignment: Alignment.center,
                       child: Text(
@@ -1202,7 +1138,9 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                           fontWeight: mode == entry.$1
                               ? FontWeight.w700
                               : FontWeight.w500,
-                          color: AppColors.textPrimary,
+                          color: mode == entry.$1
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
                         ),
                       ),
                     ),
@@ -1289,53 +1227,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
               },
             ),
           ),
-          const SizedBox(height: 16),
-          // Exactness chips (`Ngày chính xác`, `± 1 ngày`, `± 2 ngày`, `± 3 ngày`, `± 7 ngày`, `± 14 ngày`)
-          const Text(
-            'Độ linh hoạt ngày nhận/trả phòng',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final days in const [0, 1, 2, 3, 7, 14])
-                InkWell(
-                  onTap: () => ref
-                      .read(villaFilterProvider.notifier)
-                      .update((s) => s.copyWith(exactnessDays: days)),
-                  borderRadius: BorderRadius.circular(999),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: filter.exactnessDays == days
-                          ? AppColors.textPrimary
-                          : Colors.white,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      days == 0 ? 'Ngày chính xác' : '± $days ngày',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: filter.exactnessDays == days
-                            ? Colors.white
-                            : AppColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ] else if (mode == 'months') ...[
+        ] else ...[
           const Text(
             'Chọn các tháng dự kiến đi Vũng Tàu',
             style: TextStyle(
@@ -1347,7 +1239,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: 12,
+            itemCount: availableMonths.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
               mainAxisSpacing: 10,
@@ -1355,11 +1247,12 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
               childAspectRatio: 1.5,
             ),
             itemBuilder: (context, idx) {
-              final m = idx + 1;
+              final m = availableMonths[idx];
               final selected = filter.selectedMonths.contains(m);
               return InkWell(
                 onTap: () {
-                  final next = [...filter.selectedMonths];
+                  final next = [...filter.selectedMonths]
+                    ..removeWhere((item) => item < currentMonth);
                   if (selected) {
                     next.remove(m);
                   } else {
@@ -1377,10 +1270,11 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: selected ? const Color(0xFFECFEFF) : Colors.white,
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: selected ? AppColors.primary : AppColors.border,
+                      width: selected ? 1.5 : 1.0,
                     ),
                   ),
                   alignment: Alignment.center,
@@ -1409,41 +1303,6 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                 ),
               );
             },
-          ),
-        ] else ...[
-          const Text(
-            'Bạn muốn ở trong bao lâu?',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 8,
-            children: [
-              for (final item in const [
-                ('weekend', 'Cuối tuần'),
-                ('week', '1 tuần'),
-                ('month', '1 tháng'),
-              ])
-                ChoiceChip(
-                  label: Text(item.$2),
-                  selected: filter.flexDuration == item.$1,
-                  onSelected: (_) {
-                    final computed =
-                        SearchDateModeHelper.computeForFlexible(item.$1);
-                    ref.read(villaFilterProvider.notifier).update(
-                          (s) => s.copyWith(
-                            flexDuration: item.$1,
-                            checkIn: computed.checkIn,
-                            checkOut: computed.checkOut,
-                          ),
-                        );
-                  },
-                ),
-            ],
           ),
         ],
       ],
@@ -1536,20 +1395,33 @@ class _TabPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.textPrimary : AppColors.surfaceVariant,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: selected ? Colors.white : AppColors.textPrimary,
-          ),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              height: 2.5,
+              width: selected ? 28 : 0,
+              decoration: BoxDecoration(
+                color: selected ? AppColors.primary : Colors.transparent,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1712,31 +1584,37 @@ class _SimpleMonthGrid extends StatelessWidget {
 
             return InkWell(
               onTap: isPast ? null : () => onDayTapped(date),
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: (isStart || isEnd)
-                      ? AppColors.primary
-                      : isInRange
-                          ? const Color(0xFFECFEFF)
-                          : Colors.transparent,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  '$day',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: (isStart || isEnd || isInRange)
-                        ? FontWeight.w700
-                        : FontWeight.w500,
-                    color: isPast
-                        ? AppColors.textMuted
-                        : (isStart || isEnd)
-                            ? Colors.white
-                            : isInRange
-                                ? AppColors.primary
-                                : AppColors.textPrimary,
+              customBorder: const CircleBorder(),
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: Container(
+                    margin: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: (isStart || isEnd)
+                          ? AppColors.primary
+                          : isInRange
+                              ? AppColors.rangeBackground
+                              : Colors.transparent,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '$day',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: (isStart || isEnd || isInRange)
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: isPast
+                            ? AppColors.textMuted
+                            : (isStart || isEnd)
+                                ? Colors.white
+                                : isInRange
+                                    ? AppColors.primary
+                                    : AppColors.textPrimary,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1896,11 +1774,13 @@ class _StayFilterModalSheetState extends ConsumerState<_StayFilterModalSheet> {
                         children: _sortOptions.map((opt) {
                           final selected = _sort == opt.$1;
                           return ChoiceChip(
-                            avatar: Icon(
-                              AppSemanticIcons.resolveSortIcon(opt.$1),
-                              size: 15,
-                              color: AppColors.iconStrong,
-                            ),
+                            avatar: opt.$1 == 'newest'
+                                ? null
+                                : Icon(
+                                    AppSemanticIcons.resolveSortIcon(opt.$1),
+                                    size: 15,
+                                    color: AppColors.iconStrong,
+                                  ),
                             showCheckmark: false,
                             label: Text(opt.$2),
                             selected: selected,
@@ -2203,7 +2083,7 @@ Future<void> showAiSearchQuickModal(
               Row(
                 children: [
                   const Icon(
-                    LucideIcons.sparkles,
+                    LucideIcons.search,
                     size: 20,
                     color: AppColors.iconStrong,
                   ),
@@ -2287,7 +2167,7 @@ Future<void> showAiSearchQuickModal(
                     );
                   },
                   icon: const Icon(
-                    LucideIcons.sparkles,
+                    LucideIcons.search,
                     size: 16,
                     color: Colors.white,
                   ),

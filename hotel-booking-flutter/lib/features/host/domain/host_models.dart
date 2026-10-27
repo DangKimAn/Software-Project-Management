@@ -1518,12 +1518,51 @@ BookingDisplayStatus getBookingDisplayStatus(
       break;
   }
 
+  final rawReason = booking['cancellationReason']?.toString().trim();
+  String? localizedReason = rawReason;
+  if (rawReason != null && rawReason.isNotEmpty) {
+    switch (rawReason.toUpperCase()) {
+      case 'PAYMENT_EXPIRED':
+      case 'EXPIRED':
+      case 'HOLD_EXPIRED':
+        localizedReason =
+            'Quá thời hạn thanh toán (hệ thống tự động hủy giữ chỗ)';
+        break;
+      case 'CUSTOMER_CANCELLED':
+      case 'CANCELLED_BY_GUEST':
+      case 'GUEST_CANCELLED':
+        localizedReason = 'Khách hàng chủ động hủy đặt phòng';
+        break;
+      case 'HOST_REJECTED':
+      case 'REJECTED':
+        localizedReason = 'Chủ nhà từ chối yêu cầu đặt phòng';
+        break;
+      case 'HOST_CANCELLED':
+      case 'CANCELLED_BY_HOST':
+        localizedReason = 'Chủ nhà đã hủy đặt phòng';
+        break;
+      case 'ADMIN_CANCELLED':
+      case 'CANCELLED_BY_ADMIN':
+        localizedReason = 'Quản trị viên đã hủy đặt phòng';
+        break;
+      case 'LATE_PAYMENT_AFTER_BOOKING_EXPIRED':
+      case 'PAYMENT_SUCCESS_AFTER_HOLD_EXPIRED':
+        localizedReason = 'Thanh toán phát sinh sau khi đã hết thời gian giữ chỗ';
+        break;
+      default:
+        if (RegExp(r'^[A-Za-z0-9]+(_[A-Za-z0-9]+)+$').hasMatch(rawReason)) {
+          localizedReason = 'Đơn đặt phòng đã bị hủy theo quy định hệ thống';
+        }
+        break;
+    }
+  }
+
   return BookingDisplayStatus(
     label: label,
     tone: tone,
     normalizedStatus: code,
     code: code,
-    reason: booking['cancellationReason']?.toString(),
+    reason: localizedReason,
     isTerminal: _terminalStatuses.contains(lifecycle) ||
         _terminalStatuses.contains(code) ||
         code == 'refunded',

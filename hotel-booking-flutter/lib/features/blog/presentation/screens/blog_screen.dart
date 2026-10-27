@@ -15,7 +15,7 @@ import '../../../../shared/widgets/app_image.dart';
 import '../../data/blog_repository.dart';
 
 /// Port of `Source goc/frontend/src/views/pages/Blog/BlogPage.tsx`
-/// adhering to Minh Thanh Villa Light Luxury Design System (FLUTTER_RULES.md).
+/// adhering to The Palm Light Luxury Design System (FLUTTER_RULES.md).
 class BlogScreen extends ConsumerStatefulWidget {
   const BlogScreen({super.key});
 
@@ -537,7 +537,7 @@ class BlogPostCard extends StatelessWidget {
                             vertical: 4,
                           ),
                           decoration: const BoxDecoration(
-                            color: AppColors.surfaceWarmSand,
+                            color: AppColors.surfaceBase,
                             borderRadius: AppRadii.roundedPill,
                           ),
                           child: Text(
@@ -633,6 +633,7 @@ class _BlogPaginationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final currentPage = pagination.page;
     final totalPages = pagination.totalPages;
+    if (totalPages <= 1) return const SizedBox.shrink();
     final pages = <int>[];
     final start = (currentPage - 2).clamp(1, totalPages);
     final end = (currentPage + 2).clamp(1, totalPages);
@@ -650,28 +651,22 @@ class _BlogPaginationBar extends StatelessWidget {
           button: true,
           enabled: pagination.hasPreviousPage,
           label: 'Trang trước',
-          child: OutlinedButton.icon(
+          child: OutlinedButton(
             key: const ValueKey('blog-page-prev'),
             onPressed: pagination.hasPreviousPage
                 ? () => onPageSelected(currentPage - 1)
                 : null,
             style: OutlinedButton.styleFrom(
-              minimumSize: const Size(48, 48),
-              shape: const StadiumBorder(),
+              minimumSize: const Size(40, 40),
+              padding: EdgeInsets.zero,
+              shape: const CircleBorder(),
               side: BorderSide(
                 color: pagination.hasPreviousPage
                     ? AppColors.border
                     : AppColors.borderSoft,
               ),
             ),
-            icon: Icon(
-              LucideIcons.chevronLeft,
-              size: 16,
-              color: pagination.hasPreviousPage
-                  ? AppColors.iconStrong
-                  : AppColors.textTertiary,
-            ),
-            label: const Text('Trước'),
+            child: const Text('<'),
           ),
         ),
         for (final p in pages)
@@ -719,28 +714,22 @@ class _BlogPaginationBar extends StatelessWidget {
           button: true,
           enabled: pagination.hasNextPage,
           label: 'Trang sau',
-          child: OutlinedButton.icon(
+          child: OutlinedButton(
             key: const ValueKey('blog-page-next'),
             onPressed: pagination.hasNextPage
                 ? () => onPageSelected(currentPage + 1)
                 : null,
             style: OutlinedButton.styleFrom(
-              minimumSize: const Size(48, 48),
-              shape: const StadiumBorder(),
+              minimumSize: const Size(40, 40),
+              padding: EdgeInsets.zero,
+              shape: const CircleBorder(),
               side: BorderSide(
                 color: pagination.hasNextPage
                     ? AppColors.border
                     : AppColors.borderSoft,
               ),
             ),
-            icon: Icon(
-              LucideIcons.chevronRight,
-              size: 16,
-              color: pagination.hasNextPage
-                  ? AppColors.iconStrong
-                  : AppColors.textTertiary,
-            ),
-            label: const Text('Sau'),
+            child: const Text('>'),
           ),
         ),
       ],

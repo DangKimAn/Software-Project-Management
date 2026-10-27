@@ -131,15 +131,6 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                           : 'Bản đồ Vũng Tàu',
                                     ),
                                   ),
-                                  OutlinedButton.icon(
-                                    onPressed: () => context.push('/ai-search'),
-                                    icon: const Icon(
-                                      LucideIcons.sparkles,
-                                      size: 16,
-                                      color: AppColors.iconStrong,
-                                    ),
-                                    label: const Text('Tìm bằng AI'),
-                                  ),
                                   if (filter.searchQuery.isNotEmpty ||
                                       filter.locationGroup != null ||
                                       filter.lat != null ||
@@ -300,6 +291,14 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                             WrapCrossAlignment.center,
                                         children: [
                                           OutlinedButton(
+                                            style: OutlinedButton.styleFrom(
+                                              minimumSize: const Size(40, 40),
+                                              padding: EdgeInsets.zero,
+                                              shape: const CircleBorder(),
+                                              side: const BorderSide(
+                                                color: AppColors.border,
+                                              ),
+                                            ),
                                             onPressed: pagination.hasPrev
                                                 ? () {
                                                     ref
@@ -314,7 +313,7 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                                         );
                                                   }
                                                 : null,
-                                            child: const Text('Trang trước'),
+                                            child: const Text('<'),
                                           ),
                                           Text(
                                             'Trang ${pagination.page} / ${pagination.totalPages}',
@@ -323,6 +322,14 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                             ),
                                           ),
                                           OutlinedButton(
+                                            style: OutlinedButton.styleFrom(
+                                              minimumSize: const Size(40, 40),
+                                              padding: EdgeInsets.zero,
+                                              shape: const CircleBorder(),
+                                              side: const BorderSide(
+                                                color: AppColors.border,
+                                              ),
+                                            ),
                                             onPressed: pagination.hasNext
                                                 ? () {
                                                     ref
@@ -337,7 +344,7 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                                         );
                                                   }
                                                 : null,
-                                            child: const Text('Trang sau'),
+                                            child: const Text('>'),
                                           ),
                                         ],
                                       ),

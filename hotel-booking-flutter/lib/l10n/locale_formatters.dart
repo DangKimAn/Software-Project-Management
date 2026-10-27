@@ -26,7 +26,7 @@ class LocalizedErrorCopy {
 
 /// Locale-aware formatting & domain localization utilities for `vi`, `en`, and `ko`.
 ///
-/// Enforces Minh Thanh Villa business rules:
+/// Enforces The Palm business rules:
 /// - Currency ALWAYS remains integer VND (`₫`) across all locales; never converts currency.
 /// - Calendar dates ALWAYS use `Asia/Ho_Chi_Minh` pure dates (`BookingDate`, `YYYY-MM-DD`).
 /// - Server errors (`ServerFailure` / HTTP 5xx) are NEVER misclassified as offline/network errors.

@@ -75,8 +75,14 @@ const debugSocket = (...args: unknown[]) => {
 const getSocketCorsOrigin = () => {
     const env = getEnv();
 
-    if (env.nodeEnv !== "production" && env.corsOrigins.length === 0) {
-        return true;
+    if (env.nodeEnv !== "production") {
+        if (env.corsOrigins.length === 0) {
+            return true;
+        }
+        return [
+            ...env.corsOrigins,
+            /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i,
+        ];
     }
 
     return env.corsOrigins;
