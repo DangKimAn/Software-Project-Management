@@ -79,7 +79,7 @@ const seed = async () => {
 
     // 2. Seed Users
     console.info("2. Seeding Users (Admin, Hosts, Guests)...");
-    const passwordHash = await bcrypt.hash("123456", 10);
+    const passwordHash = await bcrypt.hash("12345678", 10);
     const adminPasswordHash = await bcrypt.hash("Admin@123", 10);
 
     const usersData = [
@@ -87,7 +87,7 @@ const seed = async () => {
             email: "admin@minhthanhvilla.com",
             phone: "0901000001",
             username: "admin",
-            fullName: "Quản trị viên MinhThanh",
+            fullName: "Quản trị viên The Palm Villa",
             passwordHash: adminPasswordHash,
             roleId: 4, // admin
         },
@@ -138,7 +138,7 @@ const seed = async () => {
                 hostApplicationStatus: u.hostApplicationStatus ?? null,
                 status: "active",
                 dateOfBirth: new Date("1995-05-15"),
-                bio: `Tài khoản ${u.fullName} tại hệ thống MinhThanh Villa`,
+                bio: `Tài khoản ${u.fullName} tại hệ thống The Palm Villa`,
             },
         });
 
@@ -192,7 +192,7 @@ const seed = async () => {
         {
             listingId: 101,
             hostId: hostThanh.userId,
-            title: "MinhThanh Luxury Sea View Villa Bãi Dâu",
+            title: "The Palm Luxury Sea View Villa Bãi Dâu",
             description:
                 "Biệt thự nghỉ dưỡng cao cấp trực diện biển Bãi Dâu, ngắm trọn hoàng hôn tuyệt đẹp. Trang bị hồ bơi vô cực tràn bờ, phòng khách không gian mở, đầy đủ tiện nghi BBQ và dàn karaoke chất lượng cao.",
             addressLine: "120 Trần Phú",
@@ -554,7 +554,7 @@ const seed = async () => {
             content: [
                 "Khi đi du lịch theo đoàn từ 8 - 15 người, thuê trọn gói một căn villa luôn là lựa chọn tiết kiệm và riêng tư nhất.",
                 "Hãy ưu tiên các căn có hồ bơi riêng và sân vườn rộng để tổ chức tiệc nướng hải sản buổi tối.",
-                "Hệ thống MinhThanh Villa hỗ trợ đặt phòng trực tuyến nhanh chóng với thông tin minh bạch và cam kết chất lượng.",
+                "Hệ thống The Palm Villa hỗ trợ đặt phòng trực tuyến nhanh chóng với thông tin minh bạch và cam kết chất lượng.",
             ],
             status: "published",
             publishedAt: new Date(),

@@ -1,7 +1,9 @@
 {
   "APP_ENV": "dev",
-"API_BASE_URL": "http://localhost:7000",
+  "API_BASE_URL": "http://localhost:7000",
   "HOTLINE_NUMBER": "0901234567",
   "ZALO_OA_URL": "https://zalo.me/0901234567",
-  "ENABLE_LOGGING": "true"
+  "ENABLE_LOGGING": "true",
+  "GOOGLE_SERVER_CLIENT_ID": "1066515688940-7a3979894bs52fuvt95ggkvc8u63lfuq.apps.googleusercontent.com"
 }
+

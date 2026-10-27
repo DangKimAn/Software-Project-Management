@@ -692,7 +692,7 @@ class AppTopHeader extends ConsumerWidget {
                           const SizedBox(width: 8),
                           Flexible(
                             child: Text(
-                              'Minh Thanh Villa',
+                              'The Palm Villa',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(

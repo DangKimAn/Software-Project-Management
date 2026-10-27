@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Minh Thanh Villa';
+  String get appTitle => 'The Palm Villa';
 
   @override
   String get appTagline => 'Luxury Vacation Villas in Vung Tau';

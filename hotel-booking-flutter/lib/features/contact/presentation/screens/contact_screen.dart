@@ -48,7 +48,7 @@ class _ContactScreenState extends State<ContactScreen> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() {
       _sentMessage =
-          'Cảm ơn bạn, Minh Thanh Villa đã ghi nhận thông tin và sẽ phản hồi sớm nhất.';
+          'Cảm ơn bạn, The Palm Villa đã ghi nhận thông tin và sẽ phản hồi sớm nhất.';
     });
     _nameCtrl.clear();
     _phoneCtrl.clear();
@@ -167,7 +167,7 @@ class _ContactScreenState extends State<ContactScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'LIÊN HỆ MINH THANH VILLA',
+          'LIÊN HỆ THE PALM VILLA',
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
@@ -188,7 +188,7 @@ class _ContactScreenState extends State<ContactScreen> {
         ),
         const SizedBox(height: 20),
         const Text(
-          'Gửi nhu cầu của bạn cho đội ngũ Minh Thanh Villa. Chúng tôi hỗ trợ chọn căn phù hợp, kiểm tra lịch trống, báo giá và giải đáp các câu hỏi trước chuyến đi.',
+          'Gửi nhu cầu của bạn cho đội ngũ The Palm Villa. Chúng tôi hỗ trợ chọn căn phù hợp, kiểm tra lịch trống, báo giá và giải đáp các câu hỏi trước chuyến đi.',
           style: TextStyle(
             fontSize: 16,
             height: 1.75,

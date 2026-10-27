@@ -3,5 +3,7 @@
   "API_BASE_URL": "https://api.minhthanhvilla.com",
   "HOTLINE_NUMBER": "0901234567",
   "ZALO_OA_URL": "https://zalo.me/0901234567",
-  "ENABLE_LOGGING": "false"
+  "ENABLE_LOGGING": "false",
+  "GOOGLE_SERVER_CLIENT_ID": "1066515688940-7a3979894bs52fuvt95ggkvc8u63lfuq.apps.googleusercontent.com"
 }
+

@@ -15,7 +15,7 @@ abstract final class ContactService {
     String? additionalNotes,
   }) {
     final buffer = StringBuffer();
-    buffer.writeln('Xin chào Minh Thanh Villa, tôi muốn tư vấn đặt biệt thự:');
+    buffer.writeln('Xin chào The Palm Villa, tôi muốn tư vấn đặt biệt thự:');
     buffer.writeln('• Biệt thự: $villaName (Mã: $villaCode)');
 
     if (checkIn != null && checkOut != null) {

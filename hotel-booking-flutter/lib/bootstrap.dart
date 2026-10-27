@@ -20,7 +20,7 @@ Future<void> bootstrap({String? expectedEnvironment}) async {
     buildFlavor: appFlavor,
   );
   AppLogger.i(
-    'Starting Minh Thanh Villa Mobile in [$resolvedExpectedEnv] environment.',
+    'Starting The Palm Villa Mobile in [$resolvedExpectedEnv] environment.',
   );
 
   // 2. Initialize local preferences
@@ -32,7 +32,7 @@ Future<void> bootstrap({String? expectedEnvironment}) async {
       overrides: [
         preferencesServiceProvider.overrideWithValue(prefsService),
       ],
-      child: const MinhThanhVillaApp(),
+      child: const ThePalmVillaApp(),
     ),
   );
 }

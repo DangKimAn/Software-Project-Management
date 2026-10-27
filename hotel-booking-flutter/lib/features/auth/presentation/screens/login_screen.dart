@@ -159,7 +159,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       const SizedBox(height: AppSpacing.s8),
                       Text(
-                        'Đăng nhập để xem kỳ nghỉ và quản lý chuyến đi của bạn tại Minh Thanh Villa.',
+                        'Đăng nhập để xem kỳ nghỉ và quản lý chuyến đi của bạn tại The Palm Villa.',
                         style: AppTypography.body
                             .copyWith(color: AppColors.textMuted),
                       ),

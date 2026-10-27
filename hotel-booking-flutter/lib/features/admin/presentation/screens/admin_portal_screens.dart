@@ -109,7 +109,7 @@ class AdminPortalScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'minh thanh villa',
+                        'the palm villa',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
