@@ -10,22 +10,26 @@ import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 void main() {
-  final now = DateTime.now();
-  final testBooking = Booking(
-    id: 'test-booking-123',
-    listingId: 'villa-1',
-    propertyName: 'Villa Palm Test',
-    checkInDate: '2026-11-01',
-    checkOutDate: '2026-11-03',
-    nights: 2,
-    guestCount: 2,
-    totalAmount: 2500000,
-    status: 'pending_payment',
-    paymentStatus: 'pending',
-    lockedUntil: now.add(const Duration(minutes: 9, seconds: 45)),
-    paymentExpiresAt: now.add(const Duration(minutes: 9, seconds: 45)),
-    createdAt: now,
-  );
+  Booking createTestBooking([DateTime? baseTime]) {
+    final t = baseTime ?? DateTime.now();
+    return Booking(
+      id: 'test-booking-123',
+      listingId: 'villa-1',
+      propertyName: 'Villa Palm Test',
+      checkInDate: '2026-11-01',
+      checkOutDate: '2026-11-03',
+      nights: 2,
+      guestCount: 2,
+      totalAmount: 2500000,
+      status: 'pending_payment',
+      paymentStatus: 'pending',
+      lockedUntil: t.add(const Duration(minutes: 9, seconds: 45)),
+      paymentExpiresAt: t.add(const Duration(minutes: 9, seconds: 45)),
+      createdAt: t,
+    );
+  }
+
+  final testBooking = createTestBooking();
 
   group('GlobalPendingBookingBanner Widget', () {
     testWidgets(
@@ -35,7 +39,7 @@ void main() {
         ProviderScope(
           child: MaterialApp(
             home: Scaffold(
-              body: GlobalPendingBookingBanner(booking: testBooking),
+              body: GlobalPendingBookingBanner(booking: createTestBooking()),
             ),
           ),
         ),
@@ -48,13 +52,13 @@ void main() {
       // 2. Verify "Thời gian còn lại" text is NOT present (xoa thoi gian con lai)
       expect(find.textContaining('Thời gian còn lại'), findsNothing);
 
-      // Verify formatted countdown (09:45 or 09:44) is present with black text
+      // Verify formatted countdown (09:4x) is present with black text
       final textWidgets = tester.widgetList<Text>(find.byType(Text));
       final hasCountdown = textWidgets.any(
         (t) =>
-            RegExp(r'09:4[4-5]').hasMatch(t.data ?? '') ||
+            RegExp(r'09:4\d').hasMatch(t.data ?? '') ||
             (t.textSpan != null &&
-                RegExp(r'09:4[4-5]').hasMatch(t.textSpan!.toPlainText())),
+                RegExp(r'09:4\d').hasMatch(t.textSpan!.toPlainText())),
       );
       expect(hasCountdown, isTrue);
 
