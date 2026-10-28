@@ -40,12 +40,12 @@ jobs:
       - name: Build Android Release APK
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=1G"
-        run: flutter build apk --release --dart-define-from-file=config/prod.json
+        run: flutter build apk --release --flavor prod --dart-define-from-file=config/prod.json
 
       - name: Build Android App Bundle (AAB for Google Play)
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=1G"
-        run: flutter build appbundle --release --dart-define-from-file=config/prod.json
+        run: flutter build appbundle --release --flavor prod --dart-define-from-file=config/prod.json
 
       - name: Build Web Production
         run: |
@@ -57,6 +57,6 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            hotel-booking-flutter/build/app/outputs/flutter-apk/app-release.apk
-            hotel-booking-flutter/build/app/outputs/bundle/release/app-release.aab
+            hotel-booking-flutter/build/app/outputs/flutter-apk/app-prod-release.apk
+            hotel-booking-flutter/build/app/outputs/bundle/prodRelease/app-prod-release.aab
             hotel-booking-flutter/build/minhthanhvilla-web-prod.tar.gz
