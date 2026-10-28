@@ -1,0 +1,68 @@
+services:
+  # MySQL 8 Database
+  mysql:
+    image: mysql:8.0
+    container_name: minhthanhvilla-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_dev
+      MYSQL_DATABASE: booking_room
+      MYSQL_USER: villa_user
+      MYSQL_PASSWORD: villa_password_dev
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Qdrant Vector Database for AI Semantic Search
+  qdrant:
+    image: qdrant/qdrant:v1.9.0
+    container_name: minhthanhvilla-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  # Backend Node.js API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: minhthanhvilla-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      MYSQLHOST: mysql
+      MYSQLPORT: 3306
+      MYSQLDATABASE: booking_room
+      MYSQLUSER: villa_user
+      MYSQLPASSWORD: villa_password_dev
+      MYSQL_SSL: "false"
+      JWT_SECRET_KEY: dev_jwt_secret_key_at_least_32_characters_long_for_security
+      JWT_ACCESS_SECRET: dev_jwt_access_secret_at_least_32_characters_long
+      JWT_REFRESH_SECRET: dev_jwt_refresh_secret_at_least_32_characters_long
+      TOKEN_HASH_SECRET: dev_token_hash_secret_at_least_32_characters_long
+      OTP_HASH_SECRET: dev_otp_hash_secret_at_least_32_characters_long
+      COOKIE_SECRET: dev_cookie_secret_at_least_32_characters_long
+      CLIENT_ORIGIN: http://localhost:3000
+      CORS_ORIGINS: http://localhost:3000,http://localhost:8080
+      QDRANT_URL: http://qdrant:6333
+
+volumes:
+  mysql_data:
+  qdrant_data:

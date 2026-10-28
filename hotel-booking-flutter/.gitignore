@@ -42,7 +42,6 @@ app.*.symbols
 app.*.map.txt
 
 # Web related
-lib/generated_plugin_registrant.dart
 
 # Windows related
 **/windows/flutter/ephemeral/

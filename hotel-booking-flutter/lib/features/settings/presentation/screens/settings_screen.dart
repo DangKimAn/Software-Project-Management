@@ -10,6 +10,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
@@ -1109,48 +1110,61 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surfaceBase,
-      appBar: AppBar(
-        backgroundColor: AppColors.surfaceBase,
-        surfaceTintColor: Colors.transparent,
-        title: const Text('Tài khoản'),
-        actions: [
-          if (effectiveUser != null)
-            ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-              child: IconButton(
-                key: const Key('settings_refresh_profile_button'),
-                tooltip: 'Đồng bộ hồ sơ từ máy chủ',
-                onPressed: activeSyncState.isLoading ? null : _handleRetrySync,
-                icon: const Icon(
-                  LucideIcons.refreshCw,
-                  size: 20,
-                  color: AppColors.iconStrong,
-                ),
-              ),
-            ),
-        ],
-      ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          color: AppColors.primary,
-          onRefresh: _handleRetrySync,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.s20,
-              vertical: AppSpacing.s12,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const GlobalPendingBookingHeaderBanner(),
-                // Async Error / Offline / 401-403 Status Banner
-                if (activeSyncState.isOffline ||
-                    activeSyncState.isError ||
-                    activeSyncState.isUnauthorized) ...[
-                  _buildAsyncStatusBanner(activeSyncState),
-                  const SizedBox(height: AppSpacing.s16),
-                ],
+      body: Column(
+        children: [
+          const AppSearchHeader(
+            currentPath: '/account/profile',
+            hidePendingBanner: true,
+          ),
+          Expanded(
+            child: SafeArea(
+              top: false,
+              child: RefreshIndicator(
+                color: AppColors.primary,
+                onRefresh: _handleRetrySync,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.s20,
+                    vertical: AppSpacing.s12,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const GlobalPendingBookingHeaderBanner(),
+                      if (effectiveUser != null)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.only(bottom: AppSpacing.s8),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minWidth: 48,
+                                minHeight: 48,
+                              ),
+                              child: IconButton(
+                                key: const Key('settings_refresh_profile_button'),
+                                tooltip: 'Đồng bộ hồ sơ từ máy chủ',
+                                onPressed: activeSyncState.isLoading
+                                    ? null
+                                    : _handleRetrySync,
+                                icon: const Icon(
+                                  LucideIcons.refreshCw,
+                                  size: 20,
+                                  color: AppColors.iconStrong,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      // Async Error / Offline / 401-403 Status Banner
+                      if (activeSyncState.isOffline ||
+                          activeSyncState.isError ||
+                          activeSyncState.isUnauthorized) ...[
+                        _buildAsyncStatusBanner(activeSyncState),
+                        const SizedBox(height: AppSpacing.s16),
+                      ],
 
                 // Group 1: Account Profile Section (`Hồ sơ cá nhân`)
                 Padding(
@@ -1355,6 +1369,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ),
       ),
+    ),
+  ],
+),
     );
   }
 

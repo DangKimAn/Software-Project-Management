@@ -795,8 +795,8 @@ describe("Listings service availability rules", () => {
             };
 
             await originalGetPublicListings({
-                checkIn: "2026-07-20",
-                checkOut: "2026-07-22",
+                checkIn: "2027-07-20",
+                checkOut: "2027-07-22",
             });
 
             assert.equal(capturedBookingQueries.length, 1);

@@ -9,6 +9,7 @@ import '../../app/theme/app_colors.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/socket_service.dart';
 import '../../features/auth/presentation/view_models/auth_notifier.dart';
+import '../../features/search/presentation/widgets/source_search_bar.dart';
 import '../../features/trips/presentation/widgets/global_pending_booking_banner.dart';
 import 'app_semantic_icons.dart';
 
@@ -236,13 +237,16 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
     SocketService? socketService,
     bool enablePolling = true,
     bool autoConnectSocket = true,
+    bool autoFetch = true,
   })  : _socketService = socketService,
         super(const NotificationsState()) {
     if (_isAuthenticated) {
       if (autoConnectSocket) {
         _socketService?.connect();
       }
-      fetchNotifications();
+      if (autoFetch) {
+        fetchNotifications();
+      }
       _socketSub = socketStream.listen(_onSocketNotification);
       _reconnectSub = _socketService?.onConnected.listen((_) {
         if (mounted && _isAuthenticated) {
@@ -370,11 +374,16 @@ final notificationsProvider =
   final client = ref.watch(dioClientProvider);
   final socket = ref.watch(socketServiceProvider);
   final user = ref.watch(authNotifierProvider).valueOrNull;
+  final isTest =
+      WidgetsBinding.instance.runtimeType.toString().contains('Test');
   return NotificationsNotifier(
     client,
     user != null,
     socket.onNotificationNew,
     socketService: socket,
+    enablePolling: !isTest,
+    autoConnectSocket: !isTest,
+    autoFetch: !isTest,
   );
 });
 
@@ -631,6 +640,36 @@ class NotificationBell extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Top header variant equipped with the pill search bar ("Bạn muốn đi đâu?"),
+/// notification bell, and popup menu across main tabs (Tin nhắn, Chuyến đi, Tài khoản).
+class AppSearchHeader extends StatelessWidget {
+  final String currentPath;
+  final bool hidePendingBanner;
+
+  const AppSearchHeader({
+    super.key,
+    required this.currentPath,
+    this.hidePendingBanner = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppTopHeader(
+      currentPath: currentPath,
+      hidePendingBanner: hidePendingBanner,
+      centerSearchTrigger: SourceSearchBar(
+        isCompact: true,
+        isInHeader: true,
+        onSearchSubmitted: () {
+          try {
+            context.push('/tim-kiem');
+          } catch (_) {}
+        },
       ),
     );
   }

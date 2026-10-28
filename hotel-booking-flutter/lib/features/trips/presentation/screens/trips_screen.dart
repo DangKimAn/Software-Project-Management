@@ -11,6 +11,7 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
+import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_loading.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
@@ -273,85 +274,92 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
     if (user == null) {
       return Scaffold(
         backgroundColor: AppColors.surfaceBase,
-        appBar: AppBar(
-          backgroundColor: AppColors.surfaceBase,
-          elevation: 0,
-          title: Text(
-            'Chuyến đi của bạn',
-            style: AppTypography.sectionHeading
-                .copyWith(color: AppColors.textStrong),
-          ),
-        ),
-        body: SafeArea(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.s24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    LucideIcons.plane,
-                    size: 64,
-                    color: AppColors.iconStrong,
+        body: Column(
+          children: [
+            const AppSearchHeader(
+              currentPath: '/account/trips',
+              hidePendingBanner: true,
+            ),
+            Expanded(
+              child: SafeArea(
+                top: false,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.s24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          LucideIcons.plane,
+                          size: 64,
+                          color: AppColors.iconStrong,
+                        ),
+                        const SizedBox(height: AppSpacing.s16),
+                        const Text(
+                          'Đăng nhập để xem chuyến đi',
+                          style: AppTypography.sectionHeading,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: AppSpacing.s8),
+                        Text(
+                          'Khi đăng nhập, bạn có thể theo dõi tình trạng đặt phòng, thanh toán và quản lý kỳ nghỉ của mình.',
+                          style:
+                              AppTypography.body.copyWith(color: AppColors.textMuted),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: AppSpacing.s24),
+                        AppButton(
+                          text: 'Đăng nhập ngay',
+                          onPressed: () => context.push('/dang-nhap'),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: AppSpacing.s16),
-                  const Text(
-                    'Đăng nhập để xem chuyến đi',
-                    style: AppTypography.sectionHeading,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: AppSpacing.s8),
-                  Text(
-                    'Khi đăng nhập, bạn có thể theo dõi tình trạng đặt phòng, thanh toán và quản lý kỳ nghỉ của mình.',
-                    style:
-                        AppTypography.body.copyWith(color: AppColors.textMuted),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: AppSpacing.s24),
-                  AppButton(
-                    text: 'Đăng nhập ngay',
-                    onPressed: () => context.push('/dang-nhap'),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
+          ],
         ),
       );
     }
 
     final bookingsAsync = ref.watch(myBookingsProvider);
+    final activeBooking = ref.watch(activePendingBookingProvider);
 
     return Scaffold(
       backgroundColor: AppColors.surfaceBase,
-      appBar: AppBar(
-        backgroundColor: AppColors.surfaceBase,
-        elevation: 0,
-        title: Text(
-          'Chuyến đi của bạn',
-          style: AppTypography.sectionHeading
-              .copyWith(color: AppColors.textStrong),
-        ),
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: AppColors.textPrimary,
-          unselectedLabelColor: AppColors.textMuted,
-          indicatorColor: AppColors.textPrimary,
-          indicatorWeight: 2.5,
-          labelStyle:
-              AppTypography.caption.copyWith(fontWeight: FontWeight.w700),
-          tabs: const [
-            Tab(text: 'Sắp tới'),
-            Tab(text: 'Hoàn tất'),
-            Tab(text: 'Đã hủy'),
-          ],
-        ),
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            const GlobalPendingBookingHeaderBanner(),
-            Expanded(
+      body: Column(
+        children: [
+          const AppSearchHeader(
+            currentPath: '/account/trips',
+            hidePendingBanner: true,
+          ),
+          if (activeBooking != null)
+            GlobalPendingBookingBanner(
+              booking: activeBooking,
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            ),
+          Material(
+            color: AppColors.surfaceBase,
+            child: TabBar(
+              controller: _tabController,
+              labelColor: AppColors.textPrimary,
+              unselectedLabelColor: AppColors.textMuted,
+              indicatorColor: AppColors.textPrimary,
+              indicatorWeight: 2.5,
+              labelStyle:
+                  AppTypography.caption.copyWith(fontWeight: FontWeight.w700),
+              tabs: const [
+                Tab(text: 'Sắp tới'),
+                Tab(text: 'Hoàn tất'),
+                Tab(text: 'Đã hủy'),
+              ],
+            ),
+          ),
+          const Divider(height: 1, thickness: 1, color: AppColors.border),
+          Expanded(
+            child: SafeArea(
+              top: false,
               child: bookingsAsync.when(
                 loading: () => const Center(
                     child: AppLoading(message: 'Đang tải lịch trình...')),
@@ -363,11 +371,38 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                 ),
                 data: (bookings) {
                   final activeBookings =
-                      bookings.where((b) => b.isActive).toList();
+                      bookings.where((b) => b.isActive).toList()
+                        ..sort((a, b) {
+                          final dateA = DateTime.tryParse(a.checkInDate) ??
+                              DateTime(2099);
+                          final dateB = DateTime.tryParse(b.checkInDate) ??
+                              DateTime(2099);
+                          final cmp = dateA.compareTo(dateB);
+                          if (cmp != 0) return cmp;
+                          return a.id.compareTo(b.id);
+                        });
                   final completedBookings =
-                      bookings.where((b) => b.isCompleted).toList();
+                      bookings.where((b) => b.isCompleted).toList()
+                        ..sort((a, b) {
+                          final dateA = DateTime.tryParse(a.checkInDate) ??
+                              DateTime(1970);
+                          final dateB = DateTime.tryParse(b.checkInDate) ??
+                              DateTime(1970);
+                          final cmp = dateB.compareTo(dateA);
+                          if (cmp != 0) return cmp;
+                          return b.id.compareTo(a.id);
+                        });
                   final cancelledBookings =
-                      bookings.where((b) => b.isCancelled).toList();
+                      bookings.where((b) => b.isCancelled).toList()
+                        ..sort((a, b) {
+                          final dateA = DateTime.tryParse(a.checkInDate) ??
+                              DateTime(1970);
+                          final dateB = DateTime.tryParse(b.checkInDate) ??
+                              DateTime(1970);
+                          final cmp = dateB.compareTo(dateA);
+                          if (cmp != 0) return cmp;
+                          return b.id.compareTo(a.id);
+                        });
 
                   return TabBarView(
                     controller: _tabController,
@@ -394,8 +429,8 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                 },
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

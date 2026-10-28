@@ -32,9 +32,6 @@ class ContactScreen extends StatefulWidget {
 }
 
 class _ContactScreenState extends State<ContactScreen> {
-  String _feedbackBannerMessage = '';
-  bool _isFeedbackError = false;
-
   String get _effectiveHotline =>
       (widget.hotlineOverride ?? AppConfig.hotlineNumber).trim();
 
@@ -57,57 +54,29 @@ class _ContactScreenState extends State<ContactScreen> {
   Future<void> _handleCallHotline() async {
     final result = await ContactService.callHotlineDetailed(
       customNumber: _effectiveHotline,
-      rejectPlaceholder: true,
-      copyOnPlaceholder: false,
+      rejectPlaceholder: false,
+      copyOnPlaceholder: true,
     );
     if (!mounted) return;
-    setState(() {
-      _feedbackBannerMessage = result.message;
-      _isFeedbackError =
-          result.status == ContactActionStatus.unverifiedConfig ||
-              result.status == ContactActionStatus.invalidInput ||
-              result.status == ContactActionStatus.failed;
-    });
     _showStatusSnackBar(result.message);
   }
 
   Future<void> _handleCopyHotline() async {
-    if (!ContactService.isVerifiedHotline(_effectiveHotline)) {
-      const msg =
-          'Số hotline hiện tại là cấu hình mẫu chưa xác minh thực tế nên không sao chép.';
-      setState(() {
-        _feedbackBannerMessage = msg;
-        _isFeedbackError = true;
-      });
-      _showStatusSnackBar(msg);
-      return;
-    }
     final clean = ContactService.normalizePhone(_effectiveHotline);
     final copied = await ContactService.copyTextToClipboard(clean);
     if (!mounted) return;
     final msg = copied
         ? 'Đã sao chép số hotline ${ContactService.formatDisplayPhone(clean)} vào bộ nhớ tạm.'
         : 'Không thể sao chép số hotline trên thiết bị này.';
-    setState(() {
-      _feedbackBannerMessage = msg;
-      _isFeedbackError = !copied;
-    });
     _showStatusSnackBar(msg);
   }
 
   Future<void> _handleOpenZalo() async {
     final result = await ContactService.openZaloInquiryDetailed(
       customZaloUrl: _effectiveZaloUrl,
-      rejectPlaceholder: true,
+      rejectPlaceholder: false,
     );
     if (!mounted) return;
-    setState(() {
-      _feedbackBannerMessage = result.message;
-      _isFeedbackError =
-          result.status == ContactActionStatus.unverifiedConfig ||
-              result.status == ContactActionStatus.invalidInput ||
-              result.status == ContactActionStatus.failed;
-    });
     _showStatusSnackBar(result.message);
   }
 
@@ -117,11 +86,6 @@ class _ContactScreenState extends State<ContactScreen> {
       fallbackCopyText: '28 Thi Sách, TP. Vũng Tàu',
     );
     if (!mounted) return;
-    setState(() {
-      _feedbackBannerMessage = result.message;
-      _isFeedbackError = result.status == ContactActionStatus.invalidInput ||
-          result.status == ContactActionStatus.failed;
-    });
     _showStatusSnackBar(result.message);
   }
 
@@ -267,32 +231,6 @@ class _ContactScreenState extends State<ContactScreen> {
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        if (_feedbackBannerMessage.isNotEmpty)
-          Container(
-            key: const ValueKey('contact-feedback-banner'),
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.sm),
-            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceBase,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: _isFeedbackError
-                    ? AppColors.errorRed
-                    : AppColors.borderSoft,
-              ),
-            ),
-            child: Text(
-              _feedbackBannerMessage,
-              style: AppTypography.bodyMedium.copyWith(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: _isFeedbackError
-                    ? AppColors.errorRed
-                    : AppColors.textStrong,
-              ),
-            ),
-          ),
         Column(
           children: [
             _ContactChannelCard(

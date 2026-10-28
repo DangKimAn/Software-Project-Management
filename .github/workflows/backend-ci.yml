@@ -1,0 +1,116 @@
+name: Backend CI (TypeCheck, Tests & Docker Build)
+
+on:
+  push:
+    branches: [main, develop, "feature/**", "fix/**"]
+    paths:
+      - "backend/**"
+      - "docker-compose.yml"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "backend/**"
+      - "docker-compose.yml"
+      - ".github/workflows/backend-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint_and_typecheck:
+    name: TypeScript Check & Code Quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run TypeScript Strict Typecheck
+        run: npm run typecheck
+
+      - name: Audit Dependencies (High/Critical)
+        run: npm audit --audit-level=high || echo "::warning::Audit reported vulnerabilities to review"
+
+  test_suite:
+    name: Backend Test Suite (123 Contracts, Security & RBAC)
+    runs-on: ubuntu-latest
+    needs: lint_and_typecheck
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Compile TypeScript
+        run: npm run build
+
+      - name: Run Backend Test Suite
+        env:
+          NODE_ENV: test
+          ALLOW_REFRESH_TOKEN_IN_BODY: "false"
+          ALLOW_REFRESH_TOKEN_IN_HEADER: "false"
+          JWT_SECRET_KEY: test_jwt_secret_key_at_least_32_chars_long
+          JWT_ACCESS_SECRET: test_jwt_access_secret_at_least_32_chars
+          JWT_REFRESH_SECRET: test_jwt_refresh_secret_at_least_32_chars
+          TOKEN_HASH_SECRET: test_token_hash_secret_at_least_32_chars
+          OTP_HASH_SECRET: test_otp_hash_secret_at_least_32_chars
+          COOKIE_SECRET: test_cookie_secret_at_least_32_chars
+        run: npm run test
+
+  docker_validation:
+    name: Docker Container Build Check
+    runs-on: ubuntu-latest
+    needs: lint_and_typecheck
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image (Dry-Run / Cache Validation)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: false
+          tags: minhthanhvilla-backend:ci-check
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

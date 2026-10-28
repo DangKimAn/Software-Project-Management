@@ -1,0 +1,67 @@
+name: Deploy Flutter Web to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "hotel-booking-flutter/**"
+      - ".github/workflows/deploy-flutter-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  build_and_deploy_web:
+    name: Build Flutter Web & Publish
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hotel-booking-flutter
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Web Production
+        run: |
+          # Use repository name as base-href for GitHub Pages compatibility
+          REPO_NAME="${{ github.event.repository.name }}"
+          flutter build web --release \
+            --base-href "/$REPO_NAME/" \
+            --dart-define-from-file=config/prod.json
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: hotel-booking-flutter/build/web
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

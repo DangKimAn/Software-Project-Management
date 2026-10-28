@@ -929,7 +929,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
         body: Column(
           children: [
             if (!widget.isHostPortal)
-              const AppTopHeader(currentPath: '/messages'),
+              const AppSearchHeader(currentPath: '/messages'),
             Expanded(
               child: AppEmptyView(
                 icon: LucideIcons.messageSquare,
@@ -1104,7 +1104,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          const AppTopHeader(currentPath: '/messages'),
+          const AppSearchHeader(currentPath: '/messages'),
           Expanded(child: bodyContent),
         ],
       ),
@@ -1160,24 +1160,12 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
           Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.s16,
-              vertical: AppSpacing.s12,
+              vertical: AppSpacing.s8,
             ),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                const Expanded(
-                  child: Text(
-                    'Hộp thư tin nhắn',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textStrong,
-                    ),
-                  ),
-                ),
                 if (totalUnread > 0) ...[
-                  const SizedBox(width: AppSpacing.s8),
                   Container(
                     key: const Key('inbox_total_unread_badge'),
                     padding: const EdgeInsets.symmetric(
@@ -1197,6 +1185,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                       ),
                     ),
                   ),
+                  const SizedBox(width: AppSpacing.s8),
                 ],
                 IconButton(
                   onPressed: () => ref.invalidate(conversationsListProvider),
@@ -2003,7 +1992,7 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          const AppTopHeader(currentPath: '/messages'),
+          const AppSearchHeader(currentPath: '/messages'),
           Expanded(
             child: villaAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),

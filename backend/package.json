@@ -16,6 +16,7 @@
     "dev": "nodemon --exec ts-node src/index.ts",
     "db:check": "ts-node src/scripts/check-db-connection.ts",
     "db:seed": "ts-node src/scripts/seed.ts",
+    "mock:upcoming": "ts-node src/scripts/mock-guest-upcoming-booking.ts",
     "db:ensure-runtime-schema": "ts-node src/scripts/ensure-runtime-schema.ts",
     "db:ensure-final-modules": "ts-node src/scripts/ensure-final-modules-schema.ts",
     "db:migrate": "npm run db:migrate:safe",
@@ -34,7 +35,7 @@
     "build": "node node_modules/typescript/lib/tsc.js -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "node node_modules/typescript/lib/tsc.js --noEmit -p tsconfig.json && node node_modules/typescript/lib/tsc.js --noEmit -p tsconfig.tests.json",
-    "test": "npm run build && node --test --require ts-node/register --test-concurrency=1 tests/auth-flow.test.ts tests/auth-token-security.test.ts tests/host-onboarding-verification-flow.test.ts tests/listings-endpoints.test.ts tests/bookings-endpoints.test.ts tests/users-rbac-verification.test.ts tests/security-middleware.test.ts tests/trust-safety-uc09.test.ts tests/payments-coupons-payouts-reports.test.ts tests/semantic-search.test.ts tests/listing-image-vision.test.ts"
+    "test": "npm run build && ALLOW_REFRESH_TOKEN_IN_BODY=false ALLOW_REFRESH_TOKEN_IN_HEADER=false node --test --require ts-node/register --test-concurrency=1 tests/auth-flow.test.ts tests/auth-token-security.test.ts tests/host-onboarding-verification-flow.test.ts tests/listings-endpoints.test.ts tests/bookings-endpoints.test.ts tests/users-rbac-verification.test.ts tests/security-middleware.test.ts tests/trust-safety-uc09.test.ts tests/payments-coupons-payouts-reports.test.ts tests/semantic-search.test.ts tests/listing-image-vision.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1048.0",

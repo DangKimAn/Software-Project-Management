@@ -102,8 +102,8 @@ const buildBooking = (overrides: Record<string, unknown> = {}) => ({
     listingId: 801,
     guestUserId: 201,
     hostUserId: 101,
-    checkInDate: "2026-06-20",
-    checkOutDate: "2026-06-22",
+    checkInDate: "2027-06-20",
+    checkOutDate: "2027-06-22",
     guestCount: 2,
     nights: 2,
     totalNights: 2,
@@ -268,8 +268,8 @@ describe("Bookings service transaction-safe business rules", () => {
 
         const result = await bookingsService.createBooking(guestUser, {
             listingId: 801,
-            checkInDate: "2026-06-20",
-            checkOutDate: "2026-06-22",
+            checkInDate: "2027-06-20",
+            checkOutDate: "2027-06-22",
             guestCount: 2,
         });
 
@@ -305,14 +305,14 @@ describe("Bookings service transaction-safe business rules", () => {
             items: [
                 {
                     listingId: 801,
-                    checkInDate: "2026-06-20",
-                    checkOutDate: "2026-06-22",
+                    checkInDate: "2027-06-20",
+                    checkOutDate: "2027-06-22",
                     guestCount: 2,
                 },
                 {
                     listingId: 801,
-                    checkInDate: "2026-06-24",
-                    checkOutDate: "2026-06-26",
+                    checkInDate: "2027-06-24",
+                    checkOutDate: "2027-06-26",
                     guestCount: 2,
                 },
             ],
@@ -332,8 +332,8 @@ describe("Bookings service transaction-safe business rules", () => {
             buildBooking({
                 bookingId: 9002,
                 status: "confirmed",
-                checkInDate: "2026-07-01",
-                checkOutDate: "2026-07-03",
+                checkInDate: "2027-07-01",
+                checkOutDate: "2027-07-03",
             }),
         ]);
         patch(Booking, "create", async (payload: Record<string, unknown>) => {
@@ -347,14 +347,14 @@ describe("Bookings service transaction-safe business rules", () => {
                     items: [
                         {
                             listingId: 801,
-                            checkInDate: "2026-06-20",
-                            checkOutDate: "2026-06-22",
+                            checkInDate: "2027-06-20",
+                            checkOutDate: "2027-06-22",
                             guestCount: 2,
                         },
                         {
                             listingId: 801,
-                            checkInDate: "2026-07-02",
-                            checkOutDate: "2026-07-04",
+                            checkInDate: "2027-07-02",
+                            checkOutDate: "2027-07-04",
                             guestCount: 2,
                         },
                     ],
@@ -407,14 +407,14 @@ describe("Bookings service transaction-safe business rules", () => {
                     items: [
                         {
                             listingId: 801,
-                            checkInDate: "2026-06-20",
-                            checkOutDate: "2026-06-22",
+                            checkInDate: "2027-06-20",
+                            checkOutDate: "2027-06-22",
                             guestCount: 2,
                         },
                         {
                             listingId: 801,
-                            checkInDate: "2026-06-24",
-                            checkOutDate: "2026-06-26",
+                            checkInDate: "2027-06-24",
+                            checkOutDate: "2027-06-26",
                             guestCount: 2,
                         },
                     ],
@@ -436,8 +436,8 @@ describe("Bookings service transaction-safe business rules", () => {
 
         const result = await bookingsService.createBooking(guestUser, {
             listingId: 801,
-            checkInDate: "2026-06-22",
-            checkOutDate: "2026-06-24",
+            checkInDate: "2027-06-22",
+            checkOutDate: "2027-06-24",
             guestCount: 2,
         });
 
@@ -458,8 +458,8 @@ describe("Bookings service transaction-safe business rules", () => {
 
         const result = await bookingsService.createBooking(guestUser, {
             listingId: 801,
-            checkInDate: "2026-06-20",
-            checkOutDate: "2026-06-22",
+            checkInDate: "2027-06-19",
+            checkOutDate: "2027-06-21",
             guestCount: 2,
         });
 
@@ -479,7 +479,7 @@ describe("Bookings service transaction-safe business rules", () => {
         }));
         patch(AvailabilityCalendar, "findAll", async () => [
             {
-                date: "2026-06-20",
+                date: "2027-06-20",
                 isAvailable: true,
                 isBlockedByHost: false,
                 priceOverride: 2500000,
@@ -490,8 +490,8 @@ describe("Bookings service transaction-safe business rules", () => {
 
         const result = await bookingsService.createBooking(guestUser, {
             listingId: 801,
-            checkInDate: "2026-06-20",
-            checkOutDate: "2026-06-21",
+            checkInDate: "2027-06-20",
+            checkOutDate: "2027-06-21",
             guestCount: 2,
         });
 
@@ -535,8 +535,8 @@ describe("Bookings service transaction-safe business rules", () => {
 
         const result = await bookingsService.createBooking(guestUser, {
             listingId: 801,
-            checkInDate: "2026-06-22",
-            checkOutDate: "2026-06-24",
+            checkInDate: "2027-06-22",
+            checkOutDate: "2027-06-24",
             guestCount: 2,
             couponCode: "summer10",
         });
@@ -584,8 +584,8 @@ describe("Bookings service transaction-safe business rules", () => {
 
         const result = await bookingsService.createBooking(guestUser, {
             listingId: 801,
-            checkInDate: "2026-06-22",
-            checkOutDate: "2026-06-24",
+            checkInDate: "2027-06-22",
+            checkOutDate: "2027-06-24",
             guestCount: 2,
             couponCode: "summer10",
         });
@@ -608,8 +608,8 @@ describe("Bookings service transaction-safe business rules", () => {
 
         const result = await bookingsService.createBooking(guestUser, {
             listingId: 801,
-            checkInDate: "2026-06-22",
-            checkOutDate: "2026-06-24",
+            checkInDate: "2027-06-22",
+            checkOutDate: "2027-06-24",
             guestCount: 4,
         });
 
@@ -641,8 +641,8 @@ describe("Bookings service transaction-safe business rules", () => {
 
         const created = await bookingsService.createBooking(guestUser, {
             listingId: 801,
-            checkInDate: "2026-06-22",
-            checkOutDate: "2026-06-24",
+            checkInDate: "2027-06-22",
+            checkOutDate: "2027-06-24",
             guestCount: 2,
         });
 
@@ -666,8 +666,8 @@ describe("Bookings service transaction-safe business rules", () => {
             () =>
                 bookingsService.createBooking(guestUser, {
                     listingId: 801,
-                    checkInDate: "2026-06-20",
-                    checkOutDate: "2026-06-22",
+                    checkInDate: "2027-06-20",
+                    checkOutDate: "2027-06-22",
                     guestCount: 2,
                 }),
             409,
@@ -688,8 +688,8 @@ describe("Bookings service transaction-safe business rules", () => {
             () =>
                 bookingsService.createBooking(guestUser, {
                     listingId: 801,
-                    checkInDate: "2026-06-20",
-                    checkOutDate: "2026-06-22",
+                    checkInDate: "2027-06-20",
+                    checkOutDate: "2027-06-22",
                     guestCount: 2,
                 }),
             409,
@@ -702,15 +702,15 @@ describe("Bookings service transaction-safe business rules", () => {
             buildBooking({
                 bookingId: 9002,
                 status: "confirmed",
-                checkInDate: "2026-07-01",
-                checkOutDate: "2026-07-03",
+                checkInDate: "2027-07-01",
+                checkOutDate: "2027-07-03",
             }),
         ]);
 
         const result = await bookingsService.createBooking(guestUser, {
             listingId: 801,
-            checkInDate: "2026-07-03",
-            checkOutDate: "2026-07-05",
+            checkInDate: "2027-07-03",
+            checkOutDate: "2027-07-05",
             guestCount: 2,
         });
 
@@ -723,8 +723,8 @@ describe("Bookings service transaction-safe business rules", () => {
             buildBooking({
                 bookingId: 9002,
                 status: "confirmed",
-                checkInDate: "2026-07-01",
-                checkOutDate: "2026-07-03",
+                checkInDate: "2027-07-01",
+                checkOutDate: "2027-07-03",
             }),
         ]);
 
@@ -732,8 +732,8 @@ describe("Bookings service transaction-safe business rules", () => {
             () =>
                 bookingsService.createBooking(guestUser, {
                     listingId: 801,
-                    checkInDate: "2026-07-02",
-                    checkOutDate: "2026-07-04",
+                    checkInDate: "2027-07-02",
+                    checkOutDate: "2027-07-04",
                     guestCount: 2,
                 }),
             409,
@@ -744,7 +744,7 @@ describe("Bookings service transaction-safe business rules", () => {
         patchCreateBookingHappyPath(buildListing({
             availabilityCalendar: [
                 {
-                    date: "2026-07-02",
+                    date: "2027-07-02",
                     isAvailable: false,
                     isBlockedByHost: true,
                     priceOverride: null,
@@ -758,8 +758,8 @@ describe("Bookings service transaction-safe business rules", () => {
             () =>
                 bookingsService.createBooking(guestUser, {
                     listingId: 801,
-                    checkInDate: "2026-07-01",
-                    checkOutDate: "2026-07-03",
+                    checkInDate: "2027-07-01",
+                    checkOutDate: "2027-07-03",
                     guestCount: 2,
                 }),
             409,
@@ -795,14 +795,14 @@ describe("Bookings service transaction-safe business rules", () => {
         const results = await Promise.allSettled([
             bookingsService.createBooking(guestUser, {
                 listingId: 801,
-                checkInDate: "2026-07-01",
-                checkOutDate: "2026-07-03",
+                checkInDate: "2027-07-01",
+                checkOutDate: "2027-07-03",
                 guestCount: 2,
             }),
             bookingsService.createBooking(guestUser, {
                 listingId: 801,
-                checkInDate: "2026-07-01",
-                checkOutDate: "2026-07-03",
+                checkInDate: "2027-07-01",
+                checkOutDate: "2027-07-03",
                 guestCount: 2,
             }),
         ]);
@@ -822,8 +822,8 @@ describe("Bookings service transaction-safe business rules", () => {
             buildBooking({
                 bookingId: 9002,
                 status: "checked_out",
-                checkInDate: "2026-06-20",
-                checkOutDate: "2026-06-22",
+                checkInDate: "2027-06-20",
+                checkOutDate: "2027-06-22",
             }),
         ]);
 
@@ -831,8 +831,8 @@ describe("Bookings service transaction-safe business rules", () => {
             () =>
                 bookingsService.createBooking(guestUser, {
                     listingId: 801,
-                    checkInDate: "2026-06-20",
-                    checkOutDate: "2026-06-22",
+                    checkInDate: "2027-06-20",
+                    checkOutDate: "2027-06-22",
                     guestCount: 2,
                 }),
             409,
@@ -851,8 +851,8 @@ describe("Bookings service transaction-safe business rules", () => {
 
         const result = await bookingsService.createBooking(guestUser, {
             listingId: 801,
-            checkInDate: "2026-06-20",
-            checkOutDate: "2026-06-22",
+            checkInDate: "2027-06-20",
+            checkOutDate: "2027-06-22",
             guestCount: 2,
         });
 
@@ -864,8 +864,8 @@ describe("Bookings service transaction-safe business rules", () => {
         const staleBooking = buildBooking({
             bookingId: 9002,
             status: "pending_payment",
-            checkInDate: "2026-07-01",
-            checkOutDate: "2026-07-03",
+            checkInDate: "2027-07-01",
+            checkOutDate: "2027-07-03",
             lockedUntil: new Date(Date.now() - 60 * 1000),
             cancellationReason: null,
         });
@@ -880,8 +880,8 @@ describe("Bookings service transaction-safe business rules", () => {
 
         const result = await bookingsService.createBooking(guestUser, {
             listingId: 801,
-            checkInDate: "2026-07-01",
-            checkOutDate: "2026-07-03",
+            checkInDate: "2027-07-01",
+            checkOutDate: "2027-07-03",
             guestCount: 2,
         });
 
@@ -898,15 +898,15 @@ describe("Bookings service transaction-safe business rules", () => {
             buildBooking({
                 bookingId: 9002,
                 status: "confirmed",
-                checkInDate: "2026-06-18",
-                checkOutDate: "2026-06-20",
+                checkInDate: "2027-06-18",
+                checkOutDate: "2027-06-20",
             }),
         ]);
 
         const result = await bookingsService.createBooking(guestUser, {
             listingId: 801,
-            checkInDate: "2026-06-20",
-            checkOutDate: "2026-06-22",
+            checkInDate: "2027-06-20",
+            checkOutDate: "2027-06-22",
             guestCount: 2,
         });
 
@@ -920,8 +920,8 @@ describe("Bookings service transaction-safe business rules", () => {
             () =>
                 bookingsService.createBooking(guestUser, {
                     listingId: 801,
-                    checkInDate: "2026-06-20",
-                    checkOutDate: "2026-06-22",
+                    checkInDate: "2027-06-20",
+                    checkOutDate: "2027-06-22",
                     guestCount: 3,
                 }),
             422,
@@ -933,8 +933,8 @@ describe("Bookings service transaction-safe business rules", () => {
             () =>
                 bookingsService.createBooking(guestUser, {
                     listingId: 801,
-                    checkInDate: "2026-06-22",
-                    checkOutDate: "2026-06-20",
+                    checkInDate: "2027-06-22",
+                    checkOutDate: "2027-06-20",
                     guestCount: 2,
                 }),
             422,
