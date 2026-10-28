@@ -1,0 +1,22 @@
+name: PR Source Branch Gatekeeper
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify_branch:
+    name: Verify PR Source Branch
+    runs-on: ubuntu-latest
+    steps:
+      # Bước kiểm tra nguồn PR
+      - name: Check source branch
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: |
+          if [ "${{ github.head_ref }}" != "develop" ]; then
+            echo "LỖI: Bạn chỉ được phép gộp code vào main từ nhánh develop!"
+            exit 1
+          fi

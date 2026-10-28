@@ -30,6 +30,15 @@ jobs:
         working-directory: hotel-booking-flutter
 
     steps:
+      # Bước kiểm tra nguồn PR
+      - name: Check source branch
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: |
+          if [ "${{ github.head_ref }}" != "develop" ]; then
+            echo "LỖI: Bạn chỉ được phép gộp code vào main từ nhánh develop!"
+            exit 1
+          fi
+
       - name: Checkout Repository (Zero Credential Persistence)
         uses: actions/checkout@v4
         with:

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hotel_booking_flutter/app/di/providers.dart';
 import 'package:hotel_booking_flutter/app/theme/app_theme.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
 import 'package:hotel_booking_flutter/features/auth/presentation/view_models/auth_notifier.dart';

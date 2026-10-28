@@ -1132,32 +1132,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const GlobalPendingBookingHeaderBanner(),
-                      if (effectiveUser != null)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Padding(
-                            padding:
-                                const EdgeInsets.only(bottom: AppSpacing.s8),
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                minWidth: 48,
-                                minHeight: 48,
-                              ),
-                              child: IconButton(
-                                key: const Key('settings_refresh_profile_button'),
-                                tooltip: 'Đồng bộ hồ sơ từ máy chủ',
-                                onPressed: activeSyncState.isLoading
-                                    ? null
-                                    : _handleRetrySync,
-                                icon: const Icon(
-                                  LucideIcons.refreshCw,
-                                  size: 20,
-                                  color: AppColors.iconStrong,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
                       // Async Error / Offline / 401-403 Status Banner
                       if (activeSyncState.isOffline ||
                           activeSyncState.isError ||

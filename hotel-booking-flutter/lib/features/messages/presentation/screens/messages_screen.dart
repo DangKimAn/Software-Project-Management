@@ -1157,15 +1157,15 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.s16,
-              vertical: AppSpacing.s8,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (totalUnread > 0) ...[
+          if (totalUnread > 0) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.s16,
+                vertical: AppSpacing.s8,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
                   Container(
                     key: const Key('inbox_total_unread_badge'),
                     padding: const EdgeInsets.symmetric(
@@ -1185,30 +1185,22 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                       ),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.s8),
                 ],
-                IconButton(
-                  onPressed: () => ref.invalidate(conversationsListProvider),
-                  tooltip: 'Làm mới hộp thư',
-                  constraints: const BoxConstraints(
-                    minWidth: 48,
-                    minHeight: 48,
-                  ),
-                  icon: const Icon(
-                    LucideIcons.refreshCw,
-                    size: 18,
-                    color: AppColors.iconStrong,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+            const Divider(height: 1, color: AppColors.borderSoft),
+          ],
           Expanded(
-            child: ListView.separated(
-              itemCount: conversations.length,
-              separatorBuilder: (_, __) =>
-                  const Divider(height: 1, color: AppColors.divider),
+            child: RefreshIndicator(
+              color: AppColors.primary,
+              onRefresh: () async {
+                ref.invalidate(conversationsListProvider);
+              },
+              child: ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: conversations.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, color: AppColors.divider),
               itemBuilder: (context, index) {
                 final conv = conversations[index];
                 final isSelected = conv.id == _selectedConversationId;
@@ -1349,8 +1341,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
               },
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    ),
     );
   }
 
