@@ -38,9 +38,13 @@ jobs:
         run: flutter pub get
 
       - name: Build Android Release APK
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=1G"
         run: flutter build apk --release --dart-define-from-file=config/prod.json
 
       - name: Build Android App Bundle (AAB for Google Play)
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=1G"
         run: flutter build appbundle --release --dart-define-from-file=config/prod.json
 
       - name: Build Web Production
