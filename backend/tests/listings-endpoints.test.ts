@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { before, describe, it } = require("node:test");
+const { after, before, describe, it } = require("node:test");
 
 const request = require("supertest");
 const { Op } = require("sequelize");
@@ -868,5 +868,14 @@ describe("Vung Tau location group helpers", () => {
             locationGroups.detectLocationGroupFromQuery("villa Thuy Tien yên tĩnh"),
             "Thủy Tiên",
         );
+    });
+
+    after(async () => {
+        const sequelize = require("../dist/config/database").default || require("../dist/config/database").sequelize;
+        try {
+            await sequelize.close();
+        } catch {
+            // ignore
+        }
     });
 });

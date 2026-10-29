@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { afterEach, beforeEach, describe, it } = require("node:test");
+const { after, afterEach, beforeEach, describe, it } = require("node:test");
 import type { PatchEntry } from "./helpers/types";
 
 process.env.NODE_ENV = "test";
@@ -27,9 +27,19 @@ const patch = (target: Record<string, unknown>, key: string, value: unknown): vo
 };
 
 afterEach(() => {
+    expirationService.stopPaymentExpirationSweep();
     while (originals.length > 0) {
         const [target, key, value] = originals.pop()!;
         target[key] = value;
+    }
+});
+
+after(async () => {
+    expirationService.stopPaymentExpirationSweep();
+    try {
+        await sequelize.close();
+    } catch {
+        // ignore
     }
 });
 

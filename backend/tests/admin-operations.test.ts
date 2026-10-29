@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { afterEach, beforeEach, describe, it } = require("node:test");
+const { after, afterEach, beforeEach, describe, it } = require("node:test");
 
 const request = require("supertest");
 import type { PatchEntry } from "./helpers/types";
@@ -36,6 +36,14 @@ afterEach(() => {
     while (originals.length > 0) {
         const [target, key, value] = originals.pop()!;
         target[key] = value;
+    }
+});
+
+after(async () => {
+    try {
+        await sequelize.close();
+    } catch {
+        // ignore
     }
 });
 

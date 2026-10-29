@@ -14,7 +14,7 @@ process.env.R2_BUCKET = "dummy-bucket";
 process.env.R2_PUBLIC_BASE_URL = "https://pub-r2.example.com";
 
 const assert = require("node:assert/strict");
-const { afterEach, beforeEach, describe, it } = require("node:test");
+const { after, afterEach, beforeEach, describe, it } = require("node:test");
 import type { PatchEntry } from "./helpers/types";
 
 const { ApiError } = require("../dist/common/api-error");
@@ -45,6 +45,14 @@ afterEach(() => {
     while (originals.length > 0) {
         const [target, key, value] = originals.pop()!;
         target[key] = value;
+    }
+});
+
+after(async () => {
+    try {
+        await sequelize.close();
+    } catch {
+        // ignore
     }
 });
 

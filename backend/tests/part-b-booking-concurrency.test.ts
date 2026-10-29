@@ -7,7 +7,7 @@ process.env.REFRESH_TOKEN_COOKIE_NAME = "refreshToken";
 process.env.REFRESH_TOKEN_COOKIE_PATH = "/api/auth";
 
 const assert = require("node:assert/strict");
-const { afterEach, beforeEach, describe, it } = require("node:test");
+const { after, afterEach, beforeEach, describe, it } = require("node:test");
 const { UniqueConstraintError } = require("sequelize");
 import type { PatchEntry } from "./helpers/types";
 
@@ -42,6 +42,14 @@ afterEach(() => {
     while (originals.length > 0) {
         const [target, key, value] = originals.pop()!;
         target[key] = value;
+    }
+});
+
+after(async () => {
+    try {
+        await sequelize.close();
+    } catch {
+        // ignore
     }
 });
 

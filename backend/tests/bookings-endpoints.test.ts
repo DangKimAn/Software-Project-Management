@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { afterEach, describe, it } = require("node:test");
+const { after, afterEach, describe, it } = require("node:test");
 
 const { Op, UniqueConstraintError } = require("sequelize");
 import type { PatchEntry, Rejectable, TransactionCallback } from "./helpers/types";
@@ -45,6 +45,14 @@ afterEach(() => {
     while (originals.length > 0) {
         const [target, key, value] = originals.pop()!;
         target[key] = value;
+    }
+});
+
+after(async () => {
+    try {
+        await sequelize.close();
+    } catch {
+        // ignore
     }
 });
 
