@@ -1,10 +1,10 @@
 name: Backend CI with Virtual Database
 
-on:
+'on':
   push:
-    branches: [ "develop", "main", "test", "test/**", "feature/**", "fix/**" ]
+    branches: [ "develop", "main", "test", "test/**", "feature/**", "features/**", "fix/**" ]
   pull_request:
-    branches: [ "develop", "main", "test" ]
+    branches: [ "develop", "main", "test", "test/**", "feature/**", "features/**" ]
 
 permissions:
   contents: read
