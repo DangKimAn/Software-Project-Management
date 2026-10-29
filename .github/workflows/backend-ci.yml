@@ -2,13 +2,13 @@ name: Backend CI (TypeCheck, Tests & Docker Build)
 
 on:
   push:
-    branches: [main, develop, "feature/**", "fix/**"]
+    branches: [main, develop, test, "feature/**", "fix/**", "test/**"]
     paths:
       - "backend/**"
       - "docker-compose.yml"
       - ".github/workflows/backend-ci.yml"
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, test]
     paths:
       - "backend/**"
       - "docker-compose.yml"
