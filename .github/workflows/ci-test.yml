@@ -67,6 +67,15 @@ jobs:
       # 2. CHUẨN BỊ DATABASE & CẤU TRÚC BẢNG (SEQUELIZE)
       - name: Chạy Sequelize Migration tạo 49 bảng
         env:
+          NODE_ENV: test
+          ALLOW_REFRESH_TOKEN_IN_BODY: "false"
+          ALLOW_REFRESH_TOKEN_IN_HEADER: "false"
+          JWT_SECRET_KEY: test_jwt_secret_key_at_least_32_chars_long
+          JWT_ACCESS_SECRET: test_jwt_access_secret_at_least_32_chars
+          JWT_REFRESH_SECRET: test_jwt_refresh_secret_at_least_32_chars
+          TOKEN_HASH_SECRET: test_token_hash_secret_at_least_32_chars
+          OTP_HASH_SECRET: test_otp_hash_secret_at_least_32_chars
+          COOKIE_SECRET: test_cookie_secret_at_least_32_chars
           # Cấp biến môi trường để code Node.js kết nối đúng vào MySQL ảo
           DB_HOST: 127.0.0.1
           DB_PORT: 3306

@@ -258,7 +258,7 @@ export const getEnv = (): AppEnv => {
     const nodeEnv = process.env.NODE_ENV ?? "development";
     const jwtSecret = assertProductionValue(
         "JWT_SECRET_KEY or JWT_SECRET",
-        readEnv("JWT_SECRET_KEY", "JWT_SECRET"),
+        readEnv("JWT_SECRET_KEY", "JWT_SECRET") ?? (nodeEnv === "production" ? undefined : "dev_jwt_secret_key_at_least_32_chars_long"),
         nodeEnv,
         { secret: true },
     );
@@ -369,7 +369,7 @@ export const getEnv = (): AppEnv => {
 
     const cookieSecret = assertProductionValue(
         "COOKIE_SECRET",
-        process.env.COOKIE_SECRET,
+        process.env.COOKIE_SECRET ?? (nodeEnv === "production" ? undefined : "dev_cookie_secret_at_least_32_chars_long"),
         nodeEnv,
         { secret: true },
     );
