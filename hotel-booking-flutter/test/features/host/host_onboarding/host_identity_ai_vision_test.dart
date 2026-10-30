@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -9,7 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/app/theme/app_theme.dart';
 import 'package:hotel_booking_flutter/features/host/data/host_repository.dart';
 import 'package:hotel_booking_flutter/features/host/domain/host_models.dart';
-import 'package:hotel_booking_flutter/features/host/onboarding/host_onboarding_services.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/screens/host_onboarding_screens.dart';
 import 'package:hotel_booking_flutter/features/host/services/host_file_picker_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,7 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 // =============================================================================
 
 class _FakeHostRepository extends HostRepository {
-  _FakeHostRepository(Dio dio) : super(dio);
+  _FakeHostRepository(super.dio);
 
   HostIdentityAiResult? resultToReturn;
   Object? errorToThrow;
@@ -167,7 +165,7 @@ void main() {
         'isClear': true,
         'isDocumentValid': true,
         'confidence': 0.98,
-        'warnings': [],
+        'warnings': <String>[],
         'summaryVi': 'CMND mặt trước - NGUYỄN VĂN A - Số: 241234567',
       };
 
@@ -202,7 +200,7 @@ void main() {
         'isClear': true,
         'isDocumentValid': true,
         'confidence': 0.98,
-        'warnings': [],
+        'warnings': <String>[],
         'summaryVi': 'Hộ chiếu Việt Nam - NGUYỄN VĂN A - Số: P01234567',
       };
 
@@ -236,7 +234,7 @@ void main() {
         'isClear': true,
         'isDocumentValid': true,
         'confidence': 0.98,
-        'warnings': [],
+        'warnings': <String>[],
         'summaryVi': 'Giấy phép lái xe mặt trước - NGUYỄN VĂN A - Số: 241234567890',
       };
 

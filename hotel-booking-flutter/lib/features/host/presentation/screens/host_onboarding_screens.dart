@@ -894,16 +894,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
   bool _analyzingBack = false;
 
   HostIdentityAiResult? get _aiIdentityResult => _aiFrontResult;
-  set _aiIdentityResult(HostIdentityAiResult? val) => _aiFrontResult = val;
   bool get _analyzingAi => _analyzingFront || _analyzingBack;
-  set _analyzingAi(bool val) {
-    _analyzingFront = val;
-    _analyzingBack = val;
-  }
-  String? get _aiError => _aiFrontError ?? _aiBackError;
-  set _aiError(String? val) {
-    _aiFrontError = val;
-  }
 
   @override
   void initState() {
@@ -1225,7 +1216,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
       // Check side mismatch (e.g. uploaded back image into front slot, or front into back slot)
       if (isFront && result.side == 'back') {
-        final errText =
+        const errText =
             '❌ Bạn đã tải lên mặt sau thay vì mặt trước. Vui lòng tải lên ảnh mặt trước CCCD có ảnh chân dung.';
         setState(() {
           _aiFrontResult = result;
@@ -1234,7 +1225,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
           _errorMessage = errText;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(errText),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
@@ -1244,7 +1235,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
       }
 
       if (!isFront && result.side == 'front') {
-        final errText =
+        const errText =
             '❌ Bạn đã tải lên mặt trước thay vì mặt sau. Vui lòng tải lên ảnh mặt sau CCCD (có chip và mã MRZ).';
         setState(() {
           _aiBackResult = result;
@@ -1253,7 +1244,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
           _errorMessage = errText;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(errText),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,

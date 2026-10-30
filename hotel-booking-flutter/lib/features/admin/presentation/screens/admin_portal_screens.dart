@@ -3862,7 +3862,7 @@ class _AdminHostApplicationsTabState
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(0.15),
+                    color: AppColors.primary.withValues(alpha: 0.15),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
@@ -4234,7 +4234,7 @@ class _AdminHostApplicationsTabState
                               color: AppColors.successSoft,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: AppColors.success.withOpacity(0.3),
+                                color: AppColors.success.withValues(alpha: 0.3),
                               ),
                             ),
                             child: const Row(
@@ -4267,7 +4267,7 @@ class _AdminHostApplicationsTabState
                               color: AppColors.errorSoft,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: AppColors.error.withOpacity(0.3),
+                                color: AppColors.error.withValues(alpha: 0.3),
                               ),
                             ),
                             child: Row(
