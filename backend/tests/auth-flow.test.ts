@@ -359,6 +359,16 @@ describe("Auth flow", () => {
 
         assert.equal(invalid.status, 422);
         assert.equal(invalid.body.success, false);
+
+        const missingPhone = await request(app).post("/api/auth/register").send({
+            email: "guest2@example.com",
+            password: "Password1",
+            firstName: "Guest",
+            lastName: "User",
+        });
+
+        assert.equal(missingPhone.status, 422);
+        assert.equal(missingPhone.body.success, false);
     });
 });
 

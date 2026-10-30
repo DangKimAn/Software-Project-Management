@@ -39,6 +39,7 @@ import hostOnboardingRoutes from "./modules/host-onboarding/host-onboarding.rout
 import { sendSuccess } from "./common/http";
 import semanticSearchRoutes, { aiListingSearchRouter } from "./modules/semantic-search/semantic-search.routes";
 import uploadsRoutes from "./modules/uploads/uploads.routes";
+import identityVisionRoutes from "./modules/ai/identity-vision.routes";
 import listingImageVisionRoutes, {
     adminImageVisionRoutes,
     hostImageVisionRoutes,
@@ -139,6 +140,8 @@ export const createApp = () => {
     app.use("/api/host", hostPayoutsRoutes);
     app.use("/api/ai/listings/search", aiListingSearchRouter);
     app.use("/api/ai/listings", listingImageVisionRoutes);
+    app.use("/api/ai/id-card-vision", identityVisionRoutes);
+    app.use("/api/ai/identity", identityVisionRoutes);
     app.use("/api/admin/images", adminImageVisionRoutes);
     app.use("/api/admin", adminRoutes);
     app.use("/api/payments", paymentsRoutes);

@@ -53,6 +53,11 @@ class AppNotificationItem {
   String get type => eventType;
   String get message => body;
   Map<String, dynamic>? get metadata => payload;
+  bool get forAdmin =>
+      payload?['forAdmin'] == true ||
+      payload?['isAdminNotification'] == true ||
+      payload?['targetRole'] == 'admin' ||
+      title.startsWith('[Admin]');
 
   factory AppNotificationItem.fromJson(Map<String, dynamic> rawJson) {
     final json = rawJson['notification'] is Map
@@ -125,15 +130,24 @@ class AppNotificationItem {
       return '/account/trips';
     }
 
-    if (tType == 'listing' || eType.startsWith('listing.')) {
-      if (eType == 'listing.submitted_for_review') {
+    if (tType == 'listing' ||
+        eType.startsWith('listing.') ||
+        eType.startsWith('listing_')) {
+      if (forAdmin ||
+          eType == 'listing.submitted_for_review' ||
+          eType == 'listing_submitted' ||
+          eType == 'listing.submitted') {
         return '/admin/kiem-duyet';
       }
       return '/chu-nha/cho-nghi';
     }
 
-    if (tType == 'host_application' || eType.startsWith('host_application.')) {
-      if (eType == 'host_application.submitted') {
+    if (tType == 'host_application' ||
+        eType.startsWith('host_application.') ||
+        eType.startsWith('host_application_')) {
+      if (forAdmin ||
+          eType == 'host_application.submitted' ||
+          eType == 'host_application_submitted') {
         return '/admin/ho-so-host';
       }
       return '/tro-thanh-host/trang-thai';
@@ -510,15 +524,54 @@ class NotificationBell extends ConsumerWidget {
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                item.title,
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight: item.isRead
-                                                      ? FontWeight.w600
-                                                      : FontWeight.w700,
-                                                  color: AppColors.textPrimary,
-                                                ),
+                                              Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  if (item.forAdmin) ...[
+                                                    Container(
+                                                      margin: const EdgeInsets.only(
+                                                        top: 1,
+                                                        right: 6,
+                                                      ),
+                                                      padding: const EdgeInsets.symmetric(
+                                                        horizontal: 5,
+                                                        vertical: 1.5,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFF3E8FF),
+                                                        borderRadius:
+                                                            BorderRadius.circular(4),
+                                                        border: Border.all(
+                                                          color: const Color(0xFF9333EA),
+                                                          width: 0.8,
+                                                        ),
+                                                      ),
+                                                      child: const Text(
+                                                        'ADMIN',
+                                                        style: TextStyle(
+                                                          fontSize: 9.5,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          color: Color(0xFF7E22CE),
+                                                          letterSpacing: 0.3,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                  Expanded(
+                                                    child: Text(
+                                                      item.title,
+                                                      style: TextStyle(
+                                                        fontSize: 14,
+                                                        fontWeight: item.isRead
+                                                            ? FontWeight.w600
+                                                            : FontWeight.w700,
+                                                        color: AppColors.textPrimary,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                               if (item.body.isNotEmpty) ...[
                                                 const SizedBox(height: 4),
@@ -714,9 +767,7 @@ class AppTopHeader extends ConsumerWidget {
         padding: EdgeInsets.symmetric(
           horizontal: isDesktop
               ? (centerSearchTrigger != null ? 24 : 40)
-              : (centerSearchTrigger != null
-                  ? (isCompactMobile ? 8.0 : 12.0)
-                  : (isCompactMobile ? 12.0 : 16.0)),
+              : (isCompactMobile ? 12.0 : 16.0),
           vertical: 10,
         ),
         child: SafeArea(

@@ -207,6 +207,88 @@ enum HostDocumentType {
   bool get requiresSingleDocument => this == HostDocumentType.passport;
 }
 
+class HostIdentityAiResult {
+  final String documentType;
+  final String side;
+  final String? idNumber;
+  final String? fullName;
+  final String? dateOfBirth;
+  final String? gender;
+  final String? nationality;
+  final String? placeOfOrigin;
+  final String? placeOfResidence;
+  final String? expiryDate;
+  final String? issueDate;
+  final String? issuePlace;
+  final String? mrz;
+  final bool isClear;
+  final bool isDocumentValid;
+  final double confidence;
+  final List<String> warnings;
+  final String summaryVi;
+
+  const HostIdentityAiResult({
+    required this.documentType,
+    required this.side,
+    this.idNumber,
+    this.fullName,
+    this.dateOfBirth,
+    this.gender,
+    this.nationality,
+    this.placeOfOrigin,
+    this.placeOfResidence,
+    this.expiryDate,
+    this.issueDate,
+    this.issuePlace,
+    this.mrz,
+    this.isClear = true,
+    this.isDocumentValid = true,
+    this.confidence = 1.0,
+    this.warnings = const [],
+    this.summaryVi = '',
+  });
+
+  factory HostIdentityAiResult.fromJson(Map<String, dynamic> json) {
+    return HostIdentityAiResult(
+      documentType: json['documentType']?.toString() ?? 'cccd',
+      side: json['side']?.toString() ?? 'front',
+      idNumber: json['idNumber']?.toString(),
+      fullName: json['fullName']?.toString(),
+      dateOfBirth: json['dateOfBirth']?.toString(),
+      gender: json['gender']?.toString(),
+      nationality: json['nationality']?.toString(),
+      placeOfOrigin: json['placeOfOrigin']?.toString(),
+      placeOfResidence: json['placeOfResidence']?.toString(),
+      expiryDate: json['expiryDate']?.toString(),
+      issueDate: json['issueDate']?.toString(),
+      issuePlace: json['issuePlace']?.toString(),
+      mrz: json['mrz']?.toString(),
+      isClear: json['isClear'] == true,
+      isDocumentValid: json['isDocumentValid'] == true,
+      confidence: (json['confidence'] as num?)?.toDouble() ?? 1.0,
+      warnings: (json['warnings'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      summaryVi: json['summaryVi']?.toString() ?? '',
+    );
+  }
+
+  /// Extracts the effective identification number from [idNumber] or from [mrz] (e.g. IDVNM012345678901).
+  String? get effectiveIdNumber {
+    if (idNumber != null && idNumber!.trim().isNotEmpty) {
+      return idNumber!.trim();
+    }
+    if (mrz != null && mrz!.isNotEmpty) {
+      final match = RegExp(r'IDVNM(\d{9,12})', caseSensitive: false).firstMatch(mrz!);
+      if (match != null) {
+        return match.group(1);
+      }
+    }
+    return null;
+  }
+}
+
 class HostApplicationDocument {
   final String documentType;
   final String fileUrl;

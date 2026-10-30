@@ -904,6 +904,28 @@ void main() {
         expect(find.text('Số định danh (KYC): ***6789'), findsOneWidget);
         expect(find.textContaining('079188006789'), findsNothing);
         expect(find.textContaining('supersecret999'), findsNothing);
+
+        // 4. Tap 'Từ chối' without typing a rejection reason:
+        // Must NOT jump to top / display top error banner, but report error directly on the reason input field!
+        await tester.tap(find.byKey(const Key('admin_host_app_reject_btn')));
+        await tester.pumpAndSettle();
+
+        // Top error banner must NOT show the reason error
+        expect(find.text('Vui lòng nhập lý do từ chối.'), findsOneWidget); // Found only on the field errorText, not top banner
+        final reasonFieldFinder =
+            find.byKey(const Key('admin_host_app_reject_reason_field'));
+        expect(reasonFieldFinder, findsOneWidget);
+        final reasonFieldWidget = tester.widget<TextField>(reasonFieldFinder);
+        expect(
+          reasonFieldWidget.decoration?.errorText,
+          'Vui lòng nhập lý do từ chối.',
+        );
+
+        // Typing into the field clears the inline error
+        await tester.enterText(reasonFieldFinder, 'Giấy tờ bị mờ');
+        await tester.pumpAndSettle();
+        final updatedField = tester.widget<TextField>(reasonFieldFinder);
+        expect(updatedField.decoration?.errorText, isNull);
       },
     );
   });

@@ -18,7 +18,6 @@ import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../../reviews/presentation/widgets/review_list_widget.dart';
 import '../../domain/entities/booking.dart';
 import '../view_models/trips_view_model.dart';
-import '../widgets/global_pending_booking_banner.dart';
 
 /// Complete port of `Source goc/frontend/src/views/pages/Trips/index.tsx` (`TripHistoryList`, `TripHistoryCard`, `ReviewModal`).
 class TripsScreen extends ConsumerStatefulWidget {
@@ -278,7 +277,6 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
           children: [
             const AppSearchHeader(
               currentPath: '/account/trips',
-              hidePendingBanner: true,
             ),
             Expanded(
               child: SafeArea(
@@ -324,7 +322,6 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
     }
 
     final bookingsAsync = ref.watch(myBookingsProvider);
-    final activeBooking = ref.watch(activePendingBookingProvider);
 
     return Scaffold(
       backgroundColor: AppColors.surfaceBase,
@@ -332,13 +329,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
         children: [
           const AppSearchHeader(
             currentPath: '/account/trips',
-            hidePendingBanner: true,
           ),
-          if (activeBooking != null)
-            GlobalPendingBookingBanner(
-              booking: activeBooking,
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            ),
           Material(
             color: AppColors.surfaceBase,
             child: TabBar(

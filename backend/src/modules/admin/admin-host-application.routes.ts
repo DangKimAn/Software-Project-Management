@@ -8,6 +8,7 @@ import {
     getAdminHostApplicationDetailController,
     listAdminHostApplicationsController,
     rejectHostApplicationController,
+    streamAdminHostDocumentController,
 } from "../host-applications/host-application.controller";
 
 const router = express.Router();
@@ -16,6 +17,8 @@ router.use(authenticate, requireActiveUser, requireRole("admin"));
 
 router.get("/", listAdminHostApplicationsController);
 router.get("/:applicationId", getAdminHostApplicationDetailController);
+router.get("/:applicationId/documents/:documentId/file", streamAdminHostDocumentController);
+router.get("/:applicationId/documents/:documentId/view", streamAdminHostDocumentController);
 router.patch("/:applicationId/approve", approveHostApplicationController);
 router.patch("/:applicationId/reject", rejectHostApplicationController);
 

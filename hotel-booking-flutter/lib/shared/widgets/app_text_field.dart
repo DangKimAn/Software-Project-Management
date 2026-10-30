@@ -17,6 +17,7 @@ class AppTextField extends StatelessWidget {
   final VoidCallback? onTap;
   final int maxLines;
   final bool autofocus;
+  final Iterable<String>? autofillHints;
   const AppTextField(
       {super.key,
       this.controller,
@@ -34,7 +35,8 @@ class AppTextField extends StatelessWidget {
       this.readOnly = false,
       this.onTap,
       this.maxLines = 1,
-      this.autofocus = false});
+      this.autofocus = false,
+      this.autofillHints});
 
   @override
   Widget build(BuildContext context) => TextFormField(
@@ -50,6 +52,7 @@ class AppTextField extends StatelessWidget {
         onTap: onTap,
         maxLines: obscureText ? 1 : maxLines,
         autofocus: autofocus,
+        autofillHints: autofillHints,
         style: Theme.of(context).textTheme.bodyMedium,
         decoration: InputDecoration(
           hintText: hintText,

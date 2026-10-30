@@ -19,14 +19,20 @@ import {
     createPrivateSignedGetUrl,
     deletePrivateIdentityDocumentsQuietly,
     ensurePrivateR2StorageConfigured,
+    getPrivateIdentityDocumentStream,
     getPrivateSignedUrlExpiresSeconds,
     uploadPrivateIdentityDocument,
 } from "../../services/privateR2Storage.service";
 import { getColumnType, getExistingColumns } from "../../services/schema-introspection-service";
 import { writeAuditLog } from "../../services/audit-log-service";
+import { analyzeIdentityDocument } from "../ai/identity-vision.service";
 import type { AuthenticatedUser } from "../auth/auth.service";
 import { ensureUserRole } from "../auth/auth.service";
-import { notifyHostApplicationSubmitted } from "../notifications/notification.service";
+import {
+    notifyHostApplicationApproved,
+    notifyHostApplicationRejected,
+    notifyHostApplicationSubmitted,
+} from "../notifications/notification.service";
 
 const identityApplicationDocumentTypeValues = ["cccd", "cmnd", "passport", "driver_license"] as const;
 type ApplicationIdentityDocumentType = (typeof identityApplicationDocumentTypeValues)[number];
@@ -106,7 +112,12 @@ const assertEmail = (value?: string | null) => {
     const email = nullableTrim(value);
 
     if (!email) {
-        return;
+        throw new ApiError(422, "Validation error", [
+            {
+                path: "contactEmail",
+                msg: "contactEmail is required",
+            },
+        ]);
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -318,7 +329,7 @@ const getLatestHostApplication = async (userId: number, transaction?: Transactio
 
 const updateUserHostApplicationStatus = async (
     userId: number,
-    status: HostApplicationStatus,
+    status: HostApplicationStatus | null,
     transaction?: Transaction,
 ) => {
     const columns = await getExistingColumns("users", ["host_application_status"], transaction);
@@ -333,12 +344,16 @@ const updateUserHostApplicationStatus = async (
     });
 };
 
-const markUserAsApprovedHost = async (userId: number, transaction?: Transaction) => {
+const markUserAsApprovedHost = async (
+    userId: number,
+    transaction?: Transaction,
+    contactName?: string | null,
+) => {
     await ensureUserRole(userId, "host", transaction);
 
     const columns = await getExistingColumns(
         "users",
-        ["is_host_verified", "host_application_status", "role"],
+        ["is_host_verified", "host_application_status", "role", "full_name"],
         transaction,
     );
     const assignments: string[] = [];
@@ -359,6 +374,11 @@ const markUserAsApprovedHost = async (userId: number, transaction?: Transaction)
         if (!roleColumnType || roleColumnType.includes("'host'")) {
             assignments.push("role = CASE WHEN role = 'admin' THEN role ELSE 'host' END");
         }
+    }
+
+    if (columns.has("full_name") && contactName && contactName.trim().length > 0) {
+        assignments.push("full_name = ?");
+        replacements.push(contactName.trim());
     }
 
     if (assignments.length > 0) {
@@ -399,10 +419,113 @@ export const submitHostApplication = async (
         throw new ApiError(404, "User not found");
     }
 
+    // Auto-populate contact email and phone from account profile if not provided
+    if (!nullableTrim(input.contactEmail) && existingUser.email) {
+        input.contactEmail = existingUser.email;
+    }
+    const enteredPhone = input.phone ?? input.contactPhone;
+    if (!nullableTrim(enteredPhone) && existingUser.phone) {
+        input.phone = existingUser.phone;
+        input.contactPhone = existingUser.phone;
+    }
+
     assertSubmitInput(input);
     const profileType = normalizeProfileType(input);
     const documentType = normalizeDocumentType(input);
     const uploadPlan = buildDocumentUploadPlan(profileType, documentType, input.files);
+
+    // Tier 2: Server-side AI Content Verification for Identity Documents
+    const identityFrontItem = uploadPlan.find(
+        (item) => item.side === "front" || item.documentType === "passport",
+    );
+    const identityBackItem = uploadPlan.find(
+        (item) => item.side === "back",
+    );
+
+    if (identityFrontItem && !identityFrontItem.file.mimetype.startsWith("image/")) {
+        throw new ApiError(422, "Validation error", [
+            {
+                path: "identityFront",
+                msg: "Giấy tờ tùy thân (CCCD/CMND/Hộ chiếu) bắt buộc phải là ảnh chụp (JPG, PNG, WebP), không chấp nhận tệp tài liệu PDF.",
+            },
+        ]);
+    }
+
+    if (identityBackItem && !identityBackItem.file.mimetype.startsWith("image/")) {
+        throw new ApiError(422, "Validation error", [
+            {
+                path: "identityBack",
+                msg: "Mặt sau CCCD bắt buộc phải là ảnh chụp (JPG, PNG, WebP), không chấp nhận tệp tài liệu PDF.",
+            },
+        ]);
+    }
+
+    if (process.env.OPENAI_API_KEY && process.env.NODE_ENV !== "test") {
+        let frontAiResult: any = null;
+        let backAiResult: any = null;
+
+        if (identityFrontItem) {
+            try {
+                frontAiResult = await analyzeIdentityDocument({
+                    fileBuffer: identityFrontItem.file.buffer,
+                    mimeType: identityFrontItem.file.mimetype,
+                });
+
+                if (!frontAiResult.isDocumentValid || frontAiResult.documentType === "unknown") {
+                    const reason =
+                        frontAiResult.warnings?.[0] || "Tệp tải lên không phải là giấy tờ tùy thân hợp lệ.";
+                    throw new ApiError(422, "Validation error", [
+                        {
+                            path: "identityFront",
+                            msg: `Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ: ${reason}. Vui lòng tải lên ảnh chụp giấy tờ tùy thân gốc.`,
+                        },
+                    ]);
+                }
+            } catch (error: any) {
+                if (error instanceof ApiError && error.statusCode === 422) {
+                    throw error;
+                }
+            }
+        }
+
+        if (identityBackItem) {
+            try {
+                backAiResult = await analyzeIdentityDocument({
+                    fileBuffer: identityBackItem.file.buffer,
+                    mimeType: identityBackItem.file.mimetype,
+                });
+
+                if (!backAiResult.isDocumentValid || backAiResult.documentType === "unknown") {
+                    const reason =
+                        backAiResult.warnings?.[0] || "Tệp mặt sau không phải là CCCD hợp lệ.";
+                    throw new ApiError(422, "Validation error", [
+                        {
+                            path: "identityBack",
+                            msg: `Tệp mặt sau không phải là CCCD hợp lệ: ${reason}. Vui lòng tải lên ảnh chụp mặt sau CCCD gốc.`,
+                        },
+                    ]);
+                }
+            } catch (error: any) {
+                if (error instanceof ApiError && error.statusCode === 422) {
+                    throw error;
+                }
+            }
+        }
+
+        if (frontAiResult && backAiResult) {
+            const frontId = (frontAiResult.idNumber || "").trim();
+            const backId = (backAiResult.idNumber || "").trim();
+            if (frontId && backId && frontId !== backId) {
+                throw new ApiError(422, "Validation error", [
+                    {
+                        path: "identityBack",
+                        msg: `Số CCCD ở mặt sau (${backId}) không trùng khớp với số CCCD ở mặt trước (${frontId}). Vui lòng tải lên 2 mặt của cùng một thẻ CCCD.`,
+                    },
+                ]);
+            }
+        }
+    }
+
     ensurePrivateR2StorageConfigured();
 
     const uploadedObjectKeys: string[] = [];
@@ -415,7 +538,7 @@ export const submitHostApplication = async (
                 throw new ApiError(409, "Pending host application already exists");
             }
 
-            if (latestApplication?.status === "approved" || user.roles.includes("host")) {
+            if (user.roles.includes("host") || (latestApplication?.status === "approved" && user.roles.includes("host"))) {
                 throw new ApiError(409, "Host application is already approved");
             }
 
@@ -465,7 +588,7 @@ export const submitHostApplication = async (
             await updateUserHostApplicationStatus(userId, "pending", transaction);
 
             // Notify admin users about the new host application
-            void notifyHostApplicationSubmitted(
+            await notifyHostApplicationSubmitted(
                 Number(application.applicationId),
                 userId,
                 transaction,
@@ -498,20 +621,93 @@ export const getMyHostApplication = async (user: AuthenticatedUser) => {
         throw new ApiError(404, "User not found");
     }
 
+    const isCurrentHost = user.roles.includes("host");
+
     if (!application) {
+        const effectiveUserStatus =
+            existingUser.hostApplicationStatus === "approved" && !isCurrentHost
+                ? "rejected"
+                : (existingUser.hostApplicationStatus ?? null);
         return {
-            status: existingUser.hostApplicationStatus ?? null,
-            hostApplicationStatus: existingUser.hostApplicationStatus ?? null,
+            status: effectiveUserStatus,
+            hostApplicationStatus: effectiveUserStatus,
             application: null,
         };
     }
 
     const documents = await getDocumentsForApplication(Number(application.applicationId));
+    const serialized = serializeHostApplication(application, documents);
+
+    if (application.status === "approved" && !isCurrentHost) {
+        serialized.status = "rejected";
+        serialized.hostApplicationStatus = "rejected";
+        serialized.rejectReason = serialized.rejectReason || "Quyền Host đã được quản trị viên điều chỉnh về Guest.";
+        serialized.rejectionReason = serialized.rejectionReason || "Quyền Host đã được quản trị viên điều chỉnh về Guest.";
+
+        return {
+            status: "rejected",
+            hostApplicationStatus: "rejected",
+            application: serialized,
+        };
+    }
 
     return {
         status: application.status,
         hostApplicationStatus: application.status,
-        application: serializeHostApplication(application, documents),
+        application: serialized,
+    };
+};
+
+export const cancelHostApplication = async (user: AuthenticatedUser) => {
+    const userId = Number(user.id);
+    const existingUser = await User.findById(userId);
+
+    if (!existingUser) {
+        throw new ApiError(404, "User not found");
+    }
+
+    const application = await getLatestHostApplication(userId);
+
+    if (!application) {
+        throw new ApiError(404, "Không tìm thấy hồ sơ đăng ký Host để hủy");
+    }
+
+    if (application.status === "approved" || user.roles.includes("host")) {
+        throw new ApiError(400, "Không thể hủy hồ sơ đã được phê duyệt");
+    }
+
+    if (application.status === "rejected") {
+        throw new ApiError(400, "Không thể hủy hồ sơ đã bị từ chối");
+    }
+
+    const documents = await getDocumentsForApplication(Number(application.applicationId));
+    const objectKeys = documents.map((doc) => doc.objectKey).filter(Boolean);
+
+    await sequelize.transaction(async (transaction) => {
+        await HostIdentityDocument.destroy({
+            where: {
+                applicationId: Number(application.applicationId),
+            },
+            transaction,
+        });
+
+        await HostApplication.destroy({
+            where: {
+                applicationId: Number(application.applicationId),
+            },
+            transaction,
+        });
+
+        await updateUserHostApplicationStatus(userId, null, transaction);
+    });
+
+    if (objectKeys.length > 0) {
+        await deletePrivateIdentityDocumentsQuietly(objectKeys);
+    }
+
+    return {
+        message: "Đã hủy đơn đăng ký Host thành công.",
+        status: null,
     };
 };
 
@@ -648,6 +844,7 @@ const getApplicationForAdminOrThrow = async (applicationId: number, transaction?
 export const getAdminHostApplicationDetail = async (
     admin: AuthenticatedUser,
     applicationId: number,
+    adminToken?: string,
 ) => {
     if (!admin.roles.includes("admin")) {
         throw new ApiError(403, "Forbidden");
@@ -662,19 +859,25 @@ export const getAdminHostApplicationDetail = async (
     const signedUrlExpiresAt = new Date(Date.now() + expiresIn * 1000);
 
     const documentsWithSignedUrls = await Promise.all(
-        documents.map(async (document) => ({
-            id: Number(document.id),
-            documentType: document.documentType,
-            side: document.side,
-            originalFilename: document.originalFilename,
-            mimeType: document.mimeType,
-            fileSize: document.fileSize,
-            status: document.status,
-            signedUrl: await createPrivateSignedGetUrl(document.objectKey),
-            signedUrlExpiresAt,
-            createdAt: document.createdAt,
-            updatedAt: document.updatedAt,
-        })),
+        documents.map(async (document) => {
+            const tokenQuery = adminToken ? `?token=${encodeURIComponent(adminToken)}` : "";
+            const fileUrl = `/api/admin/host-applications/${applicationId}/documents/${document.id}/file${tokenQuery}`;
+            return {
+                id: Number(document.id),
+                documentType: document.documentType,
+                side: document.side,
+                originalFilename: document.originalFilename,
+                mimeType: document.mimeType,
+                fileSize: document.fileSize,
+                status: document.status,
+                signedUrl: await createPrivateSignedGetUrl(document.objectKey),
+                fileUrl,
+                proxyUrl: fileUrl,
+                signedUrlExpiresAt,
+                createdAt: document.createdAt,
+                updatedAt: document.updatedAt,
+            };
+        }),
     );
 
     return {
@@ -702,6 +905,37 @@ export const getAdminHostApplicationDetail = async (
               }
             : null,
         documents: documentsWithSignedUrls,
+    };
+};
+
+export const getAdminHostDocumentStream = async (
+    admin: AuthenticatedUser,
+    applicationId: number,
+    documentId: number,
+) => {
+    if (!admin.roles.includes("admin")) {
+        throw new ApiError(403, "Forbidden");
+    }
+
+    const document = await HostIdentityDocument.findOne({
+        where: {
+            id: documentId,
+            applicationId,
+        },
+    });
+
+    if (!document) {
+        throw new ApiError(404, "Identity document not found");
+    }
+
+    const s3Response = await getPrivateIdentityDocumentStream(document.objectKey);
+    if (!s3Response.Body) {
+        throw new ApiError(404, "Identity document file body not found");
+    }
+
+    return {
+        document,
+        stream: s3Response.Body,
     };
 };
 
@@ -733,7 +967,8 @@ export const approveHostApplication = async (
             },
         );
 
-        await markUserAsApprovedHost(application.userId, transaction);
+        await markUserAsApprovedHost(application.userId, transaction, application.contactName);
+        await notifyHostApplicationApproved(applicationId, application.userId, transaction);
         await writeAuditLog({
             actorId: Number(admin.id),
             action: "host_application.approve",
@@ -805,6 +1040,7 @@ export const rejectHostApplication = async (
         );
 
         await updateUserHostApplicationStatus(application.userId, "rejected", transaction);
+        await notifyHostApplicationRejected(applicationId, application.userId, reason, transaction);
         await writeAuditLog({
             actorId: Number(admin.id),
             action: "host_application.reject",

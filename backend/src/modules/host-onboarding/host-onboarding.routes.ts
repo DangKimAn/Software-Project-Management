@@ -22,12 +22,13 @@ router.post(
     normalizeHostRegisterPayload,
     [
         body("contactName").optional({ nullable: true }).isString().trim().isLength({ max: 255 }),
-        body("contactEmail").optional({ nullable: true }).isEmail().withMessage("contactEmail is invalid").normalizeEmail(),
+        body("contactEmail")
+            .optional({ nullable: true })
+            .isEmail()
+            .withMessage("contactEmail is invalid")
+            .normalizeEmail(),
         body("contactPhone")
-            .isString()
-            .trim()
-            .notEmpty()
-            .withMessage("contactPhone is required")
+            .optional({ nullable: true })
             .matches(/^(0|\+84)[0-9]{9}$/)
             .withMessage("contactPhone must be a valid Vietnamese phone number"),
         body("businessAddress")

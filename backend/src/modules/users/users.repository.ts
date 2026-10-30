@@ -106,6 +106,44 @@ export const replaceUserRoles = async (
     }
 };
 
+export const syncUserHostDemotion = async (
+    userId: string | number,
+    adminId: string | number,
+    transaction?: Transaction,
+) => {
+    await sequelize.query(
+        "UPDATE users SET is_host_verified = 0, host_application_status = 'rejected' WHERE user_id = ?",
+        {
+            replacements: [Number(userId)],
+            transaction,
+        },
+    );
+    await sequelize.query(
+        "UPDATE host_applications SET status = 'rejected', rejection_reason = ?, reviewed_at = NOW(), reviewed_by_user_id = ? WHERE user_id = ? AND status = 'approved'",
+        {
+            replacements: [
+                "Quyền Host đã được quản trị viên điều chỉnh về Guest.",
+                Number(adminId),
+                Number(userId),
+            ],
+            transaction,
+        },
+    );
+};
+
+export const syncUserHostPromotion = async (
+    userId: string | number,
+    transaction?: Transaction,
+) => {
+    await sequelize.query(
+        "UPDATE users SET is_host_verified = 1, host_application_status = 'approved' WHERE user_id = ?",
+        {
+            replacements: [Number(userId)],
+            transaction,
+        },
+    );
+};
+
 export const countActiveUsersWithRole = async (role: UserRole, transaction?: Transaction) => {
     const rows = await sequelize.query<{ count: number }>(
         `

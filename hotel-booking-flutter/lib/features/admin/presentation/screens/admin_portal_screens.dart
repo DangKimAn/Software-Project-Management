@@ -127,11 +127,18 @@ final ButtonStyle _kPillElevatedStyle = ElevatedButton.styleFrom(
 InputDecoration _multilineInputDecoration({
   String? hintText,
   String? labelText,
+  String? errorText,
 }) {
   final borderRadius = BorderRadius.circular(20);
   return InputDecoration(
     hintText: hintText,
     labelText: labelText,
+    errorText: errorText,
+    errorStyle: const TextStyle(
+      color: AppColors.error,
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+    ),
     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     border: OutlineInputBorder(
       borderRadius: borderRadius,
@@ -144,6 +151,14 @@ InputDecoration _multilineInputDecoration({
     focusedBorder: OutlineInputBorder(
       borderRadius: borderRadius,
       borderSide: const BorderSide(color: AppColors.textPrimary, width: 1.4),
+    ),
+    errorBorder: OutlineInputBorder(
+      borderRadius: borderRadius,
+      borderSide: const BorderSide(color: AppColors.error, width: 1.4),
+    ),
+    focusedErrorBorder: OutlineInputBorder(
+      borderRadius: borderRadius,
+      borderSide: const BorderSide(color: AppColors.error, width: 1.4),
     ),
   );
 }
@@ -3359,6 +3374,7 @@ class _AdminHostApplicationsTabState
   bool _loadingDetail = false;
   bool _actionLoading = false;
   final TextEditingController _rejectReasonCtrl = TextEditingController();
+  String? _rejectReasonError;
   String? _error;
   bool _isOffline = false;
   String? _message;
@@ -3592,6 +3608,7 @@ class _AdminHostApplicationsTabState
       _selectedId = applicationId;
       _loadingDetail = true;
       _error = null;
+      _rejectReasonError = null;
       _isOffline = false;
       _message = null;
       _rejectReasonCtrl.clear();
@@ -3635,20 +3652,29 @@ class _AdminHostApplicationsTabState
     setState(() {
       _actionLoading = true;
       _error = null;
+      _rejectReasonError = null;
       _isOffline = false;
       _message = null;
     });
     try {
       await ref.read(adminRepositoryProvider).approveHostApplication(appId);
       if (!mounted) return;
-      setState(() => _message = 'Đã duyệt hồ sơ chủ nhà.');
+      setState(() {
+        _message = 'Đã duyệt hồ sơ chủ nhà #$appId. Hồ sơ đã chuyển vào mục "Đã duyệt".';
+        if (_status == 'pending') {
+          _selectedId = null;
+          _detail = null;
+        }
+      });
       AppToast.show(
         context,
-        'Đã duyệt hồ sơ chủ nhà #$appId.',
+        'Đã duyệt hồ sơ chủ nhà #$appId. Hồ sơ đã chuyển vào mục "Đã duyệt".',
         type: AppToastType.success,
       );
       await _fetchApplications();
-      await _fetchDetail(appId);
+      if (_status != 'pending') {
+        await _fetchDetail(appId);
+      }
     } catch (e) {
       if (!mounted) return;
       final status = AdminRepository.extractStatusCode(e);
@@ -3682,12 +3708,13 @@ class _AdminHostApplicationsTabState
 
     final reason = _rejectReasonCtrl.text.trim();
     if (reason.isEmpty) {
-      setState(() => _error = 'Vui lòng nhập lý do từ chối.');
+      setState(() => _rejectReasonError = 'Vui lòng nhập lý do từ chối.');
       return;
     }
     setState(() {
       _actionLoading = true;
       _error = null;
+      _rejectReasonError = null;
       _isOffline = false;
       _message = null;
     });
@@ -3696,14 +3723,22 @@ class _AdminHostApplicationsTabState
           .read(adminRepositoryProvider)
           .rejectHostApplication(appId, reason);
       if (!mounted) return;
-      setState(() => _message = 'Đã từ chối hồ sơ chủ nhà.');
+      setState(() {
+        _message = 'Đã từ chối hồ sơ chủ nhà #$appId. Hồ sơ đã chuyển vào mục "Từ chối".';
+        if (_status == 'pending') {
+          _selectedId = null;
+          _detail = null;
+        }
+      });
       AppToast.show(
         context,
-        'Đã từ chối hồ sơ chủ nhà #$appId.',
+        'Đã từ chối hồ sơ chủ nhà #$appId. Hồ sơ đã chuyển vào mục "Từ chối".',
         type: AppToastType.info,
       );
       await _fetchApplications();
-      await _fetchDetail(appId);
+      if (_status != 'pending') {
+        await _fetchDetail(appId);
+      }
     } catch (e) {
       if (!mounted) return;
       final status = AdminRepository.extractStatusCode(e);
@@ -3720,6 +3755,141 @@ class _AdminHostApplicationsTabState
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
+  }
+
+  Widget _buildHostAppStatusBadge(dynamic rawStatus) {
+    final status = '$rawStatus'.toLowerCase();
+    if (status == 'approved') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.successSoft,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.success),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(LucideIcons.circleCheck, size: 14, color: AppColors.success),
+            SizedBox(width: 6),
+            Text(
+              'Đã phê duyệt (Đã cấp quyền Host)',
+              style: TextStyle(
+                color: AppColors.success,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (status == 'rejected') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.errorSoft,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.error),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(LucideIcons.circleX, size: 14, color: AppColors.error),
+            SizedBox(width: 6),
+            Text(
+              'Đã từ chối',
+              style: TextStyle(
+                color: AppColors.error,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.warningSoft,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.warning),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.clock, size: 14, color: AppColors.warning),
+          SizedBox(width: 6),
+          Text(
+            'Chờ phê duyệt',
+            style: TextStyle(
+              color: AppColors.warning,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusFilterChip(String value, String label, IconData icon) {
+    final isSelected = _status == value;
+    return InkWell(
+      key: Key('admin_host_app_filter_$value'),
+      onTap: () {
+        if (_status == value) return;
+        setState(() {
+          _status = value;
+          _appPage = 1;
+          _selectedId = null;
+          _detail = null;
+        });
+        _fetchApplications();
+      },
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.border,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.15),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected ? Colors.white : AppColors.iconMuted,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? Colors.white : AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -3745,10 +3915,20 @@ class _AdminHostApplicationsTabState
                   child: Center(child: CircularProgressIndicator()),
                 )
               : _applications.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(28),
-                      child:
-                          Center(child: Text('Không có hồ sơ host phù hợp.')),
+                  ? Padding(
+                      padding: const EdgeInsets.all(28),
+                      child: Center(
+                        child: Text(
+                          _status == 'pending'
+                              ? 'Không có hồ sơ nào đang chờ duyệt.'
+                              : _status == 'approved'
+                                  ? 'Chưa có hồ sơ nào đã duyệt.'
+                                  : _status == 'rejected'
+                                      ? 'Chưa có hồ sơ nào bị từ chối.'
+                                      : 'Không có hồ sơ host phù hợp.',
+                          style: const TextStyle(color: AppColors.textSecondary),
+                        ),
+                      ),
                     )
                   : ListView.separated(
                       shrinkWrap: true,
@@ -3889,14 +4069,42 @@ class _AdminHostApplicationsTabState
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '${_detail!['contactName'] ?? (_detail!['user'] is Map ? _detail!['user']['name'] : null) ?? 'Hồ sơ host'}',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                          ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${_detail!['contactName'] ?? (_detail!['user'] is Map ? _detail!['user']['name'] : null) ?? 'Hồ sơ host'}',
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  _buildHostAppStatusBadge(_detail!['status']),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Đóng chi tiết',
+                              icon: const Icon(
+                                LucideIcons.x,
+                                size: 20,
+                                color: AppColors.iconMuted,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _selectedId = null;
+                                  _detail = null;
+                                });
+                              },
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 10),
                         Text(
                           'SĐT: ${_detail!['phone'] ?? '-'} · Loại: ${_detail!['profileType'] ?? 'individual'}',
                           style: const TextStyle(
@@ -3955,7 +4163,9 @@ class _AdminHostApplicationsTabState
                             final doc = rawDoc is Map
                                 ? Map<String, dynamic>.from(rawDoc)
                                 : const <String, dynamic>{};
+                            final fileUrl = '${doc['fileUrl'] ?? doc['proxyUrl'] ?? ''}';
                             final signedUrl = '${doc['signedUrl'] ?? ''}';
+                            final previewUrl = fileUrl.isNotEmpty ? fileUrl : signedUrl;
                             final mimeType = '${doc['mimeType'] ?? ''}';
                             return Container(
                               margin: const EdgeInsets.only(bottom: 12),
@@ -3974,22 +4184,27 @@ class _AdminHostApplicationsTabState
                                     ),
                                   ),
                                   const SizedBox(height: 8),
-                                  if (signedUrl.isNotEmpty &&
+                                  if (previewUrl.isNotEmpty &&
                                       mimeType != 'application/pdf')
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(16),
                                       child: AppImage(
-                                        imageUrl: signedUrl,
+                                        imageUrl: previewUrl,
                                         height: 180,
                                         width: double.infinity,
                                       ),
                                     ),
-                                  if (signedUrl.isNotEmpty) ...[
+                                  if (signedUrl.isNotEmpty || previewUrl.isNotEmpty) ...[
                                     const SizedBox(height: 8),
                                     OutlinedButton(
                                       style: _kPillOutlinedStyle,
                                       onPressed: () async {
-                                        final uri = Uri.tryParse(signedUrl);
+                                        final target = signedUrl.isNotEmpty
+                                            ? signedUrl
+                                            : previewUrl;
+                                        final uri = Uri.tryParse(target.startsWith('http')
+                                            ? target
+                                            : AppImage.resolveNetworkUrl(target));
                                         if (uri != null) {
                                           await launchUrl(
                                             uri,
@@ -4010,45 +4225,136 @@ class _AdminHostApplicationsTabState
                             'Không có giấy tờ đính kèm.',
                             style: TextStyle(color: AppColors.textSecondary),
                           ),
-                        const Divider(height: 24),
-                        const Text(
-                          'Quyết định xét duyệt',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _rejectReasonCtrl,
-                          maxLines: 3,
-                          decoration: _multilineInputDecoration(
-                            hintText:
-                                'Nhập lý do nếu bạn muốn từ chối hồ sơ này...',
+                        if (_detail!['status'] == 'approved') ...[
+                          const Divider(height: 24),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.successSoft,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: AppColors.success.withOpacity(0.3),
+                              ),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(
+                                  LucideIcons.circleCheck,
+                                  color: AppColors.success,
+                                  size: 20,
+                                ),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Hồ sơ này đã được phê duyệt thành công. Người dùng đã có quyền Host.',
+                                    style: TextStyle(
+                                      color: AppColors.success,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 8,
-                          children: [
-                            ElevatedButton(
-                              style: _kPillElevatedStyle,
-                              onPressed: !canManageHostApps ||
-                                      _actionLoading ||
-                                      _detail!['status'] == 'approved'
-                                  ? null
-                                  : _runApprove,
-                              child: const Text('Phê duyệt hồ sơ'),
+                        ] else if (_detail!['status'] == 'rejected') ...[
+                          const Divider(height: 24),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.errorSoft,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: AppColors.error.withOpacity(0.3),
+                              ),
                             ),
-                            OutlinedButton(
-                              style: _kPillOutlinedStyle,
-                              onPressed: !canManageHostApps ||
-                                      _actionLoading ||
-                                      _detail!['status'] == 'rejected'
-                                  ? null
-                                  : _runReject,
-                              child: const Text('Từ chối'),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  LucideIcons.circleX,
+                                  color: AppColors.error,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Hồ sơ này đã bị từ chối.',
+                                        style: TextStyle(
+                                          color: AppColors.error,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      if (_detail!['rejectReason'] != null &&
+                                          '${_detail!['rejectReason']}'
+                                              .trim()
+                                              .isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Lý do từ chối: ${_detail!['rejectReason']}',
+                                          style: const TextStyle(
+                                            color: AppColors.textPrimary,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ] else ...[
+                          const Divider(height: 24),
+                          const Text(
+                            'Quyết định xét duyệt',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            key: const Key('admin_host_app_reject_reason_field'),
+                            controller: _rejectReasonCtrl,
+                            maxLines: 3,
+                            onChanged: (_) {
+                              if (_rejectReasonError != null) {
+                                setState(() => _rejectReasonError = null);
+                              }
+                            },
+                            decoration: _multilineInputDecoration(
+                              hintText:
+                                  'Nhập lý do nếu bạn muốn từ chối hồ sơ này...',
+                              errorText: _rejectReasonError,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: [
+                              ElevatedButton(
+                                style: _kPillElevatedStyle,
+                                onPressed: !canManageHostApps || _actionLoading
+                                    ? null
+                                    : _runApprove,
+                                child: const Text('Phê duyệt hồ sơ'),
+                              ),
+                              OutlinedButton(
+                                key: const Key('admin_host_app_reject_btn'),
+                                style: _kPillOutlinedStyle,
+                                onPressed: !canManageHostApps || _actionLoading
+                                    ? null
+                                    : _runReject,
+                                child: const Text('Từ chối'),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
     );
@@ -4303,62 +4609,15 @@ class _AdminHostApplicationsTabState
                 alignment: WrapAlignment.spaceBetween,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Container(
-                    height: 38,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _status,
-                          isDense: true,
-                          icon: const Icon(
-                            LucideIcons.chevronDown,
-                            size: 14,
-                            color: AppColors.iconMuted,
-                          ),
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'pending',
-                              child: Text('Chờ duyệt'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'approved',
-                              child: Text('Đã duyệt'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'rejected',
-                              child: Text('Từ chối'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'all',
-                              child: Text('Tất cả'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() {
-                              _status = value;
-                              _appPage = 1;
-                              _selectedId = null;
-                              _detail = null;
-                            });
-                            _fetchApplications();
-                          },
-                        ),
-                      ),
-                    ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildStatusFilterChip('pending', 'Chờ duyệt', LucideIcons.clock),
+                      _buildStatusFilterChip('approved', 'Đã duyệt', LucideIcons.circleCheck),
+                      _buildStatusFilterChip('rejected', 'Từ chối', LucideIcons.circleX),
+                      _buildStatusFilterChip('all', 'Tất cả', LucideIcons.layers),
+                    ],
                   ),
                   OutlinedButton.icon(
                     style: _kCompactPillOutlinedStyle,

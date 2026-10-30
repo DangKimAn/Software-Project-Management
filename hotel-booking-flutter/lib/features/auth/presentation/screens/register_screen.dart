@@ -273,7 +273,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       AppTextField(
                         controller: _phoneController,
                         readOnly: _isLoading,
-                        labelText: 'Số điện thoại',
+                        labelText: 'Số điện thoại *',
                         hintText: 'Nhập số điện thoại',
                         prefixIcon: const Icon(
                           LucideIcons.phone,
@@ -290,13 +290,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           }
                         },
                         validator: (v) =>
-                            _fieldErrors['phone'] ?? AuthValidation.phone(v),
+                            _fieldErrors['phone'] ??
+                            AuthValidation.phone(v, required: true),
                       ),
                       const SizedBox(height: AppSpacing.s16),
                       AppTextField(
                         controller: _emailController,
                         readOnly: _isLoading,
-                        labelText: 'Email',
+                        labelText: 'Email *',
                         hintText: 'Nhập địa chỉ email',
                         prefixIcon: const Icon(
                           LucideIcons.mail,

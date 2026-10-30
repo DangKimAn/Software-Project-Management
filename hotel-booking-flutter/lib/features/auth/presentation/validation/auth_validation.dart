@@ -15,9 +15,11 @@ abstract final class AuthValidation {
     return 'Email, tên đăng nhập hoặc số điện thoại không hợp lệ';
   }
 
-  static String? phone(String? value) {
+  static String? phone(String? value, {bool required = false}) {
     final text = value?.trim() ?? '';
-    if (text.isEmpty) return null;
+    if (text.isEmpty) {
+      return required ? 'Vui lòng nhập số điện thoại' : null;
+    }
     return RegExp(r'^(0|\+84)[0-9]{9}$').hasMatch(text)
         ? null
         : 'Số điện thoại cần có 10 số hoặc bắt đầu bằng +84';
@@ -25,6 +27,7 @@ abstract final class AuthValidation {
 
   static String? email(String? value) {
     final text = value?.trim() ?? '';
+    if (text.isEmpty) return 'Vui lòng nhập email';
     return text.length <= 255 &&
             RegExp(r'^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$').hasMatch(text)
         ? null

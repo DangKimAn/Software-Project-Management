@@ -221,6 +221,22 @@ export const createPrivateSignedGetUrl = async (objectKey: string) => {
     );
 };
 
+export const getPrivateIdentityDocumentStream = async (objectKey: string) => {
+    if (!objectKey?.trim()) {
+        throw new ApiError(404, "Identity document object not found");
+    }
+
+    const config = assertRequiredPrivateR2Env();
+    const client = createPrivateR2Client(config);
+
+    return client.send(
+        new GetObjectCommand({
+            Bucket: config.bucket,
+            Key: objectKey,
+        }),
+    );
+};
+
 export const deletePrivateIdentityDocument = async (objectKey: string) => {
     const config = assertRequiredPrivateR2Env();
     const client = createPrivateR2Client(config);

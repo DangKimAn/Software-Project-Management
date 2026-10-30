@@ -212,6 +212,10 @@ export const extractAuthToken = (req: Request) => {
         return authorization.slice("Bearer ".length).trim();
     }
 
+    if (typeof req.query?.token === "string" && req.query.token.trim()) {
+        return req.query.token.trim();
+    }
+
     const parsedCookieToken =
         typeof req.signedCookies?.auth_token === "string"
             ? req.signedCookies.auth_token
