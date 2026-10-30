@@ -666,7 +666,7 @@ const autoAdvanceBookingStatus = async (booking: BookingDocument): Promise<void>
 const serializeBooking = async (booking: BookingDocument, includeImages = false) => {
     await autoAdvanceBookingStatus(booking);
 
-    const [latestPayment, latestRefund, payoutStatus, listing, review, guestUser] = await Promise.all([
+    const [latestPayment, latestRefund, payoutStatus, listing, review, guestUser, hostUser] = await Promise.all([
         getLatestPaymentForBooking(booking.bookingId),
         getLatestRefundForBooking(booking.bookingId),
         getLatestPayoutStatusForBooking(booking.bookingId),
@@ -681,6 +681,7 @@ const serializeBooking = async (booking: BookingDocument, includeImages = false)
             },
         }),
         User.findById(booking.guestUserId),
+        User.findById(booking.hostUserId),
     ]);
     const images = listing ? await getListingImagesForListing(listing) : [];
     const coverImage = getCoverImage(images);
@@ -728,6 +729,16 @@ const serializeBooking = async (booking: BookingDocument, includeImages = false)
         listingId: booking.listingId,
         guestUserId: String(booking.guestUserId),
         hostUserId: String(booking.hostUserId),
+        hostName: hostUser?.fullName ?? null,
+        hostPhone: hostUser?.phone ?? null,
+        host: hostUser
+            ? {
+                userId: hostUser.userId,
+                fullName: hostUser.fullName,
+                phone: hostUser.phone,
+                email: hostUser.email,
+            }
+            : null,
         guestName: guestUser?.fullName ?? null,
         guestEmail: guestUser?.email ?? null,
         listingTitle: listing?.title ?? null,

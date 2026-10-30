@@ -186,6 +186,15 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
     return '$m:$s';
   }
 
+  String _formatDisplayDate(String raw) {
+    final trimmed = raw.trim();
+    final parts = trimmed.split('-');
+    if (parts.length == 3 && parts[0].length == 4) {
+      return '${parts[2]}/${parts[1]}/${parts[0]}';
+    }
+    return trimmed;
+  }
+
   Future<void> _handleValidateCoupon(Booking booking) async {
     final code = _couponController.text.trim().toUpperCase();
     if (code.isEmpty) {
@@ -391,7 +400,10 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
       body: SafeArea(
         child: Column(
           children: [
-            const AppTopHeader(currentPath: '/account/trips'),
+            const AppTopHeader(
+              currentPath: '/thanh-toan',
+              hidePendingBanner: true,
+            ),
             Expanded(
               child: bookingAsync.when(
                 loading: () => const AppLoading(
@@ -440,9 +452,25 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   // Countdown Lock / Status Banner (Neutral icon, no decorative circle)
-                                  Padding(
-                                    padding:
-                                        const EdgeInsets.symmetric(vertical: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceBase,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: booking.isPaid
+                                            ? AppColors.success
+                                                .withValues(alpha: 0.35)
+                                            : (isHoldExpired ||
+                                                    booking.isCancelled
+                                                ? AppColors.error
+                                                    .withValues(alpha: 0.35)
+                                                : AppColors.borderSoft),
+                                      ),
+                                    ),
                                     child: Row(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.center,
@@ -466,45 +494,72 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                                         !booking.isExpired
                                                     ? 'Đơn đặt phòng đã bị hủy (${booking.statusDisplay}).'
                                                     : (!isHoldExpired
-                                                        ? 'Hệ thống đang giữ lịch phòng cho bạn. Vui lòng hoàn tất thanh toán trong:'
+                                                        ? 'Hệ thống đang giữ lịch phòng cho bạn. Hoàn tất thanh toán trong:'
                                                         : 'Thời gian giữ chỗ đã hết hạn.')),
                                             style: const TextStyle(
                                               fontSize: 13,
+                                              height: 1.35,
                                               fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary,
                                             ),
                                           ),
                                         ),
                                         if (!booking.isPaid &&
                                             (!booking.isCancelled ||
                                                 booking.isExpired)) ...[
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            _formatCountdown(_remainingSeconds),
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w800,
-                                              color: AppColors.primary,
+                                          const SizedBox(width: 10),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 6,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                              border: Border.all(
+                                                color: AppColors.primary
+                                                    .withValues(alpha: 0.25),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              _formatCountdown(
+                                                _remainingSeconds,
+                                              ),
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w800,
+                                                color: AppColors.primary,
+                                              ),
                                             ),
                                           ),
                                         ],
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(height: 16),
+                                  const SizedBox(height: 18),
 
                                   const Text(
                                     'Xác nhận & Thanh toán kỳ nghỉ',
                                     style: TextStyle(
-                                      fontSize: 22,
+                                      fontSize: 20,
                                       fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.3,
+                                      color: AppColors.textPrimary,
                                     ),
                                   ),
-                                  const SizedBox(height: 16),
+                                  const SizedBox(height: 14),
 
-                                  // Booking Summary
-                                  Padding(
-                                    padding:
-                                        const EdgeInsets.symmetric(vertical: 4),
+                                  // Booking Summary Card
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: AppColors.borderSoft,
+                                      ),
+                                    ),
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
@@ -517,8 +572,8 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                               borderRadius:
                                                   BorderRadius.circular(12),
                                               child: SizedBox(
-                                                width: 88,
-                                                height: 68,
+                                                width: 96,
+                                                height: 76,
                                                 child: AppImage(
                                                   url: booking.coverImageUrl ??
                                                       'assets/images/NDT05929-HDR1.jpg',
@@ -534,28 +589,49 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                                 children: [
                                                   Text(
                                                     booking.propertyName,
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                     style: const TextStyle(
-                                                      fontSize: 16,
+                                                      fontSize: 15,
+                                                      height: 1.3,
                                                       fontWeight:
                                                           FontWeight.w700,
+                                                      color:
+                                                          AppColors.textPrimary,
                                                     ),
                                                   ),
-                                                  const SizedBox(height: 4),
+                                                  const SizedBox(height: 6),
                                                   Text(
                                                     'Mã đơn: #${booking.id} • ${booking.statusDisplay}',
                                                     style: const TextStyle(
                                                       fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w500,
                                                       color: AppColors
                                                           .textSecondary,
                                                     ),
                                                   ),
-                                                  const SizedBox(height: 4),
+                                                  const SizedBox(height: 6),
                                                   Text(
-                                                    '${booking.checkInDate} → ${booking.checkOutDate} (${booking.nights} đêm • ${booking.guestCount} khách)',
+                                                    '${_formatDisplayDate(booking.checkInDate)} → ${_formatDisplayDate(booking.checkOutDate)}',
                                                     style: const TextStyle(
                                                       fontSize: 13,
                                                       fontWeight:
-                                                          FontWeight.w600,
+                                                          FontWeight.w700,
+                                                      color:
+                                                          AppColors.textPrimary,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    '${booking.nights} đêm • ${booking.guestCount} khách',
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      color: AppColors
+                                                          .textSecondary,
                                                     ),
                                                   ),
                                                 ],
@@ -563,9 +639,14 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                             ),
                                           ],
                                         ),
-                                        const Divider(
-                                          height: 28,
-                                          color: AppColors.divider,
+                                        const Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 14,
+                                          ),
+                                          child: Divider(
+                                            height: 1,
+                                            color: AppColors.divider,
+                                          ),
                                         ),
                                         if (pb != null) ...[
                                           _PaymentDetailRow(
@@ -627,21 +708,29 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                               value:
                                                   '-${CurrencyFormatter.formatVnd(pb.discountAmount)}',
                                             ),
-                                          const Divider(
-                                            height: 20,
-                                            color: AppColors.divider,
+                                          const Padding(
+                                            padding: EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                            child: Divider(
+                                              height: 1,
+                                              color: AppColors.divider,
+                                            ),
                                           ),
                                         ],
                                         Row(
                                           mainAxisAlignment:
                                               MainAxisAlignment.spaceBetween,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
                                           children: [
                                             const Flexible(
                                               child: Text(
-                                                'Tổng cộng thanh toán (chốt bởi máy chủ)',
+                                                'Tổng cộng thanh toán',
                                                 style: TextStyle(
                                                   fontSize: 15,
                                                   fontWeight: FontWeight.w800,
+                                                  color: AppColors.textPrimary,
                                                 ),
                                               ),
                                             ),
@@ -651,7 +740,7 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                                 booking.totalAmount,
                                               ),
                                               style: const TextStyle(
-                                                fontSize: 20,
+                                                fontSize: 19,
                                                 fontWeight: FontWeight.w800,
                                                 color: AppColors.primary,
                                               ),
@@ -661,73 +750,164 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(height: 20),
+                                  const SizedBox(height: 16),
 
                                   // Coupon check section (if guest wants to verify a coupon eligibility)
                                   if (booking.canPayNow && !isHoldExpired) ...[
-                                    const Text(
-                                      'Kiểm tra mã ưu đãi',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: AppColors.borderSoft,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Expanded(
-                                          child: TextField(
-                                            controller: _couponController,
-                                            textCapitalization:
-                                                TextCapitalization.characters,
-                                            decoration: const InputDecoration(
-                                              hintText: 'Nhập mã coupon...',
-                                              isDense: true,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Mã ưu đãi / Giảm giá',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.textPrimary,
                                             ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        OutlinedButton(
-                                          style: OutlinedButton.styleFrom(
-                                            minimumSize: const Size(88, 48),
+                                          const SizedBox(height: 10),
+                                          Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
+                                            children: [
+                                              Expanded(
+                                                child: SizedBox(
+                                                  height: 46,
+                                                  child: TextField(
+                                                    controller:
+                                                        _couponController,
+                                                    textCapitalization:
+                                                        TextCapitalization
+                                                            .characters,
+                                                    style: const TextStyle(
+                                                      fontSize: 14,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                    decoration: InputDecoration(
+                                                      hintText:
+                                                          'Nhập mã coupon...',
+                                                      hintStyle:
+                                                          const TextStyle(
+                                                        fontSize: 13,
+                                                        fontWeight:
+                                                            FontWeight.w400,
+                                                        color:
+                                                            AppColors.textMuted,
+                                                      ),
+                                                      filled: true,
+                                                      fillColor:
+                                                          AppColors.surfaceBase,
+                                                      contentPadding:
+                                                          const EdgeInsets
+                                                              .symmetric(
+                                                        horizontal: 14,
+                                                        vertical: 12,
+                                                      ),
+                                                      enabledBorder:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(12),
+                                                        borderSide:
+                                                            const BorderSide(
+                                                          color:
+                                                              AppColors.border,
+                                                        ),
+                                                      ),
+                                                      focusedBorder:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(12),
+                                                        borderSide:
+                                                            const BorderSide(
+                                                          color: AppColors
+                                                              .textPrimary,
+                                                          width: 1.4,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              SizedBox(
+                                                height: 46,
+                                                child: OutlinedButton(
+                                                  style:
+                                                      OutlinedButton.styleFrom(
+                                                    minimumSize:
+                                                        const Size(96, 46),
+                                                    foregroundColor:
+                                                        AppColors.textPrimary,
+                                                    side: const BorderSide(
+                                                      color:
+                                                          AppColors.textPrimary,
+                                                    ),
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              12),
+                                                    ),
+                                                    textStyle: const TextStyle(
+                                                      fontSize: 13,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                  onPressed: _isValidatingCoupon
+                                                      ? null
+                                                      : () =>
+                                                          _handleValidateCoupon(
+                                                            booking,
+                                                          ),
+                                                  child: Text(
+                                                    _isValidatingCoupon
+                                                        ? 'Đang kiểm tra...'
+                                                        : 'Áp dụng',
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          onPressed: _isValidatingCoupon
-                                              ? null
-                                              : () => _handleValidateCoupon(
-                                                  booking),
-                                          child: Text(
-                                            _isValidatingCoupon
-                                                ? 'Đang kiểm tra...'
-                                                : 'Kiểm tra',
-                                          ),
-                                        ),
-                                      ],
+                                          if (_couponError != null) ...[
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              _couponError!,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: AppColors.error,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                          if (_couponResult != null &&
+                                              _couponResult!.valid) ...[
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Mã ${_couponResult!.code} hợp lệ: giảm ${CurrencyFormatter.formatVnd(_couponResult!.discountAmount)}${_couponResult!.description != null ? " (${_couponResult!.description})" : ""}.',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: AppColors.success,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
                                     ),
-                                    if (_couponError != null) ...[
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        _couponError!,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.error,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                    if (_couponResult != null &&
-                                        _couponResult!.valid) ...[
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        'Mã ${_couponResult!.code} hợp lệ: giảm ${CurrencyFormatter.formatVnd(_couponResult!.discountAmount)}${_couponResult!.description != null ? " (${_couponResult!.description})" : ""}.',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.textPrimary,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
                                     const SizedBox(height: 20),
                                   ],
 
@@ -735,11 +915,12 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                   const Text(
                                     'Chọn phương thức thanh toán',
                                     style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w700,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.textPrimary,
                                     ),
                                   ),
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 10),
                                   for (final methodMeta in methods) ...[
                                     _GatewayOptionTile(
                                       value: methodMeta.method,
@@ -760,7 +941,7 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                               )
                                           : null,
                                     ),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: 10),
                                   ],
 
                                   if (_activePaymentSession != null) ...[
@@ -824,7 +1005,7 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                     ),
                                   ],
 
-                                  const SizedBox(height: 24),
+                                  const SizedBox(height: 20),
                                   if (booking.isPaid)
                                     SizedBox(
                                       width: double.infinity,
@@ -838,13 +1019,22 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                         ),
                                         label: const Text(
                                           'Xem chuyến đi của tôi',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                         ),
                                         style: ElevatedButton.styleFrom(
+                                          elevation: 0,
                                           backgroundColor:
-                                              AppColors.textPrimary,
+                                              AppColors.primary,
                                           foregroundColor: Colors.white,
                                           minimumSize:
-                                              const Size.fromHeight(48),
+                                              const Size.fromHeight(52),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                          ),
                                           padding: const EdgeInsets.symmetric(
                                             vertical: 14,
                                           ),
@@ -872,12 +1062,21 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                               : (isHoldExpired
                                                   ? 'Đã hết thời gian giữ chỗ'
                                                   : 'Thanh toán ${CurrencyFormatter.formatVnd(booking.totalAmount)} qua ${_selectedMethod.toUpperCase()}'),
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                         ),
                                         style: ElevatedButton.styleFrom(
+                                          elevation: 0,
                                           backgroundColor: AppColors.primary,
                                           foregroundColor: Colors.white,
                                           minimumSize:
-                                              const Size.fromHeight(48),
+                                              const Size.fromHeight(52),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                          ),
                                           padding: const EdgeInsets.symmetric(
                                             vertical: 14,
                                           ),
@@ -912,7 +1111,7 @@ class _PaymentDetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -920,7 +1119,7 @@ class _PaymentDetailRow extends StatelessWidget {
             child: Text(
               label,
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: 14,
                 color: AppColors.textSecondary,
               ),
             ),
@@ -929,8 +1128,9 @@ class _PaymentDetailRow extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
             ),
           ),
         ],
@@ -961,58 +1161,64 @@ class _GatewayOptionTile extends StatelessWidget {
     final isSelected = available && value == groupValue;
     return InkWell(
       onTap: available && onSelected != null ? () => onSelected!(value) : null,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 48),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Icon(
-                  !available
-                      ? LucideIcons.circleOff
-                      : (isSelected
-                          ? LucideIcons.circleCheck
-                          : LucideIcons.circle),
-                  size: 20,
-                  color: !available
-                      ? AppColors.iconMuted
-                      : (isSelected
-                          ? AppColors.iconStrong
-                          : AppColors.iconMuted),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w600,
-                        color: !available
-                            ? AppColors.textMuted
-                            : AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 56),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.borderSoft,
+            width: isSelected ? 1.5 : 1.0,
           ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                !available
+                    ? LucideIcons.circleOff
+                    : (isSelected
+                        ? LucideIcons.circleCheck
+                        : LucideIcons.circle),
+                size: 20,
+                color: !available
+                    ? AppColors.iconMuted
+                    : (isSelected ? AppColors.iconStrong : AppColors.iconMuted),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w600,
+                      color: !available
+                          ? AppColors.textMuted
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.35,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

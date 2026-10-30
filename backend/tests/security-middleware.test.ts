@@ -8,6 +8,8 @@ process.env.JWT_SECRET_KEY = "test-secret";
 process.env.ACCESS_TOKEN_TTL_MINUTES = "15";
 process.env.CORS_ORIGIN = "https://app.example.com";
 process.env.GLOBAL_RATE_LIMIT_MAX = "1000";
+process.env.ALLOW_REFRESH_TOKEN_IN_BODY = "false";
+process.env.ALLOW_REFRESH_TOKEN_IN_HEADER = "false";
 
 const app = require("../dist/app").default;
 const { getCorsOptions } = require("../dist/config/cors");

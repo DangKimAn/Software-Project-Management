@@ -26,47 +26,125 @@ class AppSemanticIcons {
     }
     if (lower.contains('hồ bơi') ||
         lower.contains('bể bơi') ||
+        lower.contains('ho boi') ||
+        lower.contains('ho_boi') ||
         lower.contains('pool')) {
       return LucideIcons.waves;
     }
-    if (lower.contains('bếp') ||
-        lower.contains('kitchen') ||
-        lower.contains('nấu ăn')) {
-      return LucideIcons.utensils;
-    }
-    if (lower.contains('bbq') || lower.contains('nướng')) {
+    // Check BBQ / grill / fireplace BEFORE generic 'bếp' or 'sân vườn'
+    // so compound labels like "Bếp nướng BBQ sân vườn" map to flame.
+    if (lower.contains('bbq') ||
+        lower.contains('nướng') ||
+        lower.contains('grill') ||
+        lower.contains('lò sưởi') ||
+        lower.contains('fireplace')) {
       return LucideIcons.flame;
     }
+    if (lower.contains('tv') ||
+        lower.contains('tivi') ||
+        lower.contains('television') ||
+        lower.contains('màn hình') ||
+        lower.contains('netflix') ||
+        lower.contains('máy chiếu')) {
+      return LucideIcons.tv;
+    }
+    if (lower.contains('bồn tắm') ||
+        lower.contains('jacuzzi') ||
+        lower.contains('bathtub') ||
+        lower.contains('bath') ||
+        lower.contains('phòng tắm') ||
+        lower.contains('nhà vệ sinh') ||
+        lower.contains('toilet') ||
+        lower.contains('wc') ||
+        lower.contains('vòi sen') ||
+        lower.contains('shower')) {
+      return LucideIcons.bath;
+    }
+    if (lower.contains('tủ lạnh') ||
+        lower.contains('refrigerator') ||
+        lower.contains('fridge') ||
+        lower.contains('minibar')) {
+      return LucideIcons.refrigerator;
+    }
+    if (lower.contains('cà phê') ||
+        lower.contains('coffee') ||
+        lower.contains('trà')) {
+      return LucideIcons.coffee;
+    }
+    if (lower.contains('bếp') ||
+        lower.contains('kitchen') ||
+        lower.contains('nấu ăn') ||
+        lower.contains('bàn ăn') ||
+        lower.contains('dining')) {
+      return LucideIcons.utensils;
+    }
     if (lower.contains('điều hòa') ||
+        lower.contains('dieu hoa') ||
+        lower.contains('dieu_hoa') ||
         lower.contains('máy lạnh') ||
-        lower.contains('air_conditioner')) {
+        lower.contains('air_conditioner') ||
+        lower.contains('air conditioning') ||
+        lower.contains('ac_unit') ||
+        lower == 'ac') {
       return LucideIcons.snowflake;
     }
     if (lower.contains('máy giặt') ||
+        lower.contains('may_giat') ||
         lower.contains('giặt') ||
-        lower.contains('washer')) {
+        lower.contains('washer') ||
+        lower.contains('laundry')) {
       return LucideIcons.washingMachine;
+    }
+    if (lower.contains('máy sấy') ||
+        lower.contains('hair dryer') ||
+        lower.contains('dryer')) {
+      return LucideIcons.wind;
+    }
+    if (lower.contains('bàn ủi') ||
+        lower.contains('bàn là') ||
+        lower.contains('iron')) {
+      return LucideIcons.shirt;
     }
     if (lower.contains('đậu xe') ||
         lower.contains('đỗ xe') ||
+        lower.contains('dau_xe') ||
         lower.contains('parking') ||
-        lower.contains('ô tô')) {
+        lower.contains('ô tô') ||
+        lower.contains('xe hơi')) {
       return LucideIcons.car;
     }
+    if (lower.contains('xe đạp') ||
+        lower.contains('bike') ||
+        lower.contains('bicycle')) {
+      return LucideIcons.bike;
+    }
     if (lower.contains('thú cưng') ||
+        lower.contains('thu_cung') ||
         lower.contains('pet') ||
         lower.contains('chó mèo')) {
       return LucideIcons.pawPrint;
     }
     if (lower.contains('gần biển') ||
+        lower.contains('gan_bien') ||
         lower.contains('bãi biển') ||
-        lower.contains('near_beach')) {
+        lower.contains('bãi tắm') ||
+        lower.contains('sát biển') ||
+        lower.contains('ra biển') ||
+        lower.contains('near_beach') ||
+        lower.contains('beach_access')) {
       return LucideIcons.umbrella;
     }
     if (lower.contains('ban công') ||
+        lower.contains('ban_cong') ||
         lower.contains('sân thượng') ||
-        lower.contains('balcony')) {
-      return LucideIcons.sun;
+        lower.contains('balcony') ||
+        lower.contains('thoáng mát')) {
+      return LucideIcons.wind;
+    }
+    if (lower.contains('sân vườn') ||
+        lower.contains('garden') ||
+        lower.contains('cây xanh')) {
+      return LucideIcons.trees;
     }
     if (lower.contains('view') ||
         lower.contains('cảnh') ||
@@ -75,6 +153,7 @@ class AppSemanticIcons {
     }
     if (lower.contains('check-in') ||
         lower.contains('checkin') ||
+        lower.contains('nhận phòng') ||
         lower.contains('khóa')) {
       return LucideIcons.keyRound;
     }
@@ -86,11 +165,35 @@ class AppSemanticIcons {
     if (lower.contains('bida') || lower.contains('billiards')) {
       return LucideIcons.circleDot;
     }
-    if (lower.contains('thang máy') || lower.contains('elevator')) {
+    if (lower.contains('thang máy') ||
+        lower.contains('thang_may') ||
+        lower.contains('elevator')) {
       return LucideIcons.arrowUpDown;
     }
-    if (lower.contains('sân vườn') || lower.contains('garden')) {
-      return LucideIcons.sunMedium;
+    if (lower.contains('giường đôi') || lower.contains('double_bed')) {
+      return LucideIcons.bedDouble;
+    }
+    if (lower.contains('phòng ngủ') ||
+        lower.contains('giường') ||
+        lower.contains('bedroom') ||
+        lower.contains('bed')) {
+      return LucideIcons.bed;
+    }
+    if (lower.contains('sofa') ||
+        lower.contains('phòng khách') ||
+        lower.contains('living_room')) {
+      return LucideIcons.sofa;
+    }
+    if (lower.contains('gym') ||
+        lower.contains('tập thể dục') ||
+        lower.contains('fitness')) {
+      return LucideIcons.dumbbell;
+    }
+    if (lower.contains('camera') ||
+        lower.contains('an ninh') ||
+        lower.contains('bảo vệ') ||
+        lower.contains('security')) {
+      return LucideIcons.shieldCheck;
     }
 
     return LucideIcons.circleCheck;
@@ -112,7 +215,7 @@ class AppSemanticIcons {
       case 'phu-hop-nhom-dong':
         return LucideIcons.users;
       default:
-        return LucideIcons.sparkles;
+        return LucideIcons.clock;
     }
   }
 }
@@ -124,9 +227,16 @@ class AppBrandIcon extends StatelessWidget {
   final double size;
   final Color color;
 
-  /// The Palm Villa architectural crest mark (`logo_mau.svg`) rendered in
-  /// clean monochrome stroke.
+  /// The Palm Villa palm tree mark (`assets/icons/app_icon.png`) rendered in
+  /// clean monochrome tint.
   const AppBrandIcon.minhThanhLogo({
+    super.key,
+    this.size = 24,
+    this.color = AppColors.iconStrong,
+  }) : _type = _BrandType.minhThanhLogo;
+
+  /// Alias for [AppBrandIcon.minhThanhLogo] displaying The Palm Villa icon.
+  const AppBrandIcon.thePalmLogo({
     super.key,
     this.size = 24,
     this.color = AppColors.iconStrong,
@@ -224,8 +334,19 @@ class AppBrandIcon extends StatelessWidget {
         return SizedBox(
           width: size,
           height: size,
-          child: CustomPaint(
-            painter: _MinhThanhLogoStrokePainter(color: color),
+          child: Image.asset(
+            'assets/icons/app_icon.png',
+            width: size,
+            height: size,
+            fit: BoxFit.contain,
+            color: color,
+            colorBlendMode: BlendMode.srcIn,
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (_, __, ___) => Icon(
+              LucideIcons.treePalm,
+              size: size,
+              color: color,
+            ),
           ),
         );
     }
@@ -438,46 +559,5 @@ class _TikTokStrokePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TikTokStrokePainter oldDelegate) =>
-      oldDelegate.color != color;
-}
-
-class _MinhThanhLogoStrokePainter extends CustomPainter {
-  final Color color;
-
-  const _MinhThanhLogoStrokePainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final stroke = math.max(1.75, size.width * 0.085);
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final w = size.width;
-    final h = size.height;
-
-    // Outer circular wave crest from `logo_mau.svg`
-    final rect = Rect.fromLTWH(w * 0.08, h * 0.08, w * 0.84, h * 0.84);
-    canvas.drawArc(rect, -0.35 * math.pi, 1.55 * math.pi, false, paint);
-
-    // Inner villa roof + pillars silhouette from `logo_mau.svg`
-    final roof = Path()
-      ..moveTo(w * 0.22, h * 0.54)
-      ..lineTo(w * 0.50, h * 0.32)
-      ..lineTo(w * 0.78, h * 0.54)
-      ..moveTo(w * 0.32, h * 0.50)
-      ..lineTo(w * 0.32, h * 0.76)
-      ..moveTo(w * 0.50, h * 0.46)
-      ..lineTo(w * 0.50, h * 0.78)
-      ..moveTo(w * 0.68, h * 0.50)
-      ..lineTo(w * 0.68, h * 0.76);
-    canvas.drawPath(roof, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _MinhThanhLogoStrokePainter oldDelegate) =>
       oldDelegate.color != color;
 }

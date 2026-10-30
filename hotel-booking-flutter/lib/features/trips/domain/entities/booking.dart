@@ -251,6 +251,9 @@ class CouponValidationResult {
     if (lower.contains('not applicable for this listing')) {
       return 'Mã giảm giá không áp dụng cho chỗ nghỉ này.';
     }
+    if (RegExp(r'^[A-Za-z0-9]+(_[A-Za-z0-9]+)+$').hasMatch(trimmed)) {
+      return 'Mã giảm giá không đủ điều kiện áp dụng cho đơn đặt phòng này.';
+    }
     return trimmed;
   }
 
@@ -424,6 +427,22 @@ class PaymentSessionResult {
   bool get isFailed => paymentStatus == 'failed';
   bool get isCancelled => paymentStatus == 'cancelled';
   bool get isExpired => paymentStatus == 'expired';
+
+  String? get latePaymentReasonDisplay =>
+      localizeLatePaymentReason(latePaymentReason);
+
+  static String? localizeLatePaymentReason(String? rawReason) {
+    if (rawReason == null || rawReason.trim().isEmpty) return null;
+    final trimmed = rawReason.trim();
+    final upper = trimmed.toUpperCase();
+    if (upper == 'LATE_PAYMENT_AFTER_BOOKING_EXPIRED' ||
+        upper == 'PAYMENT_SUCCESS_AFTER_HOLD_EXPIRED' ||
+        upper == 'PAYMENT_EXPIRED' ||
+        RegExp(r'^[A-Za-z0-9]+(_[A-Za-z0-9]+)+$').hasMatch(trimmed)) {
+      return 'Khoản thanh toán được ghi nhận sau khi thời gian giữ chỗ đã hết hạn. Hệ thống đang xử lý hoàn tiền về phương thức thanh toán ban đầu.';
+    }
+    return trimmed;
+  }
 
   factory PaymentSessionResult.fromJson(Map<String, dynamic> json) {
     final rawStatus = (json['paymentStatus'] ?? json['status'] ?? 'pending')
@@ -826,6 +845,46 @@ class Booking {
   }
 
   String get statusDisplay => statusDisplayAt();
+
+  String? get cancellationReasonDisplay =>
+      localizeCancellationReason(cancellationReason);
+
+  static String? localizeCancellationReason(String? rawReason) {
+    if (rawReason == null || rawReason.trim().isEmpty) return null;
+    final trimmed = rawReason.trim();
+    final upper = trimmed.toUpperCase();
+    switch (upper) {
+      case 'PAYMENT_EXPIRED':
+      case 'EXPIRED':
+      case 'HOLD_EXPIRED':
+        return 'Quá thời hạn thanh toán (hệ thống tự động hủy giữ chỗ)';
+      case 'CUSTOMER_CANCELLED':
+      case 'CANCELLED_BY_GUEST':
+      case 'GUEST_CANCELLED':
+      case 'USER_CANCELLED':
+        return 'Khách hàng chủ động hủy đặt phòng';
+      case 'HOST_REJECTED':
+      case 'REJECTED':
+      case 'REJECTED_BY_HOST':
+        return 'Chủ nhà từ chối yêu cầu đặt phòng';
+      case 'HOST_CANCELLED':
+      case 'CANCELLED_BY_HOST':
+        return 'Chủ nhà đã hủy đặt phòng';
+      case 'ADMIN_CANCELLED':
+      case 'CANCELLED_BY_ADMIN':
+        return 'Quản trị viên đã hủy đặt phòng';
+      case 'LATE_PAYMENT_AFTER_BOOKING_EXPIRED':
+      case 'PAYMENT_SUCCESS_AFTER_HOLD_EXPIRED':
+        return 'Thanh toán phát sinh sau khi đã hết thời gian giữ chỗ';
+      case 'SYSTEM_CANCELLED':
+      case 'AUTO_CANCELLED':
+        return 'Hệ thống tự động hủy đặt phòng';
+    }
+    if (RegExp(r'^[A-Za-z0-9]+(_[A-Za-z0-9]+)+$').hasMatch(trimmed)) {
+      return 'Đơn đặt phòng đã bị hủy theo quy định hệ thống';
+    }
+    return trimmed;
+  }
 
   String get statusTone {
     final eff = effectiveStatus;

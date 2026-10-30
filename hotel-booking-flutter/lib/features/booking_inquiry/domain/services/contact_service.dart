@@ -304,7 +304,7 @@ abstract final class ContactService {
     final safeVillaCode = _sanitizeLine(villaCode);
     final buffer = StringBuffer();
     buffer.writeln('Xin chào The Palm Villa, tôi muốn tư vấn đặt biệt thự:');
-    buffer.writeln('• Biệt thự: $villaName (Mã: $villaCode)');
+    buffer.writeln('• Biệt thự: $safeVillaName (Mã: $safeVillaCode)');
 
     if (checkIn != null && checkOut != null) {
       final nights = checkIn.differenceInNights(checkOut);
@@ -343,7 +343,7 @@ abstract final class ContactService {
         .trim();
 
     final buffer = StringBuffer();
-    buffer.writeln('Xin chào Minh Thanh Villa, tôi cần tư vấn lưu trú:');
+    buffer.writeln('Xin chào The Palm, tôi cần tư vấn lưu trú:');
     if (safeName.isNotEmpty) {
       buffer.writeln('• Họ và tên: $safeName');
     }

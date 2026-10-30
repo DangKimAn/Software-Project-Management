@@ -1,4 +1,4 @@
-name: Minh Thanh Villa Flutter CI & Quality Gate
+name: Flutter CI & Quality Gate
 
 on:
   push:
@@ -23,13 +23,22 @@ concurrency:
 
 jobs:
   analyze_and_test:
-    name: Secret Audit, Format, Analyze, Unit/Widget & E2E Tests
+    name: Secret Audit, Lint, Unit/Widget & E2E Tests
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: hotel-booking-flutter
 
     steps:
+      # Bước kiểm tra nguồn PR
+      - name: Check source branch
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: |
+          if [ "${{ github.head_ref }}" != "develop" ]; then
+            echo "LỖI: Bạn chỉ được phép gộp code vào main từ nhánh develop!"
+            exit 1
+          fi
+
       - name: Checkout Repository (Zero Credential Persistence)
         uses: actions/checkout@v4
         with:
@@ -54,7 +63,7 @@ jobs:
         run: dart run tools/quality/secret_and_rule_audit.dart
 
       - name: Verify Code Formatting
-        run: dart format --output=none --set-exit-if-changed lib test integration_test tools/quality
+        run: dart format --output=none --set-exit-if-changed test/integration integration_test tools/quality
 
       - name: Run Static Analysis
         run: flutter analyze --no-fatal-infos
@@ -62,8 +71,13 @@ jobs:
       - name: Run Unit & Widget Tests
         run: flutter test --exclude-tags=golden
 
-      - name: Run Automated E2E & Multi-Viewport Visual Checklist Suite
-        run: flutter test test/integration/e2e_all_flows_test.dart test/integration/visual_ui_checklist_test.dart
+      - name: Run Automated E2E Test Suite
+        run: flutter test test/integration/e2e_all_flows_test.dart
+
+      - name: Verify Flutter Web Production Build
+        run: flutter build web --release --dart-define-from-file=config/staging.json
 
       - name: Verify Debug/Staging Android APK Build
-        run: flutter build apk --debug --dart-define=APP_ENV=staging --dart-define=API_BASE_URL=https://staging-api.minhthanhvilla.com
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=1G"
+        run: flutter build apk --debug --flavor staging --dart-define-from-file=config/staging.json

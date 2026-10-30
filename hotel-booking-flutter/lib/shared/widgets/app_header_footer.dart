@@ -9,6 +9,8 @@ import '../../app/theme/app_colors.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/socket_service.dart';
 import '../../features/auth/presentation/view_models/auth_notifier.dart';
+import '../../features/search/presentation/widgets/source_search_bar.dart';
+import '../../features/trips/presentation/widgets/global_pending_booking_banner.dart';
 import 'app_semantic_icons.dart';
 
 class AppNotificationItem {
@@ -51,6 +53,11 @@ class AppNotificationItem {
   String get type => eventType;
   String get message => body;
   Map<String, dynamic>? get metadata => payload;
+  bool get forAdmin =>
+      payload?['forAdmin'] == true ||
+      payload?['isAdminNotification'] == true ||
+      payload?['targetRole'] == 'admin' ||
+      title.startsWith('[Admin]');
 
   factory AppNotificationItem.fromJson(Map<String, dynamic> rawJson) {
     final json = rawJson['notification'] is Map
@@ -123,15 +130,24 @@ class AppNotificationItem {
       return '/account/trips';
     }
 
-    if (tType == 'listing' || eType.startsWith('listing.')) {
-      if (eType == 'listing.submitted_for_review') {
+    if (tType == 'listing' ||
+        eType.startsWith('listing.') ||
+        eType.startsWith('listing_')) {
+      if (forAdmin ||
+          eType == 'listing.submitted_for_review' ||
+          eType == 'listing_submitted' ||
+          eType == 'listing.submitted') {
         return '/admin/kiem-duyet';
       }
       return '/chu-nha/cho-nghi';
     }
 
-    if (tType == 'host_application' || eType.startsWith('host_application.')) {
-      if (eType == 'host_application.submitted') {
+    if (tType == 'host_application' ||
+        eType.startsWith('host_application.') ||
+        eType.startsWith('host_application_')) {
+      if (forAdmin ||
+          eType == 'host_application.submitted' ||
+          eType == 'host_application_submitted') {
         return '/admin/ho-so-host';
       }
       return '/tro-thanh-host/trang-thai';
@@ -235,13 +251,16 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
     SocketService? socketService,
     bool enablePolling = true,
     bool autoConnectSocket = true,
+    bool autoFetch = true,
   })  : _socketService = socketService,
         super(const NotificationsState()) {
     if (_isAuthenticated) {
       if (autoConnectSocket) {
         _socketService?.connect();
       }
-      fetchNotifications();
+      if (autoFetch) {
+        fetchNotifications();
+      }
       _socketSub = socketStream.listen(_onSocketNotification);
       _reconnectSub = _socketService?.onConnected.listen((_) {
         if (mounted && _isAuthenticated) {
@@ -369,17 +388,27 @@ final notificationsProvider =
   final client = ref.watch(dioClientProvider);
   final socket = ref.watch(socketServiceProvider);
   final user = ref.watch(authNotifierProvider).valueOrNull;
+  final isTest =
+      WidgetsBinding.instance.runtimeType.toString().contains('Test');
   return NotificationsNotifier(
     client,
     user != null,
     socket.onNotificationNew,
     socketService: socket,
+    enablePolling: !isTest,
+    autoConnectSocket: !isTest,
+    autoFetch: !isTest,
   );
 });
 
 /// NotificationBell widget matching `NotificationBell.tsx` with strict monochrome icon rules.
 class NotificationBell extends ConsumerWidget {
-  const NotificationBell({super.key});
+  final bool isOverlayTop;
+
+  const NotificationBell({
+    super.key,
+    this.isOverlayTop = false,
+  });
 
   String _formatNotificationTime(String raw) {
     if (raw.trim().isEmpty) return '';
@@ -472,9 +501,7 @@ class NotificationBell extends ConsumerWidget {
                                     _navigateForNotification(context, item);
                                   },
                                   child: Container(
-                                    color: item.isRead
-                                        ? Colors.white
-                                        : AppColors.surfaceWarmSand,
+                                    color: Colors.white,
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 20,
                                       vertical: 14,
@@ -497,15 +524,54 @@ class NotificationBell extends ConsumerWidget {
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                item.title,
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight: item.isRead
-                                                      ? FontWeight.w600
-                                                      : FontWeight.w700,
-                                                  color: AppColors.textPrimary,
-                                                ),
+                                              Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  if (item.forAdmin) ...[
+                                                    Container(
+                                                      margin: const EdgeInsets.only(
+                                                        top: 1,
+                                                        right: 6,
+                                                      ),
+                                                      padding: const EdgeInsets.symmetric(
+                                                        horizontal: 5,
+                                                        vertical: 1.5,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFF3E8FF),
+                                                        borderRadius:
+                                                            BorderRadius.circular(4),
+                                                        border: Border.all(
+                                                          color: const Color(0xFF9333EA),
+                                                          width: 0.8,
+                                                        ),
+                                                      ),
+                                                      child: const Text(
+                                                        'ADMIN',
+                                                        style: TextStyle(
+                                                          fontSize: 9.5,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          color: Color(0xFF7E22CE),
+                                                          letterSpacing: 0.3,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                  Expanded(
+                                                    child: Text(
+                                                      item.title,
+                                                      style: TextStyle(
+                                                        fontSize: 14,
+                                                        fontWeight: item.isRead
+                                                            ? FontWeight.w600
+                                                            : FontWeight.w700,
+                                                        color: AppColors.textPrimary,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                               if (item.body.isNotEmpty) ...[
                                                 const SizedBox(height: 4),
@@ -573,9 +639,6 @@ class NotificationBell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authNotifierProvider).valueOrNull;
-    if (user == null) return const SizedBox.shrink();
-
     final notifState = ref.watch(notificationsProvider);
 
     return Semantics(
@@ -587,28 +650,43 @@ class NotificationBell extends ConsumerWidget {
         highlightColor: Colors.transparent,
         hoverColor: Colors.transparent,
         child: SizedBox(
-          width: 48,
+          width: 40,
           height: 48,
           child: Stack(
             alignment: Alignment.center,
             children: [
-              const Icon(
+              Icon(
                 LucideIcons.bell,
                 size: 20,
-                color: AppColors.iconStrong,
+                color: isOverlayTop ? Colors.white : AppColors.iconStrong,
               ),
               if (notifState.unreadCount > 0)
                 Positioned(
-                  top: 8,
-                  right: 6,
-                  child: Text(
-                    notifState.unreadCount > 99
-                        ? '99+'
-                        : '${notifState.unreadCount}',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
+                  top: 6,
+                  right: 2,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    decoration: BoxDecoration(
                       color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isOverlayTop ? Colors.transparent : Colors.white,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        notifState.unreadCount > 99
+                            ? '99+'
+                            : '${notifState.unreadCount}',
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          height: 1.0,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -620,300 +698,494 @@ class NotificationBell extends ConsumerWidget {
   }
 }
 
+/// Top header variant equipped with the pill search bar ("Bạn muốn đi đâu?"),
+/// notification bell, and popup menu across main tabs (Tin nhắn, Chuyến đi, Tài khoản).
+class AppSearchHeader extends StatelessWidget {
+  final String currentPath;
+  final bool hidePendingBanner;
+
+  const AppSearchHeader({
+    super.key,
+    required this.currentPath,
+    this.hidePendingBanner = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppTopHeader(
+      currentPath: currentPath,
+      hidePendingBanner: hidePendingBanner,
+      centerSearchTrigger: SourceSearchBar(
+        isCompact: true,
+        isInHeader: true,
+        onSearchSubmitted: () {
+          try {
+            context.push('/tim-kiem');
+          } catch (_) {}
+        },
+      ),
+    );
+  }
+}
+
 /// Top Header / Navbar matching `Source goc/frontend/src/views/components/common/Header.tsx` & `Navbar.tsx`.
 class AppTopHeader extends ConsumerWidget {
   final String currentPath;
   final Widget? centerSearchTrigger;
   final bool isOverlayTop;
+  final bool hidePendingBanner;
 
   const AppTopHeader({
     super.key,
     this.currentPath = '/',
     this.centerSearchTrigger,
     this.isOverlayTop = false,
+    this.hidePendingBanner = false,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authUser = ref.watch(authNotifierProvider).valueOrNull;
-    List<dynamic> queueItems = const [];
-    try {
-      queueItems = ref.watch(bookingQueueProvider);
-    } catch (_) {
-      queueItems = const [];
-    }
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isDesktop = screenWidth >= 900;
-    final isCompactMobile = screenWidth < 380;
+    return LayoutBuilder(builder: (context, constraints) {
+      final screenWidth = constraints.maxWidth;
+      final isDesktop = screenWidth >= 900;
+      final isCompactMobile = screenWidth < 380;
 
-    return AnimatedContainer(
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        color: isOverlayTop ? Colors.transparent : Colors.white,
-        border: isOverlayTop
-            ? null
-            : const Border(
-                bottom: BorderSide(color: Color(0xFFE4E4E7), width: 1),
-              ),
-      ),
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 40 : (isCompactMobile ? 12 : 16),
-        vertical: 12,
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Center(
-          heightFactor: 1.0,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1440),
-            child: Row(
-              children: [
-                // Left: Brand Logo (`Header.tsx` -> `logo_mau.svg`)
-                Flexible(
-                  child: InkWell(
-                    onTap: () => context.go('/'),
-                    splashColor: Colors.transparent,
-                    highlightColor: Colors.transparent,
-                    hoverColor: Colors.transparent,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          AppBrandIcon.minhThanhLogo(
-                            size: 26,
-                            color: isOverlayTop
-                                ? Colors.white
-                                : AppColors.iconStrong,
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              'The Palm Villa',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: isCompactMobile ? 16 : 19,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.4,
-                                color: isOverlayTop
-                                    ? Colors.white
-                                    : AppColors.textPrimary,
+      return AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          color: isOverlayTop ? Colors.transparent : Colors.white,
+          border: isOverlayTop
+              ? null
+              : const Border(
+                  bottom: BorderSide(color: Color(0xFFE4E4E7), width: 1),
+                ),
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: isDesktop
+              ? (centerSearchTrigger != null ? 24 : 40)
+              : (isCompactMobile ? 12.0 : 16.0),
+          vertical: 10,
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                heightFactor: 1.0,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1440),
+                  child: Row(
+                children: [
+                  // Left & Center Area: Switches smoothly between (Brand Logo + Nav Links) and (Pinned Search Bar)
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 380),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      layoutBuilder: (currentChild, previousChildren) {
+                        return Stack(
+                          alignment: Alignment.centerLeft,
+                          children: [
+                            ...previousChildren,
+                            if (currentChild != null) currentChild,
+                          ],
+                        );
+                      },
+                      transitionBuilder: (child, animation) {
+                        final isSearch = (child.key as ValueKey?)?.value == 'pinned_search_content';
+                        if (isSearch) {
+                          return SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0.0, 0.70),
+                              end: Offset.zero,
+                            ).animate(CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic,
+                            )),
+                            child: FadeTransition(
+                              opacity: CurvedAnimation(
+                                parent: animation,
+                                curve: const Interval(0.1, 1.0, curve: Curves.easeOut),
+                              ),
+                              child: ScaleTransition(
+                                scale: Tween<double>(
+                                  begin: 0.94,
+                                  end: 1.0,
+                                ).animate(CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeOutCubic,
+                                )),
+                                child: child,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
+                          );
+                        } else {
+                          return SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0.0, -0.2),
+                              end: Offset.zero,
+                            ).animate(CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic,
+                            )),
+                            child: FadeTransition(
+                              opacity: animation,
+                              child: child,
+                            ),
+                          );
+                        }
+                      },
+                      child: centerSearchTrigger != null
+                          ? KeyedSubtree(
+                              key: const ValueKey('pinned_search_content'),
+                              child: Padding(
+                                padding: EdgeInsets.only(
+                                  right: isDesktop ? 16 : 8,
+                                ),
+                                child: centerSearchTrigger!,
+                              ),
+                            )
+                          : KeyedSubtree(
+                              key: const ValueKey('top_header_content'),
+                              child: Row(
+                                children: [
+                                  // Left: Brand Logo + "The Palm Villa"
+                                  Flexible(
+                                    child: InkWell(
+                                      onTap: () => context.go('/'),
+                                      splashColor: Colors.transparent,
+                                      highlightColor: Colors.transparent,
+                                      hoverColor: Colors.transparent,
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(minHeight: 48),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            AppBrandIcon.minhThanhLogo(
+                                              size: 26,
+                                              color: isOverlayTop
+                                                  ? Colors.white
+                                                  : AppColors.iconStrong,
+                                            ),
+                                            if (screenWidth >= 380) ...[
+                                              const SizedBox(width: 8),
+                                              Flexible(
+                                                child: Text(
+                                                  'The Palm Villa',
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: isDesktop
+                                                        ? 19
+                                                        : (isCompactMobile ? 16 : 19),
+                                                    fontWeight: FontWeight.w800,
+                                                    letterSpacing: -0.4,
+                                                    color: isOverlayTop
+                                                        ? Colors.white
+                                                        : AppColors.textPrimary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                  if (isDesktop) ...[
+                                    const Spacer(),
+                                    // Center: 4 Navigation Links (`Navbar.tsx`)
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _NavTextLink(
+                                          label: 'Trang chủ',
+                                          isActive: currentPath == '/',
+                                          isOverlayTop: isOverlayTop,
+                                          onTap: () => context.go('/'),
+                                        ),
+                                        SizedBox(width: screenWidth >= 1280 ? 28 : (screenWidth >= 1080 ? 20 : 14)),
+                                        _NavTextLink(
+                                          label: 'Nơi lưu trú',
+                                          isActive: currentPath.startsWith('/search') ||
+                                              currentPath.startsWith('/tim-kiem') ||
+                                              currentPath.startsWith('/noi-luu-tru') ||
+                                              currentPath.startsWith('/villas'),
+                                          isOverlayTop: isOverlayTop,
+                                          onTap: () => context.push('/tim-kiem'),
+                                        ),
+                                        SizedBox(width: screenWidth >= 1280 ? 28 : (screenWidth >= 1080 ? 20 : 14)),
+                                        _NavTextLink(
+                                          label: 'Blog',
+                                          isActive: currentPath.startsWith('/blog') ||
+                                              currentPath.startsWith('/cam-nang'),
+                                          isOverlayTop: isOverlayTop,
+                                          onTap: () => context.push('/cam-nang'),
+                                        ),
+                                        SizedBox(width: screenWidth >= 1280 ? 28 : (screenWidth >= 1080 ? 20 : 14)),
+                                        _NavTextLink(
+                                          label: 'Liên hệ',
+                                          isActive: currentPath.startsWith('/lien-he'),
+                                          isOverlayTop: isOverlayTop,
+                                          onTap: () => context.push('/lien-he'),
+                                        ),
+                                      ],
+                                    ),
+                                    const Spacer(),
+                                  ] else
+                                    const Spacer(),
+                                ],
+                              ),
+                            ),
                     ),
                   ),
-                ),
 
-                if (isDesktop) const Spacer(),
-
-                // Center: 4 Navigation Links (`Navbar.tsx`) or Compact Search Trigger
-                if (centerSearchTrigger != null && isDesktop)
-                  centerSearchTrigger!
-                else if (isDesktop)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _NavTextLink(
-                        label: 'Trang chủ',
-                        isActive: currentPath == '/',
-                        isOverlayTop: isOverlayTop,
-                        onTap: () => context.go('/'),
-                      ),
-                      const SizedBox(width: 32),
-                      _NavTextLink(
-                        label: 'Nơi lưu trú',
-                        isActive: currentPath.startsWith('/search') ||
-                            currentPath.startsWith('/tim-kiem') ||
-                            currentPath.startsWith('/noi-luu-tru') ||
-                            currentPath.startsWith('/villas'),
-                        isOverlayTop: isOverlayTop,
-                        onTap: () => context.push('/tim-kiem'),
-                      ),
-                      const SizedBox(width: 32),
-                      _NavTextLink(
-                        label: 'Blog',
-                        isActive: currentPath.startsWith('/blog') ||
-                            currentPath.startsWith('/cam-nang'),
-                        isOverlayTop: isOverlayTop,
-                        onTap: () => context.push('/cam-nang'),
-                      ),
-                      const SizedBox(width: 32),
-                      _NavTextLink(
-                        label: 'Liên hệ',
-                        isActive: currentPath.startsWith('/lien-he'),
-                        isOverlayTop: isOverlayTop,
-                        onTap: () => context.push('/lien-he'),
-                      ),
-                    ],
+                  // Right: Host action (only when not scrolled down), NotificationBell, then Menu
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 320),
+                    curve: Curves.easeOutCubic,
+                    child: (centerSearchTrigger == null &&
+                            (authUser == null || !authUser.isAdmin) &&
+                            screenWidth >= 1260)
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                onTap: () {
+                                  if (authUser != null && authUser.isHost) {
+                                    context.push('/chu-nha/cho-nghi');
+                                  } else {
+                                    context.push('/tro-thanh-host');
+                                  }
+                                },
+                                borderRadius: BorderRadius.circular(999),
+                                child: Container(
+                                  constraints: const BoxConstraints(minHeight: 48),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 9,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        isOverlayTop ? Colors.transparent : Colors.white,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        authUser != null && authUser.isHost
+                                            ? 'Khu vực host'
+                                            : 'Trở thành host',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: isOverlayTop
+                                              ? Colors.white
+                                              : const Color(0xFF18181B),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                          )
+                        : const SizedBox.shrink(),
                   ),
 
-                if (isDesktop) const Spacer() else const SizedBox(width: 8),
+                  // Notification Bell (Icon thông báo)
+                  NotificationBell(isOverlayTop: isOverlayTop),
+                  const SizedBox(width: 2),
 
-                // Right: "Trở thành host" (`rounded-full`) + NotificationBell + AccountMenu (`rounded-full` trigger, `rounded-3xl` menu)
-                if (screenWidth >= 640) ...[
-                  InkWell(
-                    onTap: () {
-                      if (authUser != null && authUser.isHost) {
-                        context.push('/chu-nha/cho-nghi');
-                      } else {
-                        context.push('/tro-thanh-host');
+                  // Menu Button (Icon menu)
+                  PopupMenuButton<String>(
+                    tooltip: 'Menu',
+                    offset: const Offset(0, 48),
+                    color: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    onSelected: (value) async {
+                      switch (value) {
+                        case 'home':
+                          context.go('/');
+                          break;
+                        case 'login':
+                          unawaited(context.push('/dang-nhap'));
+                          break;
+                        case 'register':
+                          unawaited(context.push('/dang-ky'));
+                          break;
+                        case 'profile':
+                          unawaited(context.push('/account/profile'));
+                          break;
+                        case 'trips':
+                          unawaited(context.push('/account/trips'));
+                          break;
+                        case 'wishlist':
+                          unawaited(context.push('/yeu-thich'));
+                          break;
+                        case 'messages':
+                          unawaited(context.push('/messages'));
+                          break;
+                        case 'ai-search':
+                          unawaited(context.push('/tim-kiem-ai'));
+                          break;
+                        case 'stays':
+                          unawaited(context.push('/tim-kiem'));
+                          break;
+                        case 'blog':
+                          unawaited(context.push('/cam-nang'));
+                          break;
+                        case 'contact':
+                          unawaited(context.push('/lien-he'));
+                          break;
+                        case 'host':
+                          if (authUser != null && authUser.isHost) {
+                            unawaited(context.push('/chu-nha/cho-nghi'));
+                          } else {
+                            unawaited(context.push('/tro-thanh-host'));
+                          }
+                          break;
+                        case 'admin':
+                          unawaited(context.push('/admin'));
+                          break;
+                        case 'logout':
+                          ref
+                              .read(notificationsProvider.notifier)
+                              .clearForLogout();
+                          await ref
+                              .read(authNotifierProvider.notifier)
+                              .logout();
+                          if (context.mounted) {
+                            context.go('/');
+                          }
+                          break;
                       }
                     },
-                    borderRadius: BorderRadius.circular(999),
-                    child: Container(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 9,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isOverlayTop ? Colors.transparent : Colors.white,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            authUser != null && authUser.isHost
-                                ? 'Khu vực host'
-                                : 'Trở thành host',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: isOverlayTop
-                                  ? Colors.white
-                                  : const Color(0xFF18181B),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                ],
-
-                // MultiBooking Queue Link (/gio-cho-dat)
-                if (queueItems.isNotEmpty) ...[
-                  InkWell(
-                    onTap: () => context.push('/gio-cho-dat'),
-                    splashColor: Colors.transparent,
-                    highlightColor: Colors.transparent,
-                    hoverColor: Colors.transparent,
-                    child: SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Icon(
-                            LucideIcons.shoppingCart,
-                            size: 20,
-                            color: isOverlayTop
-                                ? Colors.white
-                                : AppColors.iconStrong,
-                          ),
-                          Positioned(
-                            top: 8,
-                            right: 6,
-                            child: Text(
-                              '${queueItems.length}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color: isOverlayTop
-                                    ? Colors.white
-                                    : AppColors.primary,
+                    itemBuilder: (context) {
+                      if (authUser == null) {
+                        return [
+                          if (!isDesktop) ...[
+                            const PopupMenuItem(
+                              value: 'home',
+                              child: _MenuItemRow(
+                                icon: LucideIcons.house,
+                                label: 'Trang chủ',
                               ),
                             ),
+                            const PopupMenuItem(
+                              value: 'stays',
+                              child: _MenuItemRow(
+                                icon: LucideIcons.search,
+                                label: 'Nơi lưu trú',
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'blog',
+                              child: _MenuItemRow(
+                                icon: LucideIcons.bookOpen,
+                                label: 'Blog',
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'contact',
+                              child: _MenuItemRow(
+                                icon: LucideIcons.phone,
+                                label: 'Liên hệ',
+                              ),
+                            ),
+                            const PopupMenuDivider(),
+                          ],
+                          const PopupMenuItem(
+                            value: 'wishlist',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.heart,
+                              label: 'Danh sách yêu thích',
+                            ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-
-                // Notification Bell
-                const NotificationBell(),
-                const SizedBox(width: 4),
-
-                // User Account Menu (`AccountMenu.tsx` + `Header.tsx`)
-                PopupMenuButton<String>(
-                  tooltip: 'Tài khoản',
-                  offset: const Offset(0, 48),
-                  color: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  onSelected: (value) async {
-                    switch (value) {
-                      case 'home':
-                        context.go('/');
-                        break;
-                      case 'login':
-                        unawaited(context.push('/dang-nhap'));
-                        break;
-                      case 'register':
-                        unawaited(context.push('/dang-ky'));
-                        break;
-                      case 'profile':
-                        unawaited(context.push('/account/profile'));
-                        break;
-                      case 'trips':
-                        unawaited(context.push('/account/trips'));
-                        break;
-                      case 'wishlist':
-                        unawaited(context.push('/yeu-thich'));
-                        break;
-                      case 'queue':
-                        unawaited(context.push('/gio-cho-dat'));
-                        break;
-                      case 'messages':
-                        unawaited(context.push('/messages'));
-                        break;
-                      case 'ai-search':
-                        unawaited(context.push('/tim-kiem-ai'));
-                        break;
-                      case 'stays':
-                        unawaited(context.push('/tim-kiem'));
-                        break;
-                      case 'blog':
-                        unawaited(context.push('/cam-nang'));
-                        break;
-                      case 'contact':
-                        unawaited(context.push('/lien-he'));
-                        break;
-                      case 'host':
-                        if (authUser != null && authUser.isHost) {
-                          unawaited(context.push('/chu-nha/cho-nghi'));
-                        } else {
-                          unawaited(context.push('/tro-thanh-host'));
-                        }
-                        break;
-                      case 'admin':
-                        unawaited(context.push('/admin'));
-                        break;
-                      case 'logout':
-                        ref
-                            .read(notificationsProvider.notifier)
-                            .clearForLogout();
-                        await ref.read(authNotifierProvider.notifier).logout();
-                        if (context.mounted) {
-                          context.go('/');
-                        }
-                        break;
-                    }
-                  },
-                  itemBuilder: (context) {
-                    if (authUser == null) {
+                          const PopupMenuItem(
+                            value: 'trips',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.calendarCheck,
+                              label: 'Chuyến đi',
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'messages',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.messageSquare,
+                              label: 'Tin nhắn',
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'profile',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.userRound,
+                              label: 'Hồ sơ',
+                            ),
+                          ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
+                            value: 'host',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.house,
+                              label: 'Trở thành host',
+                            ),
+                          ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
+                            value: 'login',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.logIn,
+                              label: 'Đăng nhập',
+                              isBold: true,
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'register',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.userPlus,
+                              label: 'Đăng ký',
+                            ),
+                          ),
+                        ];
+                      }
                       return [
+                        PopupMenuItem(
+                          enabled: false,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                authUser.fullName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                authUser.email,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuDivider(),
                         if (!isDesktop) ...[
                           const PopupMenuItem(
                             value: 'home',
@@ -955,7 +1227,7 @@ class AppTopHeader extends ConsumerWidget {
                         const PopupMenuItem(
                           value: 'trips',
                           child: _MenuItemRow(
-                            icon: LucideIcons.plane,
+                            icon: LucideIcons.calendarCheck,
                             label: 'Chuyến đi',
                           ),
                         ),
@@ -973,219 +1245,73 @@ class AppTopHeader extends ConsumerWidget {
                             label: 'Hồ sơ',
                           ),
                         ),
-                        const PopupMenuItem(
-                          value: 'queue',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.shoppingCart,
-                            label: 'Danh sách đặt nhiều căn',
+                        const PopupMenuDivider(),
+                        if (!authUser.isAdmin)
+                          PopupMenuItem(
+                            value: 'host',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.house,
+                              label: authUser.isHost
+                                  ? 'Khu vực host'
+                                  : 'Trở thành host',
+                            ),
                           ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'ai-search',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.sparkles,
-                            label: 'Tìm kiếm bằng AI',
+                        if (authUser.isAdmin)
+                          const PopupMenuItem(
+                            value: 'admin',
+                            child: _MenuItemRow(
+                              icon: LucideIcons.shield,
+                              label: 'Khu vực admin',
+                              isBold: true,
+                            ),
                           ),
-                        ),
                         const PopupMenuDivider(),
                         const PopupMenuItem(
-                          value: 'host',
+                          value: 'logout',
                           child: _MenuItemRow(
-                            icon: LucideIcons.house,
-                            label: 'Trở thành host',
-                          ),
-                        ),
-                        const PopupMenuDivider(),
-                        const PopupMenuItem(
-                          value: 'login',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.logIn,
-                            label: 'Đăng nhập',
-                            isBold: true,
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'register',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.userPlus,
-                            label: 'Đăng ký',
+                            icon: LucideIcons.logOut,
+                            label: 'Đăng xuất',
                           ),
                         ),
                       ];
-                    }
-                    return [
-                      PopupMenuItem(
-                        enabled: false,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              authUser.fullName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            Text(
-                              authUser.email,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
+                    },
+                    child: Container(
+                      constraints: const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 48,
                       ),
-                      const PopupMenuDivider(),
-                      if (!isDesktop) ...[
-                        const PopupMenuItem(
-                          value: 'home',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.house,
-                            label: 'Trang chủ',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'stays',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.search,
-                            label: 'Nơi lưu trú',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'blog',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.bookOpen,
-                            label: 'Blog',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'contact',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.phone,
-                            label: 'Liên hệ',
-                          ),
-                        ),
-                        const PopupMenuDivider(),
-                      ],
-                      const PopupMenuItem(
-                        value: 'wishlist',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.heart,
-                          label: 'Danh sách yêu thích',
-                        ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
                       ),
-                      const PopupMenuItem(
-                        value: 'trips',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.plane,
-                          label: 'Chuyến đi',
-                        ),
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(999),
                       ),
-                      const PopupMenuItem(
-                        value: 'messages',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.messageSquare,
-                          label: 'Tin nhắn',
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'profile',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.userRound,
-                          label: 'Hồ sơ',
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'queue',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.shoppingCart,
-                          label: 'Danh sách đặt nhiều căn',
-                        ),
-                      ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: 'host',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.house,
-                          label: authUser.isHost
-                              ? 'Khu vực host'
-                              : 'Trở thành host',
-                        ),
-                      ),
-                      if (authUser.isAdmin)
-                        const PopupMenuItem(
-                          value: 'admin',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.shield,
-                            label: 'Khu vực admin',
-                            isBold: true,
-                          ),
-                        ),
-                      const PopupMenuDivider(),
-                      const PopupMenuItem(
-                        value: 'logout',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.logOut,
-                          label: 'Đăng xuất',
-                        ),
-                      ),
-                    ];
-                  },
-                  child: Container(
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
+                      child: Center(
+                        child: Icon(
                           LucideIcons.menu,
-                          size: 16,
-                          color: AppColors.iconStrong,
+                          size: 20,
+                          color: isOverlayTop
+                              ? Colors.white
+                              : AppColors.iconStrong,
                         ),
-                        const SizedBox(width: 8),
-                        const Icon(
-                          LucideIcons.circleUser,
-                          size: 22,
-                          color: AppColors.iconMuted,
-                        ),
-                        if (authUser != null && screenWidth >= 520) ...[
-                          const SizedBox(width: 6),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 96),
-                            child: Text(
-                              authUser.firstName.isNotEmpty
-                                  ? authUser.firstName
-                                  : authUser.fullName,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
+          if (!hidePendingBanner)
+            const GlobalPendingBookingHeaderBanner(
+              margin: EdgeInsets.only(top: 8),
+            ),
+        ],
       ),
-    );
+    ),
+  );
+    });
   }
 }
 
@@ -1262,7 +1388,7 @@ class _NavTextLink extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 16,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: isActive ? FontWeight.w800 : FontWeight.w700,
                 color: textColor,
               ),
             ),

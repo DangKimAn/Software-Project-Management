@@ -317,8 +317,10 @@ void main() {
         final requestedGroups = <String>[];
         final dio = Dio();
         dio.httpClientAdapter = _MockDioAdapter((options) {
-          if (options.path == '/api/admin/reports/revenue') {
+          if (options.path == '/api/users') {
             callBatch += 1;
+          }
+          if (options.path == '/api/admin/reports/revenue') {
             requestedGroups.add('${options.queryParameters['group']}');
           }
           // First batch: simulate offline network error
@@ -902,6 +904,28 @@ void main() {
         expect(find.text('Số định danh (KYC): ***6789'), findsOneWidget);
         expect(find.textContaining('079188006789'), findsNothing);
         expect(find.textContaining('supersecret999'), findsNothing);
+
+        // 4. Tap 'Từ chối' without typing a rejection reason:
+        // Must NOT jump to top / display top error banner, but report error directly on the reason input field!
+        await tester.tap(find.byKey(const Key('admin_host_app_reject_btn')));
+        await tester.pumpAndSettle();
+
+        // Top error banner must NOT show the reason error
+        expect(find.text('Vui lòng nhập lý do từ chối.'), findsOneWidget); // Found only on the field errorText, not top banner
+        final reasonFieldFinder =
+            find.byKey(const Key('admin_host_app_reject_reason_field'));
+        expect(reasonFieldFinder, findsOneWidget);
+        final reasonFieldWidget = tester.widget<TextField>(reasonFieldFinder);
+        expect(
+          reasonFieldWidget.decoration?.errorText,
+          'Vui lòng nhập lý do từ chối.',
+        );
+
+        // Typing into the field clears the inline error
+        await tester.enterText(reasonFieldFinder, 'Giấy tờ bị mờ');
+        await tester.pumpAndSettle();
+        final updatedField = tester.widget<TextField>(reasonFieldFinder);
+        expect(updatedField.decoration?.errorText, isNull);
       },
     );
   });
@@ -1185,6 +1209,102 @@ void main() {
           },
         );
       }
+
+      testWidgets(
+        'pinned bottom navigation bar displays Người dùng, Kiểm duyệt, Hồ sơ, Menu with >= 48x48 touch targets and switches tabs / opens Menu drawer',
+        (tester) async {
+          final repo = buildPopulatedRepo();
+          await tester.binding.setSurfaceSize(const Size(390, 780));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+
+          await tester.pumpWidget(
+            _buildTestPortal(
+              activeTab: 'tong-quan',
+              repository: repo,
+              surfaceSize: const Size(390, 780),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final bottomNavBar = find.byKey(
+            const ValueKey('admin-bottom-nav-bar'),
+          );
+          expect(bottomNavBar, findsOneWidget);
+
+          final usersNav = find.byKey(
+            const ValueKey('admin-bottom-nav-nguoi-dung'),
+          );
+          final moderationNav = find.byKey(
+            const ValueKey('admin-bottom-nav-kiem-duyet'),
+          );
+          final hostAppsNav = find.byKey(
+            const ValueKey('admin-bottom-nav-ho-so-host'),
+          );
+          final menuNav = find.byKey(
+            const ValueKey('admin-bottom-nav-menu'),
+          );
+
+          expect(usersNav, findsOneWidget);
+          expect(moderationNav, findsOneWidget);
+          expect(hostAppsNav, findsOneWidget);
+          expect(menuNav, findsOneWidget);
+
+          expect(
+            find.descendant(
+                of: bottomNavBar, matching: find.text('Người dùng')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(
+                of: bottomNavBar, matching: find.text('Kiểm duyệt')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: bottomNavBar, matching: find.text('Hồ sơ')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: bottomNavBar, matching: find.text('Menu')),
+            findsOneWidget,
+          );
+
+          for (final navFinder in [
+            usersNav,
+            moderationNav,
+            hostAppsNav,
+            menuNav,
+          ]) {
+            final size = tester.getSize(navFinder);
+            expect(size.width, greaterThanOrEqualTo(48));
+            expect(size.height, greaterThanOrEqualTo(48));
+          }
+
+          // Tap 'Người dùng'
+          await tester.tap(usersNav);
+          await tester.pumpAndSettle();
+          expect(find.text('Quản lý người dùng'), findsOneWidget);
+
+          // Tap 'Kiểm duyệt'
+          await tester.tap(moderationNav);
+          await tester.pumpAndSettle();
+          expect(find.text('Kiểm duyệt bài đăng'), findsOneWidget);
+
+          // Tap 'Hồ sơ'
+          await tester.tap(hostAppsNav);
+          await tester.pumpAndSettle();
+          expect(find.text('Hồ sơ host'), findsOneWidget);
+
+          // Tap 'Menu' -> opens Drawer with full Admin navigation items
+          await tester.tap(menuNav);
+          await tester.pumpAndSettle();
+          expect(find.text('Admin Panel'), findsOneWidget);
+          expect(find.text('Phân quyền'), findsOneWidget);
+
+          await tester.tap(find.text('Phân quyền'));
+          await tester.pumpAndSettle();
+          expect(find.text('Phân quyền hệ thống'), findsOneWidget);
+        },
+      );
     },
   );
 }

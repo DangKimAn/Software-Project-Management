@@ -207,6 +207,88 @@ enum HostDocumentType {
   bool get requiresSingleDocument => this == HostDocumentType.passport;
 }
 
+class HostIdentityAiResult {
+  final String documentType;
+  final String side;
+  final String? idNumber;
+  final String? fullName;
+  final String? dateOfBirth;
+  final String? gender;
+  final String? nationality;
+  final String? placeOfOrigin;
+  final String? placeOfResidence;
+  final String? expiryDate;
+  final String? issueDate;
+  final String? issuePlace;
+  final String? mrz;
+  final bool isClear;
+  final bool isDocumentValid;
+  final double confidence;
+  final List<String> warnings;
+  final String summaryVi;
+
+  const HostIdentityAiResult({
+    required this.documentType,
+    required this.side,
+    this.idNumber,
+    this.fullName,
+    this.dateOfBirth,
+    this.gender,
+    this.nationality,
+    this.placeOfOrigin,
+    this.placeOfResidence,
+    this.expiryDate,
+    this.issueDate,
+    this.issuePlace,
+    this.mrz,
+    this.isClear = true,
+    this.isDocumentValid = true,
+    this.confidence = 1.0,
+    this.warnings = const [],
+    this.summaryVi = '',
+  });
+
+  factory HostIdentityAiResult.fromJson(Map<String, dynamic> json) {
+    return HostIdentityAiResult(
+      documentType: json['documentType']?.toString() ?? 'cccd',
+      side: json['side']?.toString() ?? 'front',
+      idNumber: json['idNumber']?.toString(),
+      fullName: json['fullName']?.toString(),
+      dateOfBirth: json['dateOfBirth']?.toString(),
+      gender: json['gender']?.toString(),
+      nationality: json['nationality']?.toString(),
+      placeOfOrigin: json['placeOfOrigin']?.toString(),
+      placeOfResidence: json['placeOfResidence']?.toString(),
+      expiryDate: json['expiryDate']?.toString(),
+      issueDate: json['issueDate']?.toString(),
+      issuePlace: json['issuePlace']?.toString(),
+      mrz: json['mrz']?.toString(),
+      isClear: json['isClear'] == true,
+      isDocumentValid: json['isDocumentValid'] == true,
+      confidence: (json['confidence'] as num?)?.toDouble() ?? 1.0,
+      warnings: (json['warnings'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      summaryVi: json['summaryVi']?.toString() ?? '',
+    );
+  }
+
+  /// Extracts the effective identification number from [idNumber] or from [mrz] (e.g. IDVNM012345678901).
+  String? get effectiveIdNumber {
+    if (idNumber != null && idNumber!.trim().isNotEmpty) {
+      return idNumber!.trim();
+    }
+    if (mrz != null && mrz!.isNotEmpty) {
+      final match = RegExp(r'IDVNM(\d{9,12})', caseSensitive: false).firstMatch(mrz!);
+      if (match != null) {
+        return match.group(1);
+      }
+    }
+    return null;
+  }
+}
+
 class HostApplicationDocument {
   final String documentType;
   final String fileUrl;
@@ -1518,12 +1600,51 @@ BookingDisplayStatus getBookingDisplayStatus(
       break;
   }
 
+  final rawReason = booking['cancellationReason']?.toString().trim();
+  String? localizedReason = rawReason;
+  if (rawReason != null && rawReason.isNotEmpty) {
+    switch (rawReason.toUpperCase()) {
+      case 'PAYMENT_EXPIRED':
+      case 'EXPIRED':
+      case 'HOLD_EXPIRED':
+        localizedReason =
+            'Quá thời hạn thanh toán (hệ thống tự động hủy giữ chỗ)';
+        break;
+      case 'CUSTOMER_CANCELLED':
+      case 'CANCELLED_BY_GUEST':
+      case 'GUEST_CANCELLED':
+        localizedReason = 'Khách hàng chủ động hủy đặt phòng';
+        break;
+      case 'HOST_REJECTED':
+      case 'REJECTED':
+        localizedReason = 'Chủ nhà từ chối yêu cầu đặt phòng';
+        break;
+      case 'HOST_CANCELLED':
+      case 'CANCELLED_BY_HOST':
+        localizedReason = 'Chủ nhà đã hủy đặt phòng';
+        break;
+      case 'ADMIN_CANCELLED':
+      case 'CANCELLED_BY_ADMIN':
+        localizedReason = 'Quản trị viên đã hủy đặt phòng';
+        break;
+      case 'LATE_PAYMENT_AFTER_BOOKING_EXPIRED':
+      case 'PAYMENT_SUCCESS_AFTER_HOLD_EXPIRED':
+        localizedReason = 'Thanh toán phát sinh sau khi đã hết thời gian giữ chỗ';
+        break;
+      default:
+        if (RegExp(r'^[A-Za-z0-9]+(_[A-Za-z0-9]+)+$').hasMatch(rawReason)) {
+          localizedReason = 'Đơn đặt phòng đã bị hủy theo quy định hệ thống';
+        }
+        break;
+    }
+  }
+
   return BookingDisplayStatus(
     label: label,
     tone: tone,
     normalizedStatus: code,
     code: code,
-    reason: booking['cancellationReason']?.toString(),
+    reason: localizedReason,
     isTerminal: _terminalStatuses.contains(lifecycle) ||
         _terminalStatuses.contains(code) ||
         code == 'refunded',

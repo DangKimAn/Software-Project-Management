@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http_parser/http_parser.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/security/secure_storage_service.dart';
@@ -270,6 +271,15 @@ class HostRepository {
       if (e.response?.statusCode == 404) return null;
       rethrow;
     }
+  }
+
+  /// `POST /api/host/applications/cancel`
+  /// Cancels the current user's pending host application and deletes uploaded documents.
+  Future<bool> cancelApplication() async {
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/applications/cancel',
+    );
+    return response.statusCode == 200;
   }
 
   // ===========================================================================
@@ -1410,5 +1420,40 @@ class HostRepository {
       data: {'content': trimmed},
     );
     return _unwrapMap(response.data);
+  }
+
+  /// `POST /api/ai/id-card-vision/extract`
+  /// Uploads CCCD/ID card bytes to backend AI for OCR and information extraction.
+  Future<HostIdentityAiResult> analyzeIdentityCard({
+    required List<int> bytes,
+    required String filename,
+    required String mimeType,
+  }) async {
+    final formData = FormData.fromMap({
+      'image': MultipartFile.fromBytes(
+        bytes,
+        filename: filename,
+        contentType: MediaType.parse(
+          mimeType.isNotEmpty ? mimeType : 'image/jpeg',
+        ),
+      ),
+    });
+
+    final response = await _client.dio.post<dynamic>(
+      '/api/ai/id-card-vision/extract',
+      data: formData,
+    );
+
+    final map = response.data is Map<String, dynamic>
+        ? response.data as Map<String, dynamic>
+        : Map<String, dynamic>.from(response.data as Map<Object?, Object?>);
+
+    final data = map['data'] is Map<String, dynamic>
+        ? map['data'] as Map<String, dynamic>
+        : Map<String, dynamic>.from(
+            (map['data'] as Map<Object?, Object?>?) ?? <String, dynamic>{},
+          );
+
+    return HostIdentityAiResult.fromJson(data);
   }
 }

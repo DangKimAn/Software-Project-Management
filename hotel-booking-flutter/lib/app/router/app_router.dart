@@ -22,7 +22,6 @@ import '../../features/search/presentation/screens/ai_search_screen.dart';
 import '../../features/search/presentation/screens/search_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/trips/presentation/screens/guest_payment_screen.dart';
-import '../../features/trips/presentation/screens/multi_booking_screen.dart';
 import '../../features/trips/presentation/screens/payment_result_screen.dart';
 import '../../features/trips/presentation/screens/trips_screen.dart';
 import '../../features/villa_detail/presentation/screens/villa_detail_screen.dart';
@@ -76,6 +75,7 @@ bool _isProtectedRoutePath(String path) {
       path == '/account/profile' ||
       path == '/gio-cho-dat' ||
       path == '/messages' ||
+      path == '/tin-nhan' ||
       path == '/tro-thanh-host/dang-ky' ||
       path == '/tro-thanh-host/trang-thai' ||
       path == '/thanh-toan/ket-qua' ||
@@ -211,22 +211,28 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Branch 1: Wishlist / Favorites (/favorites, /yeu-thich)
+          // Branch 1: Guest Messages (/messages, /tin-nhan)
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/favorites',
-                builder: (context, state) => const RouteAuthGuard(
-                  accessLevel: RouteAccessLevel.authenticated,
-                  child: FavoritesScreen(),
-                ),
+                path: '/messages',
+                builder: (context, state) {
+                  final convId = state.uri.queryParameters['conversationId'];
+                  return RouteAuthGuard(
+                    accessLevel: RouteAccessLevel.authenticated,
+                    child: MessagesScreen(initialConversationId: convId),
+                  );
+                },
               ),
               GoRoute(
-                path: '/yeu-thich',
-                builder: (context, state) => const RouteAuthGuard(
-                  accessLevel: RouteAccessLevel.authenticated,
-                  child: FavoritesScreen(),
-                ),
+                path: '/tin-nhan',
+                builder: (context, state) {
+                  final convId = state.uri.queryParameters['conversationId'];
+                  return RouteAuthGuard(
+                    accessLevel: RouteAccessLevel.authenticated,
+                    child: MessagesScreen(initialConversationId: convId),
+                  );
+                },
               ),
             ],
           ),
@@ -462,25 +468,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
 
-      // ── Booking Queue, Payments & Messages (Authenticated) ──
+      // ── Booking Queue, Payments & Wishlist / Favorites (Authenticated) ──
       GoRoute(
         path: '/gio-cho-dat',
+        // Retired queue: old links must not reopen its UI.
+        redirect: (context, state) => '/account/trips',
+      ),
+      GoRoute(
+        path: '/favorites',
         pageBuilder: (context, state) => _buildProtectedSlidePage(
           state: state,
           accessLevel: RouteAccessLevel.authenticated,
-          child: const MultiBookingScreen(),
+          child: const FavoritesScreen(),
         ),
       ),
       GoRoute(
-        path: '/messages',
-        pageBuilder: (context, state) {
-          final convId = state.uri.queryParameters['conversationId'];
-          return _buildProtectedSlidePage(
-            state: state,
-            accessLevel: RouteAccessLevel.authenticated,
-            child: MessagesScreen(initialConversationId: convId),
-          );
-        },
+        path: '/yeu-thich',
+        pageBuilder: (context, state) => _buildProtectedSlidePage(
+          state: state,
+          accessLevel: RouteAccessLevel.authenticated,
+          child: const FavoritesScreen(),
+        ),
       ),
       GoRoute(
         path: '/thanh-toan/ket-qua',
@@ -871,7 +879,7 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
 
   static const _tabs = [
     (icon: LucideIcons.compass, label: 'Khám phá'),
-    (icon: LucideIcons.heart, label: 'Yêu thích'),
+    (icon: LucideIcons.messageSquare, label: 'Tin nhắn'),
     (icon: LucideIcons.calendarCheck, label: 'Chuyến đi'),
     (icon: LucideIcons.user, label: 'Tài khoản'),
   ];
@@ -915,14 +923,6 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Container(
-                            width: 24,
-                            height: 2,
-                            margin: const EdgeInsets.only(bottom: 6),
-                            color: isSelected
-                                ? AppColors.textStrong
-                                : Colors.transparent,
-                          ),
                           Icon(
                             tab.icon,
                             size: 20,
@@ -938,11 +938,22 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: isSelected
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
+                                  ? FontWeight.w800
+                                  : FontWeight.w700,
                               color: isSelected
                                   ? AppColors.textStrong
                                   : AppColors.textSecondary,
+                            ),
+                          ),
+                          Container(
+                            width: 24,
+                            height: 2,
+                            margin: const EdgeInsets.only(top: 4),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(999),
                             ),
                           ),
                         ],

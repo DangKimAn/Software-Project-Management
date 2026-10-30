@@ -99,6 +99,23 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   }
 
   @override
+  void didUpdateWidget(covariant MessagesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextConvId = widget.initialConversationId?.trim();
+    final prevConvId = oldWidget.initialConversationId?.trim();
+    if (nextConvId != prevConvId &&
+        nextConvId != null &&
+        nextConvId.isNotEmpty &&
+        _selectedConversationId != nextConvId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _selectConversation(nextConvId);
+        }
+      });
+    }
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!mounted) return;
     if (state == AppLifecycleState.resumed) {
@@ -912,7 +929,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
         body: Column(
           children: [
             if (!widget.isHostPortal)
-              const AppTopHeader(currentPath: '/messages'),
+              const AppSearchHeader(currentPath: '/messages'),
             Expanded(
               child: AppEmptyView(
                 icon: LucideIcons.messageSquare,
@@ -1087,7 +1104,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          const AppTopHeader(currentPath: '/messages'),
+          const AppSearchHeader(currentPath: '/messages'),
           Expanded(child: bodyContent),
         ],
       ),
@@ -1140,27 +1157,15 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.s16,
-              vertical: AppSpacing.s12,
-            ),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Hộp thư tin nhắn',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textStrong,
-                    ),
-                  ),
-                ),
-                if (totalUnread > 0) ...[
-                  const SizedBox(width: AppSpacing.s8),
+          if (totalUnread > 0) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.s16,
+                vertical: AppSpacing.s8,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
                   Container(
                     key: const Key('inbox_total_unread_badge'),
                     padding: const EdgeInsets.symmetric(
@@ -1181,28 +1186,21 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                     ),
                   ),
                 ],
-                IconButton(
-                  onPressed: () => ref.invalidate(conversationsListProvider),
-                  tooltip: 'Làm mới hộp thư',
-                  constraints: const BoxConstraints(
-                    minWidth: 48,
-                    minHeight: 48,
-                  ),
-                  icon: const Icon(
-                    LucideIcons.refreshCw,
-                    size: 18,
-                    color: AppColors.iconStrong,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+            const Divider(height: 1, color: AppColors.borderSoft),
+          ],
           Expanded(
-            child: ListView.separated(
-              itemCount: conversations.length,
-              separatorBuilder: (_, __) =>
-                  const Divider(height: 1, color: AppColors.divider),
+            child: RefreshIndicator(
+              color: AppColors.primary,
+              onRefresh: () async {
+                ref.invalidate(conversationsListProvider);
+              },
+              child: ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: conversations.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, color: AppColors.divider),
               itemBuilder: (context, index) {
                 final conv = conversations[index];
                 final isSelected = conv.id == _selectedConversationId;
@@ -1222,9 +1220,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                   key: ValueKey<String>('conv_tile_${conv.id}'),
                   onTap: () => _selectConversation(conv.id),
                   child: Container(
-                    color: isSelected
-                        ? AppColors.surfaceWarmSand
-                        : AppColors.surfaceBase,
+                    color: AppColors.surfaceBase,
                     padding: const EdgeInsets.symmetric(
                       horizontal: AppSpacing.s16,
                       vertical: 14,
@@ -1345,8 +1341,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
               },
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    ),
     );
   }
 
@@ -1595,7 +1592,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                               _scrollToBottom(animate: true),
                                           style: FilledButton.styleFrom(
                                             backgroundColor:
-                                                AppColors.textStrong,
+                                                AppColors.primary,
                                             foregroundColor: Colors.white,
                                             minimumSize: const Size(48, 44),
                                             shape: const StadiumBorder(),
@@ -1776,7 +1773,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
 
     final bgColor = msg.isFailed
         ? AppColors.errorSoft
-        : (isMe ? AppColors.textPrimary : AppColors.surfaceBase);
+        : (isMe ? AppColors.primary : AppColors.surfaceBase);
     final textColor = msg.isFailed
         ? AppColors.textStrong
         : (isMe ? Colors.white : AppColors.textPrimary);
@@ -1988,7 +1985,7 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          const AppTopHeader(currentPath: '/messages'),
+          const AppSearchHeader(currentPath: '/messages'),
           Expanded(
             child: villaAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -2004,9 +2001,12 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                 return SingleChildScrollView(
                   child: Center(
                     child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 720),
+                      constraints: const BoxConstraints(maxWidth: 640),
                       child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.s20),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.s16,
+                          vertical: AppSpacing.s12,
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -2014,7 +2014,11 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                               onPressed: () =>
                                   context.go('/villa/${widget.villaId}'),
                               style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.s8,
+                                ),
                                 minimumSize: const Size(48, 48),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                 shape: const StadiumBorder(),
                                 foregroundColor: AppColors.textStrong,
                               ),
@@ -2023,24 +2027,31 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 size: 16,
                                 color: AppColors.iconStrong,
                               ),
-                              label: const Text('Quay lại trang biệt thự'),
+                              label: const Text(
+                                'Quay lại trang biệt thự',
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
-                            const SizedBox(height: AppSpacing.s12),
+                            const SizedBox(height: AppSpacing.s8),
                             const Text(
                               'Liên hệ Chủ nhà',
                               style: TextStyle(
-                                fontSize: 24,
+                                fontSize: 22,
                                 fontWeight: FontWeight.w800,
                                 color: AppColors.textStrong,
+                                letterSpacing: -0.4,
                               ),
                             ),
                             if (villa != null) ...[
                               const SizedBox(height: AppSpacing.s12),
                               Container(
-                                padding: const EdgeInsets.all(AppSpacing.s16),
+                                padding: const EdgeInsets.all(AppSpacing.s12),
                                 decoration: BoxDecoration(
                                   color: AppColors.surfaceBase,
-                                  borderRadius: AppRadii.roundedCard,
+                                  borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
                                     color: AppColors.borderSoft,
                                   ),
@@ -2048,10 +2059,10 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 child: Row(
                                   children: [
                                     ClipRRect(
-                                      borderRadius: BorderRadius.circular(16),
+                                      borderRadius: BorderRadius.circular(12),
                                       child: SizedBox(
-                                        width: 72,
-                                        height: 56,
+                                        width: 64,
+                                        height: 52,
                                         child: AppImage(
                                           url: villa.imageUrls.isNotEmpty
                                               ? villa.imageUrls.first
@@ -2067,20 +2078,21 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                         children: [
                                           Text(
                                             villa.name,
-                                            maxLines: 2,
+                                            maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
+                                              fontSize: 15,
                                               fontWeight: FontWeight.w700,
                                               color: AppColors.textStrong,
                                             ),
                                           ),
-                                          const SizedBox(height: 2),
+                                          const SizedBox(height: 3),
                                           Text(
-                                            'Chủ nhà: ${villa.host?.fullName ?? 'Chủ nhà VungTau Stay'}',
+                                            'Chủ nhà: ${villa.host?.fullName ?? 'Chủ nhà The Palm Villa'}',
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
-                                              fontSize: 12,
+                                              fontSize: 12.5,
                                               color: AppColors.textSecondary,
                                             ),
                                           ),
@@ -2091,54 +2103,84 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 ),
                               ),
                             ],
-                            const SizedBox(height: AppSpacing.s20),
+                            const SizedBox(height: AppSpacing.s16),
                             const Text(
                               'Câu hỏi thường gặp cho Chủ nhà:',
                               style: TextStyle(
-                                fontSize: 14,
+                                fontSize: 13.5,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.textStrong,
                               ),
                             ),
                             const SizedBox(height: AppSpacing.s8),
-                            Wrap(
-                              spacing: AppSpacing.s8,
-                              runSpacing: AppSpacing.s8,
+                            Column(
                               children: _quickQuestions.map((q) {
-                                return InkWell(
-                                  borderRadius: AppRadii.roundedPill,
-                                  onTap: () {
-                                    setState(() {
-                                      _msgCtrl.value = TextEditingValue(
-                                        text: q,
-                                        selection: TextSelection.collapsed(
-                                          offset: q.length,
-                                        ),
-                                      );
-                                    });
-                                  },
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      minHeight: 48,
-                                    ),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: AppSpacing.s16,
-                                        vertical: 10,
+                                final isSelected = _msgCtrl.text.trim() == q;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () {
+                                      setState(() {
+                                        _msgCtrl.value = TextEditingValue(
+                                          text: q,
+                                          selection: TextSelection.collapsed(
+                                            offset: q.length,
+                                          ),
+                                        );
+                                      });
+                                    },
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        minHeight: 48,
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.surfaceBase,
-                                        borderRadius: AppRadii.roundedPill,
-                                        border: Border.all(
-                                          color: AppColors.borderSoft,
+                                      child: Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 10,
                                         ),
-                                      ),
-                                      child: Text(
-                                        q,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                          color: AppColors.textStrong,
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? AppColors.primary
+                                              : AppColors.surfaceBase,
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? AppColors.primary
+                                                : AppColors.borderSoft,
+                                            width: isSelected ? 1.2 : 1.0,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              LucideIcons.messageSquare,
+                                              size: 15,
+                                              color: isSelected
+                                                  ? Colors.white
+                                                  : AppColors.iconStrong,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Text(
+                                                q,
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  height: 1.35,
+                                                  fontWeight: isSelected
+                                                      ? FontWeight.w600
+                                                      : FontWeight.w500,
+                                                  color: isSelected
+                                                      ? Colors.white
+                                                      : AppColors.textStrong,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -2146,28 +2188,62 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 );
                               }).toList(),
                             ),
-                            const SizedBox(height: AppSpacing.s16),
+                            const SizedBox(height: AppSpacing.s12),
+                            const Text.rich(
+                              TextSpan(
+                                text: 'Nội dung tin nhắn gửi Chủ nhà ',
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textStrong,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: '*',
+                                    style: TextStyle(color: AppColors.primary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.s8),
                             TextField(
                               controller: _msgCtrl,
-                              maxLines: 4,
+                              minLines: 3,
+                              maxLines: 5,
+                              onChanged: (_) => setState(() {}),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                height: 1.45,
+                                color: AppColors.textStrong,
+                              ),
                               decoration: InputDecoration(
-                                labelText: 'Nội dung tin nhắn gửi Chủ nhà *',
                                 hintText:
                                     'Nhập câu hỏi của bạn về lịch trống, tiện nghi hoặc yêu cầu đặc biệt...',
+                                hintStyle: const TextStyle(
+                                  fontSize: 13.5,
+                                  height: 1.45,
+                                  color: AppColors.textMuted,
+                                ),
+                                filled: true,
+                                fillColor: AppColors.surfaceBase,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.s16,
+                                  vertical: 14,
+                                ),
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(24),
+                                  borderRadius: BorderRadius.circular(16),
                                   borderSide: const BorderSide(
-                                    color: AppColors.border,
+                                    color: AppColors.borderSoft,
                                   ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(24),
+                                  borderRadius: BorderRadius.circular(16),
                                   borderSide: const BorderSide(
                                     color: AppColors.border,
                                   ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(24),
+                                  borderRadius: BorderRadius.circular(16),
                                   borderSide: const BorderSide(
                                     color: AppColors.borderFocus,
                                     width: 1.4,
@@ -2175,7 +2251,7 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: AppSpacing.s20),
+                            const SizedBox(height: AppSpacing.s16),
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton.icon(
@@ -2198,7 +2274,7 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                   minimumSize: const Size.fromHeight(48),
                                   shape: const StadiumBorder(),
                                   padding: const EdgeInsets.symmetric(
-                                    vertical: 15,
+                                    vertical: 14,
                                     horizontal: AppSpacing.s16,
                                   ),
                                 ),

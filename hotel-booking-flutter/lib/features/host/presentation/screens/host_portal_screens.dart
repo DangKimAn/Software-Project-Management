@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../data/host_repository.dart';
 import '../../domain/host_models.dart';
 import '../../services/host_file_picker_service.dart';
@@ -84,6 +85,23 @@ String formatHostVnd(dynamic value) {
   return formatter.format(numVal);
 }
 
+String formatCompactHostVnd(dynamic value) {
+  final numVal =
+      value is num ? value.toDouble() : (double.tryParse('${value ?? 0}') ?? 0);
+  if (numVal <= 0) return '0 đ';
+  if (numVal >= 1000000) {
+    final v = numVal / 1000000;
+    final s = v.toStringAsFixed(v.truncateToDouble() == v ? 0 : 1).replaceAll('.', ',');
+    return '$s Tr đ';
+  } else if (numVal >= 1000) {
+    final v = numVal / 1000;
+    final s = v.toStringAsFixed(v.truncateToDouble() == v ? 0 : 1).replaceAll('.', ',');
+    return '$s k';
+  }
+  return '${numVal.round()} đ';
+}
+
+
 class HostPortalScreen extends ConsumerStatefulWidget {
   final String section;
   final HostPortalSection? initialSection;
@@ -135,6 +153,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       TextEditingController();
   final TextEditingController _calendarMinNightsCtrl = TextEditingController();
   final TextEditingController _calendarNotesCtrl = TextEditingController();
+  bool _calendarShowListingList = true;
+  bool _calendarSearchVisible = false;
+  final TextEditingController _calendarSearchCtrl = TextEditingController();
+  String _calendarSearchQuery = '';
+  String _calendarListingFilter = 'all';
+  bool _showCalendarPriceEditor = true;
+  bool _showCalendarCustomSettings = false;
 
   // Guests search state
   final TextEditingController _guestSearchCtrl = TextEditingController();
@@ -227,6 +252,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
   @override
   void dispose() {
+    _calendarSearchCtrl.dispose();
     _calendarPriceOverrideCtrl.dispose();
     _calendarMinNightsCtrl.dispose();
     _calendarNotesCtrl.dispose();
@@ -460,11 +486,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           content: TextField(
             key: const Key('booking_cancel_reason_input'),
             controller: reasonCtrl,
-            maxLines: 2,
+            maxLines: 1,
+            style: const TextStyle(fontSize: 13, height: 1.2),
             decoration: InputDecoration(
               labelText: 'Lý do hủy booking *',
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(16),
               ),
             ),
           ),
@@ -553,6 +583,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   Future<void> _ensureCalendarLoaded() async {
     if (_listings.isEmpty) {
       await _fetchListings();
+    }
+    if (mounted && _listings.length == 1) {
+      setState(() => _calendarShowListingList = false);
+    }
+    if (_bookings.isEmpty) {
+      await _fetchBookings();
     }
     if (_calendarListingId != null && _calendarListingId!.isNotEmpty) {
       await _fetchCalendarDays();
@@ -1250,12 +1286,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
         return Scaffold(
           backgroundColor: AppColors.background,
-          appBar: AppBar(
-            backgroundColor: AppColors.surfaceBase,
-            elevation: 0,
-            titleSpacing: 12,
-            leading: isDesktop
-                ? IconButton(
+          appBar: isDesktop
+              ? AppBar(
+                  backgroundColor: AppColors.surfaceBase,
+                  elevation: 0,
+                  titleSpacing: 12,
+                  leading: IconButton(
                     constraints:
                         const BoxConstraints(minWidth: 48, minHeight: 48),
                     icon: const Icon(
@@ -1264,53 +1300,55 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     ),
                     onPressed: () => context.go('/'),
                     tooltip: 'Về trang chủ',
-                  )
-                : null,
-            title: Row(
-              children: [
-                const Icon(
-                  LucideIcons.building2,
-                  size: 20,
-                  color: AppColors.textPrimary,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Host Portal • ${_activeSection.label}',
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
-            ),
-            actions: [
-              IconButton(
-                key: const Key('host_portal_add_property_quick_btn'),
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                tooltip: 'Thêm chỗ nghỉ mới',
-                onPressed: () => _switchSection(HostPortalSection.newProperty),
-                icon: const Icon(
-                  LucideIcons.plus,
-                  color: AppColors.textPrimary,
-                  size: 20,
-                ),
-              ),
-              IconButton(
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                tooltip: 'Về trang chủ',
-                onPressed: () => context.go('/'),
-                icon: const Icon(
-                  LucideIcons.externalLink,
-                  color: AppColors.textPrimary,
-                  size: 18,
-                ),
-              ),
-            ],
-          ),
+                  title: Row(
+                    children: [
+                      const AppBrandIcon.minhThanhLogo(
+                        size: 22,
+                        color: AppColors.textPrimary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Host Portal • ${_activeSection.label}',
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    IconButton(
+                      key: const Key('host_portal_add_property_quick_btn'),
+                      constraints:
+                          const BoxConstraints(minWidth: 48, minHeight: 48),
+                      tooltip: 'Thêm chỗ nghỉ mới',
+                      onPressed: () =>
+                          _switchSection(HostPortalSection.newProperty),
+                      icon: const Icon(
+                        LucideIcons.plus,
+                        color: AppColors.textPrimary,
+                        size: 20,
+                      ),
+                    ),
+                    IconButton(
+                      constraints:
+                          const BoxConstraints(minWidth: 48, minHeight: 48),
+                      tooltip: 'Về trang chủ',
+                      onPressed: () => context.go('/'),
+                      icon: const Icon(
+                        LucideIcons.externalLink,
+                        color: AppColors.textPrimary,
+                        size: 18,
+                      ),
+                    ),
+                  ],
+                )
+              : null,
           drawer: isDesktop
               ? null
               : Drawer(
@@ -1318,31 +1356,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   child:
                       SafeArea(child: _buildSidebarNavigation(inDrawer: true)),
                 ),
+          bottomNavigationBar: isDesktop
+              ? null
+              : Builder(builder: _buildMobileBottomNavigation),
           body: SafeArea(
-            child: Column(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!isDesktop) _buildMobileSectionTabBar(),
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (isDesktop)
-                        SizedBox(
-                          width: 250,
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              color: AppColors.surfaceBase,
-                              border: Border(
-                                right: BorderSide(color: AppColors.border),
-                              ),
-                            ),
-                            child: _buildSidebarNavigation(inDrawer: false),
-                          ),
+                if (isDesktop)
+                  SizedBox(
+                    width: 250,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: AppColors.surfaceBase,
+                        border: Border(
+                          right: BorderSide(color: AppColors.border),
                         ),
-                      Expanded(child: _buildActiveSectionBody()),
-                    ],
+                      ),
+                      child: _buildSidebarNavigation(inDrawer: false),
+                    ),
                   ),
-                ),
+                Expanded(child: _buildActiveSectionBody()),
               ],
             ),
           ),
@@ -1351,49 +1385,60 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     );
   }
 
-  Widget _buildMobileSectionTabBar() {
-    return Container(
-      width: double.infinity,
+  Widget _buildMobileBottomNavigation(BuildContext context) {
+    const sections = [
+      HostPortalSection.guests,
+      HostPortalSection.calendar,
+      HostPortalSection.newProperty,
+      HostPortalSection.messages,
+    ];
+    final selectedIndex = sections.indexOf(_activeSection);
+
+    return DecoratedBox(
       decoration: const BoxDecoration(
-        color: AppColors.surfaceBase,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+        border: Border(top: BorderSide(color: AppColors.border)),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Row(
-          children: [
-            for (var i = 0; i < HostPortalSection.values.length; i++) ...[
-              if (i > 0) const SizedBox(width: 6),
-              Builder(
-                builder: (context) {
-                  final section = HostPortalSection.values[i];
-                  final selected = _activeSection == section;
-                  return ChoiceChip(
-                    key: Key('host_tab_${section.keyName}'),
-                    shape: const StadiumBorder(),
-                    label: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          section.icon,
-                          size: 15,
-                          color: selected
-                              ? AppColors.primary
-                              : AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(section.label),
-                      ],
-                    ),
-                    selected: selected,
-                    onSelected: (_) => _switchSection(section),
-                  );
-                },
-              ),
-            ],
-          ],
-        ),
+      child: BottomNavigationBar(
+        key: const Key('host_bottom_navigation'),
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: AppColors.surfaceBase,
+        elevation: 0,
+        currentIndex: selectedIndex < 0 ? 4 : selectedIndex,
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: AppColors.textSecondary,
+        selectedFontSize: 12,
+        unselectedFontSize: 12,
+        showUnselectedLabels: true,
+        onTap: (index) {
+          if (index == 4) {
+            Scaffold.of(context).openDrawer();
+          } else {
+            _switchSection(sections[index]);
+          }
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(LucideIcons.users),
+            label: 'Khách',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(LucideIcons.calendar),
+            label: 'Lịch',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(LucideIcons.plus),
+            label: 'Thêm',
+            tooltip: 'Thêm chỗ nghỉ',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(LucideIcons.messageSquare),
+            label: 'Tin nhắn',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(LucideIcons.menu),
+            label: 'Menu',
+          ),
+        ],
       ),
     );
   }
@@ -1407,7 +1452,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             padding: const EdgeInsets.only(bottom: 4),
             child: InkWell(
               key: Key('host_sidebar_${section.keyName}'),
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.zero,
               onTap: () {
                 if (inDrawer) Navigator.of(context).pop();
                 _switchSection(section);
@@ -1417,15 +1462,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: _activeSection == section
-                      ? AppColors.surfaceMuted
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
+                  border: Border(bottom: BorderSide(
                     color: _activeSection == section
                         ? AppColors.primary
                         : Colors.transparent,
-                  ),
+                    width: 2,
+                  )),
                 ),
                 child: Row(
                   children: [
@@ -1442,9 +1484,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         section.label,
                         style: TextStyle(
                           fontSize: 14,
-                          fontWeight: _activeSection == section
-                              ? FontWeight.w700
-                              : FontWeight.w500,
+                          fontWeight: FontWeight.w700,
                           color: _activeSection == section
                               ? AppColors.primary
                               : AppColors.textPrimary,
@@ -1456,6 +1496,43 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               ),
             ),
           ),
+        if (inDrawer) ...[
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Divider(height: 1, color: AppColors.border),
+          ),
+          InkWell(
+            borderRadius: BorderRadius.zero,
+            onTap: () {
+              Navigator.of(context).pop();
+              context.go('/');
+            },
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 48),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: const Row(
+                children: [
+                  Icon(
+                    LucideIcons.externalLink,
+                    size: 18,
+                    color: AppColors.textSecondary,
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Về trang chủ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1501,174 +1578,124 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   // ===========================================================================
 
   Widget _buildOverviewSection() {
-    final publishedCount = _listings
-        .where(
-          (l) =>
-              HostListingStatus.fromApi(l['status']) ==
-              HostListingStatus.published,
-        )
-        .length;
-    final pendingApprovalCount = _listings
-        .where(
-          (l) =>
-              HostListingStatus.fromApi(l['status']) ==
-              HostListingStatus.pendingApproval,
-        )
-        .length;
     final overviewError =
         _listingsError ?? _bookingsError ?? _reportError ?? _payoutsError;
+    final stats = [
+      (label: 'Chỗ nghỉ', value: _loadingListings ? '—' : '${_listings.length}',
+        icon: LucideIcons.house, section: HostPortalSection.properties),
+      (label: 'Đặt phòng', value: _loadingBookings ? '—' : '${_bookings.length}',
+        icon: LucideIcons.calendarCheck, section: HostPortalSection.bookings),
+      (label: 'Doanh thu · 30 ngày',
+        value: _loadingReport ? '—' : formatCompactHostVnd(_revenueReport.hostRevenue),
+        icon: LucideIcons.chartColumn, section: HostPortalSection.reports),
+      (label: 'Tài khoản nhận tiền', value: _loadingPayouts ? '—' : '${_payoutAccounts.length}',
+        icon: LucideIcons.wallet, section: HostPortalSection.payouts),
+    ];
+    final recentBookings = List<Map<String, dynamic>>.from(_bookings)
+      ..sort((a, b) {
+        final aId = int.tryParse('${a['bookingId'] ?? a['id'] ?? 0}') ?? 0;
+        final bId = int.tryParse('${b['bookingId'] ?? b['id'] ?? 0}') ?? 0;
+        return bId.compareTo(aId);
+      });
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Tổng quan hoạt động Host',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Số liệu thực tế từ chỗ nghỉ, đặt phòng và doanh thu của bạn.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(120, 48),
-                      foregroundColor: AppColors.textPrimary,
-                      side: const BorderSide(color: AppColors.border),
-                      shape: const StadiumBorder(),
-                    ),
-                    onPressed: _loadInitialPortalData,
-                    icon: const Icon(LucideIcons.refreshCw, size: 16),
-                    label: const Text('Tải lại'),
-                  ),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(150, 48),
-                      shape: const StadiumBorder(),
-                      elevation: 0,
-                    ),
-                    onPressed: () =>
-                        _switchSection(HostPortalSection.newProperty),
-                    icon: const Icon(LucideIcons.plus, size: 16),
-                    label: const Text('Thêm chỗ nghỉ'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          if (overviewError != null) ...[
-            const SizedBox(height: 16),
-            _buildInlineError(
-              overviewError,
-              onRetry: _loadInitialPortalData,
-            ),
-          ],
-          const SizedBox(height: 20),
-          _buildKpiGrid([
-            (
-              label: 'Tổng chỗ nghỉ',
-              value: '${_listings.length}',
-              sub:
-                  '$publishedCount đang hiển thị • $pendingApprovalCount chờ duyệt',
-            ),
-            (
-              label: 'Tổng đơn đặt phòng',
-              value: '${_bookings.length}',
-              sub: 'Dữ liệu thực từ /api/host/bookings',
-            ),
-            (
-              label: 'Doanh thu Host (30 ngày)',
-              value: formatHostVnd(_revenueReport.hostRevenue),
-              sub:
-                  'Doanh thu gộp: ${formatHostVnd(_revenueReport.grossRevenue)}',
-            ),
-            (
-              label: 'Tài khoản nhận tiền',
-              value: '${_payoutAccounts.length}',
-              sub: '${_payouts.length} kỳ đối soát thanh toán',
-            ),
-          ]),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceBase,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return RefreshIndicator(
+      onRefresh: _loadInitialPortalData,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Đặt phòng gần đây',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
+                const Expanded(child: Text('Tổng quan', style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ))),
+                IconButton(
+                  tooltip: 'Tải lại',
+                  onPressed: _loadInitialPortalData,
+                  icon: const Icon(LucideIcons.refreshCw, size: 20),
+                ),
+                IconButton.filled(
+                  tooltip: 'Thêm chỗ nghỉ',
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => _switchSection(HostPortalSection.newProperty),
+                  icon: const Icon(LucideIcons.plus, size: 22),
+                ),
+              ],
+            ),
+            if (overviewError != null) ...[
+              const SizedBox(height: 12),
+              _buildInlineError(overviewError, onRetry: _loadInitialPortalData),
+            ],
+            const SizedBox(height: 16),
+            LayoutBuilder(builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 820 ? 4 : 2;
+              final width = (constraints.maxWidth - 12 * (columns - 1)) / columns;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: stats.map((stat) => SizedBox(
+                  width: width,
+                  child: Material(
+                    color: AppColors.surfaceBase,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      side: const BorderSide(color: AppColors.border),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () => _switchSection(stat.section),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(stat.icon, size: 20, color: AppColors.primary),
+                            const SizedBox(height: 10),
+                            Text(stat.value, style: const TextStyle(
+                              fontSize: 24, fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            )),
+                            const SizedBox(height: 4),
+                            Text(stat.label, style: const TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary,
+                            )),
+                          ],
                         ),
                       ),
                     ),
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(88, 48),
-                        shape: const StadiumBorder(),
-                      ),
-                      onPressed: () =>
-                          _switchSection(HostPortalSection.bookings),
-                      child: const Text('Xem tất cả'),
-                    ),
-                  ],
+                  ),
+                )).toList(),
+              );
+            }),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Expanded(child: Text('Đặt phòng gần đây', style: TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ))),
+                TextButton(
+                  onPressed: () => _switchSection(HostPortalSection.bookings),
+                  child: const Text('Xem tất cả'),
                 ),
-                const SizedBox(height: 12),
-                if (_loadingBookings)
-                  const Center(child: CircularProgressIndicator())
-                else if (_bookings.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Text(
-                      'Chưa có đơn đặt phòng nào.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  )
-                else
-                  ..._bookings.take(5).map((b) => _buildBookingItemCard(b)),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            if (_loadingBookings)
+              const Center(child: CircularProgressIndicator())
+            else if (recentBookings.isEmpty)
+              _buildEmptyBox('Chưa có đặt phòng.')
+            else
+              ...recentBookings.take(3).map(_buildBookingItemCard),
+          ],
+        ),
       ),
     );
   }
@@ -1676,6 +1703,47 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   // ===========================================================================
   // 2 & 10. PROPERTIES (`ChoNghi`) & SUPPORT (`HoTro`) SECTIONS
   // ===========================================================================
+
+  Widget _buildPropertySummary(
+    List<({String label, String value})> items, {bool borderless = false}
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 640
+            ? items.length.clamp(1, 4)
+            : 2;
+        final width = (constraints.maxWidth - (columns - 1) * 10) / columns;
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: items.map((item) => Container(
+            width: width,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceBase,
+              border: borderless ? null : Border.all(color: AppColors.border),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.value, style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                )),
+                const SizedBox(height: 4),
+                Text(item.label, style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                )),
+              ],
+            ),
+          )).toList(),
+        );
+      },
+    );
+  }
 
   Widget _buildPropertiesSection({required bool isSupportMode}) {
     final counts = <String, int>{
@@ -1755,32 +1823,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       color: AppColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    isSupportMode
-                        ? 'Kiểm tra trạng thái duyệt, gửi duyệt lại hoặc ẩn/hiện chỗ nghỉ.'
-                        : 'Danh sách chỗ nghỉ thuộc quyền quản lý của bạn.',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
+                  if (isSupportMode) ...[
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Kiểm tra trạng thái và gửi duyệt chỗ nghỉ.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(110, 48),
-                      foregroundColor: AppColors.textPrimary,
-                      side: const BorderSide(color: AppColors.border),
-                      shape: const StadiumBorder(),
-                    ),
+                  IconButton(
+                    tooltip: 'Tải lại',
+                    constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                     onPressed: _loadingListings ? null : _fetchListings,
-                    icon: const Icon(LucideIcons.refreshCw, size: 16),
-                    label: const Text('Tải lại'),
+                    icon: const Icon(LucideIcons.refreshCw, size: 18),
                   ),
                   ElevatedButton.icon(
                     key: const Key('properties_add_new_btn'),
@@ -1804,42 +1867,40 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             const SizedBox(height: 16),
             _buildInlineError(
               _listingsError!,
+              borderless: true,
               onRetry: _fetchListings,
             ),
           ],
-          const SizedBox(height: 20),
-          _buildKpiGrid([
+          const Divider(height: 28, color: AppColors.border),
+          _buildPropertySummary([
             (
               label: 'Tổng chỗ nghỉ',
               value: '${_listings.length}',
-              sub: 'Tất cả trạng thái',
             ),
             (
               label: 'Đang hiển thị',
               value: '${counts['published'] ?? 0}',
-              sub: 'published',
             ),
             (
               label: 'Chờ duyệt',
               value: '${counts['pending_approval'] ?? 0}',
-              sub: 'pending_approval',
             ),
             (
-              label: 'Bản nháp / Ẩn / Từ chối',
+              label: 'Chưa hiển thị',
               value:
                   '${(counts['draft'] ?? 0) + (counts['hidden'] ?? 0) + (counts['rejected'] ?? 0)}',
-              sub: 'draft / hidden / rejected',
             ),
-          ]),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          ], borderless: true),
+          const Divider(height: 28, color: AppColors.border),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
             children: filterOptions.map((opt) {
               final selected = _listingStatusFilter == opt.$1;
-              return ChoiceChip(
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _HostUnderlineTab(
                 key: Key('listing_filter_${opt.$1}'),
-                shape: const StadiumBorder(),
                 label: Text(opt.$2),
                 selected: selected,
                 onSelected: (_) {
@@ -1849,44 +1910,39 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   });
                   _fetchListings();
                 },
+                ),
               );
             }).toList(),
+            ),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              const Text(
-                'Sắp xếp:',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              ...sortOptions.map((opt) {
-                return ChoiceChip(
-                  key: Key('listing_sort_${opt.$1}'),
-                  shape: const StadiumBorder(),
-                  label: Text(opt.$2),
-                  selected: _listingSortBy == opt.$1,
-                  onSelected: (_) => setState(() => _listingSortBy = opt.$1),
-                );
-              }),
-            ],
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              key: const Key('listing_sort_dropdown'),
+              isExpanded: true,
+              value: _listingSortBy,
+              items: sortOptions.map((opt) => DropdownMenuItem(
+                value: opt.$1,
+                child: Text('Sắp xếp: ${opt.$2}'),
+              )).toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _listingSortBy = value);
+              },
+            ),
           ),
-          const SizedBox(height: 16),
+          const Divider(height: 28, color: AppColors.border),
           if (_loadingListings)
             const Padding(
               padding: EdgeInsets.all(32),
               child: Center(child: CircularProgressIndicator()),
             )
           else if (sortedListings.isEmpty)
-            _buildEmptyBox('Chưa có chỗ nghỉ phù hợp bộ lọc.')
+            _buildEmptyBox('Chưa có chỗ nghỉ phù hợp bộ lọc.', borderless: true)
           else ...[
-            ...visibleListings.map(_buildListingCard),
+            for (var i = 0; i < visibleListings.length; i++) ...[
+              if (i > 0) const Divider(height: 28, color: AppColors.border),
+              _buildListingCard(visibleListings[i]),
+            ],
             if (sortedListings.length > visibleListings.length)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -1895,7 +1951,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(160, 48),
                     foregroundColor: AppColors.textPrimary,
-                    side: const BorderSide(color: AppColors.border),
+                    side: BorderSide.none,
                     shape: const StadiumBorder(),
                   ),
                   onPressed: () {
@@ -1942,11 +1998,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     return Container(
       key: Key('host_listing_item_$id'),
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 16),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
+
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2044,7 +2100,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(88, 48),
                   foregroundColor: AppColors.textPrimary,
-                  side: const BorderSide(color: AppColors.border),
+                  side: BorderSide.none,
                   shape: const StadiumBorder(),
                 ),
                 onPressed: isBusy
@@ -2082,7 +2138,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(110, 48),
                     foregroundColor: AppColors.textPrimary,
-                    side: const BorderSide(color: AppColors.border),
+                    side: BorderSide.none,
                     shape: const StadiumBorder(),
                   ),
                   onPressed: isBusy
@@ -2103,7 +2159,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(88, 48),
                     foregroundColor: AppColors.textPrimary,
-                    side: const BorderSide(color: AppColors.border),
+                    side: BorderSide.none,
                     shape: const StadiumBorder(),
                   ),
                   onPressed: isBusy
@@ -2138,7 +2194,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(88, 48),
                   foregroundColor: const Color(0xFFBE123C),
-                  side: const BorderSide(color: Color(0xFFFECDD3)),
+                  side: BorderSide.none,
                   shape: const StadiumBorder(),
                 ),
                 onPressed:
@@ -2174,7 +2230,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     const filterTabs = [
       ('all', 'Tất cả'),
       ('pending_payment', 'Chờ thanh toán'),
-      ('paid', 'Thanh toán thành công'),
+      ('paid', 'Đã thanh toán'),
       ('confirmed', 'Đã xác nhận'),
       ('checked_in', 'Đã nhận phòng'),
       ('checked_out', 'Đã trả phòng'),
@@ -2184,8 +2240,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
     const sortOptions = [
       ('newest', 'Mới nhất'),
-      ('checkin_asc', 'Nhận phòng gần nhất'),
-      ('total_desc', 'Tổng tiền cao nhất'),
+      ('checkin_asc', 'Sắp nhận phòng'),
+      ('total_desc', 'Giá cao nhất'),
     ];
 
     final filtered = _bookings
@@ -2225,43 +2281,16 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 12,
+          Row(
             children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Quản lý đặt phòng',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Xác nhận, Check-in, Check-out và theo dõi trạng thái thanh toán.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(110, 48),
-                  foregroundColor: AppColors.textPrimary,
-                  side: const BorderSide(color: AppColors.border),
-                  shape: const StadiumBorder(),
-                ),
+              const Expanded(child: Text('Đặt phòng', style: TextStyle(
+                fontSize: 22, fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ))),
+              IconButton.outlined(
+                tooltip: 'Tải lại',
                 onPressed: _loadingBookings ? null : _fetchBookings,
-                icon: const Icon(LucideIcons.refreshCw, size: 16),
-                label: const Text('Tải lại'),
+                icon: const Icon(LucideIcons.refreshCw, size: 18),
               ),
             ],
           ),
@@ -2277,45 +2306,39 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             _buildInlineSuccess(_bookingsSuccess!),
           ],
           const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: filterTabs.map((tab) {
-              return ChoiceChip(
-                key: Key('booking_filter_${tab.$1}'),
-                shape: const StadiumBorder(),
-                label: Text(tab.$2),
-                selected: _bookingStatusFilter == tab.$1,
-                onSelected: (_) => setState(() {
-                  _bookingStatusFilter = tab.$1;
-                  _bookingsVisibleCount = 10;
-                }),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Row(
             children: [
-              const Text(
-                'Sắp xếp:',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              ...sortOptions.map((opt) {
-                return ChoiceChip(
+              Expanded(child: _buildPortalDropdown<String>(
+                dropdownKey: const Key('booking_filter_dropdown'),
+                label: 'Trạng thái',
+                value: _bookingStatusFilter,
+                items: filterTabs.map((tab) => DropdownMenuItem(
+                  key: Key('booking_filter_${tab.$1}'),
+                  value: tab.$1,
+                  child: Text(tab.$2, overflow: TextOverflow.ellipsis),
+                )).toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    _bookingStatusFilter = value;
+                    _bookingsVisibleCount = 10;
+                  });
+                },
+              )),
+              const SizedBox(width: 10),
+              Expanded(child: _buildPortalDropdown<String>(
+                dropdownKey: const Key('booking_sort_dropdown'),
+                label: 'Sắp xếp',
+                value: _bookingSortBy,
+                items: sortOptions.map((opt) => DropdownMenuItem(
                   key: Key('booking_sort_${opt.$1}'),
-                  shape: const StadiumBorder(),
-                  label: Text(opt.$2),
-                  selected: _bookingSortBy == opt.$1,
-                  onSelected: (_) => setState(() => _bookingSortBy = opt.$1),
-                );
-              }),
+                  value: opt.$1,
+                  child: Text(opt.$2, overflow: TextOverflow.ellipsis),
+                )).toList(),
+                onChanged: (value) {
+                  if (value != null) setState(() => _bookingSortBy = value);
+                },
+              )),
             ],
           ),
           const SizedBox(height: 16),
@@ -2343,7 +2366,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     setState(() => _bookingsVisibleCount += 10);
                   },
                   child: Text(
-                    'Xem thêm (${filtered.length - visibleBookings.length} booking)',
+                    'Xem thêm (${filtered.length - visibleBookings.length} đặt phòng)',
                   ),
                 ),
               ),
@@ -2351,6 +2374,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
         ],
       ),
     );
+  }
+
+  String _formatBookingDate(String value) {
+    final date = DateTime.tryParse(value);
+    return date == null ? value : DateFormat('dd/MM/yyyy').format(date);
   }
 
   Widget _buildBookingItemCard(Map<String, dynamic> booking) {
@@ -2361,7 +2389,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     final guestPhone =
         (booking['guestPhone'] ?? booking['guestEmail'] ?? '').toString();
     final listingTitle =
-        (booking['listingTitle'] ?? 'Listing #${booking['listingId'] ?? ''}')
+        (booking['listingTitle'] ?? 'Chỗ nghỉ #${booking['listingId'] ?? ''}')
             .toString();
     final checkIn = (booking['checkInDate'] ?? '').toString().split('T').first;
     final checkOut =
@@ -2406,22 +2434,46 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            'Khách: $guestName${guestPhone.isNotEmpty ? ' ($guestPhone)' : ''} • $guestsCount khách',
-            style: const TextStyle(
-              fontSize: 13,
-              color: AppColors.textSecondary,
-            ),
+          Row(
+            children: [
+              const Icon(LucideIcons.users, size: 16, color: AppColors.textSecondary),
+              const SizedBox(width: 8),
+              Expanded(child: Text('$guestName · $guestsCount khách',
+                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              )),
+              if (guestPhone.isNotEmpty)
+                IconButton(
+                  tooltip: 'Liên hệ khách',
+                  icon: const Icon(LucideIcons.userRound, size: 18),
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: Text(guestName),
+                      content: SelectableText(guestPhone),
+                      actions: [TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Đóng'),
+                      )],
+                    ),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Lưu trú: $checkIn → $checkOut • Tổng tiền: ${formatHostVnd(totalPrice)}',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(LucideIcons.calendar, size: 16, color: AppColors.textSecondary),
+              const SizedBox(width: 8),
+              Expanded(child: Text(
+                '${_formatBookingDate(checkIn)} → ${_formatBookingDate(checkOut)}',
+                style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+              )),
+            ],
           ),
+          const SizedBox(height: 12),
+          Text(formatHostVnd(totalPrice), style: const TextStyle(
+            fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textPrimary,
+          )),
           if (actions.hasAnyAction) ...[
             const SizedBox(height: 12),
             Wrap(
@@ -2500,27 +2552,326 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   }
 
   // ===========================================================================
-  // 5. CALENDAR (`LichLuuTru`) SECTION
+  // 5. CALENDAR (`LichLuuTru`) SECTION — AIRBNB HOST STYLE & PERSONAL OPTIMIZATION
   // ===========================================================================
 
+  double _getListingBasePrice(String listingId) {
+    for (final l in _listings) {
+      if ('${l['listingId'] ?? l['id']}' == listingId) {
+        final p = l['basePrice'] ?? l['pricePerNight'] ?? 0;
+        return p is num ? p.toDouble() : (double.tryParse('$p') ?? 0);
+      }
+    }
+    return 0;
+  }
+
+  void _applyPricePreset(double multiplier) {
+    final basePrice = _getListingBasePrice(_calendarListingId ?? '');
+    final newPrice = (basePrice * multiplier).round();
+    setState(() {
+      _calendarPriceOverrideCtrl.text = '$newPrice';
+    });
+  }
+
+  void _selectWeekendDays() {
+    setState(() {
+      for (final d in _calendarDays) {
+        final parsed = DateTime.tryParse(d.date);
+        if (parsed != null &&
+            (parsed.weekday == DateTime.saturday ||
+                parsed.weekday == DateTime.sunday)) {
+          final isBooked =
+              d.bookingStatus != null && d.bookingStatus!.isNotEmpty;
+          if (!isBooked) {
+            _selectedCalendarDates.add(d.date);
+          }
+        }
+      }
+    });
+  }
+
+  void _selectAvailableDays() {
+    setState(() {
+      for (final d in _calendarDays) {
+        final isBooked =
+            d.bookingStatus != null && d.bookingStatus!.isNotEmpty;
+        final isBlocked = !d.isAvailable || d.isBlockedByHost;
+        if (!isBooked && !isBlocked) {
+          _selectedCalendarDates.add(d.date);
+        }
+      }
+    });
+  }
+
+  void _selectAllMonthDays() {
+    setState(() {
+      for (final d in _calendarDays) {
+        final isBooked =
+            d.bookingStatus != null && d.bookingStatus!.isNotEmpty;
+        if (!isBooked) {
+          _selectedCalendarDates.add(d.date);
+        }
+      }
+    });
+  }
+
+  void _clearSelectedDays() {
+    setState(() {
+      _selectedCalendarDates.clear();
+    });
+  }
+
+  void _prevMonth() {
+    setState(() {
+      if (_calendarMonth == 1) {
+        _calendarMonth = 12;
+        _calendarYear--;
+      } else {
+        _calendarMonth--;
+      }
+    });
+    _fetchCalendarDays();
+  }
+
+  void _nextMonth() {
+    setState(() {
+      if (_calendarMonth == 12) {
+        _calendarMonth = 1;
+        _calendarYear++;
+      } else {
+        _calendarMonth++;
+      }
+    });
+    _fetchCalendarDays();
+  }
+
+  void _goToCurrentMonth() {
+    final vnNow = DateTime.now().toUtc().add(const Duration(hours: 7));
+    setState(() {
+      _calendarMonth = vnNow.month;
+      _calendarYear = vnNow.year;
+    });
+    _fetchCalendarDays();
+  }
+
+  Widget _buildListingCalendarDotMatrix(Map<String, dynamic> listing) {
+    final listingId =
+        (listing['listingId'] ?? listing['id'] ?? '').toString();
+    final today = DateTime.now();
+
+    final bookedDateStrings = <String>{};
+    for (final b in _bookings) {
+      final bListingId =
+          (b['listingId'] ?? b['listing_id'] ?? b['id'] ?? '').toString();
+      final status = (b['status'] ?? '').toString().toLowerCase();
+      if (bListingId == listingId && status != 'cancelled') {
+        final checkInStr =
+            (b['checkInDate'] ?? b['check_in'] ?? '').toString().split('T').first;
+        final checkOutStr =
+            (b['checkOutDate'] ?? b['check_out'] ?? '').toString().split('T').first;
+        final checkIn = DateTime.tryParse(checkInStr);
+        final checkOut = DateTime.tryParse(checkOutStr);
+        if (checkIn != null && checkOut != null) {
+          for (var d = checkIn;
+              d.isBefore(checkOut);
+              d = d.add(const Duration(days: 1))) {
+            bookedDateStrings.add(DateFormat('yyyy-MM-dd').format(d));
+          }
+        }
+      }
+    }
+
+    if (listingId == _calendarListingId && _calendarDays.isNotEmpty) {
+      for (final d in _calendarDays) {
+        if (d.bookingStatus != null && d.bookingStatus!.isNotEmpty) {
+          bookedDateStrings.add(d.date);
+        }
+      }
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (var row = 0; row < 4; row++)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2.5),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var col = 0; col < 7; col++) ...[
+                  if (col > 0) const SizedBox(width: 4.5),
+                  () {
+                    final dayOffset = row * 7 + col;
+                    final targetDate = today.add(Duration(days: dayOffset));
+                    final dateStr =
+                        DateFormat('yyyy-MM-dd').format(targetDate);
+                    final isBooked = bookedDateStrings.contains(dateStr);
+
+                    final dotColor = isBooked
+                        ? const Color(0xFFE11D48)
+                        : const Color(0xFF64748B);
+
+                    return Container(
+                      width: 5.5,
+                      height: 5.5,
+                      decoration: BoxDecoration(
+                        color: dotColor,
+                        shape: BoxShape.circle,
+                      ),
+                    );
+                  }(),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildCalendarSection() {
+    if (_calendarShowListingList) {
+      return _buildCalendarAirbnbListingView();
+    }
+    return _buildCalendarDetailedMonthView();
+  }
+
+  Widget _buildCalendarAirbnbListingView() {
+    final query = _calendarSearchQuery.trim().toLowerCase();
+    final filtered = _listings.where((l) {
+      final status = (l['status'] ?? '').toString();
+      if (_calendarListingFilter == 'published' && status != 'published') {
+        return false;
+      }
+      if (_calendarListingFilter == 'hidden' && status == 'published') {
+        return false;
+      }
+      if (query.isEmpty) return true;
+      final title = (l['title'] ?? '').toString().toLowerCase();
+      final address = '${l['addressLine'] ?? ''} ${l['city'] ?? ''}'.toLowerCase();
+      return title.contains(query) || address.contains(query);
+    }).toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Lịch lưu trú & Giá theo ngày',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-            ),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Lịch',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Tổng quan lịch chỗ nghỉ & tình trạng phòng',
+                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Tìm kiếm',
+                    onPressed: () {
+                      setState(() {
+                        _calendarSearchVisible = !_calendarSearchVisible;
+                      });
+                    },
+                    icon: Icon(
+                      _calendarSearchVisible ? LucideIcons.x : LucideIcons.search,
+                      size: 20,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  if (_calendarListingId != null) ...[
+                    const SizedBox(width: 4),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(color: AppColors.primary),
+                      ),
+                      onPressed: () {
+                        setState(() => _calendarShowListingList = false);
+                        _fetchCalendarDays();
+                      },
+                      icon: const Icon(LucideIcons.calendarDays, size: 15),
+                      label: const Text('Xem lịch chi tiết',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ],
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Khóa/mở ngày trống và thiết lập giá riêng cho từng ngày qua /api/host/listings/:id/calendar.',
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          if (_calendarSearchVisible) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _calendarSearchCtrl,
+              onChanged: (val) => setState(() => _calendarSearchQuery = val),
+              decoration: InputDecoration(
+                hintText: 'Tìm theo tên hoặc địa chỉ chỗ nghỉ...',
+                prefixIcon: const Icon(LucideIcons.search, size: 18),
+                suffixIcon: _calendarSearchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(LucideIcons.x, size: 16),
+                        onPressed: () {
+                          _calendarSearchCtrl.clear();
+                          setState(() => _calendarSearchQuery = '');
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: AppColors.surfaceBase,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _HostUnderlineTab(
+                label: Text('Tất cả (${_listings.length})'),
+                selected: _calendarListingFilter == 'all',
+                onSelected: (_) => setState(() => _calendarListingFilter = 'all'),
+              ),
+              _HostUnderlineTab(
+                label: const Text('Đang hiển thị'),
+                selected: _calendarListingFilter == 'published',
+                onSelected: (_) =>
+                    setState(() => _calendarListingFilter = 'published'),
+              ),
+              _HostUnderlineTab(
+                label: const Text('Tạm ẩn / Khác'),
+                selected: _calendarListingFilter == 'hidden',
+                onSelected: (_) =>
+                    setState(() => _calendarListingFilter = 'hidden'),
+              ),
+            ],
           ),
           if (_calendarError != null) ...[
             const SizedBox(height: 16),
@@ -2534,87 +2885,472 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             _buildInlineSuccess(_calendarSuccess!),
           ],
           const SizedBox(height: 16),
+          if (_loadingListings)
+            const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (filtered.isEmpty)
+            _buildEmptyBox('Không tìm thấy chỗ nghỉ nào phù hợp.')
+          else
+            ...filtered.map((listing) {
+              final id =
+                  (listing['listingId'] ?? listing['id'] ?? '').toString();
+              final title = (listing['title'] ?? 'Chỗ nghỉ #$id').toString();
+              final statusEnum =
+                  HostListingStatus.fromApi(listing['status']);
+              final basePrice =
+                  listing['basePrice'] ?? listing['pricePerNight'] ?? 0;
+              final imageUrl = (listing['imageUrl'] ??
+                      listing['coverImageUrl'] ??
+                      '')
+                  .toString();
+
+              String statusTextVi;
+              switch (statusEnum) {
+                case HostListingStatus.published:
+                  statusTextVi = 'Đang hiển thị';
+                  break;
+                case HostListingStatus.hidden:
+                  statusTextVi = 'Đã hủy đăng';
+                  break;
+                case HostListingStatus.pendingApproval:
+                  statusTextVi = 'Chờ duyệt';
+                  break;
+                case HostListingStatus.rejected:
+                  statusTextVi = 'Bị từ chối';
+                  break;
+                case HostListingStatus.draft:
+                  statusTextVi = 'Bản nháp';
+                  break;
+              }
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceBase,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () {
+                    setState(() {
+                      _calendarListingId = id;
+                      _calendarShowListingList = false;
+                    });
+                    _fetchCalendarDays();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: imageUrl.isNotEmpty
+                              ? Image.network(
+                                  imageUrl,
+                                  width: 76,
+                                  height: 76,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      _buildNoImagePlaceholder(),
+                                )
+                              : _buildNoImagePlaceholder(),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                statusTextVi,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${formatHostVnd(basePrice)}/đêm',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        _buildListingCalendarDotMatrix(listing),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // AIRBNB HOST CALENDAR PERSONALIZATION HELPERS
+  // ===========================================================================
+
+  String _formatSelectedDateRangeLabel() {
+    if (_selectedCalendarDates.isEmpty) return '';
+    final sorted = _selectedCalendarDates.toList()..sort();
+    if (sorted.length == 1) {
+      final dt = DateTime.tryParse(sorted.first);
+      if (dt != null) {
+        return '${dt.day} thg ${dt.month} (1 ngày đã chọn)';
+      }
+      return '${sorted.first} (1 ngày đã chọn)';
+    }
+    final firstDt = DateTime.tryParse(sorted.first);
+    final lastDt = DateTime.tryParse(sorted.last);
+    if (firstDt != null && lastDt != null) {
+      final diffDays = lastDt.difference(firstDt).inDays;
+      if (diffDays == sorted.length - 1) {
+        if (firstDt.month == lastDt.month) {
+          return '${firstDt.day} – ${lastDt.day} thg ${firstDt.month}';
+        } else {
+          return '${firstDt.day}/${firstDt.month} – ${lastDt.day}/${lastDt.month}';
+        }
+      }
+    }
+    return '${sorted.length} ngày đã chọn';
+  }
+
+  String _formatSelectedPriceRange() {
+    if (_selectedCalendarDates.isEmpty) return '';
+    final selectedDays = _calendarDays
+        .where((d) => _selectedCalendarDates.contains(d.date))
+        .toList();
+    if (selectedDays.isEmpty) {
+      final basePrice = _getListingBasePrice(_calendarListingId ?? '');
+      return formatHostVnd(basePrice);
+    }
+    double minPrice = selectedDays.first.effectivePrice;
+    double maxPrice = selectedDays.first.effectivePrice;
+    for (final d in selectedDays) {
+      if (d.effectivePrice < minPrice) minPrice = d.effectivePrice;
+      if (d.effectivePrice > maxPrice) maxPrice = d.effectivePrice;
+    }
+    if (minPrice == maxPrice) {
+      return formatHostVnd(minPrice);
+    }
+    return '${formatHostVnd(minPrice)} – ${formatHostVnd(maxPrice)}';
+  }
+
+  bool _areAllSelectedAvailable() {
+    final selectedDays = _calendarDays
+        .where((d) => _selectedCalendarDates.contains(d.date))
+        .toList();
+    if (selectedDays.isEmpty) return true;
+    return selectedDays.every((d) => d.isAvailable && !d.isBlockedByHost);
+  }
+
+  Widget _buildCalendarDetailedMonthView() {
+    final activeBasePrice =
+        _getListingBasePrice(_calendarListingId ?? '');
+
+    final totalDaysInMonth =
+        DateTime(_calendarYear, _calendarMonth + 1, 0).day;
+    final bookedDays = _calendarDays
+        .where((d) => d.bookingStatus != null && d.bookingStatus!.isNotEmpty)
+        .length;
+    final occupancyPercent = totalDaysInMonth > 0
+        ? ((bookedDays / totalDaysInMonth) * 100).round()
+        : 0;
+
+    double estRevenue = 0;
+    for (final d in _calendarDays) {
+      if (d.bookingStatus != null && d.bookingStatus!.isNotEmpty) {
+        estRevenue += d.effectivePrice;
+      }
+    }
+    final avgPrice = _calendarDays.isNotEmpty
+        ? (_calendarDays.fold<double>(0, (s, d) => s + d.effectivePrice) /
+                _calendarDays.length)
+            .round()
+        : activeBasePrice.round();
+
+    final firstDayOfWeek =
+        DateTime(_calendarYear, _calendarMonth, 1).weekday; // 1: T2 -> 7: CN
+    final leadOffset = firstDayOfWeek - 1;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. Header: Back button + Large Title ONLY (No small subtitle text as requested!)
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  side: const BorderSide(color: AppColors.border),
+                  foregroundColor: AppColors.textPrimary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () =>
+                    setState(() => _calendarShowListingList = true),
+                icon: const Icon(LucideIcons.arrowLeft, size: 16),
+                label: const Text(
+                  'Tất cả chỗ nghỉ',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ),
+              const Text(
+                'Lịch lưu trú & Giá theo ngày',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Compact Listing Selector Dropdown
+          _buildPortalDropdown<String>(
+            dropdownKey: const Key('calendar_listing_dropdown'),
+            label: 'Chỗ nghỉ đang chọn',
+            value: _listings.any(
+              (l) => '${l['listingId'] ?? l['id']}' == _calendarListingId,
+            )
+                ? _calendarListingId
+                : null,
+            items: _listings.map((l) {
+              final id = '${l['listingId'] ?? l['id']}';
+              final title = (l['title'] ?? 'Listing #$id').toString();
+              return DropdownMenuItem<String>(
+                value: id,
+                child: Text(title, overflow: TextOverflow.ellipsis),
+              );
+            }).toList(),
+            onChanged: (val) {
+              if (val == null) return;
+              setState(() => _calendarListingId = val);
+              _fetchCalendarDays();
+            },
+          ),
+          const SizedBox(height: 10),
+          // 2. Ultra-Compact Mini KPI Strip (Lấp đầy, Dự kiến, Giá TB)
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.surfaceBase,
-              borderRadius: BorderRadius.circular(24),
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppColors.border),
             ),
-            child: Column(
-              children: [
-                _buildPortalDropdown<String>(
-                  dropdownKey: const Key('calendar_listing_dropdown'),
-                  label: 'Chọn chỗ nghỉ',
-                  value: _listings.any(
-                    (l) => '${l['listingId'] ?? l['id']}' == _calendarListingId,
-                  )
-                      ? _calendarListingId
-                      : null,
-                  items: _listings.map((l) {
-                    final id = '${l['listingId'] ?? l['id']}';
-                    final title = (l['title'] ?? 'Listing #$id').toString();
-                    return DropdownMenuItem<String>(
-                      value: id,
-                      child: Text(title, overflow: TextOverflow.ellipsis),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val == null) return;
-                    setState(() => _calendarListingId = val);
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Lấp đầy',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$occupancyPercent%',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 12),
+                  Container(width: 1, height: 14, color: AppColors.border),
+                  const SizedBox(width: 12),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Dự kiến',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        formatCompactHostVnd(estRevenue),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF047857),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 12),
+                  Container(width: 1, height: 14, color: AppColors.border),
+                  const SizedBox(width: 12),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Giá TB',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${formatCompactHostVnd(avgPrice)}/đ',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_calendarError != null) ...[
+            const SizedBox(height: 10),
+            _buildInlineError(_calendarError!),
+          ],
+          if (_calendarSuccess != null) ...[
+            const SizedBox(height: 10),
+            _buildInlineSuccess(_calendarSuccess!),
+          ],
+          const SizedBox(height: 12),
+          // 3. Month & Year Navigation Row (Airbnb style: 'thg M YYYY')
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              Text(
+                'thg $_calendarMonth $_calendarYear',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Tháng trước',
+                    onPressed: _prevMonth,
+                    icon: const Icon(LucideIcons.chevronLeft, size: 18),
+                  ),
+                  IconButton(
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Tháng sau',
+                    onPressed: _nextMonth,
+                    icon: const Icon(LucideIcons.chevronRight, size: 18),
+                  ),
+                  TextButton(
+                    onPressed: _goToCurrentMonth,
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                    ),
+                    child: const Text('Hôm nay',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // Backward-compatible month/year dropdowns in a compact row
+          Row(
+            children: [
+              Expanded(
+                child: _buildPortalDropdown<int>(
+                  dropdownKey: const Key('calendar_month_dropdown'),
+                  label: 'Tháng',
+                  value: _calendarMonth,
+                  items: List.generate(
+                    12,
+                    (i) => DropdownMenuItem<int>(
+                      value: i + 1,
+                      child: Text('Tháng ${i + 1}',
+                          style: const TextStyle(fontSize: 12)),
+                    ),
+                  ),
+                  onChanged: (m) {
+                    if (m == null) return;
+                    setState(() => _calendarMonth = m);
                     _fetchCalendarDays();
                   },
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildPortalDropdown<int>(
-                        dropdownKey: const Key('calendar_month_dropdown'),
-                        label: 'Tháng',
-                        value: _calendarMonth,
-                        items: List.generate(
-                          12,
-                          (i) => DropdownMenuItem<int>(
-                            value: i + 1,
-                            child: Text('Tháng ${i + 1}'),
-                          ),
-                        ),
-                        onChanged: (m) {
-                          if (m == null) return;
-                          setState(() => _calendarMonth = m);
-                          _fetchCalendarDays();
-                        },
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPortalDropdown<int>(
+                  dropdownKey: const Key('calendar_year_dropdown'),
+                  label: 'Năm',
+                  value: _calendarYear,
+                  items: [
+                    for (var y = _calendarYear - 1;
+                        y <= _calendarYear + 2;
+                        y++)
+                      DropdownMenuItem<int>(
+                        value: y,
+                        child: Text('Năm $y',
+                            style: const TextStyle(fontSize: 12)),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildPortalDropdown<int>(
-                        dropdownKey: const Key('calendar_year_dropdown'),
-                        label: 'Năm',
-                        value: _calendarYear,
-                        items: [
-                          for (var y = _calendarYear - 1;
-                              y <= _calendarYear + 2;
-                              y++)
-                            DropdownMenuItem<int>(
-                              value: y,
-                              child: Text('Năm $y'),
-                            ),
-                        ],
-                        onChanged: (y) {
-                          if (y == null) return;
-                          setState(() => _calendarYear = y);
-                          _fetchCalendarDays();
-                        },
-                      ),
-                    ),
                   ],
+                  onChanged: (y) {
+                    if (y == null) return;
+                    setState(() => _calendarYear = y);
+                    _fetchCalendarDays();
+                  },
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           if (_loadingCalendar)
             const Padding(
               padding: EdgeInsets.all(32),
@@ -2623,252 +3359,775 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           else if (_calendarDays.isEmpty)
             _buildEmptyBox('Chưa có dữ liệu lịch lưu trú cho tháng đã chọn.')
           else ...[
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _calendarDays.map((day) {
-                final isSelected = _selectedCalendarDates.contains(day.date);
-                final isBooked = day.isBooked ||
-                    (day.bookingStatus != null &&
-                        day.bookingStatus!.isNotEmpty);
-                final isPast = day.isPast;
-                final isEditable = day.isEditable() && !isBooked && !isPast;
-                Color borderColor = AppColors.border;
-                Color bgColor = AppColors.surfaceBase;
-                if (isSelected) {
-                  borderColor = AppColors.primary;
-                  bgColor = AppColors.surfaceMuted;
-                } else if (isBooked) {
-                  bgColor = const Color(0xFFECFDF5);
-                } else if (isPast) {
-                  bgColor = const Color(0xFFF8FAFC);
-                } else if (!day.isAvailable || day.isBlockedByHost) {
-                  bgColor = const Color(0xFFFFF1F2);
-                }
-
-                return InkWell(
-                  key: Key('calendar_day_${day.date}'),
-                  borderRadius: BorderRadius.circular(18),
-                  onTap: () {
-                    if (!isEditable) {
-                      setState(() {
-                        _calendarError = isBooked
-                            ? 'Ngày ${day.date} đã có khách đặt phòng, không thể chỉnh sửa.'
-                            : 'Ngày ${day.date} đã qua hoặc không thuộc quyền chỉnh sửa.';
-                      });
-                      return;
-                    }
-                    setState(() {
-                      _calendarError = null;
-                      if (isSelected) {
-                        _selectedCalendarDates.remove(day.date);
-                      } else {
-                        _selectedCalendarDates.add(day.date);
-                      }
-                    });
-                  },
-                  child: Container(
-                    width: 112,
-                    constraints: const BoxConstraints(minHeight: 72),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: bgColor,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: borderColor,
-                        width: isSelected ? 1.5 : 1,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          day.date.split('-').last,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          formatHostVnd(day.effectivePrice),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          isBooked
-                              ? 'Đã đặt'
-                              : (isPast
-                                  ? 'Đã qua'
-                                  : (!day.isAvailable || day.isBlockedByHost
-                                      ? 'Đã khóa'
-                                      : 'Còn trống')),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: isBooked
-                                ? const Color(0xFF047857)
-                                : (isPast
-                                    ? AppColors.textSecondary
-                                    : (!day.isAvailable || day.isBlockedByHost
-                                        ? const Color(0xFFBE123C)
-                                        : AppColors.primary)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 20),
+            // 4. Compact 7-Column Calendar Grid (Fully fits ~30 days in one view)
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: AppColors.surfaceBase,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: AppColors.border),
               ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Cập nhật hàng loạt (${_selectedCalendarDates.length} ngày đã chọn)',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+                  // Weekday Header: T2, T3, T4, T5, T6, T7, CN
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        for (final t in [
+                          'T2',
+                          'T3',
+                          'T4',
+                          'T5',
+                          'T6',
+                          'T7',
+                          'CN'
+                        ])
+                          Expanded(
+                            child: Center(
+                              child: Text(
+                                t,
+                                style: TextStyle(
+                                  fontWeight: t == 'T7' || t == 'CN'
+                                      ? FontWeight.w700
+                                      : FontWeight.w600,
+                                  fontSize: 12,
+                                  color: t == 'T7' || t == 'CN'
+                                      ? AppColors.textPrimary
+                                      : AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isWide = constraints.maxWidth >= 560;
-                      final priceInput = TextField(
-                        key: const Key('calendar_price_override_input'),
-                        controller: _calendarPriceOverrideCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: 'Giá riêng ngày (VND)',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                      );
-                      final minNightsInput = TextField(
-                        key: const Key('calendar_min_nights_input'),
-                        controller: _calendarMinNightsCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: 'Số đêm tối thiểu riêng',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                      );
-                      if (isWide) {
-                        return Row(
-                          children: [
-                            Expanded(child: priceInput),
-                            const SizedBox(width: 12),
-                            Expanded(child: minNightsInput),
-                          ],
-                        );
+                  const Divider(height: 1, color: AppColors.border),
+                  const SizedBox(height: 6),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: leadOffset + _calendarDays.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 7,
+                      crossAxisSpacing: 4,
+                      mainAxisSpacing: 4,
+                      childAspectRatio: 0.82,
+                    ),
+                    itemBuilder: (context, index) {
+                      if (index < leadOffset) {
+                        return const SizedBox.shrink();
                       }
-                      return Column(
-                        children: [
-                          priceInput,
-                          const SizedBox(height: 12),
-                          minNightsInput,
-                        ],
+                      final day = _calendarDays[index - leadOffset];
+                      final isSelected =
+                          _selectedCalendarDates.contains(day.date);
+                      final isBooked = day.isBooked ||
+                          (day.bookingStatus != null &&
+                              day.bookingStatus!.isNotEmpty);
+                      final isPast = day.isPast;
+                      final isEditable =
+                          day.isEditable() && !isBooked && !isPast;
+                      final isBlocked =
+                          !day.isAvailable || day.isBlockedByHost;
+
+                      Color borderColor = const Color(0xFFE2E8F0);
+                      Color bgColor = Colors.white;
+                      Color dayNumColor = AppColors.textPrimary;
+                      Color priceColor = const Color(0xFF64748B);
+
+                      if (isSelected) {
+                        borderColor = AppColors.primary;
+                        bgColor = AppColors.primary;
+                        dayNumColor = Colors.white;
+                        priceColor = Colors.white;
+                      } else if (isBooked) {
+                        borderColor = const Color(0xFFA7F3D0);
+                        bgColor = const Color(0xFFF8FAFC);
+                        dayNumColor = const Color(0xFF64748B);
+                        priceColor = const Color(0xFF94A3B8);
+                      } else if (isBlocked) {
+                        borderColor = const Color(0xFFFECDD3);
+                        bgColor = const Color(0xFFFFF1F2);
+                        dayNumColor = const Color(0xFFBE123C);
+                        priceColor = const Color(0xFFBE123C);
+                      }
+
+                      return InkWell(
+                        key: Key('calendar_day_${day.date}'),
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () {
+                          if (!isEditable) {
+                            setState(() {
+                              _calendarError = isBooked
+                                  ? 'Ngày ${day.date} đã có khách đặt phòng, không thể chỉnh sửa.'
+                                  : 'Ngày ${day.date} đã qua hoặc không thuộc quyền chỉnh sửa.';
+                            });
+                            return;
+                          }
+                          setState(() {
+                            _calendarError = null;
+                            if (isSelected) {
+                              _selectedCalendarDates.remove(day.date);
+                            } else {
+                              _selectedCalendarDates.add(day.date);
+                              _calendarPriceOverrideCtrl.text =
+                                  '${day.effectivePrice.round()}';
+                            }
+                          });
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: bgColor,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: borderColor,
+                              width: isSelected ? 1.8 : 1,
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 1, vertical: 2),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                day.date.split('-').last.replaceFirst(RegExp(r'^0'), ''),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: dayNumColor,
+                                ),
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                formatCompactHostVnd(day.effectivePrice),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: priceColor,
+                                ),
+                              ),
+                              if (isBooked)
+                                Container(
+                                  margin: const EdgeInsets.only(top: 2),
+                                  width: 4,
+                                  height: 4,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF047857),
+                                    shape: BoxShape.circle,
+                                  ),
+                                )
+                              else if (isBlocked && !isSelected)
+                                Text(
+                                  'Khóa',
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w700,
+                                    color: isSelected
+                                        ? Colors.white70
+                                        : const Color(0xFFBE123C),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       );
                     },
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    key: const Key('calendar_notes_input'),
-                    controller: _calendarNotesCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Ghi chú ngày',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      ElevatedButton.icon(
-                        key: const Key('calendar_unlock_save_btn'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(150, 48),
-                          shape: const StadiumBorder(),
-                          elevation: 0,
-                        ),
-                        onPressed: _savingCalendar
-                            ? null
-                            : () => _applyBulkCalendarUpdate(
-                                  isAvailable: true,
-                                  isBlockedByHost: false,
-                                ),
-                        icon: const Icon(LucideIcons.calendarCheck, size: 16),
-                        label: const Text('Mở ngày & Lưu giá'),
-                      ),
-                      OutlinedButton.icon(
-                        key: const Key('calendar_lock_btn'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(140, 48),
-                          foregroundColor: const Color(0xFFBE123C),
-                          side: const BorderSide(color: Color(0xFFFECDD3)),
-                          shape: const StadiumBorder(),
-                        ),
-                        onPressed: _savingCalendar
-                            ? null
-                            : () => _applyBulkCalendarUpdate(
-                                  isAvailable: false,
-                                  isBlockedByHost: true,
-                                ),
-                        icon: const Icon(LucideIcons.lock, size: 16),
-                        label: const Text('Khóa ngày đã chọn'),
-                      ),
-                      OutlinedButton.icon(
-                        key: const Key('calendar_reset_price_btn'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(140, 48),
-                          foregroundColor: AppColors.textPrimary,
-                          side: const BorderSide(color: AppColors.border),
-                          shape: const StadiumBorder(),
-                        ),
-                        onPressed: _savingCalendar
-                            ? null
-                            : () => _applyBulkCalendarUpdate(
-                                  isAvailable: true,
-                                  isBlockedByHost: false,
-                                  resetPriceOverride: true,
-                                ),
-                        icon: const Icon(LucideIcons.rotateCcw, size: 16),
-                        label: const Text('Xóa giá ghi đè'),
-                      ),
-                    ],
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: 10),
+            // Quick Date Selectors Row
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      side: const BorderSide(color: AppColors.border),
+                      foregroundColor: AppColors.textPrimary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    onPressed: _selectWeekendDays,
+                    icon: const Icon(
+                      LucideIcons.calendar,
+                      size: 13,
+                      color: AppColors.iconStrong,
+                    ),
+                    label: const Text('Cuối tuần (T7, CN)',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      side: const BorderSide(color: AppColors.border),
+                      foregroundColor: AppColors.textPrimary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    onPressed: _selectAvailableDays,
+                    icon: const Icon(
+                      LucideIcons.calendarCheck,
+                      size: 13,
+                      color: AppColors.iconStrong,
+                    ),
+                    label: const Text('Ngày còn trống',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      side: const BorderSide(color: AppColors.border),
+                      foregroundColor: AppColors.textPrimary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    onPressed: _selectAllMonthDays,
+                    icon: const Icon(
+                      LucideIcons.calendarRange,
+                      size: 13,
+                      color: AppColors.iconStrong,
+                    ),
+                    label: const Text('Cả tháng',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                  if (_selectedCalendarDates.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 6),
+                        foregroundColor: AppColors.textSecondary,
+                      ),
+                      onPressed: _clearSelectedDays,
+                      icon: const Icon(LucideIcons.rotateCcw, size: 13),
+                      label: const Text('Bỏ chọn',
+                          style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            // 5. AIRBNB FLOATING ACTION PANEL: Only visible when days are selected!
+            if (_selectedCalendarDates.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceBase,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: AppColors.border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Top Row: Selected date pill & Close button
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                       children: [
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceElevated,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: Text(
+                              _formatSelectedDateRangeLabel(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(999),
+                          onTap: _clearSelectedDays,
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceElevated,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: const Icon(
+                              LucideIcons.x,
+                              size: 16,
+                              color: AppColors.iconStrong,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Main Action Cards
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isWide = constraints.maxWidth >= 540;
+                        final allAvailable = _areAllSelectedAvailable();
+
+                        // Left Card: Status (Còn trống / Đã khóa) + Toggle X and V buttons
+                        final leftCard = Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceElevated,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    allAvailable ? 'Còn trống' : 'Đã khóa',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: allAvailable
+                                          ? const Color(0xFF10B981)
+                                          : const Color(0xFFBE123C),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 18),
+                              // Pill with Block (X) and Unlock (V)
+                              Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceBase,
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(color: AppColors.border),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    InkWell(
+                                      key: const Key('calendar_lock_btn'),
+                                      borderRadius:
+                                          BorderRadius.circular(999),
+                                      onTap: _savingCalendar
+                                          ? null
+                                          : () => _applyBulkCalendarUpdate(
+                                                isAvailable: false,
+                                                isBlockedByHost: true,
+                                              ),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 14, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: !allAvailable
+                                              ? AppColors.textStrong
+                                              : Colors.transparent,
+                                          borderRadius:
+                                              BorderRadius.circular(999),
+                                        ),
+                                        child: Icon(
+                                          LucideIcons.x,
+                                          size: 18,
+                                          color: !allAvailable
+                                              ? Colors.white
+                                              : AppColors.iconStrong,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      width: 1,
+                                      height: 16,
+                                      color: AppColors.border,
+                                    ),
+                                    InkWell(
+                                      key: const Key('calendar_unlock_save_btn'),
+                                      borderRadius:
+                                          BorderRadius.circular(999),
+                                      onTap: _savingCalendar
+                                          ? null
+                                          : () => _applyBulkCalendarUpdate(
+                                                isAvailable: true,
+                                                isBlockedByHost: false,
+                                              ),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: allAvailable
+                                              ? AppColors.textStrong
+                                              : Colors.transparent,
+                                          borderRadius:
+                                              BorderRadius.circular(999),
+                                        ),
+                                        child: Icon(
+                                          LucideIcons.check,
+                                          size: 18,
+                                          color: allAvailable
+                                              ? Colors.white
+                                              : AppColors.iconStrong,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+
+                        // Right Card: New Price & Custom Settings
+                        final rightCard = Column(
+                          children: [
+                            // Card: New Price for listing
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceElevated,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Giá mới cho chỗ ở cho thuê',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          _formatSelectedPriceRange(),
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        visualDensity: VisualDensity.compact,
+                                        padding: EdgeInsets.zero,
+                                        icon: Icon(
+                                          _showCalendarPriceEditor
+                                              ? LucideIcons.chevronUp
+                                              : LucideIcons.pencil,
+                                          size: 16,
+                                          color: AppColors.iconStrong,
+                                        ),
+                                        onPressed: () => setState(() =>
+                                            _showCalendarPriceEditor =
+                                                !_showCalendarPriceEditor),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  // Quick Price Presets
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: [
+                                      ActionChip(
+                                        visualDensity: VisualDensity.compact,
+                                        backgroundColor: AppColors.surfaceBase,
+                                        shape: const StadiumBorder(),
+                                        side: const BorderSide(
+                                            color: AppColors.border),
+                                        label: const Text('+10%',
+                                            style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.textPrimary)),
+                                        onPressed: () =>
+                                            _applyPricePreset(1.1),
+                                      ),
+                                      ActionChip(
+                                        visualDensity: VisualDensity.compact,
+                                        backgroundColor: AppColors.surfaceBase,
+                                        shape: const StadiumBorder(),
+                                        side: const BorderSide(
+                                            color: AppColors.border),
+                                        label: const Text(
+                                            '+20% (Cuối tuần/Lễ)',
+                                            style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.textPrimary)),
+                                        onPressed: () =>
+                                            _applyPricePreset(1.2),
+                                      ),
+                                      ActionChip(
+                                        visualDensity: VisualDensity.compact,
+                                        backgroundColor: AppColors.surfaceBase,
+                                        shape: const StadiumBorder(),
+                                        side: const BorderSide(
+                                            color: AppColors.border),
+                                        label: const Text('Giá gốc',
+                                            style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.textPrimary)),
+                                        onPressed: () =>
+                                            _applyPricePreset(1.0),
+                                      ),
+                                    ],
+                                  ),
+                                  if (_showCalendarPriceEditor) ...[
+                                    const SizedBox(height: 8),
+                                    TextField(
+                                      key: const Key(
+                                          'calendar_price_override_input'),
+                                      controller: _calendarPriceOverrideCtrl,
+                                      keyboardType: TextInputType.number,
+                                      style: const TextStyle(
+                                          color: AppColors.textPrimary,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13),
+                                      decoration: InputDecoration(
+                                        labelText: 'Nhập giá riêng (VND)',
+                                        labelStyle: const TextStyle(
+                                            color: AppColors.textSecondary,
+                                            fontSize: 12),
+                                        isDense: true,
+                                        filled: true,
+                                        fillColor: AppColors.surfaceBase,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 10),
+                                        border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide: const BorderSide(
+                                              color: AppColors.border),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide: const BorderSide(
+                                              color: AppColors.border),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide: const BorderSide(
+                                              color: AppColors.textStrong,
+                                              width: 1.5),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            // Card: Custom settings expandable
+                            InkWell(
+                              borderRadius: BorderRadius.circular(20),
+                              onTap: () => setState(() =>
+                                  _showCalendarCustomSettings =
+                                      !_showCalendarCustomSettings),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceElevated,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: AppColors.border),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text(
+                                          'Cài đặt tùy chỉnh',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                        Icon(
+                                          _showCalendarCustomSettings
+                                              ? LucideIcons.minus
+                                              : LucideIcons.plus,
+                                          size: 16,
+                                          color: AppColors.iconStrong,
+                                        ),
+                                      ],
+                                    ),
+                                    if (_showCalendarCustomSettings) ...[
+                                      const SizedBox(height: 10),
+                                      TextField(
+                                        key: const Key(
+                                            'calendar_min_nights_input'),
+                                        controller: _calendarMinNightsCtrl,
+                                        keyboardType: TextInputType.number,
+                                        style: const TextStyle(
+                                            color: AppColors.textPrimary,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13),
+                                        decoration: InputDecoration(
+                                          labelText: 'Số đêm tối thiểu',
+                                          labelStyle: const TextStyle(
+                                              color: AppColors.textSecondary,
+                                              fontSize: 12),
+                                          isDense: true,
+                                          filled: true,
+                                          fillColor: AppColors.surfaceBase,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 12,
+                                                  vertical: 10),
+                                          border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            borderSide: const BorderSide(
+                                                color: AppColors.border),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            borderSide: const BorderSide(
+                                                color: AppColors.border),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            borderSide: const BorderSide(
+                                                color: AppColors.textStrong,
+                                                width: 1.5),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      TextField(
+                                        key: const Key(
+                                            'calendar_notes_input'),
+                                        controller: _calendarNotesCtrl,
+                                        style: const TextStyle(
+                                            color: AppColors.textPrimary,
+                                            fontSize: 13),
+                                        decoration: InputDecoration(
+                                          labelText: 'Ghi chú ngày',
+                                          labelStyle: const TextStyle(
+                                              color: AppColors.textSecondary,
+                                              fontSize: 12),
+                                          isDense: true,
+                                          filled: true,
+                                          fillColor: AppColors.surfaceBase,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 12,
+                                                  vertical: 10),
+                                          border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            borderSide: const BorderSide(
+                                                color: AppColors.border),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            borderSide: const BorderSide(
+                                                color: AppColors.border),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            borderSide: const BorderSide(
+                                                color: AppColors.textStrong,
+                                                width: 1.5),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+
+                        if (isWide) {
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: leftCard),
+                              const SizedBox(width: 10),
+                              Expanded(child: rightCard),
+                            ],
+                          );
+                        }
+                        return Column(
+                          children: [
+                            leftCard,
+                            const SizedBox(height: 8),
+                            rightCard,
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ],
       ),
     );
   }
-
   // ===========================================================================
   // 6. GUESTS (`KhachLuuTru`) SECTION
   // ===========================================================================
@@ -2975,9 +4234,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               ('bookings_desc', 'Nhiều lượt đặt nhất'),
               ('name_asc', 'Tên A → Z'),
             ].map((opt) {
-              return ChoiceChip(
+              return _HostUnderlineTab(
                 key: Key('guest_sort_${opt.$1}'),
-                shape: const StadiumBorder(),
                 label: Text(opt.$2),
                 selected: _guestSortBy == opt.$1,
                 onSelected: (_) => setState(() => _guestSortBy = opt.$1),
@@ -3313,43 +4571,16 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 12,
+          Row(
             children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Thanh toán & Đối soát',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Các khoản doanh thu được đối soát và chuyển khoản tới tài khoản ngân hàng của bạn.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(110, 48),
-                  foregroundColor: AppColors.textPrimary,
-                  side: const BorderSide(color: AppColors.border),
-                  shape: const StadiumBorder(),
-                ),
+              const Expanded(child: Text('Thanh toán', style: TextStyle(
+                fontSize: 24, fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ))),
+              IconButton(
+                tooltip: 'Tải lại',
                 onPressed: _loadingPayouts ? null : _fetchPayoutData,
-                icon: const Icon(LucideIcons.refreshCw, size: 16),
-                label: const Text('Tải lại'),
+                icon: const Icon(LucideIcons.refreshCw, size: 20),
               ),
             ],
           ),
@@ -3361,22 +4592,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             ),
           ],
           const SizedBox(height: 16),
-          _buildKpiGrid([
-            (
-              label: 'Tài khoản nhận tiền',
-              value: '${_payoutAccounts.length}',
-              sub: 'Tài khoản ngân hàng đã liên kết',
-            ),
-            (
-              label: 'Đã thanh toán',
-              value: formatHostVnd(totalPaid),
-              sub: 'Trạng thái: Đã chuyển tiền',
-            ),
-            (
-              label: 'Chờ xử lý',
-              value: formatHostVnd(totalPending),
-              sub: 'Đang chờ duyệt / xử lý',
-            ),
+          _buildPropertySummary([
+            (label: 'Đã chuyển tiền', value: _loadingPayouts ? '—' : formatHostVnd(totalPaid)),
+            (label: 'Chờ xử lý', value: _loadingPayouts ? '—' : formatHostVnd(totalPending)),
           ]),
           const SizedBox(height: 20),
           Container(
@@ -3396,7 +4614,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   runSpacing: 8,
                   children: [
                     const Text(
-                      'Tài khoản ngân hàng nhận chi trả',
+                      'Tài khoản nhận tiền',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -3412,14 +4630,14 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         setState(() => _settingsTab = 'bank');
                         _switchSection(HostPortalSection.settings);
                       },
-                      child: const Text('Cập nhật TK'),
+                      child: Text(_payoutAccounts.isEmpty ? 'Liên kết' : 'Chỉnh sửa'),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 if (_payoutAccounts.isEmpty)
                   const Text(
-                    'Chưa có tài khoản nhận tiền.',
+                    'Liên kết ngân hàng để nhận tiền.',
                     style: TextStyle(
                       fontSize: 13,
                       color: AppColors.textSecondary,
@@ -3451,41 +4669,31 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              const Text(
-                'Lịch sử Payout',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: payoutFilterTabs.map((tab) {
-                  return ChoiceChip(
-                    key: Key('payout_filter_${tab.$1}'),
-                    shape: const StadiumBorder(),
-                    label: Text(tab.$2),
-                    selected: _payoutStatusFilter == tab.$1,
-                    onSelected: (_) =>
-                        setState(() => _payoutStatusFilter = tab.$1),
-                  );
-                }).toList(),
-              ),
-            ],
+          const Text('Lịch sử chi trả', style: TextStyle(
+            fontSize: 16, fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          )),
+          const SizedBox(height: 12),
+          _buildPortalDropdown<String>(
+            dropdownKey: const Key('payout_filter_dropdown'),
+            label: 'Trạng thái',
+            value: _payoutStatusFilter,
+            items: payoutFilterTabs.map((tab) => DropdownMenuItem(
+              key: Key('payout_filter_${tab.$1}'),
+              value: tab.$1,
+              child: Text(tab.$2),
+            )).toList(),
+            onChanged: (value) {
+              if (value != null) setState(() => _payoutStatusFilter = value);
+            },
           ),
           const SizedBox(height: 10),
           if (_loadingPayouts)
             const Center(child: CircularProgressIndicator())
           else if (filteredPayouts.isEmpty)
-            _buildEmptyBox('Chưa có lịch sử chi trả (payout).')
+            _buildEmptyBox(_payoutStatusFilter == 'all'
+                ? 'Chưa có khoản chi trả.'
+                : 'Không có khoản chi trả phù hợp.')
           else
             ...filteredPayouts.map((payout) {
               final id = payout['payoutId'] ?? payout['id'] ?? '';
@@ -3813,65 +5021,48 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Báo cáo doanh thu',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Thống kê doanh thu gộp, phí nền tảng và doanh thu thực nhận theo kỳ.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: ranges.map((r) {
-                  return ChoiceChip(
-                    key: Key('report_range_${r.$1}'),
-                    shape: const StadiumBorder(),
-                    label: Text(r.$2),
-                    selected: _reportRange == r.$1,
-                    onSelected: (_) {
-                      setState(() => _reportRange = r.$1);
-                      _fetchRevenueReport();
-                    },
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
+          const Text('Doanh thu', style: TextStyle(
+            fontSize: 24, fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+          )),
+          const SizedBox(height: 20),
+          Row(children: [
+              Expanded(child: _buildPortalDropdown<String>(
+                dropdownKey: const Key('report_range_dropdown'),
+                label: 'Thời gian',
+                value: _reportRange,
+                items: ranges.map((option) => DropdownMenuItem(
+                  key: Key('report_range_${option.$1}'),
+                  value: option.$1,
+                  child: Text(option.$2, overflow: TextOverflow.ellipsis),
+                )).toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _reportRange = value);
+                  _fetchRevenueReport();
+                },
+              )),
+              const SizedBox(width: 10),
+              Expanded(child: _buildPortalDropdown<String>(
+                dropdownKey: const Key('report_group_dropdown'),
+                label: 'Theo kỳ',
+                value: _reportGroup,
+                items: groups.map((option) => DropdownMenuItem(
+                  key: Key('report_group_${option.$1}'),
+                  value: option.$1,
+                  child: Text(option.$2, overflow: TextOverflow.ellipsis),
+                )).toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _reportGroup = value);
+                  _fetchRevenueReport();
+                },
+              )),
+          ]),
           const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceBase,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
                 _buildPortalDropdown<String>(
                   dropdownKey: const Key('reports_listing_filter_dropdown'),
-                  label: 'Lọc theo chỗ nghỉ',
+                  label: 'Chỗ nghỉ',
                   value: _reportListingId == 'all' ||
                           _listings.any(
                             (l) =>
@@ -3887,7 +5078,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     ),
                     ..._listings.map((l) {
                       final id = '${l['listingId'] ?? l['id']}';
-                      final title = (l['title'] ?? 'Listing #$id').toString();
+                      final title = (l['title'] ?? 'Chỗ nghỉ #$id').toString();
                       return DropdownMenuItem<String>(
                         value: id,
                         child: Text(title, overflow: TextOverflow.ellipsis),
@@ -3900,37 +5091,6 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     _fetchRevenueReport();
                   },
                 ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    const Text(
-                      'Nhóm theo:',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    ...groups.map((g) {
-                      return ChoiceChip(
-                        key: Key('report_group_${g.$1}'),
-                        shape: const StadiumBorder(),
-                        label: Text(g.$2),
-                        selected: _reportGroup == g.$1,
-                        onSelected: (_) {
-                          setState(() => _reportGroup = g.$1);
-                          _fetchRevenueReport();
-                        },
-                      );
-                    }),
-                  ],
-                ),
-              ],
-            ),
-          ),
           if (_reportError != null) ...[
             const SizedBox(height: 16),
             _buildInlineError(
@@ -3939,26 +5099,22 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             ),
           ],
           const SizedBox(height: 16),
-          _buildKpiGrid([
+          _buildPropertySummary([
             (
               label: 'Doanh thu gộp',
-              value: formatHostVnd(_revenueReport.grossRevenue),
-              sub: 'grossRevenue',
+              value: _loadingReport ? '—' : formatHostVnd(_revenueReport.grossRevenue),
             ),
             (
-              label: 'Doanh thu Host',
-              value: formatHostVnd(_revenueReport.hostRevenue),
-              sub: 'hostRevenue',
+              label: 'Thực nhận',
+              value: _loadingReport ? '—' : formatHostVnd(_revenueReport.hostRevenue),
             ),
             (
               label: 'Phí nền tảng',
-              value: formatHostVnd(_revenueReport.platformRevenue),
-              sub: 'platformRevenue',
+              value: _loadingReport ? '—' : formatHostVnd(_revenueReport.platformRevenue),
             ),
             (
-              label: 'Số booking',
-              value: '${_revenueReport.bookingCount}',
-              sub: 'bookingCount',
+              label: 'Đặt phòng',
+              value: _loadingReport ? '—' : '${_revenueReport.bookingCount}',
             ),
           ]),
           const SizedBox(height: 20),
@@ -3973,7 +5129,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Biểu đồ doanh thu & Chi tiết theo kỳ',
+                  'Thực nhận theo kỳ',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -3985,7 +5141,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   const Center(child: CircularProgressIndicator())
                 else if (_revenueReport.series.isEmpty)
                   const Text(
-                    'Chưa có dữ liệu phát sinh trong khoảng thời gian đã chọn.',
+                    'Chưa có doanh thu trong kỳ này.',
                     style: TextStyle(
                       fontSize: 13,
                       color: AppColors.textSecondary,
@@ -3994,7 +5150,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 else
                   ..._revenueReport.series.map((row) {
                     final ratio =
-                        (row.hostRevenue / maxRevenue).clamp(0.02, 1.0);
+                        (row.hostRevenue / maxRevenue).clamp(0.0, 1.0);
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Column(
@@ -4005,7 +5161,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                             spacing: 8,
                             children: [
                               Text(
-                                '${row.period} (${row.bookingCount} booking)',
+                                '${row.period} · ${row.bookingCount} đặt phòng',
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
@@ -4013,11 +5169,26 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                                 ),
                               ),
                               Text(
-                                'Host: ${formatHostVnd(row.hostRevenue)} • Gộp: ${formatHostVnd(row.grossRevenue)} • Phí: ${formatHostVnd(row.platformRevenue)}',
+                                formatHostVnd(row.hostRevenue),
                                 style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
                                 ),
+                              ),
+                            ],
+                          ),
+                          ExpansionTile(
+                            tilePadding: EdgeInsets.zero,
+                            title: const Text('Chi tiết', style: TextStyle(fontSize: 12)),
+                            children: [
+                              ListTile(
+                                title: const Text('Doanh thu gộp'),
+                                subtitle: Text(formatHostVnd(row.grossRevenue)),
+                              ),
+                              ListTile(
+                                title: const Text('Phí nền tảng'),
+                                subtitle: Text(formatHostVnd(row.platformRevenue)),
                               ),
                             ],
                           ),
@@ -4079,16 +5250,14 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              ChoiceChip(
+              _HostUnderlineTab(
                 key: const Key('settings_tab_profile'),
-                shape: const StadiumBorder(),
                 label: const Text('Hồ sơ Host'),
                 selected: _settingsTab == 'profile',
                 onSelected: (_) => setState(() => _settingsTab = 'profile'),
               ),
-              ChoiceChip(
+              _HostUnderlineTab(
                 key: const Key('settings_tab_bank'),
-                shape: const StadiumBorder(),
                 label: const Text('Tài khoản ngân hàng'),
                 selected: _settingsTab == 'bank',
                 onSelected: (_) => setState(() => _settingsTab = 'bank'),
@@ -4345,63 +5514,6 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   // Shared UI Builders
   // ===========================================================================
 
-  Widget _buildKpiGrid(
-    List<({String label, String value, String sub})> items,
-  ) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cols = constraints.maxWidth >= 820
-            ? 4
-            : (constraints.maxWidth >= 500 ? 2 : 1);
-        const gap = 12.0;
-        final width = (constraints.maxWidth - gap * (cols - 1)) / cols;
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
-          children: items.map((item) {
-            return Container(
-              width: width,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceBase,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.label,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    item.value,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    item.sub,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        );
-      },
-    );
-  }
 
   Widget _buildStatusPill(String label, String code) {
     Color bg = const Color(0xFFF1F5F9);
@@ -4444,14 +5556,14 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     );
   }
 
-  Widget _buildEmptyBox(String text) {
+  Widget _buildEmptyBox(String text, {bool borderless = false}) {
     return Container(
       padding: const EdgeInsets.all(28),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
+        border: borderless ? null : Border.all(color: AppColors.border),
       ),
       child: Text(
         text,
@@ -4464,13 +5576,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     );
   }
 
-  Widget _buildInlineError(String message, {VoidCallback? onRetry}) {
+  Widget _buildInlineError(String message, {VoidCallback? onRetry, bool borderless = false}) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF1F2),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFFECDD3)),
+        border: borderless ? null : Border.all(color: const Color(0xFFFECDD3)),
       ),
       child: Wrap(
         alignment: WrapAlignment.spaceBetween,
@@ -4543,6 +5655,51 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _HostUnderlineTab extends StatelessWidget {
+  const _HostUnderlineTab({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final Widget label;
+  final bool selected;
+  final ValueChanged<bool> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => onSelected(!selected),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(
+                color: selected ? AppColors.primary : Colors.transparent,
+                width: 2,
+              )),
+            ),
+            child: DefaultTextStyle.merge(
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 14,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+              ),
+              child: label,
+            ),
+          ),
+        ),
       ),
     );
   }

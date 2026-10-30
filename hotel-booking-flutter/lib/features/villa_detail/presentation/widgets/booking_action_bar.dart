@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -12,8 +13,8 @@ class BookingActionBar extends StatelessWidget {
   final int? totalCalculatedVnd;
   final int? selectedNights;
   final VoidCallback? onBookNow;
-  final VoidCallback? onAddToQueue;
   final VoidCallback? onInquireZalo;
+  final VoidCallback? onMessageHost;
   final VoidCallback? onCallHotline;
 
   const BookingActionBar({
@@ -22,8 +23,8 @@ class BookingActionBar extends StatelessWidget {
     this.totalCalculatedVnd,
     this.selectedNights,
     this.onBookNow,
-    this.onAddToQueue,
     this.onInquireZalo,
+    this.onMessageHost,
     this.onCallHotline,
   });
 
@@ -72,21 +73,14 @@ class BookingActionBar extends StatelessWidget {
 
               const SizedBox(width: 8),
 
-              // Add to Queue (MultiBooking) button
-              if (onAddToQueue != null)
-                AppIconButton(
-                  icon: const Icon(LucideIcons.shoppingBag, size: 18),
-                  iconColor: AppColors.iconStrong,
-                  tooltip: 'Thêm vào giỏ chờ đặt',
-                  onPressed: onAddToQueue,
-                ),
-
-              // Hotline icon button (monochrome, no background circle)
+              // Message host icon button (replaces phone hotline icon)
               AppIconButton(
-                icon: const Icon(LucideIcons.phone, size: 18),
+                icon: const Icon(LucideIcons.messageCircle, size: 18),
                 iconColor: AppColors.iconStrong,
-                tooltip: 'Gọi hotline tư vấn',
-                onPressed: onCallHotline ?? () => ContactService.callHotline(),
+                tooltip: 'Nhắn tin cho Chủ nhà',
+                onPressed: onMessageHost ??
+                    onCallHotline ??
+                    () => context.push('/villa/${villa.id}/nhan-tin-host'),
               ),
 
               const SizedBox(width: 8),
@@ -100,13 +94,6 @@ class BookingActionBar extends StatelessWidget {
                           ? 'Đặt phòng ngay'
                           : 'Gửi yêu cầu đặt')
                       : 'Tư vấn Zalo',
-                  icon: Icon(
-                    onBookNow != null
-                        ? LucideIcons.calendarCheck
-                        : LucideIcons.messageCircle,
-                    size: 18,
-                    color: Colors.white,
-                  ),
                   onPressed: onBookNow ??
                       onInquireZalo ??
                       () {

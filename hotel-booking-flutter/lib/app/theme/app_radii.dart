@@ -1,19 +1,13 @@
 import 'package:flutter/material.dart';
 
-/// Design tokens for border-radius matching `Source goc/frontend/src/index.css`:
-/// - `--radius-button`: 1rem (16px)
-/// - `--radius-input`: 1rem (16px)
-/// - `--radius-table`: 1rem (16px)
-/// - `--radius-card`: 1.5rem (24px / Tailwind `rounded-3xl`)
-/// - `--radius-modal`: 1.5rem (24px)
-/// - `--radius-dropdown`: 1.5rem (24px)
-/// - `--radius-panel`: 1.5rem (24px)
-/// - `--radius-badge`: 9999px (`rounded-full`)
+/// Shared light luxury radii. Fullscreen media and system bars stay square.
 abstract final class AppRadii {
   static const double sm = 8.0;
   static const double md = 16.0;
   static const double button = 999.0;
-  static const double input = 16.0;
+  static const double input = 24.0;
+  static const double search = pill;
+  static const double chip = pill;
   static const double table = 16.0;
   static const double card = 24.0;
   static const double modal = 28.0;
@@ -21,8 +15,8 @@ abstract final class AppRadii {
   static const double panel = 24.0;
   static const double popover = 30.0;
   static const double bottomSheetTop = 32.0;
-  static const double heroCardMobile = 34.0;
-  static const double heroCardDesktop = 40.0;
+  static const double heroCardMobile = 32.0;
+  static const double heroCardDesktop = 32.0;
   static const double pill = 999.0;
 
   static const BorderRadius roundedButton =

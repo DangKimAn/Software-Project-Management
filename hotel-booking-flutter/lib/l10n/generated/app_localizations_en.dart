@@ -696,7 +696,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileUnverified => 'Unverified';
 
   @override
-  String get hostOnboardingTitle => 'Become a Host at Minh Thanh Villa';
+  String get hostOnboardingTitle => 'Become a Host at The Palm';
 
   @override
   String get hostKycTitle => 'Host Registration & KYC Verification';

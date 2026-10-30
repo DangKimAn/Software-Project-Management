@@ -83,10 +83,7 @@ export const registerBodySchema = z.object({
     username: usernameSchema,
     firstName: z.string().trim().min(1, "firstName is required"),
     lastName: z.string().trim().min(1, "lastName is required"),
-    phone: z.preprocess(
-        (value) => (value === "" || value === null ? undefined : value),
-        phoneSchema.optional(),
-    ),
+    phone: phoneSchema,
     dob: dobSchema,
 });
 

@@ -1,3 +1,3 @@
 PRODUCT_BUNDLE_IDENTIFIER = com.bronc3.hotel_booking_flutter.staging
-APP_DISPLAY_NAME = Minh Thanh Villa STAGING
+APP_DISPLAY_NAME = The Palm STAGING
 FLUTTER_TARGET = lib/main_staging.dart

@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const { createHmac } = require("node:crypto");
-const { afterEach, describe, it } = require("node:test");
+const { after, afterEach, beforeEach, describe, it } = require("node:test");
 import type { PatchEntry, Rejectable, TransactionCallback } from "./helpers/types";
 
 process.env.NODE_ENV = "test";
@@ -30,6 +30,7 @@ const couponsService = require("../dist/modules/coupons/coupons.service");
 const hostBankAccountService = require("../dist/modules/host-bank-account/host-bank-account.service");
 const payoutsService = require("../dist/modules/payouts/payouts.service");
 const reportsService = require("../dist/modules/reports/reports.service");
+const notificationService = require("../dist/modules/notifications/notification.service");
 
 type QueryOptions = {
     type?: unknown;
@@ -42,10 +43,24 @@ const patch = (target: Record<string, unknown>, key: string, value: unknown): vo
     target[key] = value;
 };
 
+beforeEach(() => {
+    patch(notificationService, "notifyPaymentSuccess", async () => {});
+    patch(notificationService, "notifyPaymentPending", async () => {});
+    patch(notificationService, "notifyPaymentExpired", async () => {});
+});
+
 afterEach(() => {
     while (originals.length > 0) {
         const [target, key, value] = originals.pop()!;
         target[key] = value;
+    }
+});
+
+after(async () => {
+    try {
+        await sequelize.close();
+    } catch {
+        // ignore
     }
 });
 

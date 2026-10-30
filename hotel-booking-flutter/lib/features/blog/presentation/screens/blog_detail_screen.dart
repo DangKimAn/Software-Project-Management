@@ -19,7 +19,7 @@ import '../../data/blog_repository.dart';
 import 'blog_screen.dart';
 
 /// Port of `Source goc/frontend/src/views/pages/Blog/BlogDetailPage.tsx`
-/// adhering to Minh Thanh Villa Light Luxury Design System (FLUTTER_RULES.md).
+/// adhering to The Palm Light Luxury Design System (FLUTTER_RULES.md).
 class BlogDetailScreen extends ConsumerWidget {
   final String slug;
 
@@ -347,7 +347,7 @@ class BlogDetailScreen extends ConsumerWidget {
                                       vertical: 5,
                                     ),
                                     decoration: const BoxDecoration(
-                                      color: AppColors.surfaceWarmSand,
+                                      color: AppColors.surfaceBase,
                                       borderRadius: AppRadii.roundedPill,
                                     ),
                                     child: Text(
@@ -438,8 +438,7 @@ class BlogDetailScreen extends ConsumerWidget {
                                                 vertical: 6,
                                               ),
                                               decoration: BoxDecoration(
-                                                color:
-                                                    AppColors.surfaceWarmSand,
+                                                color: AppColors.surfaceBase,
                                                 borderRadius:
                                                     AppRadii.roundedPill,
                                                 border: Border.all(
@@ -459,91 +458,6 @@ class BlogDetailScreen extends ConsumerWidget {
                                           .toList(),
                                     ),
                                   ],
-                                  const SizedBox(height: AppSpacing.xxl),
-                                  // Consultation CTA Card (24dp radius, pill CTAs, bare Lucide icons)
-                                  Container(
-                                    width: double.infinity,
-                                    padding: EdgeInsets.all(
-                                      screenWidth < 360
-                                          ? AppSpacing.md
-                                          : AppSpacing.xl,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.surfaceBase,
-                                      borderRadius: AppRadii.roundedCard,
-                                      border: Border.all(
-                                        color: AppColors.borderSoft,
-                                      ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Cần tư vấn đặt biệt thự Vũng Tàu?',
-                                          style: AppTypography.sectionHeading
-                                              .copyWith(
-                                            fontSize: 18,
-                                            color: AppColors.textStrong,
-                                          ),
-                                        ),
-                                        const SizedBox(height: AppSpacing.xs),
-                                        const Text(
-                                          'Kết nối với đội ngũ Minh Thanh Villa để kiểm tra lịch trống và báo giá chính xác theo đoàn khách của bạn.',
-                                          style: AppTypography.bodyMuted,
-                                        ),
-                                        const SizedBox(height: AppSpacing.md),
-                                        Wrap(
-                                          spacing: AppSpacing.sm,
-                                          runSpacing: AppSpacing.sm,
-                                          children: [
-                                            FilledButton.icon(
-                                              onPressed: () =>
-                                                  context.push('/lien-he'),
-                                              style: FilledButton.styleFrom(
-                                                backgroundColor:
-                                                    AppColors.primary,
-                                                foregroundColor: Colors.white,
-                                                minimumSize: const Size(48, 48),
-                                                shape: const StadiumBorder(),
-                                              ),
-                                              icon: const Icon(
-                                                LucideIcons.messageCircle,
-                                                size: 16,
-                                                color: Colors.white,
-                                              ),
-                                              label: const Text(
-                                                'Liên hệ tư vấn',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            OutlinedButton.icon(
-                                              onPressed: () =>
-                                                  context.push('/tim-kiem'),
-                                              style: OutlinedButton.styleFrom(
-                                                minimumSize: const Size(48, 48),
-                                                shape: const StadiumBorder(),
-                                                side: const BorderSide(
-                                                  color: AppColors.border,
-                                                ),
-                                              ),
-                                              icon: const Icon(
-                                                LucideIcons.search,
-                                                size: 16,
-                                                color: AppColors.iconStrong,
-                                              ),
-                                              label: const Text(
-                                                'Tìm kiếm villa',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -862,7 +776,7 @@ class _BlogRichContentRendererState extends State<BlogRichContentRenderer> {
           width: double.infinity,
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: const BoxDecoration(
-            color: AppColors.surfaceWarmSand,
+            color: AppColors.surfaceBase,
             borderRadius: BorderRadius.all(Radius.circular(20)),
             border: Border(
               left: BorderSide(color: AppColors.primary, width: 3),
@@ -967,7 +881,7 @@ class _RelatedBlogPostCard extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: const BoxDecoration(
-                        color: AppColors.surfaceWarmSand,
+                        color: AppColors.surfaceBase,
                         borderRadius: AppRadii.roundedPill,
                       ),
                       child: Text(

@@ -5,12 +5,15 @@ import { asyncHandler } from "../../common/async-handler";
 import { sendSuccess } from "../../common/http";
 import {
     approveHostApplication,
+    cancelHostApplication,
     getAdminHostApplicationDetail,
+    getAdminHostDocumentStream,
     getMyHostApplication,
     listAdminHostApplications,
     rejectHostApplication,
     submitHostApplication,
 } from "./host-application.service";
+import { extractAuthToken } from "../auth/auth.service";
 
 const adminStatusValues = new Set(["pending", "approved", "rejected", "all"]);
 
@@ -88,6 +91,16 @@ export const getMyHostApplicationController: RequestHandler = asyncHandler(async
     });
 });
 
+export const cancelHostApplicationController: RequestHandler = asyncHandler(async (req, res) => {
+    const result = await cancelHostApplication(req.user!);
+
+    return sendSuccess(res, {
+        statusCode: 200,
+        message: result.message,
+        data: result,
+    });
+});
+
 export const listAdminHostApplicationsController: RequestHandler = asyncHandler(async (req, res) => {
     const rawStatus = typeof req.query.status === "string" ? req.query.status : undefined;
 
@@ -113,11 +126,34 @@ export const listAdminHostApplicationsController: RequestHandler = asyncHandler(
 
 export const getAdminHostApplicationDetailController: RequestHandler = asyncHandler(async (req, res) => {
     const applicationId = parsePositiveIntParam(req.params.applicationId, "applicationId");
-    const result = await getAdminHostApplicationDetail(req.user!, applicationId);
+    const token = extractAuthToken(req);
+    const result = await getAdminHostApplicationDetail(req.user!, applicationId, token);
 
     return sendSuccess(res, {
         data: result,
     });
+});
+
+export const streamAdminHostDocumentController: RequestHandler = asyncHandler(async (req, res) => {
+    const applicationId = parsePositiveIntParam(req.params.applicationId, "applicationId");
+    const documentId = parsePositiveIntParam(req.params.documentId, "documentId");
+
+    const { document, stream } = await getAdminHostDocumentStream(
+        req.user!,
+        applicationId,
+        documentId,
+    );
+
+    res.setHeader("Content-Type", document.mimeType || "application/octet-stream");
+    if (document.fileSize) {
+        res.setHeader("Content-Length", String(document.fileSize));
+    }
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+
+    const readable = stream as import("stream").Readable;
+    readable.pipe(res);
 });
 
 export const approveHostApplicationController: RequestHandler = asyncHandler(async (req, res) => {

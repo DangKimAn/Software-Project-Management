@@ -280,6 +280,12 @@ abstract final class BlogContentSanitizer {
     final scheme = uri.scheme.toLowerCase();
     if (scheme != 'https' && scheme != 'http') return '';
     if (uri.host.isEmpty || !uri.host.contains('.')) return '';
+    final hostLower = uri.host.toLowerCase();
+    if (hostLower.contains('unsplash.com')) {
+      return trimmed.contains('1507525428034')
+          ? 'assets/images/NDT05929-HDR1.jpg'
+          : 'assets/images/19tranphu.jpg';
+    }
     return uri.toString();
   }
 
@@ -751,7 +757,7 @@ class BlogPost {
       location: rawLocation.isNotEmpty ? rawLocation : 'Vũng Tàu',
       readTime: readTimeStr,
       authorName:
-          rawAuthor.isNotEmpty ? rawAuthor : 'Ban biên tập Minh Thanh Villa',
+          rawAuthor.isNotEmpty ? rawAuthor : 'Ban biên tập The Palm',
       publishedAt: _sanitizeDate(json['publishedAt'] ?? json['createdAt']),
       readTimeMinutes: mins,
       tags: parsedTags,

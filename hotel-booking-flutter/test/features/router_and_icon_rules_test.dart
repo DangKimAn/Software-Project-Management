@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hotel_booking_flutter/app/router/app_router.dart';
 import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
 import 'package:hotel_booking_flutter/app/theme/app_theme.dart';
@@ -99,8 +100,18 @@ void main() {
           LucideIcons.waves);
       expect(AppSemanticIcons.resolveAmenityIcon('Khu vực BBQ'),
           LucideIcons.flame);
+      expect(AppSemanticIcons.resolveAmenityIcon('Bếp nướng BBQ sân vườn'),
+          LucideIcons.flame);
       expect(AppSemanticIcons.resolveAmenityIcon('Bếp đầy đủ'),
           LucideIcons.utensils);
+      expect(AppSemanticIcons.resolveAmenityIcon('Smart TV 65 inch'),
+          LucideIcons.tv);
+      expect(AppSemanticIcons.resolveAmenityIcon('Bồn tắm Jacuzzi'),
+          LucideIcons.bath);
+      expect(AppSemanticIcons.resolveAmenityIcon('Ban công thoáng mát'),
+          LucideIcons.wind);
+      expect(
+          AppSemanticIcons.resolveAmenityIcon('Sân vườn'), LucideIcons.trees);
       expect(AppSemanticIcons.resolveAmenityIcon('Điều hòa'),
           LucideIcons.snowflake);
       expect(AppSemanticIcons.resolveAmenityIcon('Máy giặt'),
@@ -110,6 +121,8 @@ void main() {
       expect(AppSemanticIcons.resolveAmenityIcon('Cho phép thú cưng'),
           LucideIcons.pawPrint);
       expect(AppSemanticIcons.resolveAmenityIcon('Gần biển'),
+          LucideIcons.umbrella);
+      expect(AppSemanticIcons.resolveAmenityIcon('Gần bãi tắm (đi bộ 3 phút)'),
           LucideIcons.umbrella);
       expect(
           AppSemanticIcons.resolveAmenityIcon('Karaoke'), LucideIcons.micVocal);
@@ -326,6 +339,74 @@ void main() {
       expect(find.text('404 — Không tìm thấy trang'), findsOneWidget);
       final iconWidget = tester.widget<Icon>(find.byType(Icon).first);
       expect(iconWidget.color, AppColors.iconMuted);
+    });
+
+    testWidgets(
+        'ScaffoldWithBottomNavBar displays Khám phá, Tin nhắn, Chuyến đi, and Tài khoản on mobile',
+        (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final router = GoRouter(
+        initialLocation: '/',
+        routes: [
+          StatefulShellRoute.indexedStack(
+            builder: (context, state, navigationShell) {
+              return ScaffoldWithBottomNavBar(navigationShell: navigationShell);
+            },
+            branches: [
+              StatefulShellBranch(
+                routes: [
+                  GoRoute(
+                    path: '/',
+                    builder: (_, __) => const Scaffold(body: Text('TAB_0')),
+                  ),
+                ],
+              ),
+              StatefulShellBranch(
+                routes: [
+                  GoRoute(
+                    path: '/messages',
+                    builder: (_, __) => const Scaffold(body: Text('TAB_1')),
+                  ),
+                ],
+              ),
+              StatefulShellBranch(
+                routes: [
+                  GoRoute(
+                    path: '/trips',
+                    builder: (_, __) => const Scaffold(body: Text('TAB_2')),
+                  ),
+                ],
+              ),
+              StatefulShellBranch(
+                routes: [
+                  GoRoute(
+                    path: '/settings',
+                    builder: (_, __) => const Scaffold(body: Text('TAB_3')),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Khám phá'), findsOneWidget);
+      expect(find.text('Tin nhắn'), findsOneWidget);
+      expect(find.text('Chuyến đi'), findsOneWidget);
+      expect(find.text('Tài khoản'), findsOneWidget);
+      expect(find.text('Yêu thích'), findsNothing);
+      expect(find.byIcon(LucideIcons.messageSquare), findsOneWidget);
+
+      await tester.tap(find.text('Tin nhắn'));
+      await tester.pumpAndSettle();
+      expect(find.text('TAB_1'), findsOneWidget);
     });
   });
 

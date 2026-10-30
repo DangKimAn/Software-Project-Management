@@ -154,12 +154,22 @@ class GoogleAuthService {
           'Không thể kết nối tới Google. Vui lòng kiểm tra kết nối mạng và thử lại.',
         );
       }
+      final rawMessage = e.message?.trim() ?? '';
+      if (rawMessage.contains('ApiException: 10') ||
+          rawMessage.contains(': 10:') ||
+          e.code == '10') {
+        throw const AuthFailure(
+          'Đăng nhập Google thất bại (ApiException 10: DEVELOPER_ERROR). '
+              'Chưa đăng ký SHA-1 fingerprint hoặc sai Package Name trên Google Cloud Console.',
+          'GOOGLE_DEVELOPER_ERROR_10',
+        );
+      }
       AppLogger.e(
         'Google Sign-In failed',
       );
       throw AuthFailure(
-        e.message?.trim().isNotEmpty == true
-            ? 'Đăng nhập Google thất bại: ${e.message}'
+        rawMessage.isNotEmpty
+            ? 'Đăng nhập Google thất bại: $rawMessage'
             : 'Đăng nhập Google thất bại (${e.code}). Vui lòng kiểm tra cấu hình OAuth.',
         e.code,
       );

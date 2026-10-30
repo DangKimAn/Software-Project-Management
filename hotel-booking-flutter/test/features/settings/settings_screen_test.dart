@@ -169,14 +169,23 @@ class FakeAuthRepository implements AuthRepository {
 }
 
 class ControlledAuthNotifier extends AuthNotifier {
+  bool _initialized = false;
+
   ControlledAuthNotifier(
     super.repository, {
     super.prefs,
     AsyncValue<User?>? initialState,
   }) {
+    _initialized = true;
     if (initialState != null) {
       state = initialState;
     }
+  }
+
+  @override
+  Future<void> checkCurrentUser() async {
+    if (!_initialized) return;
+    await super.checkCurrentUser();
   }
 
   void emitState(AsyncValue<User?> next) {
@@ -769,6 +778,8 @@ void main() {
 
       expect(find.text('Quản trị viên (Admin)'), findsOneWidget);
       expect(find.byKey(const Key('menu_admin_portal')), findsOneWidget);
+      expect(find.byKey(const Key('menu_become_host')), findsNothing);
+      expect(find.text('Dành cho chủ nhà'), findsNothing);
     });
   });
 
@@ -1080,7 +1091,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final logoutBtn = find.byKey(const Key('settings_logout_button'));
+      final logoutBtn = find.byKey(const Key('settings_bottom_logout_button'));
       await tester.ensureVisible(logoutBtn);
       await tester.tap(logoutBtn);
       await tester.pumpAndSettle();

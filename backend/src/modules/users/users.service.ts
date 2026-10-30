@@ -13,6 +13,8 @@ import {
     replaceUserRoles,
     saveUserProfileUpdates,
     saveUserUpdates,
+    syncUserHostDemotion,
+    syncUserHostPromotion,
     withTransaction,
 } from "./users.repository";
 import { UserRole, UserStatus } from "../../models/user";
@@ -434,6 +436,15 @@ export const updateUserForAdmin = async (
 
         if (nextRoles) {
             await replaceUserRoles(user._id, nextRoles, transaction);
+
+            const hadHostRole = oldRoles.includes("host");
+            const willHaveHostRole = nextRoles.includes("host");
+
+            if (hadHostRole && !willHaveHostRole) {
+                await syncUserHostDemotion(user._id, actor.id, transaction);
+            } else if (!hadHostRole && willHaveHostRole) {
+                await syncUserHostPromotion(user._id, transaction);
+            }
 
             if (oldRoles.join(",") !== nextRoles.join(",")) {
                 await createAuditLog({

@@ -258,7 +258,7 @@ export const getEnv = (): AppEnv => {
     const nodeEnv = process.env.NODE_ENV ?? "development";
     const jwtSecret = assertProductionValue(
         "JWT_SECRET_KEY or JWT_SECRET",
-        readEnv("JWT_SECRET_KEY", "JWT_SECRET"),
+        readEnv("JWT_SECRET_KEY", "JWT_SECRET") ?? (nodeEnv === "production" ? undefined : "dev_jwt_secret_key_at_least_32_chars_long"),
         nodeEnv,
         { secret: true },
     );
@@ -299,25 +299,25 @@ export const getEnv = (): AppEnv => {
     const dbHost =
         assertProductionValue(
             "MYSQLHOST",
-            readEnv("MYSQLHOST", "MYSQL_HOST") ?? (nodeEnv === "production" ? undefined : "127.0.0.1"),
+            readEnv("MYSQLHOST", "MYSQL_HOST", "DB_HOST") ?? (nodeEnv === "production" ? undefined : "127.0.0.1"),
             nodeEnv,
         ) ?? "127.0.0.1";
     const dbName =
         assertProductionValue(
             "MYSQL_DATABASE",
-            readEnv("MYSQL_DATABASE", "MYSQLDATABASE") ?? (nodeEnv === "production" ? undefined : "booking_room"),
+            readEnv("MYSQL_DATABASE", "MYSQLDATABASE", "DB_DATABASE", "DB_NAME") ?? (nodeEnv === "production" ? undefined : "booking_room"),
             nodeEnv,
         ) ?? "booking_room";
     const dbUser =
         assertProductionValue(
             "MYSQLUSER",
-            readEnv("MYSQLUSER", "MYSQL_USER") ?? (nodeEnv === "production" ? undefined : "booking_app"),
+            readEnv("MYSQLUSER", "MYSQL_USER", "DB_USERNAME", "DB_USER") ?? (nodeEnv === "production" ? undefined : "booking_app"),
             nodeEnv,
         ) ?? "root";
     const dbPassword =
         assertProductionValue(
             "MYSQLPASSWORD",
-            readEnv("MYSQLPASSWORD", "MYSQL_PASSWORD") ?? (nodeEnv === "production" ? undefined : ""),
+            readEnv("MYSQLPASSWORD", "MYSQL_PASSWORD", "DB_PASSWORD") ?? (nodeEnv === "production" ? undefined : ""),
             nodeEnv,
         ) ?? "";
     const allowDatabaseRootUser = parseBoolean(
@@ -369,7 +369,7 @@ export const getEnv = (): AppEnv => {
 
     const cookieSecret = assertProductionValue(
         "COOKIE_SECRET",
-        process.env.COOKIE_SECRET,
+        process.env.COOKIE_SECRET ?? (nodeEnv === "production" ? undefined : "dev_cookie_secret_at_least_32_chars_long"),
         nodeEnv,
         { secret: true },
     );
@@ -420,7 +420,7 @@ export const getEnv = (): AppEnv => {
         nodeEnv,
         trustProxy: parseTrustProxy(process.env.TRUST_PROXY ?? (nodeEnv === "production" ? "1" : "false")),
         dbHost,
-        dbPort: parsePositiveInteger("MYSQLPORT", readEnv("MYSQLPORT", "MYSQL_PORT"), 3306),
+        dbPort: parsePositiveInteger("MYSQLPORT", readEnv("MYSQLPORT", "MYSQL_PORT", "DB_PORT"), 3306),
         dbName,
         dbUser,
         dbPassword,

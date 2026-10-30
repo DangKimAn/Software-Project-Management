@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/auth/presentation/view_models/auth_notifier.dart';
+import '../features/trips/presentation/view_models/trips_view_model.dart';
 import 'di/providers.dart';
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
@@ -31,6 +32,7 @@ class _ThePalmVillaAppState extends ConsumerState<ThePalmVillaApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.read(authNotifierProvider.notifier).onAppResumed();
+      ref.invalidate(myBookingsProvider);
     }
   }
 
@@ -58,3 +60,4 @@ class _ThePalmVillaAppState extends ConsumerState<ThePalmVillaApp>
     );
   }
 }
+

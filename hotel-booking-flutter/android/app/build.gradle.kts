@@ -78,11 +78,13 @@ android {
         create("dev") {
             dimension = "env"
             applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
             resValue("string", "app_name", "The Palm Villa DEV")
         }
         create("staging") {
             dimension = "env"
             applicationIdSuffix = ".staging"
+            versionNameSuffix = "-staging"
             resValue("string", "app_name", "The Palm Villa STAGING")
         }
         create("prod") {

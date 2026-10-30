@@ -153,9 +153,62 @@ abstract final class HostOnboardingValidator {
     return null;
   }
 
+  /// Normalizes Vietnamese names: strips diacritics, replaces đ/Đ, converts to lowercase,
+  /// and trims redundant whitespace for robust KYC comparison.
+  static String normalizeVietnameseName(String text) {
+    if (text.isEmpty) return '';
+    var result = text.trim().toLowerCase();
+    result = result.replaceAll('đ', 'd').replaceAll('Đ', 'd');
+
+    const aChars = 'àáạảãâầấậẩẫăằắặẳẵ';
+    const eChars = 'èéẹẻẽêềếệểễ';
+    const iChars = 'ìíịỉĩ';
+    const oChars = 'òóọỏõôồốộổỗơờớợởỡ';
+    const uChars = 'ùúụủũưừứựửữ';
+    const yChars = 'ỳýỵỷỹ';
+
+    for (final c in aChars.split('')) {
+      result = result.replaceAll(c, 'a');
+    }
+    for (final c in eChars.split('')) {
+      result = result.replaceAll(c, 'e');
+    }
+    for (final c in iChars.split('')) {
+      result = result.replaceAll(c, 'i');
+    }
+    for (final c in oChars.split('')) {
+      result = result.replaceAll(c, 'o');
+    }
+    for (final c in uChars.split('')) {
+      result = result.replaceAll(c, 'u');
+    }
+    for (final c in yChars.split('')) {
+      result = result.replaceAll(c, 'y');
+    }
+
+    return result.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  /// Checks whether the user entered name matches the AI extracted identity card name.
+  /// Returns `true` if they match (ignoring case, spaces, and diacritics), or if either is empty.
+  static bool isNameMatching({
+    required String enteredName,
+    required String? aiExtractedName,
+  }) {
+    if (aiExtractedName == null || aiExtractedName.trim().isEmpty) {
+      return true;
+    }
+    final normEntered = normalizeVietnameseName(enteredName);
+    if (normEntered.isEmpty) {
+      return true;
+    }
+    final normAi = normalizeVietnameseName(aiExtractedName);
+    return normEntered == normAi;
+  }
+
   static String? validateContactEmail(String? raw) {
     final trimmed = (raw ?? '').trim();
-    if (trimmed.isEmpty) return null;
+    if (trimmed.isEmpty) return 'Vui lòng nhập email liên hệ.';
     if (trimmed.length > 255 || !_emailRegex.hasMatch(trimmed)) {
       return 'Email liên hệ không đúng định dạng (ví dụ: host@example.com).';
     }
@@ -1082,6 +1135,13 @@ class HostOnboardingApiService {
       updatedAt: parsed.updatedAt,
       documents: parsed.documents,
     );
+  }
+
+  /// `POST /api/host/applications/cancel`
+  /// Cancels the current user's pending host application and deletes uploaded documents.
+  Future<bool> cancelApplication() async {
+    final response = await _dio.post<dynamic>('/api/host/applications/cancel');
+    return response.statusCode == 200;
   }
 }
 

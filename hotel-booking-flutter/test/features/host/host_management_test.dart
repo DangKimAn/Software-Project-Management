@@ -1483,6 +1483,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      final listingCard = find.text('Villa Biển Vũng Tàu');
+      if (listingCard.evaluate().isNotEmpty &&
+          find.byKey(const Key('calendar_listing_dropdown')).evaluate().isEmpty) {
+        await tester.tap(listingCard);
+        await tester.pumpAndSettle();
+      }
+
       // 1. Tapping booked date 2026-10-28 shows error and does NOT select it
       final bookedDay = find.byKey(const Key('calendar_day_2026-10-28'));
       await tester.ensureVisible(bookedDay);

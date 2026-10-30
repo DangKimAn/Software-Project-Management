@@ -18,6 +18,8 @@ import type { AuthenticatedUser } from "../auth/auth.service";
 export const notificationEventTypes = [
     "USER_REGISTERED",
     "HOST_APPLICATION_SUBMITTED",
+    "HOST_APPLICATION_APPROVED",
+    "HOST_APPLICATION_REJECTED",
     "LISTING_SUBMITTED",
     "LISTING_APPROVED",
     "LISTING_REJECTED",
@@ -127,6 +129,11 @@ const serializeNotification = (notification: NotificationLog) => ({
     payload: notification.payload ?? null,
     isRead: Boolean(notification.readAt),
     readAt: notification.readAt ?? null,
+    forAdmin: Boolean(
+        notification.payload?.forAdmin ||
+        notification.payload?.isAdminNotification ||
+        notification.title?.startsWith("[Admin]")
+    ),
     createdAt: notification.createdAt,
     updatedAt: notification.updatedAt,
 });
@@ -533,7 +540,7 @@ export const notifyHostApplicationSubmitted = async (
         transaction,
         recipients: adminIds.map((adminUserId) => ({
             userId: adminUserId,
-            title: "Có hồ sơ host mới chờ duyệt",
+            title: "[Admin] Có hồ sơ host mới chờ duyệt",
             body: `${userName} (${userEmail || userPhone}) đã gửi hồ sơ đăng ký trở thành host.`,
             actionUrl: "/admin/ho-so-host",
             payload: {
@@ -541,8 +548,101 @@ export const notifyHostApplicationSubmitted = async (
                 userId,
                 userName,
                 userEmail,
+                isAdminNotification: true,
+                forAdmin: true,
+                targetRole: "admin",
+                scope: "admin",
             },
         })),
+    });
+};
+
+export const notifyHostApplicationApproved = async (
+    applicationId: number,
+    userId: number,
+    transaction?: Transaction,
+) => {
+    const user = await getActiveUser(userId, transaction);
+    const title = "Hồ sơ đối tác đã được duyệt";
+    const body = "Chúc mừng bạn đã trở thành Host! Bạn có thể bắt đầu đăng chỗ nghỉ và quản lý đặt phòng ngay bây giờ.";
+    const lines = [
+        `Xin chào ${user?.fullName ?? ""},`,
+        "Chúc mừng bạn! Hồ sơ đăng ký trở thành Host của bạn đã được quản trị viên phê duyệt.",
+        "Bạn đã chính thức có quyền Chủ nhà và có thể đăng chỗ nghỉ, tạo ưu đãi và quản lý đặt phòng.",
+        `Mã hồ sơ: #${applicationId}`,
+    ];
+
+    await notify({
+        eventType: "HOST_APPLICATION_APPROVED",
+        targetType: "host_application",
+        targetId: applicationId,
+        transaction,
+        recipients: [
+            {
+                userId,
+                title,
+                body,
+                actionUrl: "/chu-nha/cho-nghi",
+                payload: {
+                    applicationId,
+                    status: "approved",
+                },
+                email: user?.email
+                    ? {
+                          to: user.email,
+                          subject: "Hồ sơ đăng ký Host đã được duyệt - The Palm Villa",
+                          text: lines.filter(Boolean).join("\n"),
+                          html: buildEmailHtml(title, lines),
+                      }
+                    : null,
+            },
+        ],
+    });
+};
+
+export const notifyHostApplicationRejected = async (
+    applicationId: number,
+    userId: number,
+    reason: string,
+    transaction?: Transaction,
+) => {
+    const user = await getActiveUser(userId, transaction);
+    const title = "Hồ sơ đăng ký Host bị từ chối";
+    const body = `Hồ sơ đăng ký Host của bạn chưa được duyệt. Lý do: ${reason}`;
+    const lines = [
+        `Xin chào ${user?.fullName ?? ""},`,
+        "Rất tiếc, hồ sơ đăng ký trở thành Host của bạn chưa được phê duyệt.",
+        `Lý do từ chối: ${reason}`,
+        "Vui lòng kiểm tra lại thông tin, giấy tờ tùy thân và gửi lại hồ sơ.",
+        `Mã hồ sơ: #${applicationId}`,
+    ];
+
+    await notify({
+        eventType: "HOST_APPLICATION_REJECTED",
+        targetType: "host_application",
+        targetId: applicationId,
+        transaction,
+        recipients: [
+            {
+                userId,
+                title,
+                body,
+                actionUrl: "/tro-thanh-host/dang-ky",
+                payload: {
+                    applicationId,
+                    status: "rejected",
+                    rejectionReason: reason,
+                },
+                email: user?.email
+                    ? {
+                          to: user.email,
+                          subject: "Thông báo về hồ sơ đăng ký Host - The Palm Villa",
+                          text: lines.filter(Boolean).join("\n"),
+                          html: buildEmailHtml(title, lines),
+                      }
+                    : null,
+            },
+        ],
     });
 };
 
@@ -572,14 +672,24 @@ export const notifyListingSubmitted = async (listingId: number, transaction?: Tr
                 title: "Tin đăng đã gửi kiểm duyệt",
                 body: `${listing.title} đang chờ đội ngũ kiểm duyệt.`,
                 actionUrl: "/chu-nha/cho-nghi",
-                payload,
+                payload: {
+                    ...payload,
+                    isAdminNotification: false,
+                    targetRole: "host",
+                },
             },
             ...adminIds.map((userId) => ({
                 userId,
-                title: "Có listing mới chờ duyệt",
+                title: "[Admin] Có listing mới chờ duyệt",
                 body: `${listing.title} cần được kiểm duyệt.`,
                 actionUrl: "/admin/kiem-duyet",
-                payload,
+                payload: {
+                    ...payload,
+                    isAdminNotification: true,
+                    forAdmin: true,
+                    targetRole: "admin",
+                    scope: "admin",
+                },
             })),
         ],
     });

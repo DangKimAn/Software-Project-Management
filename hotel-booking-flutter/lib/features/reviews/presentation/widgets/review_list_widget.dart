@@ -88,14 +88,19 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                 Text(
                   widget.averageRating.toStringAsFixed(1),
                   style: AppTypography.sectionHeading.copyWith(
+                    fontSize: 19,
                     color: AppColors.textPrimary,
                   ),
                 ),
               ],
             ),
             Text(
-              '(${widget.totalReviews} đánh giá)',
-              style: AppTypography.body.copyWith(color: AppColors.textMuted),
+              '· ${widget.totalReviews} đánh giá',
+              style: AppTypography.bodyLarge.copyWith(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
+              ),
             ),
           ],
         ),
@@ -116,7 +121,7 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.s16),
+        const SizedBox(height: AppSpacing.s20),
         reviewsAsync.when(
           loading: () => const Center(
             child: Padding(
@@ -161,28 +166,31 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: reviews.length,
                   separatorBuilder: (_, __) =>
-                      const Divider(height: AppSpacing.s24),
+                      const SizedBox(height: AppSpacing.s24),
                   itemBuilder: (context, index) {
                     final review = reviews[index];
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             const Icon(
-                              LucideIcons.user,
-                              size: 18,
+                              LucideIcons.circleUser,
+                              size: 28,
                               color: AppColors.iconStrong,
                             ),
-                            const SizedBox(width: AppSpacing.s8),
+                            const SizedBox(width: AppSpacing.s12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     review.reviewerName,
-                                    style: AppTypography.body.copyWith(
+                                    style: AppTypography.bodyLarge.copyWith(
+                                      fontSize: 15,
                                       fontWeight: FontWeight.w600,
+                                      color: AppColors.textStrong,
                                     ),
                                   ),
                                   if (review.createdAt != null)
@@ -190,7 +198,8 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                                       DateFormat('dd/MM/yyyy')
                                           .format(review.createdAt!),
                                       style: AppTypography.caption.copyWith(
-                                        color: AppColors.textMuted,
+                                        fontSize: 12.5,
+                                        color: AppColors.textSecondary,
                                       ),
                                     ),
                                 ],
@@ -208,8 +217,8 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                                 Text(
                                   review.rating.toStringAsFixed(1),
                                   style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
                                     color: AppColors.textPrimary,
                                   ),
                                 ),
@@ -220,40 +229,48 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                         const SizedBox(height: AppSpacing.s8),
                         Text(
                           review.comment,
-                          style: AppTypography.body.copyWith(
-                            color: AppColors.textStrong,
+                          style: AppTypography.bodyLarge.copyWith(
+                            fontSize: 15,
+                            height: 1.48,
+                            fontWeight: FontWeight.w400,
+                            color: AppColors.textPrimary,
                           ),
                         ),
                         if (review.hostReply != null &&
                             review.hostReply!.isNotEmpty) ...[
-                          const SizedBox(height: AppSpacing.s8),
-                          Padding(
-                            padding:
-                                const EdgeInsets.only(left: AppSpacing.s12),
+                          const SizedBox(height: AppSpacing.s12),
+                          Container(
+                            margin: const EdgeInsets.only(left: AppSpacing.s4),
+                            padding: const EdgeInsets.only(
+                              left: AppSpacing.s12,
+                              top: 2,
+                              bottom: 2,
+                            ),
+                            decoration: const BoxDecoration(
+                              border: Border(
+                                left: BorderSide(
+                                  color: AppColors.border,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      LucideIcons.messageSquare,
-                                      size: 14,
-                                      color: AppColors.iconStrong,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Phản hồi từ chủ nhà',
-                                      style: AppTypography.caption.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.textStrong,
-                                      ),
-                                    ),
-                                  ],
+                                Text(
+                                  'Phản hồi từ chủ nhà',
+                                  style: AppTypography.caption.copyWith(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textStrong,
+                                  ),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   review.hostReply!,
-                                  style: AppTypography.caption.copyWith(
+                                  style: AppTypography.bodyMedium.copyWith(
+                                    fontSize: 13.5,
+                                    height: 1.45,
                                     color: AppColors.textSecondary,
                                   ),
                                 ),
@@ -266,7 +283,7 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                   },
                 ),
                 if (hasMore) ...[
-                  const SizedBox(height: AppSpacing.s12),
+                  const SizedBox(height: AppSpacing.s16),
                   Center(
                     child: OutlinedButton(
                       onPressed: () {
@@ -295,14 +312,21 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
       label: Text(
         label,
         style: TextStyle(
-          fontSize: 12,
-          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+          fontSize: 13,
+          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
           color: isSelected ? Colors.white : AppColors.textPrimary,
         ),
       ),
       selected: isSelected,
-      selectedColor: AppColors.textPrimary,
-      backgroundColor: AppColors.surfaceMuted,
+      selectedColor: AppColors.primary,
+      backgroundColor: AppColors.surfaceBase,
+      surfaceTintColor: Colors.transparent,
+      shape: const StadiumBorder(),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      side: BorderSide(
+        color: isSelected ? AppColors.primary : AppColors.border,
+        width: isSelected ? 1.5 : 1.0,
+      ),
       showCheckmark: false,
       onSelected: (_) {
         setState(() {

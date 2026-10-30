@@ -1,0 +1,62 @@
+name: Release Mobile & Web Binaries (Tag Release)
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build_release_artifacts:
+    name: Build Android APK/AAB & Web Bundle
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hotel-booking-flutter
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Android Release APK
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=1G"
+        run: flutter build apk --release --flavor prod --dart-define-from-file=config/prod.json
+
+      - name: Build Android App Bundle (AAB for Google Play)
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=1G"
+        run: flutter build appbundle --release --flavor prod --dart-define-from-file=config/prod.json
+
+      - name: Build Web Production
+        run: |
+          flutter build web --release --dart-define-from-file=config/prod.json
+          tar -czvf build/minhthanhvilla-web-prod.tar.gz -C build/web .
+
+      - name: Create GitHub Release and Upload Binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            hotel-booking-flutter/build/app/outputs/flutter-apk/app-prod-release.apk
+            hotel-booking-flutter/build/app/outputs/bundle/prodRelease/app-prod-release.aab
+            hotel-booking-flutter/build/minhthanhvilla-web-prod.tar.gz
