@@ -910,7 +910,7 @@ class AppTopHeader extends ConsumerWidget {
                               InkWell(
                                 onTap: () {
                                   if (authUser != null && authUser.isHost) {
-                                    context.push('/chu-nha/cho-nghi');
+                                    context.push('/chu-nha/khach-luu-tru');
                                   } else {
                                     context.push('/tro-thanh-host');
                                   }
@@ -1002,7 +1002,7 @@ class AppTopHeader extends ConsumerWidget {
                           break;
                         case 'host':
                           if (authUser != null && authUser.isHost) {
-                            unawaited(context.push('/chu-nha/cho-nghi'));
+                            unawaited(context.push('/chu-nha/khach-luu-tru'));
                           } else {
                             unawaited(context.push('/tro-thanh-host'));
                           }

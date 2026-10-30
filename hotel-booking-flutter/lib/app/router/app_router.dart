@@ -547,11 +547,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ── Host Portal (/chu-nha/* & /host/*) — Host-only ──
       GoRoute(
         path: '/chu-nha',
-        redirect: (context, state) => '/chu-nha/cho-nghi',
+        redirect: (context, state) => '/chu-nha/khach-luu-tru',
       ),
       GoRoute(
         path: '/chu-nha/tong-quan',
-        redirect: (context, state) => '/chu-nha/cho-nghi',
+        redirect: (context, state) => '/chu-nha/khach-luu-tru',
       ),
       GoRoute(
         path: '/chu-nha/cho-nghi',
@@ -602,7 +602,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/host',
-        redirect: (context, state) => '/host/tin-nhan',
+        redirect: (context, state) => '/chu-nha/khach-luu-tru',
+      ),
+      GoRoute(
+        path: '/host/khach',
+        redirect: (context, state) => '/chu-nha/khach-luu-tru',
       ),
       GoRoute(
         path: '/host/tin-nhan',

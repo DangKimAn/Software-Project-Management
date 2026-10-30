@@ -1195,7 +1195,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     tileKey: const Key('menu_host_portal'),
                     icon: LucideIcons.house,
                     title: 'Quản lý chỗ nghỉ',
-                    onTap: () => context.push('/chu-nha/cho-nghi'),
+                    onTap: () => context.push('/chu-nha/khach-luu-tru'),
                   )
                 else if (effectiveUser != null && effectiveUser.isNewHost)
                   _buildSettingsMenuTile(
