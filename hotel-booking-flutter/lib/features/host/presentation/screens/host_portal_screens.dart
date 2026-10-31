@@ -4,24 +4,28 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
+import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../data/host_repository.dart';
 import '../../domain/host_models.dart';
 import '../../services/host_file_picker_service.dart';
+import '../widgets/host_sheet_sync_card.dart';
 import 'them_cho_nghi_screen.dart';
 
 enum HostPortalSection {
-  overview('overview', 'Tổng quan', LucideIcons.layoutDashboard),
-  properties('properties', 'Chỗ nghỉ', LucideIcons.house),
+  overview('overview', 'Tổng quan', AppSemanticIcons.dashboard),
+  properties('properties', 'Chỗ nghỉ', AppSemanticIcons.home),
   newProperty('new_property', 'Thêm chỗ nghỉ', LucideIcons.plus),
-  bookings('bookings', 'Đặt phòng', LucideIcons.calendarCheck),
+  bookings('bookings', 'Đặt phòng', AppSemanticIcons.bookings),
   calendar('calendar', 'Lịch lưu trú', LucideIcons.calendar),
   guests('guests', 'Khách lưu trú', LucideIcons.users),
-  messages('messages', 'Tin nhắn', LucideIcons.messageSquare),
+  messages('messages', 'Tin nhắn', AppSemanticIcons.messageHost),
   payouts('payouts', 'Thanh toán', LucideIcons.wallet),
   reviews('reviews', 'Đánh giá', LucideIcons.star),
-  reports('reports', 'Báo cáo', LucideIcons.chartColumn),
-  support('support', 'Hỗ trợ', LucideIcons.lifeBuoy),
+  reports('reports', 'Báo cáo', AppSemanticIcons.revenue),
+  support('support', 'Hỗ trợ', AppSemanticIcons.supportCenter),
   settings('settings', 'Cài đặt', LucideIcons.settings);
 
   final String keyName;
@@ -1286,69 +1290,67 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
         return Scaffold(
           backgroundColor: AppColors.background,
-          appBar: isDesktop
-              ? AppBar(
-                  backgroundColor: AppColors.surfaceBase,
-                  elevation: 0,
-                  titleSpacing: 12,
-                  leading: IconButton(
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
+            backgroundColor: AppColors.surfaceBase,
+            elevation: 0,
+            titleSpacing: 12,
+            leading: isDesktop
+                ? IconButton(
                     constraints:
                         const BoxConstraints(minWidth: 48, minHeight: 48),
                     icon: const Icon(
-                      LucideIcons.house,
-                      color: AppColors.textPrimary,
+                      AppSemanticIcons.home,
+                      color: AppColors.iconStrong,
                     ),
-                    onPressed: () => context.go('/'),
+                    onPressed: () => _navigatePortalRoute(context, '/'),
                     tooltip: 'Về trang chủ',
-                  ),
-                  title: Row(
-                    children: [
-                      const AppBrandIcon.minhThanhLogo(
-                        size: 22,
-                        color: AppColors.textPrimary,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Host Portal • ${_activeSection.label}',
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    IconButton(
-                      key: const Key('host_portal_add_property_quick_btn'),
-                      constraints:
-                          const BoxConstraints(minWidth: 48, minHeight: 48),
-                      tooltip: 'Thêm chỗ nghỉ mới',
-                      onPressed: () =>
-                          _switchSection(HostPortalSection.newProperty),
-                      icon: const Icon(
-                        LucideIcons.plus,
-                        color: AppColors.textPrimary,
-                        size: 20,
-                      ),
+                  )
+                : null,
+            title: Row(
+              children: [
+                const AppBrandIcon.minhThanhLogo(
+                  size: 22,
+                  color: AppColors.iconStrong,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isDesktop
+                        ? 'Host Portal • ${_activeSection.label}'
+                        : _activeSection.label,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                     ),
-                    IconButton(
-                      constraints:
-                          const BoxConstraints(minWidth: 48, minHeight: 48),
-                      tooltip: 'Về trang chủ',
-                      onPressed: () => context.go('/'),
-                      icon: const Icon(
-                        LucideIcons.externalLink,
-                        color: AppColors.textPrimary,
-                        size: 18,
-                      ),
-                    ),
-                  ],
-                )
-              : null,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              IconButton(
+                key: const Key('host_portal_add_property_quick_btn'),
+                constraints:
+                    const BoxConstraints(minWidth: 48, minHeight: 48),
+                tooltip: 'Thêm chỗ nghỉ mới',
+                onPressed: () =>
+                    _switchSection(HostPortalSection.newProperty),
+                icon: const Icon(
+                  LucideIcons.plus,
+                  color: AppColors.iconStrong,
+                  size: 20,
+                ),
+              ),
+              const NotificationBell(),
+              const SizedBox(width: 4),
+            ],
+            bottom: const PreferredSize(
+              preferredSize: Size.fromHeight(1),
+              child: Divider(height: 1, color: AppColors.border),
+            ),
+          ),
           drawer: isDesktop
               ? null
               : Drawer(
@@ -1385,6 +1387,25 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     );
   }
 
+  void _navigatePortalRoute(BuildContext context, String route) {
+    final router = GoRouter.maybeOf(context);
+    if (router != null) {
+      router.go(route);
+    }
+  }
+
+  Future<void> _handlePortalLogout({required bool inDrawer}) async {
+    if (inDrawer) {
+      Navigator.of(context).pop();
+    }
+    try {
+      await ref.read(authNotifierProvider.notifier).logout();
+    } catch (_) {}
+    if (mounted) {
+      _navigatePortalRoute(context, '/dang-nhap');
+    }
+  }
+
   Widget _buildMobileBottomNavigation(BuildContext context) {
     const sections = [
       HostPortalSection.guests,
@@ -1393,52 +1414,105 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       HostPortalSection.messages,
     ];
     final selectedIndex = sections.indexOf(_activeSection);
+    final activeTabIndex = selectedIndex < 0 ? 4 : selectedIndex;
+    const navItems = [
+      (icon: LucideIcons.users, label: 'Khách', semantic: 'Khách lưu trú'),
+      (icon: LucideIcons.calendar, label: 'Lịch', semantic: 'Lịch lưu trú'),
+      (icon: LucideIcons.plus, label: 'Thêm', semantic: 'Thêm chỗ nghỉ'),
+      (
+        icon: AppSemanticIcons.messageHost,
+        label: 'Tin nhắn',
+        semantic: 'Tin nhắn',
+      ),
+      (icon: LucideIcons.menu, label: 'Menu', semantic: 'Mở menu điều hướng Host'),
+    ];
 
-    return DecoratedBox(
+    return Container(
+      key: const Key('host_bottom_navigation'),
       decoration: const BoxDecoration(
+        color: AppColors.surfaceBase,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
-      child: BottomNavigationBar(
-        key: const Key('host_bottom_navigation'),
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: AppColors.surfaceBase,
-        elevation: 0,
-        currentIndex: selectedIndex < 0 ? 4 : selectedIndex,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textSecondary,
-        selectedFontSize: 12,
-        unselectedFontSize: 12,
-        showUnselectedLabels: true,
-        onTap: (index) {
-          if (index == 4) {
-            Scaffold.of(context).openDrawer();
-          } else {
-            _switchSection(sections[index]);
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(LucideIcons.users),
-            label: 'Khách',
+      child: SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 60),
+          child: Row(
+            children: List.generate(navItems.length, (index) {
+              final item = navItems[index];
+              final isSelected = activeTabIndex == index;
+              return Expanded(
+                child: Semantics(
+                  button: true,
+                  selected: isSelected,
+                  label: item.semantic,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      if (index == 4) {
+                        Scaffold.of(context).openDrawer();
+                      } else {
+                        _switchSection(sections[index]);
+                      }
+                    },
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 6,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              item.icon,
+                              size: 20,
+                              color: isSelected
+                                  ? AppColors.iconStrong
+                                  : AppColors.iconMuted,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              item.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: isSelected
+                                    ? FontWeight.w800
+                                    : FontWeight.w700,
+                                color: isSelected
+                                    ? AppColors.textStrong
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                            Container(
+                              width: 24,
+                              height: 2,
+                              margin: const EdgeInsets.only(top: 4),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppColors.primary
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(LucideIcons.calendar),
-            label: 'Lịch',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(LucideIcons.plus),
-            label: 'Thêm',
-            tooltip: 'Thêm chỗ nghỉ',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(LucideIcons.messageSquare),
-            label: 'Tin nhắn',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(LucideIcons.menu),
-            label: 'Menu',
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1475,8 +1549,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       section.icon,
                       size: 18,
                       color: _activeSection == section
-                          ? AppColors.primary
-                          : AppColors.textSecondary,
+                          ? AppColors.iconStrong
+                          : AppColors.iconMuted,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -1484,10 +1558,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         section.label,
                         style: TextStyle(
                           fontSize: 14,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: _activeSection == section
+                              ? FontWeight.w800
+                              : FontWeight.w700,
                           color: _activeSection == section
-                              ? AppColors.primary
-                              : AppColors.textPrimary,
+                              ? AppColors.textStrong
+                              : AppColors.textSecondary,
                         ),
                       ),
                     ),
@@ -1496,43 +1572,71 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               ),
             ),
           ),
-        if (inDrawer) ...[
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Divider(height: 1, color: AppColors.border),
-          ),
-          InkWell(
-            borderRadius: BorderRadius.zero,
-            onTap: () {
-              Navigator.of(context).pop();
-              context.go('/');
-            },
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 48),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: const Row(
-                children: [
-                  Icon(
-                    LucideIcons.externalLink,
-                    size: 18,
-                    color: AppColors.textSecondary,
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Về trang chủ',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Divider(height: 1, color: AppColors.border),
+        ),
+        InkWell(
+          key: const Key('host_portal_home_btn'),
+          borderRadius: BorderRadius.zero,
+          onTap: () {
+            if (inDrawer) Navigator.of(context).pop();
+            _navigatePortalRoute(context, '/');
+          },
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: const Row(
+              children: [
+                Icon(
+                  AppSemanticIcons.home,
+                  size: 18,
+                  color: AppColors.iconStrong,
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Về trang chủ',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
+        InkWell(
+          key: const Key('host_portal_logout_btn'),
+          borderRadius: BorderRadius.zero,
+          onTap: () => _handlePortalLogout(inDrawer: inDrawer),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: const Row(
+              children: [
+                Icon(
+                  AppSemanticIcons.logout,
+                  size: 18,
+                  color: AppColors.iconStrong,
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Đăng xuất',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -1582,12 +1686,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
         _listingsError ?? _bookingsError ?? _reportError ?? _payoutsError;
     final stats = [
       (label: 'Chỗ nghỉ', value: _loadingListings ? '—' : '${_listings.length}',
-        icon: LucideIcons.house, section: HostPortalSection.properties),
+        icon: AppSemanticIcons.home, section: HostPortalSection.properties),
       (label: 'Đặt phòng', value: _loadingBookings ? '—' : '${_bookings.length}',
-        icon: LucideIcons.calendarCheck, section: HostPortalSection.bookings),
+        icon: AppSemanticIcons.bookings, section: HostPortalSection.bookings),
       (label: 'Doanh thu · 30 ngày',
         value: _loadingReport ? '—' : formatCompactHostVnd(_revenueReport.hostRevenue),
-        icon: LucideIcons.chartColumn, section: HostPortalSection.reports),
+        icon: AppSemanticIcons.revenue, section: HostPortalSection.reports),
       (label: 'Tài khoản nhận tiền', value: _loadingPayouts ? '—' : '${_payoutAccounts.length}',
         icon: LucideIcons.wallet, section: HostPortalSection.payouts),
     ];
@@ -1614,18 +1718,24 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   color: AppColors.textPrimary,
                 ))),
                 IconButton(
+                  constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                   tooltip: 'Tải lại',
                   onPressed: _loadInitialPortalData,
-                  icon: const Icon(LucideIcons.refreshCw, size: 20),
-                ),
-                IconButton.filled(
-                  tooltip: 'Thêm chỗ nghỉ',
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
+                  icon: const Icon(
+                    AppSemanticIcons.retry,
+                    size: 20,
+                    color: AppColors.iconStrong,
                   ),
+                ),
+                IconButton(
+                  constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                  tooltip: 'Thêm chỗ nghỉ',
                   onPressed: () => _switchSection(HostPortalSection.newProperty),
-                  icon: const Icon(LucideIcons.plus, size: 22),
+                  icon: const Icon(
+                    LucideIcons.plus,
+                    size: 22,
+                    color: AppColors.iconStrong,
+                  ),
                 ),
               ],
             ),
@@ -1656,7 +1766,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(stat.icon, size: 20, color: AppColors.primary),
+                            Icon(stat.icon, size: 20, color: AppColors.iconStrong),
                             const SizedBox(height: 10),
                             Text(stat.value, style: const TextStyle(
                               fontSize: 24, fontWeight: FontWeight.w800,
@@ -1843,7 +1953,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     tooltip: 'Tải lại',
                     constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                     onPressed: _loadingListings ? null : _fetchListings,
-                    icon: const Icon(LucideIcons.refreshCw, size: 18),
+                    icon: const Icon(
+                      AppSemanticIcons.retry,
+                      size: 18,
+                      color: AppColors.iconStrong,
+                    ),
                   ),
                   ElevatedButton.icon(
                     key: const Key('properties_add_new_btn'),
@@ -2193,13 +2307,17 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 key: Key('listing_delete_btn_$id'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(88, 48),
-                  foregroundColor: const Color(0xFFBE123C),
+                  foregroundColor: AppColors.error,
                   side: BorderSide.none,
                   shape: const StadiumBorder(),
                 ),
                 onPressed:
                     isBusy ? null : () => _confirmAndDeleteListing(listing),
-                icon: const Icon(LucideIcons.trash2, size: 15),
+                icon: const Icon(
+                  LucideIcons.trash2,
+                  size: 15,
+                  color: AppColors.iconStrong,
+                ),
                 label: const Text('Xóa'),
               ),
             ],
@@ -2443,8 +2561,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               )),
               if (guestPhone.isNotEmpty)
                 IconButton(
+                  constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                   tooltip: 'Liên hệ khách',
-                  icon: const Icon(LucideIcons.userRound, size: 18),
+                  icon: const Icon(
+                    LucideIcons.phone,
+                    size: 18,
+                    color: AppColors.iconStrong,
+                  ),
                   onPressed: () => showDialog<void>(
                     context: context,
                     builder: (context) => AlertDialog(
@@ -2509,7 +2632,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     onPressed: isBusy
                         ? null
                         : () => _handleBookingAction(booking, 'check_in'),
-                    icon: const Icon(LucideIcons.logIn, size: 15),
+                    icon: const Icon(AppSemanticIcons.checkIn, size: 15),
                     label: const Text('Check-in'),
                   ),
                 if (actions.canCheckOut)
@@ -2525,7 +2648,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     onPressed: isBusy
                         ? null
                         : () => _handleBookingAction(booking, 'check_out'),
-                    icon: const Icon(LucideIcons.logOut, size: 15),
+                    icon: const Icon(AppSemanticIcons.checkOut, size: 15),
                     label: const Text('Check-out'),
                   ),
                 if (actions.canCancel)
@@ -2533,14 +2656,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     key: Key('booking_cancel_btn_$bookingId'),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(96, 48),
-                      foregroundColor: const Color(0xFFBE123C),
-                      side: const BorderSide(color: Color(0xFFFECDD3)),
+                      foregroundColor: AppColors.error,
+                      side: const BorderSide(color: AppColors.border),
                       shape: const StadiumBorder(),
                     ),
                     onPressed: isBusy
                         ? null
                         : () => _handleBookingAction(booking, 'cancel'),
-                    icon: const Icon(LucideIcons.x, size: 15),
+                    icon: const Icon(
+                      LucideIcons.x,
+                      size: 15,
+                      color: AppColors.iconStrong,
+                    ),
                     label: const Text('Hủy'),
                   ),
               ],
@@ -2747,9 +2874,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
         return false;
       }
       if (query.isEmpty) return true;
+      final idStr = '${l['listingId'] ?? l['id'] ?? ''}'.toLowerCase();
       final title = (l['title'] ?? '').toString().toLowerCase();
       final address = '${l['addressLine'] ?? ''} ${l['city'] ?? ''}'.toLowerCase();
-      return title.contains(query) || address.contains(query);
+      return title.contains(query) ||
+          address.contains(query) ||
+          idStr.contains(query) ||
+          '#$idStr'.contains(query);
     }).toList();
 
     return SingleChildScrollView(
@@ -2782,8 +2913,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   ),
                 ],
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   IconButton(
                     tooltip: 'Tìm kiếm',
@@ -2798,8 +2931,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                       color: AppColors.textPrimary,
                     ),
                   ),
-                  if (_calendarListingId != null) ...[
-                    const SizedBox(width: 4),
+                  if (_calendarListingId != null)
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
@@ -2813,13 +2945,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         _fetchCalendarDays();
                       },
                       icon: const Icon(LucideIcons.calendarDays, size: 15),
-                      label: const Text('Xem lịch chi tiết',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      label: const Text(
+                        'Xem lịch chi tiết',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ],
                 ],
               ),
             ],
+          ),
+          const SizedBox(height: 14),
+          HostSheetSyncCard(
+            onCalendarChanged: () {
+              _fetchListings();
+              if (_calendarListingId != null) {
+                _fetchCalendarDays();
+              }
+            },
           ),
           if (_calendarSearchVisible) ...[
             const SizedBox(height: 12),
@@ -2827,7 +2973,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               controller: _calendarSearchCtrl,
               onChanged: (val) => setState(() => _calendarSearchQuery = val),
               decoration: InputDecoration(
-                hintText: 'Tìm theo tên hoặc địa chỉ chỗ nghỉ...',
+                hintText: 'Tìm theo tên, mã căn (#ID) hoặc địa chỉ...',
                 prefixIcon: const Icon(LucideIcons.search, size: 18),
                 suffixIcon: _calendarSearchQuery.isNotEmpty
                     ? IconButton(
@@ -2976,7 +3122,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                statusTextVi,
+                                id.isNotEmpty
+                                    ? 'Mã #$id · $statusTextVi'
+                                    : statusTextVi,
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
@@ -3275,18 +3423,26 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                     padding: EdgeInsets.zero,
                     tooltip: 'Tháng trước',
                     onPressed: _prevMonth,
-                    icon: const Icon(LucideIcons.chevronLeft, size: 18),
+                    icon: const Icon(
+                      LucideIcons.chevronLeft,
+                      size: 18,
+                      color: AppColors.iconStrong,
+                    ),
                   ),
                   IconButton(
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                     padding: EdgeInsets.zero,
                     tooltip: 'Tháng sau',
                     onPressed: _nextMonth,
-                    icon: const Icon(LucideIcons.chevronRight, size: 18),
+                    icon: const Icon(
+                      LucideIcons.chevronRight,
+                      size: 18,
+                      color: AppColors.iconStrong,
+                    ),
                   ),
                   TextButton(
                     onPressed: _goToCurrentMonth,
@@ -4124,6 +4280,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               ),
             ],
           ],
+          const SizedBox(height: 16),
+          HostSheetSyncCard(
+            onCalendarChanged: () {
+              _fetchListings();
+              if (_calendarListingId != null) {
+                _fetchCalendarDays();
+              }
+            },
+          ),
         ],
       ),
     );
@@ -4371,7 +4536,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     ),
                     onPressed:
                         _loadingConversations ? null : _fetchConversations,
-                    icon: const Icon(LucideIcons.refreshCw, size: 16),
+                    icon: const Icon(
+                      AppSemanticIcons.retry,
+                      size: 16,
+                      color: AppColors.iconStrong,
+                    ),
                     label: const Text('Tải lại'),
                   ),
                   OutlinedButton.icon(
@@ -4385,12 +4554,19 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     onPressed: () {
                       final convId = _selectedConversationId;
                       if (convId != null && convId.isNotEmpty) {
-                        context.go('/messages?conversationId=$convId');
+                        _navigatePortalRoute(
+                          context,
+                          '/messages?conversationId=$convId',
+                        );
                       } else {
-                        context.go('/messages');
+                        _navigatePortalRoute(context, '/messages');
                       }
                     },
-                    icon: const Icon(LucideIcons.externalLink, size: 16),
+                    icon: const Icon(
+                      AppSemanticIcons.messageHost,
+                      size: 16,
+                      color: AppColors.iconStrong,
+                    ),
                     label: const Text('Hộp thư đầy đủ'),
                   ),
                 ],
@@ -5294,34 +5470,53 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                           runSpacing: 12,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            CircleAvatar(
-                              radius: 32,
-                              backgroundColor: AppColors.surfaceMuted,
-                              backgroundImage:
-                                  (_hostProfile?['avatarUrl'] != null &&
+                            Container(
+                              width: 64,
+                              height: 64,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceElevated,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: AppColors.borderSoft),
+                              ),
+                              child: ClipOval(
+                                child: SizedBox(
+                                  width: 64,
+                                  height: 64,
+                                  child: (_hostProfile?['avatarUrl'] != null &&
                                           '${_hostProfile!['avatarUrl']}'
+                                              .trim()
                                               .isNotEmpty)
-                                      ? NetworkImage(
-                                          '${_hostProfile!['avatarUrl']}',
+                                      ? AppImage(
+                                          url: '${_hostProfile!['avatarUrl']}'
+                                              .trim(),
+                                          fit: BoxFit.cover,
                                         )
-                                      : null,
-                              child: (_hostProfile?['avatarUrl'] == null ||
-                                      '${_hostProfile!['avatarUrl']}'.isEmpty)
-                                  ? const Icon(
-                                      LucideIcons.user,
-                                      color: AppColors.textPrimary,
-                                    )
-                                  : null,
+                                      : const Center(
+                                          child: Icon(
+                                            AppSemanticIcons.userProfile,
+                                            size: 26,
+                                            color: AppColors.iconStrong,
+                                          ),
+                                        ),
+                                ),
+                              ),
                             ),
                             OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.textStrong,
+                                side: const BorderSide(color: AppColors.border),
                                 minimumSize: const Size(140, 48),
                                 shape: const StadiumBorder(),
                               ),
                               onPressed: _uploadingAvatar
                                   ? null
                                   : _handlePickAndUploadAvatar,
-                              icon: const Icon(LucideIcons.upload, size: 16),
+                              icon: const Icon(
+                                AppSemanticIcons.changeAvatar,
+                                size: 16,
+                                color: AppColors.iconStrong,
+                              ),
                               label: Text(
                                 _uploadingAvatar
                                     ? 'Đang tải ảnh...'
@@ -5414,8 +5609,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                           onChanged: (_) => setState(() {}),
                           decoration: InputDecoration(
                             labelText: 'Tìm kiếm ngân hàng (Tên, Mã, BIN)',
-                            prefixIcon:
-                                const Icon(LucideIcons.search, size: 18),
+                            prefixIcon: const Icon(
+                              LucideIcons.search,
+                              size: 18,
+                              color: AppColors.iconStrong,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(999),
                             ),
@@ -5454,6 +5652,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                           key: const Key('settings_bank_account_number_input'),
                           controller: _bankAccountNumberCtrl,
                           keyboardType: TextInputType.number,
+                          enableSuggestions: false,
+                          autocorrect: false,
+                          enableIMEPersonalizedLearning: false,
                           decoration: InputDecoration(
                             labelText: 'Số tài khoản (6–30 chữ số) *',
                             border: OutlineInputBorder(
@@ -5580,9 +5781,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF1F2),
+        color: AppColors.errorSoft,
         borderRadius: BorderRadius.circular(20),
-        border: borderless ? null : Border.all(color: const Color(0xFFFECDD3)),
+        border: borderless ? null : Border.all(color: AppColors.border),
       ),
       child: Wrap(
         alignment: WrapAlignment.spaceBetween,
@@ -5594,9 +5795,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
-                LucideIcons.circleAlert,
+                AppSemanticIcons.errorAlert,
                 size: 18,
-                color: Color(0xFFBE123C),
+                color: AppColors.iconStrong,
               ),
               const SizedBox(width: 10),
               Flexible(
@@ -5605,7 +5806,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFFBE123C),
+                    color: AppColors.error,
                   ),
                 ),
               ),
@@ -5616,11 +5817,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               key: const Key('host_inline_error_retry_btn'),
               style: TextButton.styleFrom(
                 minimumSize: const Size(88, 48),
-                foregroundColor: const Color(0xFFBE123C),
+                foregroundColor: AppColors.textStrong,
                 shape: const StadiumBorder(),
               ),
               onPressed: onRetry,
-              icon: const Icon(LucideIcons.refreshCw, size: 14),
+              icon: const Icon(
+                AppSemanticIcons.retry,
+                size: 14,
+                color: AppColors.iconStrong,
+              ),
               label: const Text('Thử lại'),
             ),
         ],
@@ -5632,16 +5837,16 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFECFDF5),
+        color: AppColors.successSoft,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFA7F3D0)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         children: [
           const Icon(
             LucideIcons.circleCheck,
             size: 18,
-            color: Color(0xFF047857),
+            color: AppColors.iconStrong,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -5650,7 +5855,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF047857),
+                color: AppColors.success,
               ),
             ),
           ),

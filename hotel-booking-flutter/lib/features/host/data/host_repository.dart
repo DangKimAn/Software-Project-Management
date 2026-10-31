@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http_parser/http_parser.dart';
+import '../../../app/di/providers.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/security/secure_storage_service.dart';
@@ -18,12 +19,13 @@ final hostCurrentUserRoleProvider = Provider<String?>((ref) {
   } catch (_) {
     // Fallback when authNotifierProvider is not initialized in isolated widget tests
   }
-  return 'host';
+  return null;
 });
 
 final hostRepositoryProvider = Provider<HostRepository>((ref) {
+  final dioClient = ref.watch(dioClientProvider);
   return HostRepository(
-    HostRepository.createDefaultDio(),
+    dioClient.dio,
     roleResolver: () => ref.read(hostCurrentUserRoleProvider),
   );
 });
@@ -186,10 +188,16 @@ class HostRepository {
   }
 
   /// Ensures only authorized roles (`host` or `admin`) can execute Host Portal
-  /// mutations when user role metadata is provided.
+  /// mutations. Fails closed (`401`) when bound to a `_roleResolver` without an active session.
   void assertHostRoleAuthorized([String? userRole]) {
+    if (userRole == null && _roleResolver == null) return;
     final effectiveRole = userRole ?? _roleResolver?.call();
-    if (effectiveRole == null) return;
+    if (effectiveRole == null || effectiveRole.trim().isEmpty) {
+      throw HostAuthorizationException(
+        'Vui lòng đăng nhập bằng tài khoản Chủ nhà (Host) để thực hiện thao tác này.',
+        statusCode: 401,
+      );
+    }
     if (!isApprovedHostRole(effectiveRole)) {
       throw HostAuthorizationException(
         'Tài khoản "$effectiveRole" không có quyền thực hiện thao tác dành riêng cho Chủ nhà (Host).',
@@ -1455,5 +1463,243 @@ class HostRepository {
           );
 
     return HostIdentityAiResult.fromJson(data);
+  }
+
+  // ===========================================================================
+  // Google Sheets Agency Mode (`/api/host/sheet-sync/*` & Listing Restore)
+  // ===========================================================================
+
+  /// Enforces strict Host-only role (`host`) matching backend `requireHostOnly`
+  /// (`401` when unauthenticated, `403` for `guest` or `admin`).
+  void assertStrictHostOnlyRoleAuthorized([String? userRole]) {
+    if (userRole == null && _roleResolver == null) return;
+    final effectiveRole = userRole ?? _roleResolver?.call();
+    if (effectiveRole == null || effectiveRole.trim().isEmpty) {
+      throw HostAuthorizationException(
+        'Vui lòng đăng nhập bằng tài khoản Chủ nhà (Host) để quản lý đồng bộ Google Sheets.',
+        statusCode: 401,
+      );
+    }
+    if (effectiveRole.trim().toLowerCase() != 'host') {
+      throw HostAuthorizationException(
+        'Tài khoản "$effectiveRole" không có quyền truy cập cấu hình Google Sheets của Chủ nhà.',
+        statusCode: 403,
+        userRole: effectiveRole,
+      );
+    }
+  }
+
+  /// `POST /api/host/listings/:listingId/restore`
+  /// Restores a soft-deleted listing reusing its original immutable `listingId`.
+  Future<Map<String, dynamic>> restoreHostListing(
+    String listingId, {
+    String? userRole,
+  }) async {
+    assertHostRoleAuthorized(userRole);
+    final trimmed = listingId.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('Mã căn cần khôi phục không hợp lệ.');
+    }
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/listings/$trimmed/restore',
+    );
+    final map = _unwrapMap(response.data);
+    final listing = map['listing'] is Map<Object?, Object?>
+        ? Map<String, dynamic>.from(map['listing'] as Map<Object?, Object?>)
+        : map;
+    return _normalizeListingMap(listing);
+  }
+
+  /// `GET /api/host/sheet-sync/status`
+  Future<HostSheetSyncStatusPayload> getHostSheetSyncStatus({
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final response = await _client.dio.get<dynamic>(
+      '/api/host/sheet-sync/status',
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `POST /api/host/sheet-sync/connect`
+  Future<HostSheetSyncStatusPayload> connectHostSheet({
+    required String spreadsheetUrlOrId,
+    String? hostEditorEmail,
+    bool autoSyncEnabled = true,
+    bool strictBookingPrecheck = true,
+    bool initializeImmediately = true,
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final urlValidationError = validateGoogleSheetInput(spreadsheetUrlOrId);
+    if (urlValidationError != null) {
+      throw ArgumentError(urlValidationError);
+    }
+    final emailValidationError = validateOptionalEditorEmail(hostEditorEmail);
+    if (emailValidationError != null) {
+      throw ArgumentError(emailValidationError);
+    }
+
+    final trimmedEmail = hostEditorEmail?.trim();
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/sheet-sync/connect',
+      data: <String, dynamic>{
+        'spreadsheetUrlOrId': spreadsheetUrlOrId.trim(),
+        if (trimmedEmail != null && trimmedEmail.isNotEmpty)
+          'hostEditorEmail': trimmedEmail,
+        'autoSyncEnabled': autoSyncEnabled,
+        'strictBookingPrecheck': strictBookingPrecheck,
+        'initializeImmediately': initializeImmediately,
+      },
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `POST /api/host/sheet-sync/verify-permissions`
+  Future<HostSheetSyncStatusPayload> verifyHostSheetPermissions({
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/sheet-sync/verify-permissions',
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `POST /api/host/sheet-sync/init-calendar`
+  Future<HostSheetSyncStatusPayload> initializeHostSheetCalendar({
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/sheet-sync/init-calendar',
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `POST /api/host/sheet-sync/sync-now`
+  Future<HostSheetSyncStatusPayload> syncHostSheetNow({
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/sheet-sync/sync-now',
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `PATCH /api/host/sheet-sync/settings`
+  Future<HostSheetSyncStatusPayload> updateHostSheetSettings({
+    String? hostEditorEmail,
+    bool? autoSyncEnabled,
+    bool? strictBookingPrecheck,
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    if (hostEditorEmail != null) {
+      final emailErr = validateOptionalEditorEmail(hostEditorEmail);
+      if (emailErr != null) {
+        throw ArgumentError(emailErr);
+      }
+    }
+    final response = await _client.dio.patch<dynamic>(
+      '/api/host/sheet-sync/settings',
+      data: <String, dynamic>{
+        if (hostEditorEmail != null) 'hostEditorEmail': hostEditorEmail.trim(),
+        if (autoSyncEnabled != null) 'autoSyncEnabled': autoSyncEnabled,
+        if (strictBookingPrecheck != null)
+          'strictBookingPrecheck': strictBookingPrecheck,
+      },
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `DELETE /api/host/sheet-sync/disconnect`
+  Future<HostSheetSyncStatusPayload> disconnectHostSheet({
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final response = await _client.dio.delete<dynamic>(
+      '/api/host/sheet-sync/disconnect',
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `GET /api/host/sheet-sync/conflicts`
+  Future<List<HostSheetWarningItem>> getHostSheetConflicts({
+    String? status,
+    int? listingId,
+    int page = 1,
+    int limit = 20,
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final response = await _client.dio.get<dynamic>(
+      '/api/host/sheet-sync/conflicts',
+      queryParameters: <String, dynamic>{
+        if (status != null && status.isNotEmpty) 'status': status,
+        if (listingId != null) 'listingId': listingId,
+        'page': page < 1 ? 1 : page,
+        'limit': limit.clamp(1, 50),
+      },
+    );
+    final rawItems = _extractList(
+      response.data,
+      const ['items', 'conflicts', 'data'],
+    );
+    return rawItems.map(HostSheetWarningItem.fromJson).toList();
+  }
+
+  /// `POST /api/host/sheet-sync/conflicts/:conflictId/resolve`
+  Future<HostSheetSyncStatusPayload> resolveHostSheetConflict({
+    required int conflictId,
+    required String action,
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    const allowedActions = <String>{
+      'keep_locked',
+      'unlock_if_safe',
+      'undo_bulk_change',
+      'repair_structure',
+    };
+    if (conflictId <= 0) {
+      throw ArgumentError('Mã cảnh báo xung đột không hợp lệ.');
+    }
+    if (!allowedActions.contains(action)) {
+      throw ArgumentError('Thao tác xử lý xung đột không hợp lệ.');
+    }
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/sheet-sync/conflicts/$conflictId/resolve',
+      data: <String, dynamic>{'action': action},
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `GET /api/host/sheet-sync/logs`
+  Future<List<HostSheetChangeLogItem>> getHostSheetChangeLogs({
+    int? listingId,
+    String? search,
+    int page = 1,
+    int limit = 20,
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final trimmedSearch = search?.trim();
+    final response = await _client.dio.get<dynamic>(
+      '/api/host/sheet-sync/logs',
+      queryParameters: <String, dynamic>{
+        if (listingId != null) 'listingId': listingId,
+        if (trimmedSearch != null && trimmedSearch.isNotEmpty)
+          'search': trimmedSearch,
+        'page': page < 1 ? 1 : page,
+        'limit': limit.clamp(1, 50),
+      },
+    );
+    final rawItems = _extractList(
+      response.data,
+      const ['items', 'logs', 'data'],
+    );
+    return rawItems.map(HostSheetChangeLogItem.fromJson).toList();
   }
 }
