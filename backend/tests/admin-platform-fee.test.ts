@@ -1,7 +1,7 @@
-require("dotenv").config({ path: ".env" });
 const assert = require("node:assert/strict");
 const { after, afterEach, beforeEach, describe, it } = require("node:test");
 const request = require("supertest");
+import { Op } from "sequelize";
 import type { PatchEntry } from "./helpers/types";
 
 process.env.NODE_ENV = "test";
@@ -14,6 +14,7 @@ const PlatformFeeSetting = require("../dist/models/platform-fee-setting").defaul
 const User = require("../dist/models/user").default;
 const authService = require("../dist/modules/auth/auth.service");
 const mailService = require("../dist/services/mail.service");
+const notificationService = require("../dist/modules/notifications/notification.service");
 const {
     cancelScheduledPlatformFee,
     getCurrentPlatformFeeStatus,
@@ -32,17 +33,42 @@ const patch = (target: Record<string, unknown>, key: string, value: unknown): vo
     target[key] = value;
 };
 
-beforeEach(() => {
-    // Stub mail sending in unit tests to keep tests fast and prevent network SMTP calls
-    patch(mailService, "sendMail", async () => ({ success: true, messageId: "mock-mail-id" }));
-});
+type MockFeeSetting = {
+    id: number;
+    feePct: number;
+    status: "active" | "scheduled" | "superseded" | "cancelled";
+    effectiveAt: Date;
+    createdByAdminId: number;
+    cancelledByAdminId: number | null;
+    reason: string | null;
+    notificationSentAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    save: (options?: unknown) => Promise<MockFeeSetting>;
+};
 
-afterEach(() => {
-    while (originals.length > 0) {
-        const [target, key, value] = originals.pop()!;
-        target[key] = value;
-    }
-});
+let feeSettings: MockFeeSetting[] = [];
+let nextFeeId = 1;
+
+const buildFeeSetting = (data: Partial<MockFeeSetting>): MockFeeSetting => {
+    const item: MockFeeSetting = {
+        id: data.id ?? nextFeeId++,
+        feePct: data.feePct ?? 10,
+        status: data.status ?? "scheduled",
+        effectiveAt: data.effectiveAt ? new Date(data.effectiveAt) : new Date(),
+        createdByAdminId: data.createdByAdminId ?? 1,
+        cancelledByAdminId: data.cancelledByAdminId ?? null,
+        reason: data.reason ?? null,
+        notificationSentAt: data.notificationSentAt ? new Date(data.notificationSentAt) : null,
+        createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
+        updatedAt: data.updatedAt ? new Date(data.updatedAt) : new Date(),
+        async save() {
+            item.updatedAt = new Date();
+            return item;
+        },
+    };
+    return item;
+};
 
 const adminUser = {
     id: "1",
@@ -79,12 +105,102 @@ const guestAuth = { Authorization: "Bearer guest-token" };
 const hostAuth = { Authorization: "Bearer host-token" };
 
 describe("Admin Platform Fee Management (Unit & Integration Tests)", () => {
+    beforeEach(() => {
+        // Reset in-memory fixture state
+        nextFeeId = 2;
+        feeSettings = [
+            buildFeeSetting({
+                id: 1,
+                feePct: 10,
+                status: "active",
+                effectiveAt: new Date(Date.now() - 3600 * 1000),
+                createdByAdminId: 1,
+                reason: "Initial default platform fee 10%",
+                createdAt: new Date("2026-01-01T00:00:00Z"),
+                updatedAt: new Date("2026-01-01T00:00:00Z"),
+            }),
+        ];
+        invalidatePlatformFeeCache();
+
+        // Patch PlatformFeeSetting Sequelize Model with in-memory store
+        patch(PlatformFeeSetting, "findAll", async (options: Record<string, any> = {}) => {
+            let result = [...feeSettings];
+            if (options.where) {
+                if (options.where.status) {
+                    result = result.filter((item) => item.status === options.where.status);
+                }
+                if (options.where.effectiveAt) {
+                    const lte = options.where.effectiveAt[Op.lte];
+                    if (lte) {
+                        result = result.filter((item) => item.effectiveAt.getTime() <= new Date(lte).getTime());
+                    }
+                    const gt = options.where.effectiveAt[Op.gt];
+                    if (gt) {
+                        result = result.filter((item) => item.effectiveAt.getTime() > new Date(gt).getTime());
+                    }
+                }
+            }
+            if (options.order) {
+                for (const [col, dir] of options.order) {
+                    result.sort((a: any, b: any) => {
+                        const valA = a[col] instanceof Date ? a[col].getTime() : a[col];
+                        const valB = b[col] instanceof Date ? b[col].getTime() : b[col];
+                        return dir === "DESC" ? (valB > valA ? 1 : -1) : (valA > valB ? 1 : -1);
+                    });
+                }
+            }
+            if (options.limit) {
+                result = result.slice(0, options.limit);
+            }
+            return result;
+        });
+
+        patch(PlatformFeeSetting, "findOne", async (options: Record<string, any> = {}) => {
+            const list = await PlatformFeeSetting.findAll(options);
+            return list[0] ?? null;
+        });
+
+        patch(PlatformFeeSetting, "create", async (data: Partial<MockFeeSetting>) => {
+            const item = buildFeeSetting(data);
+            feeSettings.push(item);
+            return item;
+        });
+
+        patch(PlatformFeeSetting, "update", async (values: Partial<MockFeeSetting>, options: Record<string, any> = {}) => {
+            let count = 0;
+            for (const item of feeSettings) {
+                if (!options.where || !options.where.status || item.status === options.where.status) {
+                    Object.assign(item, values);
+                    count++;
+                }
+            }
+            return [count];
+        });
+
+        // Patch Sequelize query (total revenue and notification queries)
+        patch(sequelize, "query", async () => {
+            return [{ totalPlatformRevenue: 15000000 }];
+        });
+
+        // Stub mail & notification sending to keep tests deterministic and network-isolated
+        patch(mailService, "sendMail", async () => ({ success: true, messageId: "mock-mail-id" }));
+        patch(notificationService, "notifyAllHostsPlatformFeeScheduled", async () => {});
+    });
+
+    afterEach(() => {
+        while (originals.length > 0) {
+            const [target, key, value] = originals.pop()!;
+            target[key] = value;
+        }
+    });
+
     // ── Suite 1: Service Domain Logic & Validation ──
     describe("Platform Fee Service Domain Logic", () => {
         it("should retrieve current platform fee status and return active fee", async () => {
             const status = await getCurrentPlatformFeeStatus();
             assert.ok(status.activeFee);
             assert.strictEqual(typeof status.activeFee.feePct, "number");
+            assert.strictEqual(status.activeFee.feePct, 10);
             assert.strictEqual(status.activeFee.status, "active");
             assert.ok(Array.isArray(status.history));
             assert.strictEqual(typeof status.totalPlatformRevenue, "number");
@@ -181,6 +297,13 @@ describe("Admin Platform Fee Management (Unit & Integration Tests)", () => {
         });
 
         it("should reject scheduling duplicate while one is pending (409 Conflict)", async () => {
+            // Schedule the first change
+            await schedulePlatformFeeChange({
+                feePct: 14,
+                adminUserId: 1,
+            });
+
+            // Second schedule should conflict
             await assert.rejects(
                 async () => {
                     await schedulePlatformFeeChange({
@@ -196,6 +319,12 @@ describe("Admin Platform Fee Management (Unit & Integration Tests)", () => {
         });
 
         it("should allow admin to cancel the scheduled platform fee change", async () => {
+            // Schedule first
+            await schedulePlatformFeeChange({
+                feePct: 14,
+                adminUserId: 1,
+            });
+
             const cancelResult = await cancelScheduledPlatformFee(1);
             assert.strictEqual(cancelResult.success, true);
 
@@ -218,7 +347,7 @@ describe("Admin Platform Fee Management (Unit & Integration Tests)", () => {
 
         it("should automatically activate scheduled fee when effective date has passed", async () => {
             // Create a scheduled record with past effectiveAt
-            const pastDate = new Date(Date.now() - 1000);
+            const pastDate = new Date(Date.now() - 1000 * 60); // 1 minute ago
             await PlatformFeeSetting.create({
                 feePct: 12.5,
                 status: "scheduled",
@@ -231,8 +360,7 @@ describe("Admin Platform Fee Management (Unit & Integration Tests)", () => {
             const activeFee = await syncEffectivePlatformFee();
             assert.strictEqual(activeFee, 12.5);
 
-            // Restore back to 10%
-            await PlatformFeeSetting.update({ status: "superseded" }, { where: { status: "active" } });
+            // Clean up: set active back to 10
             await PlatformFeeSetting.create({
                 feePct: 10,
                 status: "active",
@@ -306,6 +434,7 @@ describe("Admin Platform Fee Management (Unit & Integration Tests)", () => {
             ]);
 
             patch(User, "findByPk", async (id: string | number) => usersMap.get(String(id)) ?? null);
+            patch(User, "findById", async (id: string | number) => usersMap.get(String(id)) ?? null);
             patch(User, "findOne", async ({ where }: any) => {
                 const id = where?.id || where?.userId;
                 return usersMap.get(String(id)) ?? null;
@@ -333,6 +462,7 @@ describe("Admin Platform Fee Management (Unit & Integration Tests)", () => {
             assert.strictEqual(res.body.success, true);
             assert.ok(res.body.data.activeFee);
             assert.strictEqual(typeof res.body.data.activeFee.feePct, "number");
+            assert.strictEqual(res.body.data.activeFee.feePct, 10);
             assert.ok(Array.isArray(res.body.data.history));
         });
 
@@ -347,11 +477,6 @@ describe("Admin Platform Fee Management (Unit & Integration Tests)", () => {
         });
 
         it("POST /api/admin/fees/schedule should return 201 when admin schedules valid fee", async () => {
-            // Cancel any pending
-            await request(app)
-                .post("/api/admin/fees/cancel")
-                .set(adminAuth);
-
             const res = await request(app)
                 .post("/api/admin/fees/schedule")
                 .set(adminAuth)
@@ -367,6 +492,13 @@ describe("Admin Platform Fee Management (Unit & Integration Tests)", () => {
         });
 
         it("POST /api/admin/fees/schedule should return 409 when duplicate schedule is requested", async () => {
+            // First schedule
+            await request(app)
+                .post("/api/admin/fees/schedule")
+                .set(adminAuth)
+                .send({ feePct: 13 });
+
+            // Duplicate schedule
             const res = await request(app)
                 .post("/api/admin/fees/schedule")
                 .set(adminAuth)
@@ -377,6 +509,12 @@ describe("Admin Platform Fee Management (Unit & Integration Tests)", () => {
         });
 
         it("POST /api/admin/fees/cancel should return 200 when cancelling pending fee", async () => {
+            // First schedule
+            await request(app)
+                .post("/api/admin/fees/schedule")
+                .set(adminAuth)
+                .send({ feePct: 13 });
+
             const res = await request(app)
                 .post("/api/admin/fees/cancel")
                 .set(adminAuth);

@@ -100,16 +100,20 @@ export const getCurrentPlatformFeeStatus = async () => {
     });
 
     // Calculate total platform revenue to date
-    const [revResult] = await sequelize.query<{ totalPlatformRevenue: string | number }>(
-        `
-        SELECT COALESCE(SUM(b.service_fee_amount), 0) AS totalPlatformRevenue
-        FROM bookings b
-        WHERE b.status NOT IN ('cancelled', 'rejected')
-        `,
-        { type: QueryTypes.SELECT },
-    );
-
-    const totalPlatformRevenue = Number(revResult?.totalPlatformRevenue ?? 0);
+    let totalPlatformRevenue = 0;
+    try {
+        const [revResult] = await sequelize.query<{ totalPlatformRevenue: string | number }>(
+            `
+            SELECT COALESCE(SUM(b.service_fee_amount), 0) AS totalPlatformRevenue
+            FROM bookings b
+            WHERE b.status NOT IN ('cancelled', 'rejected')
+            `,
+            { type: QueryTypes.SELECT },
+        );
+        totalPlatformRevenue = Number(revResult?.totalPlatformRevenue ?? 0);
+    } catch {
+        totalPlatformRevenue = 0;
+    }
 
     let scheduledFee: (FeeSettingResponse & { countdownSeconds: number }) | null = null;
     if (pendingScheduled) {
