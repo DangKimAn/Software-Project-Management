@@ -16,6 +16,7 @@ export type PresignUploadInput = {
     filename: string;
     contentType: string;
     listingId?: number | null;
+    size?: number | null;
 };
 
 export type UploadActor = {
@@ -154,6 +155,13 @@ export const createPresignedUploadUrl = async (
         ]);
     }
 
+    const maxUploadSizeBytes = 10 * 1024 * 1024;
+    if (input.size !== undefined && input.size !== null) {
+        if (!Number.isInteger(input.size) || input.size < 1 || input.size > maxUploadSizeBytes) {
+            throw new ApiError(413, "Upload file size must be between 1 byte and 10MB");
+        }
+    }
+
     const r2Config = assertRequiredR2Env();
     const extension = imageExtensionsByContentType[input.contentType];
     const uuid = crypto.randomUUID();
@@ -169,6 +177,7 @@ export const createPresignedUploadUrl = async (
         Bucket: r2Config.bucket,
         Key: objectKey,
         ContentType: input.contentType,
+        ...(input.size ? { ContentLength: input.size } : {}),
     });
     const uploadUrl = await getSignedUrl(client, command, {
         expiresIn: uploadUrlExpiresInSeconds,

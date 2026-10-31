@@ -14,6 +14,28 @@ import '../../app/theme/app_colors.dart';
 class AppSemanticIcons {
   const AppSemanticIcons._();
 
+  /// Canonical account logout icon synchronized across the entire system
+  /// (matching the signed-in Guest account view).
+  static const IconData logout = LucideIcons.doorOpen;
+
+  /// Canonical cross-role semantic icons shared across Guest, Host, and Admin.
+  static const IconData dashboard = LucideIcons.layoutDashboard;
+  static const IconData home = LucideIcons.house;
+  static const IconData becomeHost = LucideIcons.housePlus;
+  static const IconData adminPortal = LucideIcons.shieldCheck;
+  static const IconData bookings = LucideIcons.calendarCheck;
+  static const IconData revenue = LucideIcons.chartColumn;
+  static const IconData hostApplications = LucideIcons.fileCheck;
+  static const IconData userProfile = LucideIcons.userRound;
+  static const IconData changeAvatar = LucideIcons.camera;
+  static const IconData messageHost = LucideIcons.messageSquare;
+  static const IconData zaloSupport = LucideIcons.messageCircle;
+  static const IconData supportCenter = LucideIcons.lifeBuoy;
+  static const IconData errorAlert = LucideIcons.circleAlert;
+  static const IconData retry = LucideIcons.refreshCw;
+  static const IconData checkIn = LucideIcons.keyRound;
+  static const IconData checkOut = LucideIcons.clock;
+
   /// Resolves the exact semantic icon for any villa amenity code or Vietnamese label
   /// (matching `ListingDetailPage.tsx` `getAmenityIcon` + `filterOptions.ts`).
   static IconData resolveAmenityIcon(String nameOrCode) {

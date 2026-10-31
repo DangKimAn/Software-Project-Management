@@ -2,6 +2,7 @@ import express from "express";
 import { body } from "express-validator";
 
 import { isValidIsoDate } from "../../common/validation";
+import { getSemanticSearchRateLimiter } from "../../middlewares/rate-limit.middleware";
 import {
     aiListingSearch,
     semanticSearchListings,
@@ -9,9 +10,19 @@ import {
 
 const router = express.Router();
 export const aiListingSearchRouter = express.Router();
+const semanticSearchLimiter = getSemanticSearchRateLimiter();
+
+const MAX_SEARCH_STAY_NIGHTS = 365;
+const isSearchDateSpanValid = (checkIn: string, checkOut: string) => {
+    const startMs = Date.parse(`${checkIn}T00:00:00.000Z`);
+    const endMs = Date.parse(`${checkOut}T00:00:00.000Z`);
+    const diffDays = Math.round((endMs - startMs) / 86_400_000);
+    return Number.isFinite(diffDays) && diffDays >= 1 && diffDays <= MAX_SEARCH_STAY_NIGHTS;
+};
 
 router.post(
     "/semantic",
+    semanticSearchLimiter,
     [
         body("query")
             .isString()
@@ -31,7 +42,14 @@ router.post(
             .custom((value) => isValidIsoDate(String(value)))
             .withMessage("checkOut must use YYYY-MM-DD format")
             .custom((value, { req }) => !req.body?.checkIn || String(req.body.checkIn) < String(value))
-            .withMessage("checkOut must be after checkIn"),
+            .withMessage("checkOut must be after checkIn")
+            .custom(
+                (value, { req }) =>
+                    !req.body?.checkIn ||
+                    !isValidIsoDate(String(req.body.checkIn)) ||
+                    isSearchDateSpanValid(String(req.body.checkIn), String(value)),
+            )
+            .withMessage(`Date range cannot exceed ${MAX_SEARCH_STAY_NIGHTS} nights`),
 
         body("guests")
             .optional()
@@ -69,8 +87,8 @@ router.post(
 
         body("amenities")
             .optional()
-            .isArray()
-            .withMessage("amenities must be an array"),
+            .isArray({ max: 50 })
+            .withMessage("amenities must be an array of at most 50 items"),
 
         body("amenities.*")
             .optional()
@@ -112,6 +130,7 @@ router.post(
 
 aiListingSearchRouter.post(
     "/",
+    semanticSearchLimiter,
     [
         body("query")
             .isString()
@@ -173,12 +192,19 @@ aiListingSearchRouter.post(
             .custom((value) => isValidIsoDate(String(value)))
             .withMessage("filters.checkOut must use YYYY-MM-DD format")
             .custom((value, { req }) => !req.body?.filters?.checkIn || String(req.body.filters.checkIn) < String(value))
-            .withMessage("filters.checkOut must be after filters.checkIn"),
+            .withMessage("filters.checkOut must be after filters.checkIn")
+            .custom(
+                (value, { req }) =>
+                    !req.body?.filters?.checkIn ||
+                    !isValidIsoDate(String(req.body.filters.checkIn)) ||
+                    isSearchDateSpanValid(String(req.body.filters.checkIn), String(value)),
+            )
+            .withMessage(`Date range cannot exceed ${MAX_SEARCH_STAY_NIGHTS} nights`),
 
         body("filters.amenities")
             .optional()
-            .isArray()
-            .withMessage("filters.amenities must be an array"),
+            .isArray({ max: 50 })
+            .withMessage("filters.amenities must be an array of at most 50 items"),
 
         body("filters.amenities.*")
             .optional()

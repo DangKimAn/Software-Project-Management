@@ -166,11 +166,12 @@ const normalizeAttachments = (attachments: MessageAttachment[], messageType: Mes
     });
 
 const getListingOrThrow = async (listingId: number, transaction?: Transaction) => {
-    const rows = await sequelize.query<ListingAccessRow>(
+    const rows = await sequelize.query<ListingAccessRow & { status?: string }>(
         `
         SELECT
             listing_id AS listingId,
             host_id AS hostId,
+            status,
             title
         FROM listings
         WHERE listing_id = ?
@@ -621,6 +622,10 @@ export const createConversation = async (user: AuthenticatedUser, input: CreateC
         if (listingId && !bookingId) {
             const listing = await getListingOrThrow(listingId, transaction);
 
+            if (listing.status && listing.status !== "active" && listing.status !== "published") {
+                throw new ApiError(403, "Chỗ nghỉ này hiện không khả dụng để liên hệ.");
+            }
+
             hostUserId = listing.hostId;
             guestUserId = currentUserId;
 
@@ -644,7 +649,7 @@ export const createConversation = async (user: AuthenticatedUser, input: CreateC
 
         const participants = ensureTwoPartyConversation(guestUserId, hostUserId);
 
-        if (currentUserId === hostUserId) {
+        if (!bookingId && currentUserId === hostUserId) {
             throw new ApiError(403, "Bạn không thể nhắn tin cho chính chỗ nghỉ của mình.");
         }
 

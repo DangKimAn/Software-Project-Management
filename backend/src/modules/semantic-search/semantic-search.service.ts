@@ -747,7 +747,7 @@ const buildEmptyResponse = (
     paginate([], filters, false, false, 0, {
         reason,
         message: reason === "UNSUPPORTED_LOCATION"
-            ? "Minh Thành Villa hiện chỉ hỗ trợ khu vực Vũng Tàu."
+            ? "The Palm Villa hiện chỉ hỗ trợ khu vực Vũng Tàu."
             : message,
     });
 

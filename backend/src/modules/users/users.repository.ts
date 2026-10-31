@@ -168,6 +168,7 @@ export type UserUpdateAttributes = Partial<{
     username: string | null;
     email: string;
     phone: string | null;
+    isPhoneVerified: boolean;
     fullName: string;
     dateOfBirth: Date | null;
     bio: string | null;
@@ -249,8 +250,11 @@ export const listUsersForAdmin = async ({ search, role, status, page, limit }: A
     }
 
     if (search) {
-        conditions.push("(u.email LIKE ? OR u.phone LIKE ? OR u.full_name LIKE ? OR u.username LIKE ?)");
-        const like = `%${search}%`;
+        const escapedSearch = search.replace(/[\\%_]/g, "\\$&");
+        conditions.push(
+            "(u.email LIKE ? ESCAPE '\\\\' OR u.phone LIKE ? ESCAPE '\\\\' OR u.full_name LIKE ? ESCAPE '\\\\' OR u.username LIKE ? ESCAPE '\\\\')",
+        );
+        const like = `%${escapedSearch}%`;
         replacements.push(like, like, like, like);
     }
 

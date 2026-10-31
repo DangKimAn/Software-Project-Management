@@ -22,12 +22,18 @@ export const toNumber = (value: unknown, fallback = 0) => {
     return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const MAX_LIST_NIGHTS_ITERATIONS = 366;
+
 export const listNights = (checkIn: string, checkOut: string) => {
     const dates: string[] = [];
     const cursor = new Date(`${checkIn}T00:00:00.000Z`);
     const end = new Date(`${checkOut}T00:00:00.000Z`);
 
-    while (cursor < end) {
+    if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime())) {
+        return dates;
+    }
+
+    while (cursor < end && dates.length < MAX_LIST_NIGHTS_ITERATIONS) {
         dates.push(cursor.toISOString().slice(0, 10));
         cursor.setUTCDate(cursor.getUTCDate() + 1);
     }

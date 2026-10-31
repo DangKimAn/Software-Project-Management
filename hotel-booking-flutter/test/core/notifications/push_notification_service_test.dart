@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/core/network/socket_service.dart';
 import 'package:hotel_booking_flutter/core/notifications/device_token_repository.dart';
 import 'package:hotel_booking_flutter/core/notifications/push_notification_service.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
 
 class _FakeDeviceTokenRepository implements DeviceTokenRepository {
   final List<Map<String, String?>> registeredCalls = <Map<String, String?>>[];
@@ -147,6 +148,50 @@ void main() {
             'targetId': '88',
           }),
           equals('/messages?conversationId=88'),
+        );
+      },
+    );
+
+    test(
+      'normalizes legacy Minh Thành Villa brand text to The Palm Villa in AppNotificationItem and push banners',
+      () async {
+        final parsed = AppNotificationItem.fromJson(<String, dynamic>{
+          'id': 180001,
+          'eventType': 'USER_REGISTERED',
+          'title': 'Chào mừng đến Minh Thành Villa',
+          'body':
+              'Chủ biệt thự Nguyễn Minh Thành đã xác nhận kỳ nghỉ tại MinhThanh Luxury Sea View Villa Bãi Dâu.',
+          'isRead': false,
+        });
+
+        expect(parsed.title, equals('Chào mừng đến The Palm Villa'));
+        expect(
+          parsed.body,
+          equals(
+            'Chủ biệt thự Nguyễn Minh Thành đã xác nhận kỳ nghỉ tại The Palm Luxury Sea View Villa Bãi Dâu.',
+          ),
+        );
+
+        await service.initialize();
+        await service.syncAuthenticatedUser('201');
+        await service.handleFcmDataForTesting(
+          title: 'Chào mừng đến Minh Thành Villa',
+          body: 'Cảm ơn bạn đã chọn Minh Thanh Villa.',
+          data: <String, dynamic>{
+            'notificationLogId': '180001',
+            'eventType': 'USER_REGISTERED',
+            'actionUrl': '/account/profile',
+          },
+        );
+
+        expect(shownBanners.length, equals(1));
+        expect(
+          shownBanners.first['title'],
+          equals('Chào mừng đến The Palm Villa'),
+        );
+        expect(
+          shownBanners.first['body'],
+          equals('Cảm ơn bạn đã chọn The Palm Villa.'),
         );
       },
     );

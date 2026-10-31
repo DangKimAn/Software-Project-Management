@@ -11,6 +11,8 @@ import 'package:hotel_booking_flutter/features/trips/domain/entities/booking.dar
 import 'package:hotel_booking_flutter/features/trips/presentation/screens/trips_screen.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/view_models/trips_view_model.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class _FakeAuthNotifier extends StateNotifier<AsyncValue<User?>>
     implements AuthNotifier {
@@ -131,6 +133,37 @@ void main() {
 
       // Header component
       expect(find.byType(AppSearchHeader), findsOneWidget);
+
+      // Verify Guest bottom logout tile and top-right header menu both use LucideIcons.doorOpen
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('settings_bottom_logout_button')),
+          matching: find.byIcon(LucideIcons.doorOpen),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+
+      final headerLogoutItem = find.byWidgetPredicate(
+        (w) => w is PopupMenuItem<String> && w.value == 'logout',
+      );
+      expect(headerLogoutItem, findsOneWidget);
+      expect(
+        find.descendant(
+          of: headerLogoutItem,
+          matching: find.byIcon(AppSemanticIcons.logout),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: headerLogoutItem,
+          matching: find.byIcon(LucideIcons.logOut),
+        ),
+        findsNothing,
+      );
     });
   });
 }

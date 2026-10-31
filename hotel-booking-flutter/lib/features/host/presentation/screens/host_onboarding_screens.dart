@@ -7,6 +7,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../data/host_repository.dart';
 import '../../domain/host_models.dart';
@@ -267,7 +268,7 @@ class _TroThanhHostLandingScreenState
                         ),
                         (
                           step: '03',
-                          icon: LucideIcons.housePlus,
+                          icon: AppSemanticIcons.becomeHost,
                           title: 'Đăng chỗ nghỉ',
                           description:
                               'Mở khóa Host Portal để tạo chỗ nghỉ và đón khách.',
@@ -378,7 +379,7 @@ class _TroThanhHostLandingScreenState
     } else if (isAlreadyHost) {
       primaryCta = _PillCtaButton.primary(
         key: const Key('host_landing_portal_btn'),
-        icon: LucideIcons.layoutDashboard,
+        icon: AppSemanticIcons.dashboard,
         label: 'Vào bảng điều khiển Host',
         onPressed: () => _navigateToRoute(context, '/host', replace: true),
       );
@@ -1153,31 +1154,13 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
     try {
       final repository = ref.read(hostRepositoryProvider);
-      HostIdentityAiResult result;
-      try {
-        result = await repository.analyzeIdentityCard(
-          bytes: file.bytes,
-          filename: file.name,
-          mimeType: file.mimeType,
-        ).timeout(const Duration(seconds: 25));
-      } catch (repoErr) {
-        if (file.bytes.length <= 128) {
-          result = HostIdentityAiResult(
-            documentType: 'cccd',
-            side: isFront ? 'front' : 'back',
-            idNumber: '079090123456',
-            fullName: isFront ? 'NGUYỄN VĂN AN' : null,
-            isDocumentValid: true,
-            isClear: true,
-            confidence: 0.99,
-            warnings: const [],
-            summaryVi:
-                isFront ? 'CCCD mặt trước - NGUYỄN VĂN AN' : 'CCCD mặt sau',
-          );
-        } else {
-          rethrow;
-        }
-      }
+      final HostIdentityAiResult result = await repository
+          .analyzeIdentityCard(
+            bytes: file.bytes,
+            filename: file.name,
+            mimeType: file.mimeType,
+          )
+          .timeout(const Duration(seconds: 25));
 
       if (!mounted) return;
 
@@ -2231,7 +2214,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                                       const Icon(
                                         LucideIcons.shieldAlert,
                                         size: 20,
-                                        color: Color(0xFFDC2626),
+                                        color: AppColors.iconStrong,
                                       ),
                                       const SizedBox(width: AppSpacing.s12),
                                       Expanded(
@@ -2417,9 +2400,9 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       const Icon(
-                        LucideIcons.alertTriangle,
+                        AppSemanticIcons.errorAlert,
                         size: 20,
-                        color: Color(0xFFDC2626),
+                        color: AppColors.iconStrong,
                       ),
                       const SizedBox(width: AppSpacing.s12),
                       Expanded(
@@ -3022,7 +3005,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                     if (slotError != null)
                       _PillCtaButton.secondary(
                         key: Key('kyc_retry_btn_$slotKey'),
-                        icon: LucideIcons.rotateCcw,
+                        icon: AppSemanticIcons.retry,
                         label: 'Thử lại',
                         onPressed: _submitting
                             ? null
@@ -3049,7 +3032,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(
-                    LucideIcons.circleAlert,
+                    AppSemanticIcons.errorAlert,
                     size: 16,
                     color: AppColors.iconStrong,
                   ),
@@ -3067,7 +3050,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                   if (pickedFile == null)
                     _BareLucideIconButton(
                       key: Key('kyc_retry_btn_$slotKey'),
-                      icon: LucideIcons.rotateCcw,
+                      icon: AppSemanticIcons.retry,
                       tooltip: 'Thử chọn lại tệp',
                       onPressed: _submitting
                           ? null
@@ -3089,23 +3072,23 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
               padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.s12, vertical: AppSpacing.s8),
               decoration: BoxDecoration(
-                color: const Color(0xFFEFF6FF),
+                color: AppColors.surfaceMuted,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFBFDBFE)),
+                border: Border.all(color: AppColors.border),
               ),
               child: Row(
                 children: [
                   const Icon(
                     LucideIcons.loader,
                     size: 16,
-                    color: Color(0xFF2563EB),
+                    color: AppColors.iconStrong,
                   ),
                   const SizedBox(width: AppSpacing.s8),
                   Expanded(
                     child: Text(
                       'AI đang tự động kiểm tra giấy tờ...',
                       style: AppTypography.caption.copyWith(
-                        color: const Color(0xFF1D4ED8),
+                        color: AppColors.textStrong,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -3246,7 +3229,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
               const Icon(
                 LucideIcons.scanSearch,
                 size: 18,
-                color: Color(0xFF16A34A),
+                color: AppColors.iconStrong,
               ),
               const SizedBox(width: AppSpacing.s8),
               Expanded(
@@ -3334,7 +3317,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                   const Icon(
                     LucideIcons.circleCheck,
                     size: 14,
-                    color: Color(0xFF16A34A),
+                    color: AppColors.iconStrong,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -3375,7 +3358,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
               children: [
                 const Icon(
                   LucideIcons.shieldAlert,
-                  color: Color(0xFFDC2626),
+                  color: AppColors.iconStrong,
                   size: 20,
                 ),
                 const SizedBox(width: AppSpacing.s8),
@@ -3419,7 +3402,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
             children: [
               const Icon(
                 LucideIcons.shieldCheck,
-                color: Color(0xFF16A34A),
+                color: AppColors.iconStrong,
                 size: 20,
               ),
               const SizedBox(width: AppSpacing.s8),
@@ -4082,7 +4065,7 @@ class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
               if (status == HostApplicationStatus.approved && isActuallyHost)
                 _PillCtaButton.primary(
                   key: const Key('status_open_host_portal_btn'),
-                  icon: LucideIcons.layoutDashboard,
+                  icon: AppSemanticIcons.dashboard,
                   label: 'Mở Host Portal',
                   onPressed: () =>
                       _navigateToRoute(context, '/host', replace: true),
@@ -4604,7 +4587,7 @@ Widget _buildAlertBanner({
             alignment: Alignment.centerRight,
             child: _PillCtaButton.secondary(
               key: retryKey,
-              icon: LucideIcons.refreshCw,
+              icon: AppSemanticIcons.retry,
               label: 'Thử lại',
               onPressed: onRetry,
             ),

@@ -17,6 +17,7 @@ import {
 type AuthenticatedSocket = Socket & {
     data: {
         user?: AuthenticatedUser;
+        tokenExp?: number;
     };
 };
 
@@ -63,6 +64,10 @@ export type NotificationNewPayload = {
 
 let io: SocketIOServer | null = null;
 
+const SOCKET_MAX_HTTP_BUFFER_SIZE = 64 * 1024;
+const SOCKET_EVENT_WINDOW_MS = 10_000;
+const SOCKET_EVENT_MAX_PER_WINDOW = 60;
+
 const userRoom = (userId: string | number) => `user:${userId}`;
 const conversationRoom = (conversationId: string | number) => `conversation:${conversationId}`;
 
@@ -104,6 +109,18 @@ const extractSocketToken = (socket: Socket) => {
     return null;
 };
 
+const extractRawConversationId = (payload: unknown): unknown => {
+    if (typeof payload === "object" && payload !== null && "conversationId" in payload) {
+        return (payload as { conversationId?: unknown }).conversationId;
+    }
+
+    if (typeof payload === "number" || typeof payload === "string") {
+        return payload;
+    }
+
+    return undefined;
+};
+
 const authenticateSocket = async (socket: AuthenticatedSocket, next: (error?: Error) => void) => {
     try {
         const token = extractSocketToken(socket);
@@ -112,7 +129,11 @@ const authenticateSocket = async (socket: AuthenticatedSocket, next: (error?: Er
             return next(new Error("Unauthorized"));
         }
 
-        const payload = verifyAuthToken(token);
+        const payload = verifyAuthToken(token) as {
+            userId: string;
+            role: string;
+            exp?: number;
+        };
         const user = await User.findById(payload.userId);
 
         if (!user) {
@@ -121,6 +142,7 @@ const authenticateSocket = async (socket: AuthenticatedSocket, next: (error?: Er
 
         assertUserCanAuthenticate(user);
         socket.data.user = await toAuthenticatedUser(user);
+        socket.data.tokenExp = typeof payload.exp === "number" ? payload.exp : undefined;
 
         return next();
     } catch {
@@ -128,7 +150,42 @@ const authenticateSocket = async (socket: AuthenticatedSocket, next: (error?: Er
     }
 };
 
-const assertSocketConversationParticipant = async (conversationId: number, userId: number) => {
+const assertSocketSessionStillActive = async (socket: AuthenticatedSocket, userId: number) => {
+    const tokenExp = socket.data.tokenExp;
+    if (typeof tokenExp === "number" && tokenExp * 1000 <= Date.now()) {
+        return false;
+    }
+
+    if (typeof User.findById === "function") {
+        const currentUser = await User.findById(String(userId));
+        if (!currentUser) {
+            return false;
+        }
+        try {
+            assertUserCanAuthenticate(currentUser);
+        } catch {
+            return false;
+        }
+    }
+
+    return true;
+};
+
+const assertSocketConversationParticipant = async (
+    socket: AuthenticatedSocket,
+    conversationId: number,
+    userId: number,
+) => {
+    const active = await assertSocketSessionStillActive(socket, userId);
+    if (!active) {
+        socket.emit("conversation:error", {
+            conversationId,
+            message: "Unauthorized",
+        });
+        socket.disconnect(true);
+        return null;
+    }
+
     const conversation = await Conversation.findOne({
         where: {
             conversationId,
@@ -155,6 +212,7 @@ const assertSocketConversationParticipant = async (conversationId: number, userI
 
 export const initializeSocket = (server: HttpServer) => {
     io = new SocketIOServer(server, {
+        maxHttpBufferSize: SOCKET_MAX_HTTP_BUFFER_SIZE,
         cors: {
             origin: getSocketCorsOrigin(),
             credentials: true,
@@ -174,22 +232,56 @@ export const initializeSocket = (server: HttpServer) => {
             return;
         }
 
+        let windowStartedAt = Date.now();
+        let eventsInWindow = 0;
+
+        const consumeEventQuota = () => {
+            const now = Date.now();
+            if (now - windowStartedAt >= SOCKET_EVENT_WINDOW_MS) {
+                windowStartedAt = now;
+                eventsInWindow = 0;
+            }
+            eventsInWindow += 1;
+            if (eventsInWindow > SOCKET_EVENT_MAX_PER_WINDOW) {
+                authenticatedSocket.emit("conversation:error", {
+                    message: "Too many socket events",
+                });
+                authenticatedSocket.disconnect(true);
+                return false;
+            }
+            return true;
+        };
+
         authenticatedSocket.join(userRoom(user.id));
         debugSocket("[socket] connected user", user.id);
 
-        authenticatedSocket.on("conversation:join", (payload: { conversationId?: number | string } = {}) => {
+        authenticatedSocket.on("conversation:join", (payload?: unknown) => {
+            if (!consumeEventQuota()) {
+                return;
+            }
+
+            const rawConversationId = extractRawConversationId(payload);
+
             void (async () => {
-                const conversationId = Number(payload.conversationId);
+                const conversationId = Number(rawConversationId);
 
                 if (!Number.isInteger(conversationId) || conversationId < 1) {
                     authenticatedSocket.emit("conversation:error", {
-                        conversationId: payload.conversationId,
+                        conversationId: rawConversationId,
                         message: "conversationId is invalid",
                     });
                     return;
                 }
 
-                const allowed = await assertSocketConversationParticipant(conversationId, Number(user.id));
+                const allowed = await assertSocketConversationParticipant(
+                    authenticatedSocket,
+                    conversationId,
+                    Number(user.id),
+                );
+
+                if (allowed === null) {
+                    return;
+                }
 
                 if (!allowed) {
                     authenticatedSocket.emit("conversation:error", {
@@ -204,17 +296,22 @@ export const initializeSocket = (server: HttpServer) => {
             })().catch((error) => {
                 logger.error("Failed to join conversation socket room", error, {
                     userId: user.id,
-                    conversationId: payload.conversationId,
+                    conversationId: rawConversationId,
                 });
                 authenticatedSocket.emit("conversation:error", {
-                    conversationId: payload.conversationId,
+                    conversationId: rawConversationId,
                     message: "Could not join conversation",
                 });
             });
         });
 
-        authenticatedSocket.on("conversation:leave", (payload: { conversationId?: number | string } = {}) => {
-            const conversationId = Number(payload.conversationId);
+        authenticatedSocket.on("conversation:leave", (payload?: unknown) => {
+            if (!consumeEventQuota()) {
+                return;
+            }
+
+            const rawConversationId = extractRawConversationId(payload);
+            const conversationId = Number(rawConversationId);
 
             if (Number.isInteger(conversationId) && conversationId > 0) {
                 authenticatedSocket.leave(conversationRoom(conversationId));
@@ -226,6 +323,14 @@ export const initializeSocket = (server: HttpServer) => {
 };
 
 export const getSocketServer = () => io;
+
+export const disconnectUserSockets = (userId: string | number) => {
+    if (!io) {
+        return;
+    }
+
+    io.in(userRoom(userId)).disconnectSockets(true);
+};
 
 export const emitMessageNew = (payload: MessageNewPayload) => {
     if (!io) {

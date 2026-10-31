@@ -129,8 +129,13 @@ export const getAvailabilityCalendarForListing = async (
     for (const row of rows) {
         calendarByDate.set(row.date, {
             date: row.date,
-            isAvailable: row.isAvailable,
+            // Computed availability includes admin and host locks
+            isAvailable: Boolean(row.isBlockedByAdmin) || row.isBlockedByHost ? false : row.isAvailable,
             isBlockedByHost: row.isBlockedByHost,
+            isBlockedByAdmin: Boolean(row.isBlockedByAdmin),
+            lockSource: row.lockSource ?? null,
+            syncRevision: Number(row.syncRevision ?? 0),
+            lastSheetSyncedAt: row.lastSheetSyncedAt ?? null,
             priceOverride: row.priceOverride ?? null,
             minNightsOverride: row.minNightsOverride ?? null,
             notes: row.notes ?? null,
@@ -166,8 +171,13 @@ export const getAvailabilityCalendarMap = async (
         const current = rowsByListing.get(row.listingId) ?? [];
         current.push({
             date: row.date,
-            isAvailable: row.isAvailable,
+            // Computed availability includes admin and host locks
+            isAvailable: Boolean(row.isBlockedByAdmin) || row.isBlockedByHost ? false : row.isAvailable,
             isBlockedByHost: row.isBlockedByHost,
+            isBlockedByAdmin: Boolean(row.isBlockedByAdmin),
+            lockSource: row.lockSource ?? null,
+            syncRevision: Number(row.syncRevision ?? 0),
+            lastSheetSyncedAt: row.lastSheetSyncedAt ?? null,
             priceOverride: row.priceOverride ?? null,
             minNightsOverride: row.minNightsOverride ?? null,
             notes: row.notes ?? null,

@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../domain/entities/booking.dart';
 import '../view_models/trips_view_model.dart';
 
@@ -312,7 +314,7 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen>
       case 'failed':
       default:
         return (
-          icon: LucideIcons.triangleAlert,
+          icon: AppSemanticIcons.errorAlert,
           title: 'Thanh toán không thành công',
           subtitle:
               'Giao dịch chưa thể hoàn tất. Bạn có thể thử thanh toán lại bằng VNPay hoặc MoMo.',
@@ -322,6 +324,11 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen>
 
   @override
   Widget build(BuildContext context) {
+    final formatter = ref.watch(moneyFormatterProvider);
+    final isForeign =
+        formatter.featureEnabled && formatter.effectiveCurrency.isForeign;
+    final isRefundStatus =
+        _effectiveStatus == 'refund_pending' || _effectiveStatus == 'refunded';
     final meta = _resolveStatusMeta();
     final effectiveBookingId = (_bookingRecord?.id.isNotEmpty == true)
         ? _bookingRecord!.id
@@ -386,6 +393,11 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen>
                               if (effectiveAmount > 0)
                                 'Số tiền': CurrencyFormatter.formatVnd(
                                     effectiveAmount),
+                              if (isForeign &&
+                                  (effectiveAmount > 0 || isRefundStatus))
+                                'Lưu ý tiền tệ': isRefundStatus
+                                    ? formatter.l10n.fxRefundInVndNotice
+                                    : formatter.l10n.fxChargedInVndNotice,
                             },
                             onRecheck: canReverify
                                 ? () => _verifyTransaction(resetPollCount: true)

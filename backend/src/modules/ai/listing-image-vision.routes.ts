@@ -2,6 +2,7 @@ import express from "express";
 import { body, param, query } from "express-validator";
 
 import { authenticate } from "../../middlewares/authenticate.middleware";
+import { getAiVisionRateLimiter } from "../../middlewares/rate-limit.middleware";
 import { requireHostOnly, requireRole } from "../../middlewares/require-role.middleware";
 import {
     analyzeAllListingImages,
@@ -16,6 +17,7 @@ const router = express.Router();
 export const hostListingImageVisionRoutes = express.Router();
 export const hostImageVisionRoutes = express.Router();
 export const adminImageVisionRoutes = express.Router();
+const aiVisionLimiter = getAiVisionRateLimiter();
 
 const listingIdParamValidator = param("listingId")
     .isInt({ min: 1 })
@@ -34,12 +36,14 @@ adminImageVisionRoutes.use(authenticate, requireRole("admin"));
 
 router.post(
     "/:listingId/images/:imageId/analyze",
+    aiVisionLimiter,
     [listingIdParamValidator, imageIdParamValidator],
     analyzeSingleListingImage,
 );
 
 hostListingImageVisionRoutes.post(
     "/:listingId/images/:imageId/analyze",
+    aiVisionLimiter,
     [listingIdParamValidator, imageIdParamValidator],
     analyzeSingleListingImage,
 );
@@ -74,12 +78,14 @@ hostImageVisionRoutes.delete(
 
 adminImageVisionRoutes.post(
     "/:imageId/reanalyze",
+    aiVisionLimiter,
     [imageIdParamValidator],
     reanalyzeAdminImage,
 );
 
 router.post(
     "/:listingId/analyze-images",
+    aiVisionLimiter,
     [
         listingIdParamValidator,
         query("force")

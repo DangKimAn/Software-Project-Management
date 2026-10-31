@@ -777,4 +777,93 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get adminUserStatusInactive => 'Ngừng hoạt động';
+
+  @override
+  String get settingsCurrency => 'Tiền tệ hiển thị';
+
+  @override
+  String get currencyFollowLanguage => 'Theo ngôn ngữ';
+
+  @override
+  String get currencyFollowLanguageDesc =>
+      'Tự động chuyển đổi theo ngôn ngữ giao diện';
+
+  @override
+  String get currencyNameVnd => 'Đồng Việt Nam (VND - ₫)';
+
+  @override
+  String get currencyNameUsd => 'Đô la Mỹ (USD - \$)';
+
+  @override
+  String get currencyNameKrw => 'Won Hàn Quốc (KRW - ₩)';
+
+  @override
+  String fxEstimatedPrice(String amount) {
+    return 'Giá tham khảo: ≈ $amount';
+  }
+
+  @override
+  String fxTotalPayableVnd(String amountVnd) {
+    return 'Tổng thanh toán thực tế: $amountVnd';
+  }
+
+  @override
+  String get fxChargedInVndNotice => 'Thanh toán thực tế bằng VND.';
+
+  @override
+  String fxReferenceRateLabel(String source) {
+    return 'Tỷ giá tham khảo ($source)';
+  }
+
+  @override
+  String fxRateUpdatedAt(String time) {
+    return 'Tỷ giá cập nhật: $time';
+  }
+
+  @override
+  String get fxRateUnavailableFallback =>
+      'Chưa tải được tỷ giá ngoại tệ. Đang hiển thị giá chính thức bằng VND.';
+
+  @override
+  String fxRateStaleNotice(String time) {
+    return 'Đang sử dụng tỷ giá cập nhật gần nhất ($time).';
+  }
+
+  @override
+  String get fxBankConversionFeeNotice =>
+      'Ngân hàng phát hành thẻ có thể áp dụng tỷ giá và phí chuyển đổi riêng.';
+
+  @override
+  String get fxPaymentMethodUnsupported =>
+      'Phương thức thanh toán này hiện chưa được hỗ trợ.';
+
+  @override
+  String get fxRefundInVndNotice =>
+      'Hoàn tiền thực tế bằng VND. Số tiền ngoại tệ trên sao kê có thể khác do tỷ giá ngân hàng tại thời điểm hoàn.';
+
+  @override
+  String get fxHistoricalReferenceNote =>
+      'Giá quy đổi chỉ để tham khảo, không phải số tiền thực tế trên sao kê thanh toán.';
+
+  @override
+  String fxPayButtonVnd(String amountVnd, String method) {
+    return 'Thanh toán $amountVnd qua $method';
+  }
+
+  @override
+  String get fxPriceRangePerNight => 'Khoảng giá mỗi đêm';
+
+  @override
+  String get vnpayGatewayTitle => 'VNPay (QR Pay / Thẻ ATM nội địa)';
+
+  @override
+  String get vnpayGatewaySubtitle =>
+      'Xác nhận thanh toán VND qua cổng bảo mật VNPay';
+
+  @override
+  String get momoGatewayTitle => 'Ví điện tử MoMo';
+
+  @override
+  String get momoGatewaySubtitle =>
+      'Thanh toán VND qua ứng dụng MoMo hoặc quét mã QR MoMo';
 }

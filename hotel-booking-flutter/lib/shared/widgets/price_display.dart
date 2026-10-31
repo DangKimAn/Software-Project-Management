@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../app/di/providers.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_typography.dart';
-import '../../core/formatters/currency_formatter.dart';
+import '../../l10n/l10n.dart';
 
 class PriceDisplay extends StatelessWidget {
   final int? basePriceVnd;
   final int? saturdayPriceVnd;
   final bool showPerNightUnit;
   final TextStyle? priceStyle;
+  final MoneyDisplayContext? displayContext;
 
   const PriceDisplay({
     super.key,
@@ -15,13 +18,34 @@ class PriceDisplay extends StatelessWidget {
     this.saturdayPriceVnd,
     this.showPerNightUnit = true,
     this.priceStyle,
+    this.displayContext,
   });
 
   @override
   Widget build(BuildContext context) {
+    final hasProviderScope =
+        context.findAncestorWidgetOfExactType<UncontrolledProviderScope>() !=
+            null;
+    if (!hasProviderScope) {
+      return _buildWithFormatter(
+        context,
+        MoneyFormatter(localeCode: context.activeLanguageCode),
+      );
+    }
+
+    return Consumer(
+      builder: (context, ref, _) {
+        final formatter = ref.watch(moneyFormatterProvider);
+        return _buildWithFormatter(context, formatter);
+      },
+    );
+  }
+
+  Widget _buildWithFormatter(BuildContext context, MoneyFormatter formatter) {
+    final l10n = formatter.l10n;
     if (basePriceVnd == null || basePriceVnd! <= 0) {
       return Text(
-        'Liên hệ báo giá',
+        l10n.contactForPrice,
         style: priceStyle ??
             AppTypography.cardTitle.copyWith(
               color: AppColors.primary,
@@ -30,45 +54,68 @@ class PriceDisplay extends StatelessWidget {
       );
     }
 
-    final priceStr = CurrencyFormatter.formatVnd(basePriceVnd);
-    final satStr = CurrencyFormatter.formatSaturdayPrice(saturdayPriceVnd);
+    final resolvedContext = displayContext ??
+        (showPerNightUnit
+            ? MoneyDisplayContext.villaCard
+            : MoneyDisplayContext.breakdown);
+    final result = formatter.format(
+      basePriceVnd!,
+      context: resolvedContext,
+    );
+    final priceStr = result.formatted;
+    final satStr = formatter.formatSaturdayRate(saturdayPriceVnd);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        RichText(
-          text: TextSpan(
-            style: priceStyle ?? AppTypography.priceHighlight,
-            children: [
-              const TextSpan(
-                text: 'Từ ',
-                style: TextStyle(
-                    fontWeight: FontWeight.w400,
-                    fontSize: 13,
-                    color: AppColors.textMuted),
-              ),
-              TextSpan(text: priceStr),
-              if (showPerNightUnit) ...[
-                const TextSpan(
-                  text: ' / đêm',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w400,
-                      fontSize: 13,
-                      color: AppColors.textMuted),
-                ),
-              ],
-            ],
+    const mutedAffixStyle = TextStyle(
+      fontWeight: FontWeight.w400,
+      fontSize: 13,
+      color: AppColors.textMuted,
+    );
+
+    final List<InlineSpan> spans;
+    if (showPerNightUnit) {
+      final fullLabel = l10n.priceFrom(priceStr);
+      final idx = fullLabel.indexOf(priceStr);
+      if (idx >= 0) {
+        final prefix = fullLabel.substring(0, idx);
+        final suffix = fullLabel.substring(idx + priceStr.length);
+        spans = <InlineSpan>[
+          if (prefix.isNotEmpty) TextSpan(text: prefix, style: mutedAffixStyle),
+          TextSpan(text: priceStr),
+          if (suffix.isNotEmpty) TextSpan(text: suffix, style: mutedAffixStyle),
+        ];
+      } else {
+        spans = <InlineSpan>[TextSpan(text: fullLabel)];
+      }
+    } else {
+      spans = <InlineSpan>[TextSpan(text: priceStr)];
+    }
+
+    final semanticPrimary =
+        showPerNightUnit ? l10n.priceFrom(priceStr) : priceStr;
+    final semanticFull =
+        satStr != null ? '$semanticPrimary, $satStr' : semanticPrimary;
+
+    return Semantics(
+      label: semanticFull,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text.rich(
+            TextSpan(
+              style: priceStyle ?? AppTypography.priceHighlight,
+              children: spans,
+            ),
           ),
-        ),
-        if (satStr != null) ...[
-          const SizedBox(height: 2),
-          Text(
-            satStr,
-            style: AppTypography.caption.copyWith(color: AppColors.textMuted),
-          ),
+          if (satStr != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              satStr,
+              style: AppTypography.caption.copyWith(color: AppColors.textMuted),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

@@ -1383,6 +1383,144 @@ abstract class AppLocalizations {
   /// In vi, this message translates to:
   /// **'Ngừng hoạt động'**
   String get adminUserStatusInactive;
+
+  /// No description provided for @settingsCurrency.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tiền tệ hiển thị'**
+  String get settingsCurrency;
+
+  /// No description provided for @currencyFollowLanguage.
+  ///
+  /// In vi, this message translates to:
+  /// **'Theo ngôn ngữ'**
+  String get currencyFollowLanguage;
+
+  /// No description provided for @currencyFollowLanguageDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tự động chuyển đổi theo ngôn ngữ giao diện'**
+  String get currencyFollowLanguageDesc;
+
+  /// No description provided for @currencyNameVnd.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đồng Việt Nam (VND - ₫)'**
+  String get currencyNameVnd;
+
+  /// No description provided for @currencyNameUsd.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đô la Mỹ (USD - \$)'**
+  String get currencyNameUsd;
+
+  /// No description provided for @currencyNameKrw.
+  ///
+  /// In vi, this message translates to:
+  /// **'Won Hàn Quốc (KRW - ₩)'**
+  String get currencyNameKrw;
+
+  /// No description provided for @fxEstimatedPrice.
+  ///
+  /// In vi, this message translates to:
+  /// **'Giá tham khảo: ≈ {amount}'**
+  String fxEstimatedPrice(String amount);
+
+  /// No description provided for @fxTotalPayableVnd.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tổng thanh toán thực tế: {amountVnd}'**
+  String fxTotalPayableVnd(String amountVnd);
+
+  /// No description provided for @fxChargedInVndNotice.
+  ///
+  /// In vi, this message translates to:
+  /// **'Thanh toán thực tế bằng VND.'**
+  String get fxChargedInVndNotice;
+
+  /// No description provided for @fxReferenceRateLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tỷ giá tham khảo ({source})'**
+  String fxReferenceRateLabel(String source);
+
+  /// No description provided for @fxRateUpdatedAt.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tỷ giá cập nhật: {time}'**
+  String fxRateUpdatedAt(String time);
+
+  /// No description provided for @fxRateUnavailableFallback.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chưa tải được tỷ giá ngoại tệ. Đang hiển thị giá chính thức bằng VND.'**
+  String get fxRateUnavailableFallback;
+
+  /// No description provided for @fxRateStaleNotice.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đang sử dụng tỷ giá cập nhật gần nhất ({time}).'**
+  String fxRateStaleNotice(String time);
+
+  /// No description provided for @fxBankConversionFeeNotice.
+  ///
+  /// In vi, this message translates to:
+  /// **'Ngân hàng phát hành thẻ có thể áp dụng tỷ giá và phí chuyển đổi riêng.'**
+  String get fxBankConversionFeeNotice;
+
+  /// No description provided for @fxPaymentMethodUnsupported.
+  ///
+  /// In vi, this message translates to:
+  /// **'Phương thức thanh toán này hiện chưa được hỗ trợ.'**
+  String get fxPaymentMethodUnsupported;
+
+  /// No description provided for @fxRefundInVndNotice.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hoàn tiền thực tế bằng VND. Số tiền ngoại tệ trên sao kê có thể khác do tỷ giá ngân hàng tại thời điểm hoàn.'**
+  String get fxRefundInVndNotice;
+
+  /// No description provided for @fxHistoricalReferenceNote.
+  ///
+  /// In vi, this message translates to:
+  /// **'Giá quy đổi chỉ để tham khảo, không phải số tiền thực tế trên sao kê thanh toán.'**
+  String get fxHistoricalReferenceNote;
+
+  /// No description provided for @fxPayButtonVnd.
+  ///
+  /// In vi, this message translates to:
+  /// **'Thanh toán {amountVnd} qua {method}'**
+  String fxPayButtonVnd(String amountVnd, String method);
+
+  /// No description provided for @fxPriceRangePerNight.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khoảng giá mỗi đêm'**
+  String get fxPriceRangePerNight;
+
+  /// No description provided for @vnpayGatewayTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'VNPay (QR Pay / Thẻ ATM nội địa)'**
+  String get vnpayGatewayTitle;
+
+  /// No description provided for @vnpayGatewaySubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xác nhận thanh toán VND qua cổng bảo mật VNPay'**
+  String get vnpayGatewaySubtitle;
+
+  /// No description provided for @momoGatewayTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Ví điện tử MoMo'**
+  String get momoGatewayTitle;
+
+  /// No description provided for @momoGatewaySubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Thanh toán VND qua ứng dụng MoMo hoặc quét mã QR MoMo'**
+  String get momoGatewaySubtitle;
 }
 
 class _AppLocalizationsDelegate

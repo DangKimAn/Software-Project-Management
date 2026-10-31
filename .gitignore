@@ -34,12 +34,13 @@ Source goc.zip
 *.7z
 *.tar.gz
 pic
-# Internal AI audit & fix reports
+# Internal plans, notes, AI audit & fix reports (DO NOT COMMIT .md / .txt)
 docs/ai-fix/
 **/docs/ai-fix/
 *.md
-!README.md
-!**/README.md
+**/*.md
+*.txt
+**/*.txt
 
 # Node.js (Source goc/backend, Source goc/frontend)
 **/node_modules/
@@ -74,7 +75,9 @@ Setup Notifications/
 **/google-services.json
 **/GoogleService-Info.plist
 **/firebase-adminsdk*.json
-**/service-account*.json
+**/*service-account*.json
+**/google-credentials*.json
+**/client_secret*.json
 *.pem
 **/*.pem
 *.key

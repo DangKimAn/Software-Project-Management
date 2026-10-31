@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import '../../../core/security/url_security_validator.dart';
 import '../../auth/domain/entities/user.dart';
 
 /// Maximum lengths and constraints aligned with `backend/src/modules/users/users.validator.ts`
@@ -377,10 +378,10 @@ class AvatarR2PresignResult {
         ? (data['expiresIn'] as num).toInt()
         : (int.tryParse('${data['expiresIn'] ?? 300}') ?? 300);
 
-    if (!isValidHttpUrl(uploadUrl)) {
+    if (!UrlSecurityValidator.isSafeUploadOrMediaUrl(uploadUrl)) {
       throw const FormatException('Máy chủ không trả về uploadUrl hợp lệ.');
     }
-    if (!isValidHttpUrl(publicUrl)) {
+    if (!UrlSecurityValidator.isSafeUploadOrMediaUrl(publicUrl)) {
       throw const FormatException('Máy chủ không trả về publicUrl hợp lệ.');
     }
     if (key.isEmpty) {

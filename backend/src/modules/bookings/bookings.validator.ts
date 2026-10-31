@@ -56,6 +56,18 @@ export const createBookingBodySchema = z.object({
             path: ["checkOutDate"],
             message: "checkOutDate must be after checkInDate",
         });
+    } else if (checkInDate && checkOutDate && isValidIsoDate(checkInDate) && isValidIsoDate(checkOutDate)) {
+        const diffDays = Math.round(
+            (Date.parse(`${checkOutDate}T00:00:00.000Z`) - Date.parse(`${checkInDate}T00:00:00.000Z`)) /
+                86_400_000,
+        );
+        if (diffDays > 365) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["checkOutDate"],
+                message: "Booking duration cannot exceed 365 nights",
+            });
+        }
     }
 }).transform((value) => ({
     listingId: value.listingId,

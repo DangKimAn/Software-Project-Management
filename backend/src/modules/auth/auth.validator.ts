@@ -89,7 +89,11 @@ export const registerBodySchema = z.object({
 
 export const loginBodySchema = z.object({
     identifier: identifierSchema,
-    password: z.string().trim().min(8, "Mật khẩu phải có ít nhất 8 ký tự"),
+    password: z
+        .string()
+        .trim()
+        .min(8, "Mật khẩu phải có ít nhất 8 ký tự")
+        .max(128, "Mật khẩu tối đa 128 ký tự"),
 });
 
 export const forgotPasswordBodySchema = z.object({

@@ -33,8 +33,10 @@ jobs:
       # Bước kiểm tra nguồn PR
       - name: Check source branch
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ "${{ github.head_ref }}" != "develop" ]; then
+          if [ "$HEAD_REF" != "develop" ]; then
             echo "LỖI: Bạn chỉ được phép gộp code vào main từ nhánh develop!"
             exit 1
           fi
@@ -128,6 +130,11 @@ jobs:
           MYSQL_USER: test_user
           MYSQL_PASSWORD: test_password
           MYSQL_DATABASE: hotel_booking_test
+          MYSQLHOST: 127.0.0.1
+          MYSQLPORT: 3306
+          MYSQLUSER: test_user
+          MYSQLPASSWORD: test_password
+          MYSQLDATABASE: hotel_booking_test
           ALLOW_DATABASE_ROOT_USER: "true"
         run: |
           npm run db:ensure-runtime-schema
@@ -157,6 +164,11 @@ jobs:
           MYSQL_USER: test_user
           MYSQL_PASSWORD: test_password
           MYSQL_DATABASE: hotel_booking_test
+          MYSQLHOST: 127.0.0.1
+          MYSQLPORT: 3306
+          MYSQLUSER: test_user
+          MYSQLPASSWORD: test_password
+          MYSQLDATABASE: hotel_booking_test
           ALLOW_DATABASE_ROOT_USER: "true"
           QDRANT_URL: http://127.0.0.1:6333
         run: npm run test

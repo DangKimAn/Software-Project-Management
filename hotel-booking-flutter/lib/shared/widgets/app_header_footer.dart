@@ -6,12 +6,14 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../app/di/providers.dart';
 import '../../app/theme/app_colors.dart';
+import '../../core/config/app_config.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/socket_service.dart';
 import '../../features/auth/presentation/view_models/auth_notifier.dart';
 import '../../features/search/presentation/widgets/source_search_bar.dart';
 import '../../features/trips/presentation/widgets/global_pending_booking_banner.dart';
 import 'app_semantic_icons.dart';
+import 'currency_language_selector.dart';
 
 class AppNotificationItem {
   final String id;
@@ -48,6 +50,19 @@ class AppNotificationItem {
   })  : notificationLogId = notificationLogId ?? id,
         eventType = eventType ?? type ?? 'system',
         body = body ?? message ?? '';
+
+  static final RegExp _legacyVillaBrandPattern =
+      RegExp(r'Minh\s*Th(?:ành|anh)\s+Villa', caseSensitive: false);
+  static final RegExp _legacyLuxuryBrandPattern =
+      RegExp(r'MinhThanh\s+Luxury', caseSensitive: false);
+
+  /// Normalizes legacy brand text from historical DB notification records to The Palm Villa.
+  static String normalizeBrandText(String input) {
+    if (input.isEmpty) return input;
+    return input
+        .replaceAll(_legacyVillaBrandPattern, 'The Palm Villa')
+        .replaceAll(_legacyLuxuryBrandPattern, 'The Palm Luxury');
+  }
 
   /// Backward-compatible getters
   String get type => eventType;
@@ -90,9 +105,10 @@ class AppNotificationItem {
           : null,
       targetId:
           (rawTargetId != null && rawTargetId.isNotEmpty) ? rawTargetId : null,
-      title: (json['title'] ?? 'Thông báo').toString(),
-      body:
-          (json['body'] ?? json['message'] ?? json['content'] ?? '').toString(),
+      title: normalizeBrandText((json['title'] ?? 'Thông báo').toString()),
+      body: normalizeBrandText(
+          (json['body'] ?? json['message'] ?? json['content'] ?? '')
+              .toString()),
       actionUrl: (rawActionUrl != null && rawActionUrl.isNotEmpty)
           ? rawActionUrl
           : null,
@@ -171,8 +187,15 @@ class AppNotificationItem {
     if (!trimmed.startsWith('/') || trimmed.startsWith('//')) {
       return false;
     }
+    if (RegExp(r'[\x00-\x1F\x7F\\]').hasMatch(trimmed)) {
+      return false;
+    }
     final lower = trimmed.toLowerCase();
     if (lower.contains('://') ||
+        lower.contains('..') ||
+        lower.contains('%2f') ||
+        lower.contains('%5c') ||
+        lower.contains('%2e') ||
         lower.startsWith('/javascript:') ||
         lower.startsWith('/data:') ||
         lower.startsWith('/vbscript:')) {
@@ -530,20 +553,25 @@ class NotificationBell extends ConsumerWidget {
                                                 children: [
                                                   if (item.forAdmin) ...[
                                                     Container(
-                                                      margin: const EdgeInsets.only(
+                                                      margin:
+                                                          const EdgeInsets.only(
                                                         top: 1,
                                                         right: 6,
                                                       ),
-                                                      padding: const EdgeInsets.symmetric(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
                                                         horizontal: 5,
                                                         vertical: 1.5,
                                                       ),
                                                       decoration: BoxDecoration(
-                                                        color: const Color(0xFFF3E8FF),
+                                                        color: const Color(
+                                                            0xFFF3E8FF),
                                                         borderRadius:
-                                                            BorderRadius.circular(4),
+                                                            BorderRadius
+                                                                .circular(4),
                                                         border: Border.all(
-                                                          color: const Color(0xFF9333EA),
+                                                          color: const Color(
+                                                              0xFF9333EA),
                                                           width: 0.8,
                                                         ),
                                                       ),
@@ -553,7 +581,8 @@ class NotificationBell extends ConsumerWidget {
                                                           fontSize: 9.5,
                                                           fontWeight:
                                                               FontWeight.w800,
-                                                          color: Color(0xFF7E22CE),
+                                                          color:
+                                                              Color(0xFF7E22CE),
                                                           letterSpacing: 0.3,
                                                         ),
                                                       ),
@@ -567,7 +596,8 @@ class NotificationBell extends ConsumerWidget {
                                                         fontWeight: item.isRead
                                                             ? FontWeight.w600
                                                             : FontWeight.w700,
-                                                        color: AppColors.textPrimary,
+                                                        color: AppColors
+                                                            .textPrimary,
                                                       ),
                                                     ),
                                                   ),
@@ -665,8 +695,10 @@ class NotificationBell extends ConsumerWidget {
                   top: 6,
                   right: 2,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    constraints:
+                        const BoxConstraints(minWidth: 16, minHeight: 16),
                     decoration: BoxDecoration(
                       color: AppColors.primary,
                       borderRadius: BorderRadius.circular(10),
@@ -780,537 +812,614 @@ class AppTopHeader extends ConsumerWidget {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 1440),
                   child: Row(
-                children: [
-                  // Left & Center Area: Switches smoothly between (Brand Logo + Nav Links) and (Pinned Search Bar)
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: MediaQuery.disableAnimationsOf(context)
-                          ? Duration.zero
-                          : const Duration(milliseconds: 380),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      layoutBuilder: (currentChild, previousChildren) {
-                        return Stack(
-                          alignment: Alignment.centerLeft,
-                          children: [
-                            ...previousChildren,
-                            if (currentChild != null) currentChild,
-                          ],
-                        );
-                      },
-                      transitionBuilder: (child, animation) {
-                        final isSearch = (child.key as ValueKey?)?.value == 'pinned_search_content';
-                        if (isSearch) {
-                          return SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(0.0, 0.70),
-                              end: Offset.zero,
-                            ).animate(CurvedAnimation(
-                              parent: animation,
-                              curve: Curves.easeOutCubic,
-                            )),
-                            child: FadeTransition(
-                              opacity: CurvedAnimation(
-                                parent: animation,
-                                curve: const Interval(0.1, 1.0, curve: Curves.easeOut),
-                              ),
-                              child: ScaleTransition(
-                                scale: Tween<double>(
-                                  begin: 0.94,
-                                  end: 1.0,
+                    children: [
+                      // Left & Center Area: Switches smoothly between (Brand Logo + Nav Links) and (Pinned Search Bar)
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: MediaQuery.disableAnimationsOf(context)
+                              ? Duration.zero
+                              : const Duration(milliseconds: 380),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          layoutBuilder: (currentChild, previousChildren) {
+                            return Stack(
+                              alignment: Alignment.centerLeft,
+                              children: [
+                                ...previousChildren,
+                                if (currentChild != null) currentChild,
+                              ],
+                            );
+                          },
+                          transitionBuilder: (child, animation) {
+                            final isSearch = (child.key as ValueKey?)?.value ==
+                                'pinned_search_content';
+                            if (isSearch) {
+                              return SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0.0, 0.70),
+                                  end: Offset.zero,
                                 ).animate(CurvedAnimation(
                                   parent: animation,
                                   curve: Curves.easeOutCubic,
                                 )),
-                                child: child,
-                              ),
-                            ),
-                          );
-                        } else {
-                          return SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(0.0, -0.2),
-                              end: Offset.zero,
-                            ).animate(CurvedAnimation(
-                              parent: animation,
-                              curve: Curves.easeOutCubic,
-                            )),
-                            child: FadeTransition(
-                              opacity: animation,
-                              child: child,
-                            ),
-                          );
-                        }
-                      },
-                      child: centerSearchTrigger != null
-                          ? KeyedSubtree(
-                              key: const ValueKey('pinned_search_content'),
-                              child: Padding(
-                                padding: EdgeInsets.only(
-                                  right: isDesktop ? 16 : 8,
+                                child: FadeTransition(
+                                  opacity: CurvedAnimation(
+                                    parent: animation,
+                                    curve: const Interval(0.1, 1.0,
+                                        curve: Curves.easeOut),
+                                  ),
+                                  child: ScaleTransition(
+                                    scale: Tween<double>(
+                                      begin: 0.94,
+                                      end: 1.0,
+                                    ).animate(CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeOutCubic,
+                                    )),
+                                    child: child,
+                                  ),
                                 ),
-                                child: centerSearchTrigger!,
-                              ),
-                            )
-                          : KeyedSubtree(
-                              key: const ValueKey('top_header_content'),
-                              child: Row(
-                                children: [
-                                  // Left: Brand Logo + "The Palm Villa"
-                                  Flexible(
-                                    child: InkWell(
-                                      onTap: () => context.go('/'),
-                                      splashColor: Colors.transparent,
-                                      highlightColor: Colors.transparent,
-                                      hoverColor: Colors.transparent,
-                                      child: ConstrainedBox(
-                                        constraints: const BoxConstraints(minHeight: 48),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            AppBrandIcon.minhThanhLogo(
-                                              size: 26,
-                                              color: isOverlayTop
-                                                  ? Colors.white
-                                                  : AppColors.iconStrong,
-                                            ),
-                                            if (screenWidth >= 380) ...[
-                                              const SizedBox(width: 8),
-                                              Flexible(
-                                                child: Text(
-                                                  'The Palm Villa',
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: TextStyle(
-                                                    fontSize: isDesktop
-                                                        ? 19
-                                                        : (isCompactMobile ? 16 : 19),
-                                                    fontWeight: FontWeight.w800,
-                                                    letterSpacing: -0.4,
-                                                    color: isOverlayTop
-                                                        ? Colors.white
-                                                        : AppColors.textPrimary,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
+                              );
+                            } else {
+                              return SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0.0, -0.2),
+                                  end: Offset.zero,
+                                ).animate(CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeOutCubic,
+                                )),
+                                child: FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                              );
+                            }
+                          },
+                          child: centerSearchTrigger != null
+                              ? KeyedSubtree(
+                                  key: const ValueKey('pinned_search_content'),
+                                  child: Padding(
+                                    padding: EdgeInsets.only(
+                                      right: isDesktop ? 16 : 8,
                                     ),
+                                    child: centerSearchTrigger!,
                                   ),
-
-                                  if (isDesktop) ...[
-                                    const Spacer(),
-                                    // Center: 4 Navigation Links (`Navbar.tsx`)
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        _NavTextLink(
-                                          label: 'Trang chủ',
-                                          isActive: currentPath == '/',
-                                          isOverlayTop: isOverlayTop,
-                                          onTap: () => context.go('/'),
-                                        ),
-                                        SizedBox(width: screenWidth >= 1280 ? 28 : (screenWidth >= 1080 ? 20 : 14)),
-                                        _NavTextLink(
-                                          label: 'Nơi lưu trú',
-                                          isActive: currentPath.startsWith('/search') ||
-                                              currentPath.startsWith('/tim-kiem') ||
-                                              currentPath.startsWith('/noi-luu-tru') ||
-                                              currentPath.startsWith('/villas'),
-                                          isOverlayTop: isOverlayTop,
-                                          onTap: () => context.push('/tim-kiem'),
-                                        ),
-                                        SizedBox(width: screenWidth >= 1280 ? 28 : (screenWidth >= 1080 ? 20 : 14)),
-                                        _NavTextLink(
-                                          label: 'Blog',
-                                          isActive: currentPath.startsWith('/blog') ||
-                                              currentPath.startsWith('/cam-nang'),
-                                          isOverlayTop: isOverlayTop,
-                                          onTap: () => context.push('/cam-nang'),
-                                        ),
-                                        SizedBox(width: screenWidth >= 1280 ? 28 : (screenWidth >= 1080 ? 20 : 14)),
-                                        _NavTextLink(
-                                          label: 'Liên hệ',
-                                          isActive: currentPath.startsWith('/lien-he'),
-                                          isOverlayTop: isOverlayTop,
-                                          onTap: () => context.push('/lien-he'),
-                                        ),
-                                      ],
-                                    ),
-                                    const Spacer(),
-                                  ] else
-                                    const Spacer(),
-                                ],
-                              ),
-                            ),
-                    ),
-                  ),
-
-                  // Right: Host action (only when not scrolled down), NotificationBell, then Menu
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 320),
-                    curve: Curves.easeOutCubic,
-                    child: (centerSearchTrigger == null &&
-                            (authUser == null || !authUser.isAdmin) &&
-                            screenWidth >= 1260)
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              InkWell(
-                                onTap: () {
-                                  if (authUser != null && authUser.isHost) {
-                                    context.push('/chu-nha/cho-nghi');
-                                  } else {
-                                    context.push('/tro-thanh-host');
-                                  }
-                                },
-                                borderRadius: BorderRadius.circular(999),
-                                child: Container(
-                                  constraints: const BoxConstraints(minHeight: 48),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 9,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        isOverlayTop ? Colors.transparent : Colors.white,
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
+                                )
+                              : KeyedSubtree(
+                                  key: const ValueKey('top_header_content'),
                                   child: Row(
-                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Text(
-                                        authUser != null && authUser.isHost
-                                            ? 'Khu vực host'
-                                            : 'Trở thành host',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: isOverlayTop
-                                              ? Colors.white
-                                              : const Color(0xFF18181B),
+                                      // Left: Brand Logo + "The Palm Villa"
+                                      Flexible(
+                                        child: InkWell(
+                                          onTap: () => context.go('/'),
+                                          splashColor: Colors.transparent,
+                                          highlightColor: Colors.transparent,
+                                          hoverColor: Colors.transparent,
+                                          child: ConstrainedBox(
+                                            constraints: const BoxConstraints(
+                                                minHeight: 48),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                AppBrandIcon.minhThanhLogo(
+                                                  size: 26,
+                                                  color: isOverlayTop
+                                                      ? Colors.white
+                                                      : AppColors.iconStrong,
+                                                ),
+                                                if (screenWidth >= 380) ...[
+                                                  const SizedBox(width: 8),
+                                                  Flexible(
+                                                    child: Text(
+                                                      'The Palm Villa',
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        fontSize: isDesktop
+                                                            ? 19
+                                                            : (isCompactMobile
+                                                                ? 16
+                                                                : 19),
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        letterSpacing: -0.4,
+                                                        color: isOverlayTop
+                                                            ? Colors.white
+                                                            : AppColors
+                                                                .textPrimary,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
                                         ),
                                       ),
+
+                                      if (isDesktop) ...[
+                                        const Spacer(),
+                                        // Center: 4 Navigation Links (`Navbar.tsx`)
+                                        Flexible(
+                                          flex: 3,
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                _NavTextLink(
+                                                  label: 'Trang chủ',
+                                                  isActive: currentPath == '/',
+                                                  isOverlayTop: isOverlayTop,
+                                                  onTap: () => context.go('/'),
+                                                ),
+                                                SizedBox(
+                                                    width: screenWidth >= 1280
+                                                        ? 28
+                                                        : (screenWidth >= 1080
+                                                            ? 20
+                                                            : 14)),
+                                                _NavTextLink(
+                                                  label: 'Nơi lưu trú',
+                                                  isActive: currentPath
+                                                          .startsWith(
+                                                              '/search') ||
+                                                      currentPath.startsWith(
+                                                          '/tim-kiem') ||
+                                                      currentPath.startsWith(
+                                                          '/noi-luu-tru') ||
+                                                      currentPath.startsWith(
+                                                          '/villas'),
+                                                  isOverlayTop: isOverlayTop,
+                                                  onTap: () =>
+                                                      context.push('/tim-kiem'),
+                                                ),
+                                                SizedBox(
+                                                    width: screenWidth >= 1280
+                                                        ? 28
+                                                        : (screenWidth >= 1080
+                                                            ? 20
+                                                            : 14)),
+                                                _NavTextLink(
+                                                  label: 'Blog',
+                                                  isActive: currentPath
+                                                          .startsWith(
+                                                              '/blog') ||
+                                                      currentPath.startsWith(
+                                                          '/cam-nang'),
+                                                  isOverlayTop: isOverlayTop,
+                                                  onTap: () =>
+                                                      context.push('/cam-nang'),
+                                                ),
+                                                SizedBox(
+                                                    width: screenWidth >= 1280
+                                                        ? 28
+                                                        : (screenWidth >= 1080
+                                                            ? 20
+                                                            : 14)),
+                                                _NavTextLink(
+                                                  label: 'Liên hệ',
+                                                  isActive: currentPath
+                                                      .startsWith('/lien-he'),
+                                                  isOverlayTop: isOverlayTop,
+                                                  onTap: () =>
+                                                      context.push('/lien-he'),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                      ] else
+                                        const Spacer(),
                                     ],
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 6),
-                            ],
-                          )
-                        : const SizedBox.shrink(),
-                  ),
+                        ),
+                      ),
 
-                  // Notification Bell (Icon thông báo)
-                  NotificationBell(isOverlayTop: isOverlayTop),
-                  const SizedBox(width: 2),
+                      // Right: Host action (only when not scrolled down), NotificationBell, then Menu
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 320),
+                        curve: Curves.easeOutCubic,
+                        child: (centerSearchTrigger == null &&
+                                (authUser == null || !authUser.isAdmin) &&
+                                screenWidth >= 1260)
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  InkWell(
+                                    onTap: () {
+                                      if (authUser != null && authUser.isHost) {
+                                        context.push('/chu-nha/cho-nghi');
+                                      } else {
+                                        context.push('/tro-thanh-host');
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(999),
+                                    child: Container(
+                                      constraints:
+                                          const BoxConstraints(minHeight: 48),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 9,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isOverlayTop
+                                            ? Colors.transparent
+                                            : Colors.white,
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            authUser != null && authUser.isHost
+                                                ? 'Khu vực host'
+                                                : 'Trở thành host',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: isOverlayTop
+                                                  ? Colors.white
+                                                  : const Color(0xFF18181B),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
+                              )
+                            : const SizedBox.shrink(),
+                      ),
 
-                  // Menu Button (Icon menu)
-                  PopupMenuButton<String>(
-                    tooltip: 'Menu',
-                    offset: const Offset(0, 48),
-                    color: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    onSelected: (value) async {
-                      switch (value) {
-                        case 'home':
-                          context.go('/');
-                          break;
-                        case 'login':
-                          unawaited(context.push('/dang-nhap'));
-                          break;
-                        case 'register':
-                          unawaited(context.push('/dang-ky'));
-                          break;
-                        case 'profile':
-                          unawaited(context.push('/account/profile'));
-                          break;
-                        case 'trips':
-                          unawaited(context.push('/account/trips'));
-                          break;
-                        case 'wishlist':
-                          unawaited(context.push('/yeu-thich'));
-                          break;
-                        case 'messages':
-                          unawaited(context.push('/messages'));
-                          break;
-                        case 'ai-search':
-                          unawaited(context.push('/tim-kiem-ai'));
-                          break;
-                        case 'stays':
-                          unawaited(context.push('/tim-kiem'));
-                          break;
-                        case 'blog':
-                          unawaited(context.push('/cam-nang'));
-                          break;
-                        case 'contact':
-                          unawaited(context.push('/lien-he'));
-                          break;
-                        case 'host':
-                          if (authUser != null && authUser.isHost) {
-                            unawaited(context.push('/chu-nha/cho-nghi'));
-                          } else {
-                            unawaited(context.push('/tro-thanh-host'));
+                      if (centerSearchTrigger == null ||
+                          screenWidth >= 380) ...[
+                        HeaderCurrencyLanguageButton(
+                          isOverlayTop: isOverlayTop,
+                          showCodePill:
+                              screenWidth >= 460 && centerSearchTrigger == null,
+                        ),
+                        const SizedBox(width: 2),
+                      ],
+
+                      // Notification Bell (Icon thông báo)
+                      NotificationBell(isOverlayTop: isOverlayTop),
+                      const SizedBox(width: 2),
+
+                      // Menu Button (Icon menu)
+                      PopupMenuButton<String>(
+                        tooltip: 'Menu',
+                        offset: const Offset(0, 48),
+                        color: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        onSelected: (value) async {
+                          switch (value) {
+                            case 'home':
+                              context.go('/');
+                              break;
+                            case 'login':
+                              unawaited(context.push('/dang-nhap'));
+                              break;
+                            case 'register':
+                              unawaited(context.push('/dang-ky'));
+                              break;
+                            case 'profile':
+                              unawaited(context.push('/account/profile'));
+                              break;
+                            case 'trips':
+                              unawaited(context.push('/account/trips'));
+                              break;
+                            case 'wishlist':
+                              unawaited(context.push('/yeu-thich'));
+                              break;
+                            case 'messages':
+                              unawaited(context.push('/messages'));
+                              break;
+                            case 'ai-search':
+                              unawaited(context.push('/tim-kiem-ai'));
+                              break;
+                            case 'stays':
+                              unawaited(context.push('/tim-kiem'));
+                              break;
+                            case 'blog':
+                              unawaited(context.push('/cam-nang'));
+                              break;
+                            case 'contact':
+                              unawaited(context.push('/lien-he'));
+                              break;
+                            case 'language-currency':
+                              unawaited(
+                                showCurrencyLanguageBottomSheet(context),
+                              );
+                              break;
+                            case 'host':
+                              if (authUser != null && authUser.isHost) {
+                                unawaited(context.push('/chu-nha/cho-nghi'));
+                              } else {
+                                unawaited(context.push('/tro-thanh-host'));
+                              }
+                              break;
+                            case 'admin':
+                              unawaited(context.push('/admin'));
+                              break;
+                            case 'logout':
+                              ref
+                                  .read(notificationsProvider.notifier)
+                                  .clearForLogout();
+                              await ref
+                                  .read(authNotifierProvider.notifier)
+                                  .logout();
+                              if (context.mounted) {
+                                context.go('/');
+                              }
+                              break;
                           }
-                          break;
-                        case 'admin':
-                          unawaited(context.push('/admin'));
-                          break;
-                        case 'logout':
-                          ref
-                              .read(notificationsProvider.notifier)
-                              .clearForLogout();
-                          await ref
-                              .read(authNotifierProvider.notifier)
-                              .logout();
-                          if (context.mounted) {
-                            context.go('/');
+                        },
+                        itemBuilder: (context) {
+                          if (authUser == null) {
+                            return [
+                              if (!isDesktop) ...[
+                                const PopupMenuItem(
+                                  value: 'home',
+                                  child: _MenuItemRow(
+                                    icon: AppSemanticIcons.home,
+                                    label: 'Trang chủ',
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'stays',
+                                  child: _MenuItemRow(
+                                    icon: LucideIcons.search,
+                                    label: 'Nơi lưu trú',
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'blog',
+                                  child: _MenuItemRow(
+                                    icon: LucideIcons.bookOpen,
+                                    label: 'Blog',
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'contact',
+                                  child: _MenuItemRow(
+                                    icon: LucideIcons.phone,
+                                    label: 'Liên hệ',
+                                  ),
+                                ),
+                                const PopupMenuDivider(),
+                              ],
+                              const PopupMenuItem(
+                                value: 'wishlist',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.heart,
+                                  label: 'Danh sách yêu thích',
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'trips',
+                                child: _MenuItemRow(
+                                  icon: AppSemanticIcons.bookings,
+                                  label: 'Chuyến đi',
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'messages',
+                                child: _MenuItemRow(
+                                  icon: AppSemanticIcons.messageHost,
+                                  label: 'Tin nhắn',
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'profile',
+                                child: _MenuItemRow(
+                                  icon: AppSemanticIcons.userProfile,
+                                  label: 'Hồ sơ',
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'language-currency',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.globe,
+                                  label:
+                                      '${ref.read(moneyFormatterProvider).l10n.settingsLanguage} • ${ref.read(effectiveCurrencyProvider).code} (${ref.read(effectiveCurrencyProvider).symbol})',
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                              const PopupMenuItem(
+                                value: 'host',
+                                child: _MenuItemRow(
+                                  icon: AppSemanticIcons.becomeHost,
+                                  label: 'Trở thành host',
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                              const PopupMenuItem(
+                                value: 'login',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.logIn,
+                                  label: 'Đăng nhập',
+                                  isBold: true,
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'register',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.userPlus,
+                                  label: 'Đăng ký',
+                                ),
+                              ),
+                            ];
                           }
-                          break;
-                      }
-                    },
-                    itemBuilder: (context) {
-                      if (authUser == null) {
-                        return [
-                          if (!isDesktop) ...[
-                            const PopupMenuItem(
-                              value: 'home',
-                              child: _MenuItemRow(
-                                icon: LucideIcons.house,
-                                label: 'Trang chủ',
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'stays',
-                              child: _MenuItemRow(
-                                icon: LucideIcons.search,
-                                label: 'Nơi lưu trú',
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'blog',
-                              child: _MenuItemRow(
-                                icon: LucideIcons.bookOpen,
-                                label: 'Blog',
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'contact',
-                              child: _MenuItemRow(
-                                icon: LucideIcons.phone,
-                                label: 'Liên hệ',
+                          return [
+                            PopupMenuItem(
+                              enabled: false,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    authUser.fullName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  Text(
+                                    authUser.email,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                             const PopupMenuDivider(),
-                          ],
-                          const PopupMenuItem(
-                            value: 'wishlist',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.heart,
-                              label: 'Danh sách yêu thích',
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'trips',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.calendarCheck,
-                              label: 'Chuyến đi',
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'messages',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.messageSquare,
-                              label: 'Tin nhắn',
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'profile',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.userRound,
-                              label: 'Hồ sơ',
-                            ),
-                          ),
-                          const PopupMenuDivider(),
-                          const PopupMenuItem(
-                            value: 'host',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.house,
-                              label: 'Trở thành host',
-                            ),
-                          ),
-                          const PopupMenuDivider(),
-                          const PopupMenuItem(
-                            value: 'login',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.logIn,
-                              label: 'Đăng nhập',
-                              isBold: true,
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'register',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.userPlus,
-                              label: 'Đăng ký',
-                            ),
-                          ),
-                        ];
-                      }
-                      return [
-                        PopupMenuItem(
-                          enabled: false,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                authUser.fullName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
+                            if (!isDesktop) ...[
+                              const PopupMenuItem(
+                                value: 'home',
+                                child: _MenuItemRow(
+                                  icon: AppSemanticIcons.home,
+                                  label: 'Trang chủ',
                                 ),
                               ),
-                              Text(
-                                authUser.email,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
+                              const PopupMenuItem(
+                                value: 'stays',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.search,
+                                  label: 'Nơi lưu trú',
                                 ),
                               ),
+                              const PopupMenuItem(
+                                value: 'blog',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.bookOpen,
+                                  label: 'Blog',
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'contact',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.phone,
+                                  label: 'Liên hệ',
+                                ),
+                              ),
+                              const PopupMenuDivider(),
                             ],
+                            const PopupMenuItem(
+                              value: 'wishlist',
+                              child: _MenuItemRow(
+                                icon: LucideIcons.heart,
+                                label: 'Danh sách yêu thích',
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'trips',
+                              child: _MenuItemRow(
+                                icon: AppSemanticIcons.bookings,
+                                label: 'Chuyến đi',
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'messages',
+                              child: _MenuItemRow(
+                                icon: AppSemanticIcons.messageHost,
+                                label: 'Tin nhắn',
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'profile',
+                              child: _MenuItemRow(
+                                icon: AppSemanticIcons.userProfile,
+                                label: 'Hồ sơ',
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'language-currency',
+                              child: _MenuItemRow(
+                                icon: LucideIcons.globe,
+                                label:
+                                    '${ref.read(moneyFormatterProvider).l10n.settingsLanguage} • ${ref.read(effectiveCurrencyProvider).code} (${ref.read(effectiveCurrencyProvider).symbol})',
+                              ),
+                            ),
+                            const PopupMenuDivider(),
+                            if (!authUser.isAdmin)
+                              PopupMenuItem(
+                                value: 'host',
+                                child: _MenuItemRow(
+                                  icon: authUser.isHost
+                                      ? AppSemanticIcons.home
+                                      : AppSemanticIcons.becomeHost,
+                                  label: authUser.isHost
+                                      ? 'Khu vực host'
+                                      : 'Trở thành host',
+                                ),
+                              ),
+                            if (authUser.isAdmin)
+                              const PopupMenuItem(
+                                value: 'admin',
+                                child: _MenuItemRow(
+                                  icon: AppSemanticIcons.adminPortal,
+                                  label: 'Khu vực admin',
+                                  isBold: true,
+                                ),
+                              ),
+                            const PopupMenuDivider(),
+                            const PopupMenuItem(
+                              value: 'logout',
+                              child: _MenuItemRow(
+                                icon: AppSemanticIcons.logout,
+                                label: 'Đăng xuất',
+                              ),
+                            ),
+                          ];
+                        },
+                        child: Container(
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 48,
                           ),
-                        ),
-                        const PopupMenuDivider(),
-                        if (!isDesktop) ...[
-                          const PopupMenuItem(
-                            value: 'home',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.house,
-                              label: 'Trang chủ',
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Center(
+                            child: Icon(
+                              LucideIcons.menu,
+                              size: 20,
+                              color: isOverlayTop
+                                  ? Colors.white
+                                  : AppColors.iconStrong,
                             ),
                           ),
-                          const PopupMenuItem(
-                            value: 'stays',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.search,
-                              label: 'Nơi lưu trú',
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'blog',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.bookOpen,
-                              label: 'Blog',
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'contact',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.phone,
-                              label: 'Liên hệ',
-                            ),
-                          ),
-                          const PopupMenuDivider(),
-                        ],
-                        const PopupMenuItem(
-                          value: 'wishlist',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.heart,
-                            label: 'Danh sách yêu thích',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'trips',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.calendarCheck,
-                            label: 'Chuyến đi',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'messages',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.messageSquare,
-                            label: 'Tin nhắn',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'profile',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.userRound,
-                            label: 'Hồ sơ',
-                          ),
-                        ),
-                        const PopupMenuDivider(),
-                        if (!authUser.isAdmin)
-                          PopupMenuItem(
-                            value: 'host',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.house,
-                              label: authUser.isHost
-                                  ? 'Khu vực host'
-                                  : 'Trở thành host',
-                            ),
-                          ),
-                        if (authUser.isAdmin)
-                          const PopupMenuItem(
-                            value: 'admin',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.shield,
-                              label: 'Khu vực admin',
-                              isBold: true,
-                            ),
-                          ),
-                        const PopupMenuDivider(),
-                        const PopupMenuItem(
-                          value: 'logout',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.logOut,
-                            label: 'Đăng xuất',
-                          ),
-                        ),
-                      ];
-                    },
-                    child: Container(
-                      constraints: const BoxConstraints(
-                        minWidth: 40,
-                        minHeight: 48,
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          LucideIcons.menu,
-                          size: 20,
-                          color: isOverlayTop
-                              ? Colors.white
-                              : AppColors.iconStrong,
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
+              if (!hidePendingBanner)
+                const GlobalPendingBookingHeaderBanner(
+                  margin: EdgeInsets.only(top: 8),
+                ),
+            ],
           ),
-          if (!hidePendingBanner)
-            const GlobalPendingBookingHeaderBanner(
-              margin: EdgeInsets.only(top: 8),
-            ),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
     });
   }
 }
@@ -1371,8 +1480,7 @@ class _NavTextLink extends StatelessWidget {
         ? (isActive ? Colors.white : Colors.white.withValues(alpha: 0.85))
         : (isActive ? const Color(0xFF0F172A) : const Color(0xFF475569));
 
-    final indicatorColor =
-        isOverlayTop ? Colors.white : const Color(0xFF06B6D4);
+    final indicatorColor = isOverlayTop ? Colors.white : AppColors.primary;
 
     return InkWell(
       onTap: onTap,
@@ -1503,10 +1611,18 @@ class AppFooter extends StatelessWidget {
                         child: _FooterColumn(
                           title: 'Liên hệ',
                           links: [
-                            (
-                              'Hotline: 0929.399.893',
-                              () => _openExternalUrl('tel:0929399893')
-                            ),
+                            if (AppConfig.verifiedHotlineOrNull != null)
+                              (
+                                'Hotline: ${AppConfig.verifiedHotlineOrNull}',
+                                () => _openExternalUrl(
+                                      'tel:${AppConfig.verifiedHotlineOrNull}',
+                                    )
+                              )
+                            else
+                              (
+                                'Liên hệ tư vấn trực tuyến',
+                                () => context.push('/lien-he')
+                              ),
                             (
                               'Địa chỉ: 28 Thi Sách',
                               () => _openExternalUrl(

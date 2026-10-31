@@ -30,18 +30,24 @@ const entityMap: Record<string, string> = {
     apos: "'",
 };
 
+const isValidUnicodeScalar = (codePoint: number) =>
+    Number.isInteger(codePoint) &&
+    codePoint >= 0 &&
+    codePoint <= 0x10ffff &&
+    (codePoint < 0xd800 || codePoint > 0xdfff);
+
 const decodeHtmlEntitiesOnce = (value: string) =>
     value.replace(/&(#\d+|#x[a-f0-9]+|amp|lt|gt|quot|apos|#34|#39);/gi, (match, rawEntity: string) => {
         const entity = rawEntity.toLowerCase();
 
         if (entity.startsWith("#x")) {
             const codePoint = Number.parseInt(entity.slice(2), 16);
-            return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+            return isValidUnicodeScalar(codePoint) ? String.fromCodePoint(codePoint) : match;
         }
 
         if (entity.startsWith("#")) {
             const codePoint = Number.parseInt(entity.slice(1), 10);
-            return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+            return isValidUnicodeScalar(codePoint) ? String.fromCodePoint(codePoint) : match;
         }
 
         return entityMap[entity] ?? match;

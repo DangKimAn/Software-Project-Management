@@ -145,6 +145,7 @@ void main() {
           overrides: [
             hostRepositoryProvider.overrideWithValue(testRepo),
             hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
           ],
           child: const MaterialApp(
             home: HostPortalScreen(
@@ -163,6 +164,8 @@ void main() {
       expect(find.text('Đã hủy đăng'), findsOneWidget);
 
       // 2. Click vào chỗ nghỉ đầu tiên để mở Lịch chi tiết
+      await tester.ensureVisible(find.text('The Song 5 sao tại Vũng Tàu'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('The Song 5 sao tại Vũng Tàu'));
       await tester.pumpAndSettle();
 

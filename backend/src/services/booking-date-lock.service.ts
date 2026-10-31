@@ -3,16 +3,35 @@ import { ApiError } from "../common/api-error";
 import BookingDateLock from "../models/booking-date-lock";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const ISO_DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-export function buildReservedDates(checkInDate: Date, checkOutDate: Date): string[] {
-    const start = new Date(checkInDate);
-    const end = new Date(checkOutDate);
+function toUtcMidnightTimestamp(input: Date | string): number {
+    if (typeof input === "string") {
+        const trimmed = input.trim();
+        const match = ISO_DATE_ONLY_PATTERN.exec(trimmed);
+        if (match) {
+            return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+        }
+        const parsed = new Date(trimmed);
+        parsed.setUTCHours(0, 0, 0, 0);
+        return parsed.getTime();
+    }
+
+    const cloned = new Date(input.getTime());
+    cloned.setUTCHours(0, 0, 0, 0);
+    return cloned.getTime();
+}
+
+export function buildReservedDates(checkInDate: Date | string, checkOutDate: Date | string): string[] {
+    const startMs = toUtcMidnightTimestamp(checkInDate);
+    const endMs = toUtcMidnightTimestamp(checkOutDate);
+
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs >= endMs) {
+        return [];
+    }
+
     const dates: string[] = [];
-
-    start.setHours(0, 0, 0, 0);
-    end.setHours(0, 0, 0, 0);
-
-    for (let cursor = start.getTime(); cursor < end.getTime(); cursor += MS_PER_DAY) {
+    for (let cursor = startMs; cursor < endMs; cursor += MS_PER_DAY) {
         dates.push(new Date(cursor).toISOString().slice(0, 10));
     }
 
@@ -22,8 +41,8 @@ export function buildReservedDates(checkInDate: Date, checkOutDate: Date): strin
 export async function createBookingDateLocks(params: {
     bookingId: number;
     listingId: number;
-    checkInDate: Date;
-    checkOutDate: Date;
+    checkInDate: Date | string;
+    checkOutDate: Date | string;
     transaction?: Transaction;
 }): Promise<void> {
     const reservedDates = buildReservedDates(params.checkInDate, params.checkOutDate);

@@ -187,6 +187,33 @@ export type AnalyzeIdentityInput = {
     base64Data?: string;
 };
 
+const matchesSupportedImageMagicBytes = (buffer: Buffer): boolean => {
+    if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+        return true;
+    }
+    if (
+        buffer.length >= 8 &&
+        buffer[0] === 0x89 &&
+        buffer[1] === 0x50 &&
+        buffer[2] === 0x4e &&
+        buffer[3] === 0x47 &&
+        buffer[4] === 0x0d &&
+        buffer[5] === 0x0a &&
+        buffer[6] === 0x1a &&
+        buffer[7] === 0x0a
+    ) {
+        return true;
+    }
+    if (
+        buffer.length >= 12 &&
+        buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+        buffer.subarray(8, 12).toString("ascii") === "WEBP"
+    ) {
+        return true;
+    }
+    return false;
+};
+
 export const analyzeIdentityDocument = async (input: AnalyzeIdentityInput): Promise<IdentityVisionResult> => {
     const env = getEnv();
 
@@ -197,15 +224,27 @@ export const analyzeIdentityDocument = async (input: AnalyzeIdentityInput): Prom
     let resolvedImageUrl: string;
 
     if (input.fileBuffer) {
+        if (!matchesSupportedImageMagicBytes(input.fileBuffer)) {
+            throw new ApiError(422, "Validation error", [
+                {
+                    path: "image",
+                    msg: "Nội dung tệp ảnh không hợp lệ (chỉ chấp nhận JPG, PNG, WebP thực tế).",
+                },
+            ]);
+        }
         const mime = input.mimeType || "image/jpeg";
         const base64 = input.fileBuffer.toString("base64");
         resolvedImageUrl = `data:${mime};base64,${base64}`;
     } else if (input.base64Data) {
+        if (input.base64Data.length > 14 * 1024 * 1024) {
+            throw new ApiError(413, "Dữ liệu ảnh base64 vượt quá giới hạn cho phép.");
+        }
         resolvedImageUrl = input.base64Data.startsWith("data:")
             ? input.base64Data
             : `data:image/jpeg;base64,${input.base64Data}`;
     } else if (input.imageUrl) {
-        resolvedImageUrl = input.imageUrl;
+        const { assertSafeExternalImageUrl } = await import("../../common/url-security");
+        resolvedImageUrl = assertSafeExternalImageUrl(input.imageUrl, "imageUrl");
     } else {
         throw new ApiError(400, "Vui lòng cung cấp tệp ảnh hoặc URL ảnh giấy tờ căn cước.");
     }

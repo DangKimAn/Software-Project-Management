@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/price_display.dart';
 import '../../../booking_inquiry/domain/services/contact_service.dart';
 import '../../../villas/domain/entities/villa.dart';
@@ -58,10 +59,10 @@ class BookingActionBar extends StatelessWidget {
                     ),
                     Text(
                       selectedNights != null && selectedNights! > 0
-                          ? 'Tổng $selectedNights đêm • Đã gồm phí'
+                          ? context.l10n.totalNightsWithFee(selectedNights!)
                           : (villa.instantBook
-                              ? 'Đặt phòng xác nhận ngay'
-                              : 'Tư vấn & Đặt phòng 24/7'),
+                              ? context.l10n.bookingInstantConfirm
+                              : context.l10n.bookingSupport247),
                       style: AppTypography.caption
                           .copyWith(color: AppColors.textMuted),
                       maxLines: 1,
@@ -75,7 +76,7 @@ class BookingActionBar extends StatelessWidget {
 
               // Message host icon button (replaces phone hotline icon)
               AppIconButton(
-                icon: const Icon(LucideIcons.messageCircle, size: 18),
+                icon: const Icon(AppSemanticIcons.messageHost, size: 18),
                 iconColor: AppColors.iconStrong,
                 tooltip: 'Nhắn tin cho Chủ nhà',
                 onPressed: onMessageHost ??

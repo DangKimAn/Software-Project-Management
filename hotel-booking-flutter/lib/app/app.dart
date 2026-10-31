@@ -7,6 +7,7 @@ import '../core/notifications/push_notification_service.dart';
 import '../features/auth/domain/entities/user.dart';
 import '../features/auth/presentation/view_models/auth_notifier.dart';
 import '../features/trips/presentation/view_models/trips_view_model.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../shared/widgets/app_header_footer.dart';
 import 'di/providers.dart';
 import 'router/app_router.dart';
@@ -31,6 +32,9 @@ class _ThePalmVillaAppState extends ConsumerState<ThePalmVillaApp>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      if (ref.read(effectiveCurrencyProvider).isForeign) {
+        unawaited(ref.read(exchangeRatesProvider.notifier).refreshIfNeeded());
+      }
       final pushService = ref.read(pushNotificationServiceProvider);
 
       _pushTapSub = pushService.onNotificationTap.listen(_handlePushTap);
@@ -79,6 +83,9 @@ class _ThePalmVillaAppState extends ConsumerState<ThePalmVillaApp>
     if (state == AppLifecycleState.resumed) {
       ref.read(authNotifierProvider.notifier).onAppResumed();
       ref.invalidate(myBookingsProvider);
+      if (ref.read(effectiveCurrencyProvider).isForeign) {
+        unawaited(ref.read(exchangeRatesProvider.notifier).refreshIfNeeded());
+      }
       final currentUser = ref.read(authNotifierProvider).valueOrNull;
       if (currentUser != null) {
         unawaited(
@@ -116,6 +123,7 @@ class _ThePalmVillaAppState extends ConsumerState<ThePalmVillaApp>
         Locale('ko'),
       ],
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,

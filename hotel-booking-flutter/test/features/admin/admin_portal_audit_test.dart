@@ -12,6 +12,8 @@ import 'package:hotel_booking_flutter/features/auth/domain/entities/auth_session
 import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/repositories/auth_repository.dart';
 import 'package:hotel_booking_flutter/features/auth/presentation/view_models/auth_notifier.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 typedef _AdapterHandler = ResponseBody Function(RequestOptions options);
 
@@ -114,7 +116,15 @@ Widget _buildTestPortal({
   Size surfaceSize = const Size(1280, 900),
   double textScale = 1.0,
 }) {
-  final authRepo = _StubAuthRepository(actor);
+  const defaultAdminActor = User(
+    id: '999',
+    email: 'admin@palm.vn',
+    firstName: 'Admin',
+    lastName: 'System',
+    role: 'admin',
+    roles: ['admin'],
+  );
+  final authRepo = _StubAuthRepository(actor ?? defaultAdminActor);
   return ProviderScope(
     overrides: [
       adminRepositoryProvider.overrideWithValue(repository),
@@ -1299,6 +1309,14 @@ void main() {
           await tester.pumpAndSettle();
           expect(find.text('Admin Panel'), findsOneWidget);
           expect(find.text('Phân quyền'), findsOneWidget);
+          expect(find.text('Về trang khách'), findsOneWidget);
+          expect(find.byIcon(AppSemanticIcons.home), findsWidgets);
+          expect(find.byIcon(AppSemanticIcons.dashboard), findsOneWidget);
+          expect(find.byIcon(AppSemanticIcons.hostApplications), findsWidgets);
+          expect(find.text('Đăng xuất'), findsOneWidget);
+          expect(find.byIcon(AppSemanticIcons.logout), findsOneWidget);
+          expect(find.byIcon(LucideIcons.doorOpen), findsOneWidget);
+          expect(find.byIcon(LucideIcons.logOut), findsNothing);
 
           await tester.tap(find.text('Phân quyền'));
           await tester.pumpAndSettle();

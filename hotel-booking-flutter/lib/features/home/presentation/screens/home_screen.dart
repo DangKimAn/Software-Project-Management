@@ -5,7 +5,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/storage/preferences_service.dart';
-import '../../../../core/utils/currency_formatter.dart';
 import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
@@ -318,7 +317,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 2.0,
-                          color: Color(0xFF06B6D4),
+                          color: AppColors.primary,
                         ),
                       ),
                       SizedBox(height: 8),
@@ -797,7 +796,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 2.2,
-                          color: Color(0xFF0891B2),
+                          color: AppColors.primary,
                         ),
                       ),
                       SizedBox(height: 8),
@@ -838,7 +837,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
-                                    color: Color(0xFF0891B2),
+                                    color: AppColors.primary,
                                   ),
                                 ),
                                 SizedBox(width: 8),
@@ -1011,7 +1010,7 @@ class _CarouselNavButton extends StatelessWidget {
 }
 
 /// Popular Destination Card styled after the reference card UI (rounded card, top image with circular heart icon, title + mapPin location + price/rating).
-class _PopularDestinationCard extends StatelessWidget {
+class _PopularDestinationCard extends ConsumerWidget {
   final Villa villa;
   final VoidCallback onTap;
   final bool isFavorite;
@@ -1025,7 +1024,8 @@ class _PopularDestinationCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final formatter = ref.watch(moneyFormatterProvider);
     final thumbUrl = villa.imageUrls.isNotEmpty
         ? villa.imageUrls.first
         : 'assets/images/19tranphu.jpg';
@@ -1149,7 +1149,10 @@ class _PopularDestinationCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          CurrencyFormatter.formatVnd(villa.basePriceVnd ?? 0),
+                          formatter.formatPriceOrContact(
+                            villa.basePriceVnd,
+                            context: MoneyDisplayContext.villaCard,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -1187,7 +1190,7 @@ class _PopularDestinationCard extends StatelessWidget {
 }
 
 /// Exact port of `ListingCard.tsx` in Flat Minimal UI (no rating pill badge, no card border).
-class _ListingCardWidget extends StatelessWidget {
+class _ListingCardWidget extends ConsumerWidget {
   final String id;
   final String name;
   final String address;
@@ -1207,7 +1210,8 @@ class _ListingCardWidget extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final formatter = ref.watch(moneyFormatterProvider);
     return InkWell(
       onTap: onTap,
       child: Column(
@@ -1268,16 +1272,19 @@ class _ListingCardWidget extends StatelessWidget {
                     style: DefaultTextStyle.of(context).style,
                     children: [
                       TextSpan(
-                        text: CurrencyFormatter.formatVnd(pricePerNight),
+                        text: formatter.formatPriceOrContact(
+                          pricePerNight,
+                          context: MoneyDisplayContext.villaCard,
+                        ),
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF0891B2),
+                          color: AppColors.primary,
                         ),
                       ),
-                      const TextSpan(
-                        text: ' / đêm',
-                        style: TextStyle(
+                      TextSpan(
+                        text: ' ${formatter.l10n.pricePerNightUnit}',
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w400,
                           color: Color(0xFF94A3B8),
@@ -1362,7 +1369,7 @@ class _BlogPostCardWidget extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF0891B2),
+                        color: AppColors.primary,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1426,7 +1433,7 @@ class _BlogPostCardWidget extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF0891B2),
+                        color: AppColors.primary,
                       ),
                     ),
                   ],

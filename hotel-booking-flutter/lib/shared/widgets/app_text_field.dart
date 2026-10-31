@@ -18,6 +18,9 @@ class AppTextField extends StatelessWidget {
   final int maxLines;
   final bool autofocus;
   final Iterable<String>? autofillHints;
+  final bool? enableSuggestions;
+  final bool? autocorrect;
+  final bool? enableIMEPersonalizedLearning;
   const AppTextField(
       {super.key,
       this.controller,
@@ -36,7 +39,10 @@ class AppTextField extends StatelessWidget {
       this.onTap,
       this.maxLines = 1,
       this.autofocus = false,
-      this.autofillHints});
+      this.autofillHints,
+      this.enableSuggestions,
+      this.autocorrect,
+      this.enableIMEPersonalizedLearning});
 
   @override
   Widget build(BuildContext context) => TextFormField(
@@ -48,6 +54,10 @@ class AppTextField extends StatelessWidget {
         keyboardType: keyboardType,
         textInputAction: textInputAction,
         obscureText: obscureText,
+        enableSuggestions: enableSuggestions ?? !obscureText,
+        autocorrect: autocorrect ?? !obscureText,
+        enableIMEPersonalizedLearning:
+            enableIMEPersonalizedLearning ?? !obscureText,
         readOnly: readOnly,
         onTap: onTap,
         maxLines: obscureText ? 1 : maxLines,

@@ -9,6 +9,8 @@ abstract final class AppConstants {
 
   // Storage Keys
   static const storageLocaleKey = 'app_user_locale';
+  static const storageCurrencyPreferenceKey = 'app_user_currency_preference_v1';
+  static const storageExchangeRateSnapshotKey = 'app_fx_rate_snapshot_v1';
   static const storageFavoritesKey = 'app_saved_favorites';
   static const storageAuthTokenKey = 'app_secure_auth_token';
   static const storageRefreshCookieKey = 'app_secure_refresh_cookie';

@@ -12,6 +12,8 @@ import '../../../../core/errors/app_failure.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
+import '../../../../shared/widgets/app_semantic_icons.dart';
+import '../../../../shared/widgets/currency_language_selector.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../../booking_inquiry/domain/services/contact_service.dart';
@@ -455,7 +457,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ),
                             ),
                             icon: const Icon(
-                              LucideIcons.imageUp,
+                              AppSemanticIcons.changeAvatar,
                               size: 18,
                               color: AppColors.textInverse,
                             ),
@@ -934,7 +936,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                           shape: const StadiumBorder(),
                                         ),
                                         icon: const Icon(
-                                          LucideIcons.imageUp,
+                                          AppSemanticIcons.changeAvatar,
                                           size: 16,
                                           color: AppColors.iconStrong,
                                         ),
@@ -1137,212 +1139,220 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         const SizedBox(height: AppSpacing.s16),
                       ],
 
-                // Group 1: Account Profile Section (`Hồ sơ cá nhân`)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.s8),
-                  child: isInitialLoading
-                      ? _buildLoadingProfileCard()
-                      : (effectiveUser != null
-                          ? _buildSignedInProfileCard(effectiveUser)
-                          : _buildLoggedOutProfileCard()),
-                ),
+                      // Group 1: Account Profile Section (`Hồ sơ cá nhân`)
+                      Padding(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: AppSpacing.s8),
+                        child: isInitialLoading
+                            ? _buildLoadingProfileCard()
+                            : (effectiveUser != null
+                                ? _buildSignedInProfileCard(effectiveUser)
+                                : _buildLoggedOutProfileCard()),
+                      ),
 
-                _buildGroupDivider(),
+                      _buildGroupDivider(),
 
-                // Group 2: Trips, Favorites & Messages
-                _buildSettingsMenuTile(
-                  tileKey: const Key('menu_trips_history'),
-                  icon: LucideIcons.calendarCheck,
-                  title: 'Chuyến đi của tôi',
-                  onTap: () => _navigateProtectedRoute(
-                    context,
-                    '/account/trips',
-                    effectiveUser,
-                  ),
-                ),
-                _buildSettingsMenuTile(
-                  tileKey: const Key('menu_favorites'),
-                  icon: LucideIcons.heart,
-                  title: 'Danh sách yêu thích',
-                  onTap: () => context.push('/yeu-thich'),
-                ),
-                _buildSettingsMenuTile(
-                  tileKey: const Key('menu_messages'),
-                  icon: LucideIcons.messageSquare,
-                  title: 'Tin nhắn với Chủ nhà',
-                  onTap: () => _navigateProtectedRoute(
-                    context,
-                    '/messages',
-                    effectiveUser,
-                  ),
-                ),
-
-                _buildGroupDivider(),
-
-                // Group 3: Partner & Admin Portals + Language Preferences
-                if (effectiveUser != null && effectiveUser.isAdmin)
-                  _buildSettingsMenuTile(
-                    tileKey: const Key('menu_admin_portal'),
-                    icon: LucideIcons.shieldCheck,
-                    title: 'Quản trị hệ thống',
-                    onTap: () => context.push('/admin'),
-                  )
-                else if (effectiveUser != null && effectiveUser.isHost)
-                  _buildSettingsMenuTile(
-                    tileKey: const Key('menu_host_portal'),
-                    icon: LucideIcons.house,
-                    title: 'Quản lý chỗ nghỉ',
-                    onTap: () => context.push('/chu-nha/cho-nghi'),
-                  )
-                else if (effectiveUser != null && effectiveUser.isNewHost)
-                  _buildSettingsMenuTile(
-                    tileKey: const Key('menu_host_status'),
-                    icon: LucideIcons.clock,
-                    title: 'Trạng thái hồ sơ Chủ nhà',
-                    onTap: () => context.push('/tro-thanh-host/trang-thai'),
-                  )
-                else
-                  _buildSettingsMenuTile(
-                    tileKey: const Key('menu_become_host'),
-                    icon: LucideIcons.housePlus,
-                    title: 'Trở thành chủ nhà',
-                    onTap: () => context.push('/tro-thanh-host'),
-                  ),
-
-                Theme(
-                  data: Theme.of(context).copyWith(
-                    dividerColor: Colors.transparent,
-                    splashColor: Colors.transparent,
-                    highlightColor: Colors.transparent,
-                  ),
-                  child: ExpansionTile(
-                    key: const Key('settings_language_selector'),
-                    shape: const Border(),
-                    collapsedShape: const Border(),
-                    tilePadding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.s4,
-                      vertical: 2,
-                    ),
-                    childrenPadding: const EdgeInsets.only(
-                      left: AppSpacing.s16,
-                      bottom: AppSpacing.s4,
-                    ),
-                    leading: const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: Center(
-                        child: Icon(
-                          LucideIcons.globe,
-                          size: 24,
-                          color: AppColors.iconStrong,
+                      // Group 2: Trips, Favorites & Messages
+                      _buildSettingsMenuTile(
+                        tileKey: const Key('menu_trips_history'),
+                        icon: LucideIcons.calendarCheck,
+                        title: 'Chuyến đi của tôi',
+                        onTap: () => _navigateProtectedRoute(
+                          context,
+                          '/account/trips',
+                          effectiveUser,
                         ),
                       ),
-                    ),
-                    title: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Ngôn ngữ',
-                            style: AppTypography.bodyLarge.copyWith(
-                              fontSize: 16.5,
-                              fontWeight: FontWeight.w400,
-                              color: AppColors.textStrong,
-                              letterSpacing: -0.1,
+                      _buildSettingsMenuTile(
+                        tileKey: const Key('menu_favorites'),
+                        icon: LucideIcons.heart,
+                        title: 'Danh sách yêu thích',
+                        onTap: () => context.push('/yeu-thich'),
+                      ),
+                      _buildSettingsMenuTile(
+                        tileKey: const Key('menu_messages'),
+                        icon: AppSemanticIcons.messageHost,
+                        title: 'Tin nhắn với Chủ nhà',
+                        onTap: () => _navigateProtectedRoute(
+                          context,
+                          '/messages',
+                          effectiveUser,
+                        ),
+                      ),
+
+                      _buildGroupDivider(),
+
+                      // Group 3: Partner & Admin Portals + Language Preferences
+                      if (effectiveUser != null && effectiveUser.isAdmin)
+                        _buildSettingsMenuTile(
+                          tileKey: const Key('menu_admin_portal'),
+                          icon: AppSemanticIcons.adminPortal,
+                          title: 'Quản trị hệ thống',
+                          onTap: () => context.push('/admin'),
+                        )
+                      else if (effectiveUser != null && effectiveUser.isHost)
+                        _buildSettingsMenuTile(
+                          tileKey: const Key('menu_host_portal'),
+                          icon: AppSemanticIcons.home,
+                          title: 'Quản lý chỗ nghỉ',
+                          onTap: () => context.push('/chu-nha/cho-nghi'),
+                        )
+                      else if (effectiveUser != null && effectiveUser.isNewHost)
+                        _buildSettingsMenuTile(
+                          tileKey: const Key('menu_host_status'),
+                          icon: AppSemanticIcons.hostApplications,
+                          title: 'Trạng thái hồ sơ Chủ nhà',
+                          onTap: () =>
+                              context.push('/tro-thanh-host/trang-thai'),
+                        )
+                      else
+                        _buildSettingsMenuTile(
+                          tileKey: const Key('menu_become_host'),
+                          icon: AppSemanticIcons.becomeHost,
+                          title: 'Trở thành chủ nhà',
+                          onTap: () => context.push('/tro-thanh-host'),
+                        ),
+
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          dividerColor: Colors.transparent,
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                        ),
+                        child: ExpansionTile(
+                          key: const Key('settings_language_selector'),
+                          shape: const Border(),
+                          collapsedShape: const Border(),
+                          tilePadding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.s4,
+                            vertical: 2,
+                          ),
+                          childrenPadding: const EdgeInsets.only(
+                            left: AppSpacing.s16,
+                            bottom: AppSpacing.s4,
+                          ),
+                          leading: const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Center(
+                              child: Icon(
+                                LucideIcons.globe,
+                                size: 24,
+                                color: AppColors.iconStrong,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: AppSpacing.s8),
-                        Text(
-                          currentLocale == 'en'
-                              ? 'English'
-                              : currentLocale == 'ko'
-                                  ? '한국어'
-                                  : 'Tiếng Việt',
-                          style: AppTypography.bodyMedium.copyWith(
-                            fontSize: 14,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w400,
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Ngôn ngữ',
+                                  style: AppTypography.bodyLarge.copyWith(
+                                    fontSize: 16.5,
+                                    fontWeight: FontWeight.w400,
+                                    color: AppColors.textStrong,
+                                    letterSpacing: -0.1,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.s8),
+                              Text(
+                                currentLocale == 'en'
+                                    ? 'English'
+                                    : currentLocale == 'ko'
+                                        ? '한국어'
+                                        : 'Tiếng Việt',
+                                style: AppTypography.bodyMedium.copyWith(
+                                  fontSize: 14,
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                            ],
                           ),
+                          iconColor: AppColors.iconMuted,
+                          collapsedIconColor: AppColors.iconMuted,
+                          children: [
+                            _buildLanguageTile(
+                              tileKey: const Key('lang_tile_vi'),
+                              title: 'Tiếng Việt',
+                              subtitle: 'Mặc định • VND (₫)',
+                              isSelected: currentLocale == 'vi',
+                              onTap: () => ref
+                                  .read(localeProvider.notifier)
+                                  .setLocale('vi'),
+                            ),
+                            _buildLanguageTile(
+                              tileKey: const Key('lang_tile_en'),
+                              title: 'English',
+                              subtitle: r'International • USD ($)',
+                              isSelected: currentLocale == 'en',
+                              onTap: () => ref
+                                  .read(localeProvider.notifier)
+                                  .setLocale('en'),
+                            ),
+                            _buildLanguageTile(
+                              tileKey: const Key('lang_tile_ko'),
+                              title: '한국어',
+                              subtitle: '한국어 • KRW (₩)',
+                              isSelected: currentLocale == 'ko',
+                              onTap: () => ref
+                                  .read(localeProvider.notifier)
+                                  .setLocale('ko'),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    iconColor: AppColors.iconMuted,
-                    collapsedIconColor: AppColors.iconMuted,
-                    children: [
-                      _buildLanguageTile(
-                        tileKey: const Key('lang_tile_vi'),
-                        title: 'Tiếng Việt',
-                        subtitle: 'Mặc định',
-                        isSelected: currentLocale == 'vi',
-                        onTap: () =>
-                            ref.read(localeProvider.notifier).setLocale('vi'),
                       ),
-                      _buildLanguageTile(
-                        tileKey: const Key('lang_tile_en'),
-                        title: 'English',
-                        subtitle: 'International',
-                        isSelected: currentLocale == 'en',
-                        onTap: () =>
-                            ref.read(localeProvider.notifier).setLocale('en'),
+
+                      if (ref.watch(fxFeatureEnabledProvider))
+                        _buildCurrencyExpansionSection(currentLocale),
+
+                      _buildGroupDivider(),
+
+                      // Group 4: Support & Contact + Logout
+                      _buildSettingsMenuTile(
+                        tileKey: const Key('menu_contact_page'),
+                        icon: AppSemanticIcons.supportCenter,
+                        title: 'Trung tâm Liên hệ & Hỗ trợ',
+                        onTap: () => context.push('/lien-he'),
                       ),
-                      _buildLanguageTile(
-                        tileKey: const Key('lang_tile_ko'),
-                        title: '한국어',
-                        subtitle: 'Korean',
-                        isSelected: currentLocale == 'ko',
-                        onTap: () =>
-                            ref.read(localeProvider.notifier).setLocale('ko'),
+                      _buildSettingsMenuTile(
+                        tileKey: const Key('menu_call_hotline'),
+                        icon: LucideIcons.phone,
+                        title: 'Gọi tổng đài tư vấn',
+                        trailingText: AppConfig.hotlineNumber,
+                        onTap: () => ContactService.callHotline(),
                       ),
+                      _buildSettingsMenuTile(
+                        tileKey: const Key('menu_zalo_support'),
+                        icon: AppSemanticIcons.zaloSupport,
+                        title: 'Nhắn tin qua Zalo OA',
+                        onTap: () {
+                          ContactService.openZaloInquiry(
+                            messageText:
+                                'Xin chào The Palm, tôi cần hỗ trợ thông tin ứng dụng.',
+                          );
+                        },
+                      ),
+
+                      if (effectiveUser != null)
+                        _buildSettingsMenuTile(
+                          tileKey: const Key('settings_bottom_logout_button'),
+                          icon: AppSemanticIcons.logout,
+                          title: 'Đăng xuất',
+                          showChevron: false,
+                          onTap: () => _confirmAndLogout(effectiveUser),
+                        ),
+
+                      const SizedBox(height: AppSpacing.s32),
                     ],
                   ),
                 ),
-
-                _buildGroupDivider(),
-
-                // Group 4: Support & Contact + Logout
-                _buildSettingsMenuTile(
-                  tileKey: const Key('menu_contact_page'),
-                  icon: LucideIcons.circleHelp,
-                  title: 'Trung tâm Liên hệ & Hỗ trợ',
-                  onTap: () => context.push('/lien-he'),
-                ),
-                _buildSettingsMenuTile(
-                  tileKey: const Key('menu_call_hotline'),
-                  icon: LucideIcons.phone,
-                  title: 'Gọi tổng đài tư vấn',
-                  trailingText: AppConfig.hotlineNumber,
-                  onTap: () => ContactService.callHotline(),
-                ),
-                _buildSettingsMenuTile(
-                  tileKey: const Key('menu_zalo_support'),
-                  icon: LucideIcons.messageCircle,
-                  title: 'Nhắn tin qua Zalo OA',
-                  onTap: () {
-                    ContactService.openZaloInquiry(
-                      messageText:
-                          'Xin chào The Palm, tôi cần hỗ trợ thông tin ứng dụng.',
-                    );
-                  },
-                ),
-
-                if (effectiveUser != null)
-                  _buildSettingsMenuTile(
-                    tileKey: const Key('settings_bottom_logout_button'),
-                    icon: LucideIcons.doorOpen,
-                    title: 'Đăng xuất',
-                    showChevron: false,
-                    onTap: () => _confirmAndLogout(effectiveUser),
-                  ),
-
-                const SizedBox(height: AppSpacing.s32),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
-    ),
-  ],
-),
     );
   }
 
@@ -1358,7 +1368,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     final IconData bannerIcon = isOffline
         ? LucideIcons.wifiOff
-        : (isUnauthorized ? LucideIcons.lock : LucideIcons.triangleAlert);
+        : (isUnauthorized ? LucideIcons.lock : AppSemanticIcons.errorAlert);
 
     final String bannerTitle = isOffline
         ? 'Thiết bị đang ngoại tuyến'
@@ -1423,7 +1433,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     shape: const StadiumBorder(),
                   ),
                   icon: const Icon(
-                    LucideIcons.refreshCw,
+                    AppSemanticIcons.retry,
                     size: 16,
                     color: AppColors.iconStrong,
                   ),
@@ -1493,7 +1503,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Icon(
-              LucideIcons.userRound,
+              AppSemanticIcons.userProfile,
               color: AppColors.iconStrong,
               size: 28,
             ),
@@ -1557,7 +1567,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
         onPressed: () => _openAvatarUpdateModal(user),
         icon: const Icon(
-          LucideIcons.camera,
+          AppSemanticIcons.changeAvatar,
           size: 16,
           color: AppColors.iconStrong,
         ),
@@ -1838,6 +1848,166 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCurrencyExpansionSection(String currentLocale) {
+    final preference = ref.watch(currencyPreferenceProvider);
+    final effectiveCurrency = ref.watch(effectiveCurrencyProvider);
+    final formatter = ref.watch(moneyFormatterProvider);
+    final l10n = formatter.l10n;
+    final rateSummary = buildReferenceRateSummary(
+      formatter: formatter,
+      currency: effectiveCurrency,
+    );
+
+    final trailingBadge = preference.isAutomatic
+        ? '${effectiveCurrency.code} (${effectiveCurrency.symbol})'
+        : '${effectiveCurrency.code} (${effectiveCurrency.symbol})';
+
+    return Theme(
+      data: Theme.of(context).copyWith(
+        dividerColor: Colors.transparent,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+      ),
+      child: ExpansionTile(
+        key: const Key('settings_currency_selector'),
+        shape: const Border(),
+        collapsedShape: const Border(),
+        tilePadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.s4,
+          vertical: 2,
+        ),
+        childrenPadding: const EdgeInsets.only(
+          left: AppSpacing.s16,
+          bottom: AppSpacing.s8,
+        ),
+        leading: const SizedBox(
+          width: 24,
+          height: 24,
+          child: Center(
+            child: Icon(
+              LucideIcons.coins,
+              size: 24,
+              color: AppColors.iconStrong,
+            ),
+          ),
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                l10n.settingsCurrency,
+                style: AppTypography.bodyLarge.copyWith(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.textStrong,
+                  letterSpacing: -0.1,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.s8),
+            Text(
+              trailingBadge,
+              style: AppTypography.bodyMedium.copyWith(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+        iconColor: AppColors.iconMuted,
+        collapsedIconColor: AppColors.iconMuted,
+        children: [
+          _buildLanguageTile(
+            tileKey: const Key('currency_tile_automatic'),
+            title: l10n.currencyFollowLanguage,
+            subtitle:
+                '${l10n.currencyFollowLanguageDesc} (${AppCurrency.defaultForLocale(currentLocale).code} ${AppCurrency.defaultForLocale(currentLocale).symbol})',
+            isSelected: preference.isAutomatic,
+            onTap: () =>
+                ref.read(currencyPreferenceProvider.notifier).setAutomatic(),
+          ),
+          _buildLanguageTile(
+            tileKey: const Key('currency_tile_vnd'),
+            title: 'VND (₫)',
+            subtitle: l10n.currencyNameVnd,
+            isSelected: preference.isManual &&
+                preference.manualCurrencyOverride == AppCurrency.vnd,
+            onTap: () => ref
+                .read(currencyPreferenceProvider.notifier)
+                .setManualCurrency(AppCurrency.vnd),
+          ),
+          _buildLanguageTile(
+            tileKey: const Key('currency_tile_usd'),
+            title: r'USD ($)',
+            subtitle: l10n.currencyNameUsd,
+            isSelected: preference.isManual &&
+                preference.manualCurrencyOverride == AppCurrency.usd,
+            onTap: () => ref
+                .read(currencyPreferenceProvider.notifier)
+                .setManualCurrency(AppCurrency.usd),
+          ),
+          _buildLanguageTile(
+            tileKey: const Key('currency_tile_krw'),
+            title: 'KRW (₩)',
+            subtitle: l10n.currencyNameKrw,
+            isSelected: preference.isManual &&
+                preference.manualCurrencyOverride == AppCurrency.krw,
+            onTap: () => ref
+                .read(currencyPreferenceProvider.notifier)
+                .setManualCurrency(AppCurrency.krw),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.s16,
+              AppSpacing.s8,
+              AppSpacing.s8,
+              AppSpacing.s4,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  formatter.isFallingBackToVnd
+                      ? l10n.fxRateUnavailableFallback
+                      : l10n.fxChargedInVndNotice,
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                if (rateSummary != null && formatter.snapshot != null) ...[
+                  const SizedBox(height: AppSpacing.s4),
+                  Text(
+                    '$rateSummary • ${l10n.fxRateUpdatedAt(formatSnapshotUpdatedAt(formatter.snapshot!.sourceUpdatedAt, currentLocale))}',
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+                if (formatter.isUsingStaleRate &&
+                    formatter.snapshot != null) ...[
+                  const SizedBox(height: AppSpacing.s4),
+                  Text(
+                    l10n.fxRateStaleNotice(
+                      formatSnapshotUpdatedAt(
+                        formatter.snapshot!.sourceUpdatedAt,
+                        currentLocale,
+                      ),
+                    ),
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.warning,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

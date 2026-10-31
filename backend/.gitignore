@@ -16,10 +16,16 @@ private/
 *.pfx
 *.jks
 *.keystore
-service-account*.json
+*service-account*.json
 firebase-adminsdk*.json
 google-credentials*.json
 client_secret*.json
+
+# Internal plans & notes (DO NOT COMMIT .md / .txt)
+*.md
+**/*.md
+*.txt
+**/*.txt
 
 # Backend build/runtime output
 dist/
@@ -29,6 +35,7 @@ coverage/
 /backend/uploads/
 /uploads/
 storage/
+data/cache/
 logs/
 tmp/
 temp/

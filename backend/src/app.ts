@@ -23,9 +23,11 @@ import blogsRoutes from "./modules/blogs/blogs.routes";
 import bookingsRoutes, { hostBookingsRoutes } from "./modules/bookings/bookings.routes";
 import conversationsRoutes from "./modules/conversations/conversations.routes";
 import couponsRoutes from "./modules/coupons/coupons.routes";
+import exchangeRatesRoutes from "./modules/exchange-rates/exchange-rates.routes";
 import hostApplicationRoutes from "./modules/host-applications/host-application.routes";
 import hostBankAccountRoutes from "./modules/host-bank-account/host-bank-account.routes";
 import hostListingsRoutes from "./modules/host-listings/host-listings.routes";
+import hostSheetSyncRoutes from "./modules/host-sheet-sync/host-sheet-sync.routes";
 import notificationsRoutes from "./modules/notifications/notifications.routes";
 import paymentsRoutes from "./modules/payments/payments.routes";
 import hostPayoutsRoutes from "./modules/payouts/host-payouts.routes";
@@ -78,10 +80,32 @@ export const createApp = () => {
         });
     });
 
+    let cachedHealthSnapshot: {
+        expiresAt: number;
+        qdrantStatus: Awaited<ReturnType<typeof checkQdrantHealth>>;
+    } | null = null;
+    let cachedDbOkUntil = 0;
+    const HEALTH_CACHE_TTL_MS = 5_000;
+
     app.get("/api/health", async (req, res, next) => {
         try {
-            await sequelize.authenticate();
-            const qdrantStatus = await checkQdrantHealth();
+            const now = Date.now();
+            const isTestEnv = env.nodeEnv === "test";
+            let qdrantStatus: Awaited<ReturnType<typeof checkQdrantHealth>>;
+
+            if (!isTestEnv && cachedHealthSnapshot && cachedHealthSnapshot.expiresAt > now) {
+                qdrantStatus = cachedHealthSnapshot.qdrantStatus;
+            } else {
+                await sequelize.authenticate();
+                qdrantStatus = await checkQdrantHealth();
+                if (!isTestEnv) {
+                    cachedHealthSnapshot = {
+                        expiresAt: now + HEALTH_CACHE_TTL_MS,
+                        qdrantStatus,
+                    };
+                    cachedDbOkUntil = now + HEALTH_CACHE_TTL_MS;
+                }
+            }
 
             return sendSuccess(res, {
                 message: "OK",
@@ -94,13 +118,18 @@ export const createApp = () => {
                         dialect: "mysql",
                         status: "up",
                     },
-                    qdrant: {
-                        status: qdrantStatus,
-                        collection: getQdrantCollectionName(),
-                    },
+                    qdrant:
+                        env.nodeEnv === "production"
+                            ? { status: qdrantStatus }
+                            : {
+                                  status: qdrantStatus,
+                                  collection: getQdrantCollectionName(),
+                              },
                 },
             });
         } catch (error) {
+            cachedHealthSnapshot = null;
+            cachedDbOkUntil = 0;
             logger.error("Health check failed", error, { requestId: req.requestId });
             return next(error);
         }
@@ -108,7 +137,13 @@ export const createApp = () => {
 
     app.get("/api/health/db", async (_req, res, next) => {
         try {
-            await sequelize.authenticate();
+            const now = Date.now();
+            if (env.nodeEnv === "test" || cachedDbOkUntil <= now) {
+                await sequelize.authenticate();
+                if (env.nodeEnv !== "test") {
+                    cachedDbOkUntil = now + HEALTH_CACHE_TTL_MS;
+                }
+            }
             return sendSuccess(res, {
                 message: "Database connection healthy",
                 data: {
@@ -117,6 +152,7 @@ export const createApp = () => {
                 },
             });
         } catch (error) {
+            cachedDbOkUntil = 0;
             return next(error);
         }
     });
@@ -132,6 +168,7 @@ export const createApp = () => {
     app.use("/api/notifications", notificationsRoutes);
     app.use("/api/host/applications", hostApplicationRoutes);
     app.use("/api/host/listings", hostListingsRoutes);
+    app.use("/api/host/sheet-sync", hostSheetSyncRoutes);
     app.use("/api/host/listings", hostListingImageVisionRoutes);
     app.use("/api/host/images", hostImageVisionRoutes);
     app.use("/api/host/verifications", hostVerificationsRoutes);
@@ -153,6 +190,8 @@ export const createApp = () => {
     app.use("/api/reports", reportsRoutes);
     app.use("/api/host/reports", hostReportsRouter);
     app.use("/api/amenities", amenitiesRoutes);
+    app.use("/api/v1/exchange-rates", exchangeRatesRoutes);
+    app.use("/api/exchange-rates", exchangeRatesRoutes);
 
     app.use(notFound);
     app.use(errorHandler);

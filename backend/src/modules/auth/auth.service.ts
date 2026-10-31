@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { CookieOptions, Request } from "express";
 import { Op, QueryTypes, type Transaction } from "sequelize";
@@ -7,6 +7,8 @@ import { sendAuthOtpEmail } from "./auth-mail.service";
 import { ApiError } from "../../common/api-error";
 import sequelize from "../../config/database";
 import { getEnv } from "../../config/env";
+import { deactivateAllUserDeviceTokens } from "../../services/fcm-push.service";
+import { disconnectUserSockets } from "../../socket/socket";
 import { notifyUserRegistered } from "../notifications/notification.service";
 import AuthOtpToken, { AuthOtpPurpose } from "../../models/auth-otp-token";
 import RefreshSession from "../../models/refresh-session";
@@ -210,10 +212,6 @@ export const extractAuthToken = (req: Request) => {
 
     if (authorization?.startsWith("Bearer ")) {
         return authorization.slice("Bearer ".length).trim();
-    }
-
-    if (typeof req.query?.token === "string" && req.query.token.trim()) {
-        return req.query.token.trim();
     }
 
     const parsedCookieToken =
@@ -760,6 +758,22 @@ export const issueAuthOtp = async (
         return buildOtpResponse(normalizedIdentifier, null, expiresAt);
     }
 
+    if ((purpose === "verify_email" || purpose === "verify_phone") && !user) {
+        await createAuditLog({
+            actorId: null,
+            action: "auth.otp.issue",
+            targetType: "auth_otp",
+            metadata: {
+                purpose,
+                identifierHash,
+            },
+            ipAddress: context.ipAddress,
+            userAgent: context.userAgent,
+        });
+
+        return buildOtpResponse(normalizedIdentifier, null, expiresAt);
+    }
+
     /**
      * Tạo OTP thật.
      */
@@ -821,6 +835,15 @@ export const issueAuthOtp = async (
     return buildOtpResponse(normalizedIdentifier, otp, expiresAt);
 };
 
+const isConstantTimeEqualHash = (storedHash: string, candidateHash: string) => {
+    const storedBuf = Buffer.from(String(storedHash), "utf8");
+    const candidateBuf = Buffer.from(String(candidateHash), "utf8");
+    if (storedBuf.length !== candidateBuf.length) {
+        return false;
+    }
+    return timingSafeEqual(storedBuf, candidateBuf);
+};
+
 export const resetPasswordWithOtp = async (
     input: ResetPasswordInput,
     context: RequestContext = {},
@@ -863,7 +886,7 @@ export const resetPasswordWithOtp = async (
 
     otpToken.attemptCount += 1;
 
-    if (otpToken.tokenHash !== tokenHash) {
+    if (!isConstantTimeEqualHash(otpToken.tokenHash, tokenHash)) {
         await otpToken.save();
         throw new ApiError(400, "Invalid OTP");
     }
@@ -902,6 +925,9 @@ export const resetPasswordWithOtp = async (
             transaction,
         });
     });
+
+    await deactivateAllUserDeviceTokens(Number(user._id));
+    disconnectUserSockets(user._id);
 
     return {
         userId: String(user._id),
@@ -950,7 +976,7 @@ export const verifyPhoneWithOtp = async (
 
     otpToken.attemptCount += 1;
 
-    if (otpToken.tokenHash !== tokenHash) {
+    if (!isConstantTimeEqualHash(otpToken.tokenHash, tokenHash)) {
         await otpToken.save();
         throw new ApiError(400, "Invalid verification code");
     }
@@ -1029,7 +1055,7 @@ export const verifyEmailWithOtp = async (
 
     otpToken.attemptCount += 1;
 
-    if (otpToken.tokenHash !== tokenHash) {
+    if (!isConstantTimeEqualHash(otpToken.tokenHash, tokenHash)) {
         await otpToken.save();
         throw new ApiError(400, "Invalid verification code");
     }

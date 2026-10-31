@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 
+export 'host_sheet_sync_models.dart';
+
 /// Allowed file upload limits and MIME types per backend validator.
 const int kMaxHostUploadBytes = 5 * 1024 * 1024; // 5MB
 const int kMaxListingImagesCount = 30;
@@ -280,7 +282,8 @@ class HostIdentityAiResult {
       return idNumber!.trim();
     }
     if (mrz != null && mrz!.isNotEmpty) {
-      final match = RegExp(r'IDVNM(\d{9,12})', caseSensitive: false).firstMatch(mrz!);
+      final match =
+          RegExp(r'IDVNM(\d{9,12})', caseSensitive: false).firstMatch(mrz!);
       if (match != null) {
         return match.group(1);
       }
@@ -1629,7 +1632,8 @@ BookingDisplayStatus getBookingDisplayStatus(
         break;
       case 'LATE_PAYMENT_AFTER_BOOKING_EXPIRED':
       case 'PAYMENT_SUCCESS_AFTER_HOLD_EXPIRED':
-        localizedReason = 'Thanh toán phát sinh sau khi đã hết thời gian giữ chỗ';
+        localizedReason =
+            'Thanh toán phát sinh sau khi đã hết thời gian giữ chỗ';
         break;
       default:
         if (RegExp(r'^[A-Za-z0-9]+(_[A-Za-z0-9]+)+$').hasMatch(rawReason)) {
