@@ -54,12 +54,14 @@ export type AuthenticatedUser = {
     phone: string;
     name: string;
     username: string | null;
+    avatarUrl?: string | null;
     status: UserStatus;
     roles: UserRole[];
 };
 
 export type AuthResponseUser = AuthenticatedUser & {
     userId: string;
+    avatarUrl: string | null;
     role: UserRole;
 };
 
@@ -366,6 +368,7 @@ export const toAuthenticatedUser = async (user: UserDocument): Promise<Authentic
         phone: user.phone ?? "",
         name: user.fullName,
         username: user.username ?? null,
+        avatarUrl: user.avatarUrl ?? null,
         status: user.status,
         roles,
     };
@@ -384,6 +387,7 @@ export const toAuthResponseUser = async (
         phone: user.phone ?? "",
         name: user.fullName,
         username: user.username ?? null,
+        avatarUrl: user.avatarUrl ?? null,
         status: user.status,
         roles: resolvedRoles,
         role: selectPrimaryRole(resolvedRoles),

@@ -49,6 +49,11 @@ const analyticsQueryValidators = () => [
         .custom((value, { req }) => !req.query?.from || String(req.query.from) <= String(value))
         .withMessage("to must be greater than or equal to from"),
     query("group").optional().isIn(["day", "month", "year"]).withMessage("group is invalid"),
+    query("listingId")
+        .optional()
+        .isInt({ min: 1 })
+        .withMessage("listingId must be a positive integer")
+        .toInt(),
 ];
 
 router.use(authenticate, requireActiveUser);

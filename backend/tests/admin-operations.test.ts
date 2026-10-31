@@ -567,4 +567,51 @@ describe("Module admin (AD-01 to AD-14)", () => {
         assert.equal(resDetail.body.data.user.password, undefined);
         assert.equal(resDetail.body.data.user.passwordHash, undefined);
     });
+
+    it("AD-15: Sắp xếp danh sách người dùng theo thứ tự vai trò guest -> host -> admin rồi theo tên tiếng Việt A-Z", () => {
+        const unsorted = [
+            {
+                userId: "1",
+                fullName: "Quản trị viên The Palm Villa",
+                email: "admin@minhthanhvilla.com",
+                role: "admin",
+            },
+            {
+                userId: "11",
+                fullName: "Đặng Kim An",
+                email: "n23dccn001@student.ptithcm.edu.vn",
+                role: "guest",
+            },
+            {
+                userId: "12",
+                fullName: "NGUYỄN VĂN A",
+                email: "dangkiman41005@gmail.com",
+                role: "host",
+            },
+            {
+                userId: "4",
+                fullName: "ĐẶNG KIM AN",
+                email: "guest@gmail.com",
+                role: "guest",
+            },
+            {
+                userId: "2",
+                fullName: "Nguyễn Minh Thành",
+                email: "host.thanh@minhthanhvilla.com",
+                roles: ["guest", "host"],
+            },
+            {
+                userId: "15",
+                fullName: "Lê Hoàng Long",
+                email: "long@example.com",
+                role: "guest",
+            },
+        ];
+
+        const sorted = usersRepository.sortAdminUserItems(unsorted);
+        assert.deepEqual(
+            sorted.map((u: any) => u.userId),
+            ["4", "11", "15", "2", "12", "1"],
+        );
+    });
 });

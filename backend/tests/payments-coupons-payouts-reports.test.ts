@@ -656,6 +656,122 @@ describe("Payments, coupons, payouts, and revenue reports", () => {
         );
     });
 
+    it("separates realized stay revenue from pending-stay escrow and deducts refunds while excluding payment_expired", async () => {
+        const executedQueries: string[] = [];
+
+        patch(sequelize, "query", async (sql: string) => {
+            const text = String(sql);
+            executedQueries.push(text);
+
+            if (text.includes("AS pendingStayRevenue")) {
+                assert.equal(text.includes("'paid', 'confirmed', 'checked_in'"), true);
+                assert.equal(text.includes("payment_expired"), false);
+                return [
+                    {
+                        pendingStayRevenue: "8300000",
+                        pendingStayPlatformRevenue: "800000",
+                        pendingStayHostRevenue: "7500000",
+                        pendingStayBookingCount: 1,
+                    },
+                ];
+            }
+
+            if (text.includes("AS refundedAmount")) {
+                return [
+                    {
+                        refundedAmount: "1500000",
+                        refundCount: 1,
+                    },
+                ];
+            }
+
+            assert.equal(text.includes("'checked_out'"), true);
+            assert.equal(text.includes("'completed'"), true);
+            assert.equal(text.includes("FROM refunds"), true);
+            assert.equal(text.includes("payment_expired"), false);
+            return [
+                {
+                    period: "2026-10-31",
+                    grossRevenue: "4550000",
+                    platformRevenue: "420000",
+                    hostRevenue: "4130000",
+                    bookingCount: 1,
+                    paymentCount: 1,
+                },
+            ];
+        });
+
+        const report = await reportsService.getAdminRevenueReport(adminUser, {
+            from: "2026-10-02",
+            to: "2026-10-31",
+            group: "day",
+        });
+
+        assert.equal(executedQueries.length, 3);
+        assert.equal(report.totals.grossRevenue, 4550000);
+        assert.equal(report.totals.platformRevenue, 420000);
+        assert.equal(report.totals.hostRevenue, 4130000);
+        assert.equal(report.totals.bookingCount, 1);
+        assert.equal(report.totals.pendingStayRevenue, 8300000);
+        assert.equal(report.totals.pendingStayHostRevenue, 7500000);
+        assert.equal(report.totals.pendingStayBookingCount, 1);
+        assert.equal(report.totals.refundedAmount, 1500000);
+    });
+
+    it("returns active snapshots for hosts & listings and successfulBookings for bookings report", async () => {
+        patch(sequelize, "query", async (sql: string) => {
+            const text = String(sql);
+
+            if (text.includes("AS successfulBookings")) {
+                return [
+                    {
+                        period: "2026-10-31",
+                        totalBookings: 27,
+                        successfulBookings: 2,
+                        pendingBookings: 0,
+                        paidBookings: 1,
+                        completedBookings: 1,
+                        cancelledBookings: 3,
+                        expiredBookings: 22,
+                        totalAmount: "12850000",
+                    },
+                ];
+            }
+
+            if (text.includes("AS totalListings")) {
+                return [{ totalListings: 6, activeListings: 5, inactiveListings: 1 }];
+            }
+
+            if (text.includes("AS listingsCreated")) {
+                return [];
+            }
+
+            if (text.includes("AS allHosts")) {
+                return [{ allHosts: 3, activeHosts: 3, verifiedHosts: 3 }];
+            }
+
+            if (text.includes("AS hostsCreated")) {
+                return [];
+            }
+
+            return [];
+        });
+
+        const [bookingsReport, listingsReport, hostsReport] = await Promise.all([
+            reportsService.getAdminBookingsReport(adminUser, { from: "2026-10-25", to: "2026-10-31", group: "day" }),
+            reportsService.getAdminListingsReport(adminUser, { from: "2026-10-25", to: "2026-10-31", group: "day" }),
+            reportsService.getAdminHostsReport(adminUser, { from: "2026-10-25", to: "2026-10-31", group: "day" }),
+        ]);
+
+        assert.equal(bookingsReport.totals.totalBookings, 27);
+        assert.equal(bookingsReport.totals.successfulBookings, 2);
+        assert.equal(listingsReport.totals.listingsCreated, 0);
+        assert.equal(listingsReport.totals.activeListings, 5);
+        assert.equal(hostsReport.totals.hostsCreated, 0);
+        assert.equal(hostsReport.totals.totalHosts, 3);
+        assert.equal(hostsReport.totals.activeHosts, 3);
+    });
+
     it("enforces admin RBAC for revenue reports", async () => {
         await assertRejectsApiError(
             () => reportsService.getAdminRevenueReport(guestUser, { from: "2026-05-01", to: "2026-05-10", group: "day" }),
