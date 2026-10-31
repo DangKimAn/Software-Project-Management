@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/features/admin/data/admin_repository.dart';
 import 'package:hotel_booking_flutter/features/admin/presentation/screens/admin_portal_screens.dart';
+import 'package:hotel_booking_flutter/features/admin/presentation/theme/admin_studio_tokens.dart';
+import 'package:hotel_booking_flutter/features/admin/presentation/widgets/admin_studio_widgets.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/auth_session.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/repositories/auth_repository.dart';
@@ -549,9 +551,20 @@ void main() {
 
         // Self-lock attempt on user #1 ('Admin Chính') is blocked immediately
         final adminRow = find.byKey(const ValueKey('admin-user-row-1'));
+        expect(
+          find.descendant(
+            of: adminRow,
+            matching: find.widgetWithIcon(OutlinedButton, LucideIcons.pencil),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: adminRow, matching: find.text('Sửa')),
+          findsNothing,
+        );
         final selfLockBtn = find.descendant(
           of: adminRow,
-          matching: find.widgetWithText(OutlinedButton, 'Khóa'),
+          matching: find.widgetWithIcon(OutlinedButton, LucideIcons.lock),
         );
         await tester.tap(selfLockBtn);
         await tester.pumpAndSettle();
@@ -565,7 +578,7 @@ void main() {
         final guestRow = find.byKey(const ValueKey('admin-user-row-42'));
         final lockGuestBtn = find.descendant(
           of: guestRow,
-          matching: find.widgetWithText(OutlinedButton, 'Khóa'),
+          matching: find.widgetWithIcon(OutlinedButton, LucideIcons.lock),
         );
         await tester.tap(lockGuestBtn);
         await tester.pumpAndSettle();
@@ -581,7 +594,7 @@ void main() {
     );
 
     testWidgets(
-      'disables user mutations when actor is non-admin (moderator/host/guest)',
+      'disables user mutations when actor is non-admin (host/guest)',
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(1280, 900));
         addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -609,20 +622,20 @@ void main() {
           });
         });
 
-        const moderatorActor = User(
+        const hostActor = User(
           id: '9',
-          email: 'mod@vungtaustay.com',
-          firstName: 'Kiểm Duyệt',
-          lastName: 'Viên',
-          role: 'guest',
-          roles: ['moderator'],
+          email: 'host@vungtaustay.com',
+          firstName: 'Chủ',
+          lastName: 'Nhà',
+          role: 'host',
+          roles: ['host'],
         );
 
         await tester.pumpWidget(
           _buildTestPortal(
             activeTab: 'nguoi-dung',
             repository: AdminRepository(dio),
-            actor: moderatorActor,
+            actor: hostActor,
           ),
         );
         await tester.pumpAndSettle();
@@ -633,8 +646,12 @@ void main() {
           ),
           findsOneWidget,
         );
+        final editBtn = tester.widget<OutlinedButton>(
+          find.widgetWithIcon(OutlinedButton, LucideIcons.pencil),
+        );
+        expect(editBtn.onPressed, isNull);
         final lockBtn = tester.widget<OutlinedButton>(
-          find.widgetWithText(OutlinedButton, 'Khóa'),
+          find.widgetWithIcon(OutlinedButton, LucideIcons.lock),
         );
         expect(lockBtn.onPressed, isNull);
       },
@@ -908,20 +925,41 @@ void main() {
         expect(find.textContaining('***1234'), findsOneWidget);
         expect(find.textContaining('079099001234'), findsNothing);
 
-        // 3. View Host Application #501 detail -> masks KYC ID and does not leak raw objectKey or signature
+        // 3. Detail is NOT rendered inline below/beside the list; tapping 'Chi tiết' opens popup Dialog
+        expect(
+          find.byKey(const Key('admin_host_app_detail_dialog')),
+          findsNothing,
+        );
+        expect(find.textContaining('Giấy tờ xác minh'), findsNothing);
+
         await tester.tap(find.text('Chi tiết'));
         await tester.pumpAndSettle();
-        expect(find.text('Số định danh (KYC): ***6789'), findsOneWidget);
+
+        final detailDialogFinder = find.byKey(
+          const Key('admin_host_app_detail_dialog'),
+        );
+        expect(detailDialogFinder, findsOneWidget);
+        expect(
+          find.descendant(
+            of: detailDialogFinder,
+            matching: find.text('Số định danh (KYC): ***6789'),
+          ),
+          findsOneWidget,
+        );
         expect(find.textContaining('079188006789'), findsNothing);
         expect(find.textContaining('supersecret999'), findsNothing);
 
         // 4. Tap 'Từ chối' without typing a rejection reason:
         // Must NOT jump to top / display top error banner, but report error directly on the reason input field!
-        await tester.tap(find.byKey(const Key('admin_host_app_reject_btn')));
+        final rejectBtnFinder = find.byKey(const Key('admin_host_app_reject_btn'));
+        await tester.ensureVisible(rejectBtnFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(rejectBtnFinder);
         await tester.pumpAndSettle();
 
         // Top error banner must NOT show the reason error
-        expect(find.text('Vui lòng nhập lý do từ chối.'), findsOneWidget); // Found only on the field errorText, not top banner
+        expect(find.text('Vui lòng nhập lý do từ chối.'),
+            findsOneWidget); // Found only on the field errorText, not top banner
         final reasonFieldFinder =
             find.byKey(const Key('admin_host_app_reject_reason_field'));
         expect(reasonFieldFinder, findsOneWidget);
@@ -936,6 +974,132 @@ void main() {
         await tester.pumpAndSettle();
         final updatedField = tester.widget<TextField>(reasonFieldFinder);
         expect(updatedField.decoration?.errorText, isNull);
+
+        // 5. Closing via 'Đóng chi tiết' dismisses the popup completely
+        final closeBtnFinder = find.byTooltip('Đóng chi tiết');
+        await tester.ensureVisible(closeBtnFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(closeBtnFinder);
+        await tester.pumpAndSettle();
+        expect(detailDialogFinder, findsNothing);
+      },
+    );
+
+    testWidgets(
+      'mobile viewport (390x844) opens Host Application detail in a popup Dialog instead of rendering below list',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(390, 844));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        final dio = Dio();
+        dio.httpClientAdapter = _MockDioAdapter((options) {
+          if (options.path == '/api/admin/host-applications') {
+            return _jsonResponse({
+              'data': {
+                'items': [
+                  {
+                    'applicationId': '502',
+                    'contactName': 'ĐẶNG KIM AN',
+                    'phone': '0901000004',
+                    'status': 'rejected',
+                    'documentCount': 2,
+                  },
+                ],
+                'pagination': {
+                  'page': 1,
+                  'limit': 20,
+                  'total': 3,
+                  'totalPages': 1,
+                },
+              },
+            });
+          }
+          if (options.path == '/api/admin/host-applications/502') {
+            return _jsonResponse({
+              'data': {
+                'applicationId': '502',
+                'contactName': 'ĐẶNG KIM AN',
+                'phone': '0901000004',
+                'profileType': 'individual',
+                'businessAddress': 'vung tau, viet nam',
+                'status': 'rejected',
+                'rejectReason': 'ban dien dia chi chua chuan',
+                'documents': [
+                  {
+                    'documentType': 'cccd',
+                    'side': 'front',
+                    'mimeType': 'image/jpeg',
+                    'fileUrl': '/api/admin/host-applications/502/documents/1/file',
+                  },
+                ],
+              },
+            });
+          }
+          if (options.path == '/api/admin/verifications') {
+            return _jsonResponse({
+              'data': {
+                'verifications': const <Map<String, dynamic>>[],
+                'pagination': {
+                  'page': 1,
+                  'limit': 20,
+                  'total': 0,
+                  'totalPages': 1,
+                },
+              },
+            });
+          }
+          return _jsonResponse({'data': <String, dynamic>{}});
+        });
+
+        await tester.pumpWidget(
+          _buildTestPortal(
+            activeTab: 'ho-so-host',
+            repository: AdminRepository(dio),
+            surfaceSize: const Size(390, 844),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('admin_host_app_detail_dialog')),
+          findsNothing,
+        );
+
+        await tester.tap(find.text('Chi tiết'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        final dialogFinder = find.byKey(
+          const Key('admin_host_app_detail_dialog'),
+        );
+        expect(dialogFinder, findsOneWidget);
+        expect(
+          find.descendant(
+            of: dialogFinder,
+            matching: find.text('Địa chỉ kinh doanh: vung tau, viet nam'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: dialogFinder,
+            matching: find.text(
+              'Lý do từ chối trước đó: ban dien dia chi chua chuan',
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: dialogFinder,
+            matching: find.text('Giấy tờ xác minh (1)'),
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byTooltip('Đóng chi tiết'));
+        await tester.pumpAndSettle();
+        expect(dialogFinder, findsNothing);
       },
     );
   });
@@ -1037,7 +1201,8 @@ void main() {
           findsOneWidget,
         );
 
-        // 2. Admin #1 tries to demote themselves -> blocked by self-demotion guard
+        // 2. Admin #1 tries to demote themselves -> blocked by self-demotion guard (and Moderator is removed)
+        expect(find.text('Moderator'), findsNothing);
         final row1 = find.byKey(const ValueKey('admin-role-row-1'));
         await tester.tap(
           find.descendant(
@@ -1046,7 +1211,8 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Moderator').last);
+        expect(find.text('Moderator'), findsNothing);
+        await tester.tap(find.text('Host').last);
         await tester.pumpAndSettle();
 
         await tester.tap(
@@ -1241,6 +1407,9 @@ void main() {
           );
           expect(bottomNavBar, findsOneWidget);
 
+          final overviewNav = find.byKey(
+            const ValueKey('admin-bottom-nav-tong-quan'),
+          );
           final usersNav = find.byKey(
             const ValueKey('admin-bottom-nav-nguoi-dung'),
           );
@@ -1254,11 +1423,16 @@ void main() {
             const ValueKey('admin-bottom-nav-menu'),
           );
 
+          expect(overviewNav, findsOneWidget);
           expect(usersNav, findsOneWidget);
           expect(moderationNav, findsOneWidget);
           expect(hostAppsNav, findsOneWidget);
           expect(menuNav, findsOneWidget);
 
+          expect(
+            find.descendant(of: bottomNavBar, matching: find.text('Tổng quan')),
+            findsOneWidget,
+          );
           expect(
             find.descendant(
                 of: bottomNavBar, matching: find.text('Người dùng')),
@@ -1279,6 +1453,7 @@ void main() {
           );
 
           for (final navFinder in [
+            overviewNav,
             usersNav,
             moderationNav,
             hostAppsNav,
@@ -1311,7 +1486,7 @@ void main() {
           expect(find.text('Phân quyền'), findsOneWidget);
           expect(find.text('Về trang khách'), findsOneWidget);
           expect(find.byIcon(AppSemanticIcons.home), findsWidgets);
-          expect(find.byIcon(AppSemanticIcons.dashboard), findsOneWidget);
+          expect(find.byIcon(AppSemanticIcons.dashboard), findsWidgets);
           expect(find.byIcon(AppSemanticIcons.hostApplications), findsWidgets);
           expect(find.text('Đăng xuất'), findsOneWidget);
           expect(find.byIcon(AppSemanticIcons.logout), findsOneWidget);
@@ -1321,6 +1496,128 @@ void main() {
           await tester.tap(find.text('Phân quyền'));
           await tester.pumpAndSettle();
           expect(find.text('Phân quyền hệ thống'), findsOneWidget);
+
+          // Tap 'Tổng quan' in dock -> returns to Overview studio greeting
+          await tester.tap(overviewNav);
+          await tester.pumpAndSettle();
+          expect(find.text('Chào, Admin System'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'renders Studio frosted BackdropFilter surfaces, grouped Bento KPI cards, and sleek SF Pro weights without w800',
+        (tester) async {
+          final repo = buildPopulatedRepo();
+          await tester.binding.setSurfaceSize(const Size(390, 844));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+
+          await tester.pumpWidget(
+            _buildTestPortal(
+              activeTab: 'tong-quan',
+              repository: repo,
+              surfaceSize: const Size(390, 844),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          // Studio canvas & frosted blur surfaces (header + bottom dock)
+          final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
+          expect(scaffold.backgroundColor, AdminStudioTokens.canvas);
+          expect(find.byType(AdminFrostedSurface), findsNWidgets(2));
+          expect(find.byType(BackdropFilter), findsNWidgets(2));
+
+          // Studio header greeting & grouped Bento KPI cards
+          expect(find.text('Chào, Admin System'), findsOneWidget);
+          expect(find.byType(AdminStudioGroupCard), findsWidgets);
+          expect(find.byType(AdminStudioKpiCard), findsNWidgets(6));
+          expect(find.byIcon(LucideIcons.arrowUpRight), findsNWidgets(6));
+
+          // Typography uses sleek lighter weights (w400-w600, never chunky w800)
+          expect(AdminStudioTokens.kpiValue.fontWeight, FontWeight.w500);
+          expect(AdminStudioTokens.kpiLabel.fontWeight, FontWeight.w400);
+          expect(AdminStudioTokens.headerGreeting.fontWeight, FontWeight.w600);
+        },
+      );
+
+      testWidgets(
+        'removes all Tải lại buttons across Admin, balances 7/30/90 ngày + Theo ngày/Theo tháng segmented bars, and aligns Role dropdown + Lưu button on 1 row',
+        (tester) async {
+          final repo = buildPopulatedRepo();
+          await tester.binding.setSurfaceSize(const Size(390, 844));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+
+          // 1. Overview: balanced segmented bars & no 'Tải lại'
+          await tester.pumpWidget(
+            _buildTestPortal(
+              activeTab: 'tong-quan',
+              repository: repo,
+              surfaceSize: const Size(390, 844),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          expect(find.text('Tải lại'), findsNothing);
+          final rangeBarFinder = find.byType(AdminStudioSegmentedBar<int>);
+          final groupBarFinder = find.byType(AdminStudioSegmentedBar<String>);
+          expect(rangeBarFinder, findsOneWidget);
+          expect(groupBarFinder, findsOneWidget);
+
+          // Both segmented bars align symmetrically to the exact same full width
+          expect(
+            tester.getSize(rangeBarFinder).width,
+            equals(tester.getSize(groupBarFinder).width),
+          );
+          expect(
+            tester.getCenter(find.text('7 ngày')).dy,
+            equals(tester.getCenter(find.text('30 ngày')).dy),
+          );
+          expect(
+            tester.getCenter(find.text('30 ngày')).dy,
+            equals(tester.getCenter(find.text('90 ngày')).dy),
+          );
+          expect(
+            tester.getCenter(find.text('Theo ngày')).dy,
+            equals(tester.getCenter(find.text('Theo tháng')).dy),
+          );
+
+          // 2. Verify zero 'Tải lại' buttons on all remaining tabs
+          for (final tab in [
+            'nguoi-dung',
+            'kiem-duyet',
+            'ho-so-host',
+            'phan-quyen',
+          ]) {
+            await tester.pumpWidget(
+              _buildTestPortal(
+                activeTab: tab,
+                repository: repo,
+                surfaceSize: const Size(390, 844),
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(
+              find.text('Tải lại'),
+              findsNothing,
+              reason: 'Tab $tab must not show a manual Tải lại button',
+            );
+          }
+
+          // 3. On phan-quyen (390dp mobile), Role dropdown and 'Lưu' button sit on 1 horizontal row
+          final firstRoleRow = find.byKey(const ValueKey('admin-role-row-10'));
+          expect(firstRoleRow, findsOneWidget);
+          final dropdownCenter = tester.getCenter(
+            find.descendant(
+              of: firstRoleRow,
+              matching: find.byType(DropdownButton<String>),
+            ),
+          );
+          final saveBtnCenter = tester.getCenter(
+            find.descendant(
+              of: firstRoleRow,
+              matching: find.widgetWithText(ElevatedButton, 'Lưu'),
+            ),
+          );
+          expect((dropdownCenter.dy - saveBtnCenter.dy).abs(), lessThan(2.0));
         },
       );
     },

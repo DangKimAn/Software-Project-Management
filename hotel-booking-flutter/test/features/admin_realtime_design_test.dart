@@ -654,7 +654,7 @@ void main() {
     );
 
     testWidgets(
-      '14 & 15. Admin Host Applications & Legacy Verifications and Role Management (with moderator) render and mutate via real repository',
+      '14 & 15. Admin Host Applications & Legacy Verifications and Role Management (Guest, Host, Admin only) render and mutate via real repository',
       (tester) async {
         final updatedRoles = <String, dynamic>{};
         final approvedVerifications = <String>[];
@@ -776,7 +776,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(approvedVerifications, contains('701'));
 
-        // 15. Role Management with 'moderator'
+        // 15. Role Management with Guest, Host, Admin only (no Moderator)
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
@@ -794,16 +794,18 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Lê Kiểm Duyệt'), findsOneWidget);
+        expect(find.text('Moderator'), findsNothing);
         await tester.tap(find.byType(DropdownButton<String>).first);
         await tester.pumpAndSettle();
-        expect(find.text('Moderator'), findsWidgets);
+        expect(find.text('Moderator'), findsNothing);
+        expect(find.text('Host'), findsWidgets);
 
-        await tester.tap(find.text('Moderator').last);
+        await tester.tap(find.text('Host').last);
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('Lưu'));
         await tester.pumpAndSettle();
-        expect(updatedRoles['role'], 'moderator');
+        expect(updatedRoles['role'], 'host');
       },
     );
   });

@@ -153,19 +153,6 @@ const users = new Map<string, TestUserRecord>([
             roles: ["admin"],
         },
     ],
-    [
-        "901",
-        {
-            _id: 901,
-            id: 901,
-            email: "moderator@example.com",
-            phone: "0909999998",
-            username: "moderator",
-            fullName: "Moderator User",
-            status: "active",
-            roles: ["moderator"],
-        },
-    ],
 ]);
 
 let capturedPublicSearch: PublicSearchQuery = {};
@@ -187,10 +174,6 @@ before(() => {
 
         if (token === "admin-token") {
             return { userId: "900", role: "admin" };
-        }
-
-        if (token === "moderator-token") {
-            return { userId: "901", role: "moderator" };
         }
 
         if (token === "guest-token") {
@@ -377,7 +360,6 @@ const app = require("../dist/app").default;
 const hostAuth = { Authorization: "Bearer host-token" };
 const otherHostAuth = { Authorization: "Bearer other-host-token" };
 const adminAuth = { Authorization: "Bearer admin-token" };
-const moderatorAuth = { Authorization: "Bearer moderator-token" };
 const guestAuth = { Authorization: "Bearer guest-token" };
 
 const createListingPayload = () => ({
@@ -621,12 +603,18 @@ describe("Listings endpoint contracts", () => {
         assert.equal(capturedAdminApproval.admin!.roles.includes("admin"), true);
     });
 
-    it("rejects moderator access to admin listing approval routes", async () => {
-        const response = await request(app)
+    it("rejects non-admin access to admin listing approval routes", async () => {
+        const hostResponse = await request(app)
             .patch("/api/admin/listings/900/approve")
-            .set(moderatorAuth);
+            .set(hostAuth);
 
-        assert.equal(response.status, 403);
+        assert.equal(hostResponse.status, 403);
+
+        const guestResponse = await request(app)
+            .patch("/api/admin/listings/900/approve")
+            .set(guestAuth);
+
+        assert.equal(guestResponse.status, 403);
     });
 });
 
