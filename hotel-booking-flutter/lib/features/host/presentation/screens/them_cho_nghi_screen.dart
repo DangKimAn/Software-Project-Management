@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../data/host_repository.dart';
 import '../../domain/host_models.dart';
@@ -1508,7 +1509,6 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
         borderRadius: BorderRadius.circular(20),
-
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1518,7 +1518,8 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
               const Expanded(
                 child: Text(
                   'Độ hoàn thiện',
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  style:
+                      TextStyle(fontSize: 13, color: AppColors.textSecondary),
                 ),
               ),
               Container(
@@ -1527,7 +1528,6 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.surfaceElevated,
                   borderRadius: BorderRadius.circular(999),
-
                 ),
                 child: Text(
                   '$score%',
@@ -1557,7 +1557,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
     );
   }
 
-    Widget _buildVungTauTitleSuggestions() {
+  Widget _buildVungTauTitleSuggestions() {
     final suggestions = [
       'View Biển',
       'Hồ Bơi Riêng',
@@ -1738,9 +1738,8 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                       fontSize: 12,
                       fontWeight:
                           isSelected ? FontWeight.w700 : FontWeight.w500,
-                      color: isSelected
-                          ? Colors.white
-                          : AppColors.textSecondary,
+                      color:
+                          isSelected ? Colors.white : AppColors.textSecondary,
                     ),
                   ),
                   selected: isSelected,
@@ -2077,8 +2076,8 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                       ),
                     ),
                     onPressed: () {
-                      final base = int.tryParse(
-                              _basePriceController.text.replaceAll(RegExp(r'[^0-9]'), '')) ??
+                      final base = int.tryParse(_basePriceController.text
+                              .replaceAll(RegExp(r'[^0-9]'), '')) ??
                           0;
                       if (base > 0) {
                         final weekend = (base * 1.2).round();
@@ -2102,8 +2101,8 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                       ),
                     ),
                     onPressed: () {
-                      final base = int.tryParse(
-                              _basePriceController.text.replaceAll(RegExp(r'[^0-9]'), '')) ??
+                      final base = int.tryParse(_basePriceController.text
+                              .replaceAll(RegExp(r'[^0-9]'), '')) ??
                           0;
                       if (base > 0) {
                         final weekend = (base * 1.3).round();
@@ -2195,7 +2194,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
     );
   }
 
-    Widget _buildPoliciesAndRulesCard() {
+  Widget _buildPoliciesAndRulesCard() {
     return _SectionCard(
       title: 'Nội quy & Chính sách',
       icon: LucideIcons.shieldCheck,
@@ -2359,7 +2358,8 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                     ),
                     Text(
                       'Khách được xác nhận tức thì mà không cần chủ nhà duyệt thủ công.',
-                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                      style: TextStyle(
+                          fontSize: 11, color: AppColors.textSecondary),
                     ),
                   ],
                 ),
@@ -2368,7 +2368,8 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                 key: const Key('listing_instant_book_checkbox'),
                 value: _instantBookEnabled,
                 activeColor: AppColors.textStrong,
-                onChanged: (v) => setState(() => _instantBookEnabled = v == true),
+                onChanged: (v) =>
+                    setState(() => _instantBookEnabled = v == true),
               ),
             ],
           ),
@@ -2376,7 +2377,10 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
         const SizedBox(height: 14),
         const Text(
           'Nội quy cơ bản:',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+          style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary),
         ),
         const SizedBox(height: 8),
         Wrap(
@@ -2391,9 +2395,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
               avatar: Icon(
                 LucideIcons.cigarette,
                 size: 15,
-                color: _smokingAllowed
-                    ? Colors.white
-                    : AppColors.iconMuted,
+                color: _smokingAllowed ? Colors.white : AppColors.iconMuted,
               ),
               shape: const StadiumBorder(),
               label: Text(
@@ -2402,9 +2404,8 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                   fontSize: 13,
                   fontWeight:
                       _smokingAllowed ? FontWeight.w600 : FontWeight.w500,
-                  color: _smokingAllowed
-                      ? Colors.white
-                      : AppColors.textSecondary,
+                  color:
+                      _smokingAllowed ? Colors.white : AppColors.textSecondary,
                 ),
               ),
               selected: _smokingAllowed,
@@ -2418,9 +2419,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
               avatar: Icon(
                 LucideIcons.pawPrint,
                 size: 15,
-                color: _petsAllowed
-                    ? Colors.white
-                    : AppColors.iconMuted,
+                color: _petsAllowed ? Colors.white : AppColors.iconMuted,
               ),
               shape: const StadiumBorder(),
               label: Text(
@@ -2428,9 +2427,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: _petsAllowed ? FontWeight.w600 : FontWeight.w500,
-                  color: _petsAllowed
-                      ? Colors.white
-                      : AppColors.textSecondary,
+                  color: _petsAllowed ? Colors.white : AppColors.textSecondary,
                 ),
               ),
               selected: _petsAllowed,
@@ -2444,9 +2441,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
               avatar: Icon(
                 LucideIcons.partyPopper,
                 size: 15,
-                color: _partyAllowed
-                    ? Colors.white
-                    : AppColors.iconMuted,
+                color: _partyAllowed ? Colors.white : AppColors.iconMuted,
               ),
               shape: const StadiumBorder(),
               label: Text(
@@ -2454,9 +2449,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: _partyAllowed ? FontWeight.w600 : FontWeight.w500,
-                  color: _partyAllowed
-                      ? Colors.white
-                      : AppColors.textSecondary,
+                  color: _partyAllowed ? Colors.white : AppColors.textSecondary,
                 ),
               ),
               selected: _partyAllowed,
@@ -2510,9 +2503,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    color: selected
-                        ? Colors.white
-                        : AppColors.textSecondary,
+                    color: selected ? Colors.white : AppColors.textSecondary,
                   ),
                 ),
                 selected: selected,
@@ -2739,7 +2730,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
     );
   }
 
-    Widget _buildExistingImageCard(ExistingListingImage image, int index) {
+  Widget _buildExistingImageCard(ExistingListingImage image, int index) {
     final isAnalyzing = _analyzingImageIds.contains(image.imageId);
     final isSavingTags = _savingTagImageIds.contains(image.imageId);
     final currentTagCodes = image.tags.map((t) => t.tag).toSet();
@@ -2775,19 +2766,10 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
         children: [
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(23)),
-            child: Image.network(
-              image.url,
+            child: AppImage(
+              imageUrl: image.url,
               height: 140,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                height: 140,
-                color: AppColors.surfaceMuted,
-                alignment: Alignment.center,
-                child: const Icon(
-                  LucideIcons.image,
-                  color: AppColors.iconMuted,
-                ),
-              ),
             ),
           ),
           Padding(

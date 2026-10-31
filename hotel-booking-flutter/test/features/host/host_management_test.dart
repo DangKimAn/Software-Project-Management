@@ -13,6 +13,7 @@ import 'package:hotel_booking_flutter/features/host/presentation/screens/them_ch
 import 'package:hotel_booking_flutter/features/host/presentation/widgets/host_studio_widgets.dart';
 import 'package:hotel_booking_flutter/features/host/services/host_file_picker_service.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_image.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -1974,6 +1975,169 @@ void main() {
       expect(find.text('29/10/2026 → 31/10/2026'), findsOneWidget);
       expect(find.textContaining('7.900.000'), findsOneWidget);
       expect(find.byType(CircleAvatar), findsNothing);
+    });
+
+    testWidgets(
+        'HostPortalScreen Properties section renders AppImage thumbnails, Lucide sort chevron, filter pills, and >=48dp targets without overflow across 320-768dp',
+        (tester) async {
+      final allItems = [
+        {
+          'listingId': 105,
+          'title': 'Ocean Pearl Garden Villa Bãi Trước',
+          'addressLine': '15 Quang Trung',
+          'ward': 'Phường 1',
+          'district': 'Thành phố Vũng Tàu',
+          'city': 'Vũng Tàu',
+          'propertyType': 'villa',
+          'basePrice': 3800000,
+          'weekendPrice': 4900000,
+          'maxGuests': 14,
+          'status': 'published',
+          'imageUrl': 'assets/images/343vothisau.jpg',
+        },
+        {
+          'listingId': 106,
+          'title': 'Sunset Pool Villa Bãi Sau',
+          'addressLine': '88 Thùy Vân',
+          'ward': 'Phường 2',
+          'city': 'Vũng Tàu',
+          'propertyType': 'villa',
+          'basePrice': 4200000,
+          'maxGuests': 10,
+          'status': 'published',
+          'images': [
+            {
+              'url': 'assets/images/sunset.jpg',
+              'isCover': true,
+            },
+          ],
+        },
+        {
+          'listingId': 107,
+          'title': 'Cozy Studio Homestay',
+          'addressLine': '12 Hạ Long',
+          'ward': 'Phường 2',
+          'city': 'Vũng Tàu',
+          'propertyType': 'homestay',
+          'basePrice': 1500000,
+          'maxGuests': 4,
+          'status': 'rejected',
+          'rejectionReason': 'Thiếu ảnh phòng tắm thực tế.',
+        },
+      ];
+
+      final apiAdapter = FakeRecordingHttpClientAdapter(
+        responder: (options) {
+          if (options.path == '/api/host/listings/mine') {
+            final statusFilter = options.queryParameters['status']?.toString();
+            final filtered = (statusFilter == null || statusFilter.isEmpty)
+                ? allItems
+                : allItems
+                    .where((item) => item['status'] == statusFilter)
+                    .toList();
+            return jsonResponse({'items': filtered});
+          }
+          return jsonResponse({'items': <dynamic>[]});
+        },
+      );
+      final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+      final repo = HostRepository(client, roleResolver: () => 'host');
+      final fakePicker = FakeTestFilePickerService();
+
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      for (final width in [320.0, 360.0, 390.0, 430.0, 768.0]) {
+        for (final scale in [1.0, 1.3, 1.6]) {
+          await tester.binding.setSurfaceSize(Size(width, 900));
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                hostRepositoryProvider.overrideWithValue(repo),
+                hostFilePickerProvider.overrideWithValue(fakePicker),
+                hostCurrentUserRoleProvider.overrideWithValue('host'),
+              ],
+              child: MediaQuery(
+                data: MediaQueryData(
+                  size: Size(width, 900),
+                  textScaler: TextScaler.linear(scale),
+                ),
+                child: const MaterialApp(
+                  home: HostPortalScreen(
+                    initialSection: HostPortalSection.properties,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        }
+      }
+
+      // Detailed assertions at 390x844 mobile viewport
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
+          ],
+          child: const MaterialApp(
+            home: HostPortalScreen(
+              initialSection: HostPortalSection.properties,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // AppImage renders seeded cover assets cleanly (zero 'Chưa có ảnh' text)
+      expect(find.text('Chưa có ảnh'), findsNothing);
+      expect(find.byType(AppImage), findsNWidgets(2));
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('host_listing_item_105')),
+          matching: find.byType(Image),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('host_listing_item_106')),
+          matching: find.byType(Image),
+        ),
+        findsOneWidget,
+      );
+
+      // Sort dropdown uses LucideIcons.chevronDown and zero Material Icons.arrow_drop_down
+      expect(find.byKey(const Key('listing_sort_dropdown')), findsOneWidget);
+      expect(find.byIcon(LucideIcons.chevronDown), findsWidgets);
+      expect(find.byIcon(Icons.arrow_drop_down), findsNothing);
+
+      // Touch targets >= 48dp
+      expect(
+        tester.getSize(find.byKey(const Key('properties_add_new_btn'))).height,
+        greaterThanOrEqualTo(48),
+      );
+      expect(
+        tester.getSize(find.byKey(const Key('listing_filter_all'))).height,
+        greaterThanOrEqualTo(48),
+      );
+      expect(
+        tester.getSize(find.byKey(const Key('listing_edit_btn_105'))).height,
+        greaterThanOrEqualTo(48),
+      );
+
+      // Filtering by 'Chờ duyệt' (0 items) preserves overall KPI total ('3') via snapshot
+      final pendingFilter =
+          find.byKey(const Key('listing_filter_pending_approval'));
+      await tester.ensureVisible(pendingFilter);
+      await tester.pumpAndSettle();
+      await tester.tap(pendingFilter);
+      await tester.pumpAndSettle();
+      expect(find.text('Chưa có chỗ nghỉ phù hợp bộ lọc.'), findsOneWidget);
+      expect(find.text('3'), findsWidgets);
     });
   });
 }

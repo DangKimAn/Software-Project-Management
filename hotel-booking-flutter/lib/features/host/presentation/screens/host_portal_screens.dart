@@ -132,6 +132,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   bool _loadingListings = false;
   String? _listingsError;
   List<Map<String, dynamic>> _listings = [];
+  List<Map<String, dynamic>> _allListingsSnapshot = [];
   String _listingStatusFilter = 'all';
   String _listingSortBy = 'newest';
   int _listingsVisibleCount = 10;
@@ -357,6 +358,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       if (!mounted) return;
       setState(() {
         _listings = items;
+        if (_listingStatusFilter == 'all') {
+          _allListingsSnapshot = items;
+        }
         _loadingListings = false;
         if (_listings.isNotEmpty) {
           final firstId =
@@ -389,6 +393,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     final repo = ref.read(hostRepositoryProvider);
     try {
       await action();
+      _allListingsSnapshot = [];
       await _fetchListings();
     } catch (e) {
       if (!mounted) return;
@@ -428,8 +433,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           ElevatedButton(
             key: const Key('confirm_delete_listing_btn'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFBE123C),
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.textInverse,
               minimumSize: const Size(120, 48),
               shape: const StadiumBorder(),
               elevation: 0,
@@ -1297,6 +1302,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       builder: (context, constraints) {
         final isDesktop = constraints.maxWidth >= 960;
         final isOverview = _activeSection == HostPortalSection.overview;
+        final isStudioSection = isOverview ||
+            _activeSection == HostPortalSection.properties ||
+            _activeSection == HostPortalSection.support;
         final authUser = ref.watch(authNotifierProvider).valueOrNull;
         final profileName = (_hostProfile?['fullName'] ??
                 _hostProfile?['name'] ??
@@ -1312,8 +1320,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
         return Scaffold(
           backgroundColor:
-              isOverview ? HostStudioTokens.canvas : AppColors.background,
-          extendBody: !isDesktop && isOverview,
+              isStudioSection ? HostStudioTokens.canvas : AppColors.background,
+          extendBody: !isDesktop && isStudioSection,
           drawer: isDesktop
               ? null
               : Drawer(
@@ -1332,7 +1340,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           bottomNavigationBar:
               isDesktop ? null : Builder(builder: _buildMobileBottomNavigation),
           body: SafeArea(
-            bottom: isDesktop || !isOverview,
+            bottom: isDesktop || !isStudioSection,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2063,7 +2071,139 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     );
   }
 
+  String _extractListingCoverUrl(Map<String, dynamic> listing) {
+    for (final key in const ['imageUrl', 'coverImageUrl', 'thumbnailUrl']) {
+      final raw = listing[key]?.toString().trim() ?? '';
+      if (raw.isNotEmpty) return raw;
+    }
+
+    final coverImage = listing['coverImage'];
+    if (coverImage is String && coverImage.trim().isNotEmpty) {
+      return coverImage.trim();
+    }
+    if (coverImage is Map) {
+      final coverUrl =
+          (coverImage['url'] ?? coverImage['imageUrl'] ?? '').toString().trim();
+      if (coverUrl.isNotEmpty) return coverUrl;
+    }
+
+    final images = listing['images'];
+    if (images is List && images.isNotEmpty) {
+      Map<dynamic, dynamic>? selectedMap;
+      for (final item in images) {
+        if (item is Map && item['isCover'] == true) {
+          selectedMap = item;
+          break;
+        }
+      }
+      final fallback = selectedMap ?? images.first;
+      if (fallback is String && fallback.trim().isNotEmpty) {
+        return fallback.trim();
+      }
+      if (fallback is Map) {
+        final firstUrl =
+            (fallback['url'] ?? fallback['imageUrl'] ?? '').toString().trim();
+        if (firstUrl.isNotEmpty) return firstUrl;
+      }
+    }
+
+    return '';
+  }
+
+  Widget _buildListingFilterPill({
+    required Key pillKey,
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    int? count,
+  }) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: pillKey,
+          borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            child: Center(
+              child: AnimatedContainer(
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 160),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? HostStudioTokens.obsidian
+                      : HostStudioTokens.cardSurface,
+                  borderRadius:
+                      BorderRadius.circular(HostStudioTokens.pillRadius),
+                  border: Border.all(
+                    color: selected
+                        ? HostStudioTokens.obsidian
+                        : HostStudioTokens.hairline,
+                  ),
+                  boxShadow: selected ? null : HostStudioTokens.cardShadow,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: HostStudioTokens.pillText.copyWith(
+                        fontSize: 13,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w500,
+                        color: selected
+                            ? AppColors.textInverse
+                            : HostStudioTokens.inkSecondary,
+                      ),
+                    ),
+                    if (count != null) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? AppColors.surfaceBase.withValues(alpha: 0.16)
+                              : HostStudioTokens.softCircle,
+                          borderRadius: BorderRadius.circular(
+                            HostStudioTokens.pillRadius,
+                          ),
+                        ),
+                        child: Text(
+                          '$count',
+                          style: HostStudioTokens.metaCaption.copyWith(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: selected
+                                ? AppColors.textInverse
+                                : HostStudioTokens.inkMuted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPropertiesSection({required bool isSupportMode}) {
+    final hasSnapshot = _allListingsSnapshot.isNotEmpty;
+    final summarySource = hasSnapshot ? _allListingsSnapshot : _listings;
     final counts = <String, int>{
       'draft': 0,
       'pending_approval': 0,
@@ -2071,7 +2211,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       'hidden': 0,
       'rejected': 0,
     };
-    for (final item in _listings) {
+    for (final item in summarySource) {
       final st = HostListingStatus.fromApi(item['status']).value;
       counts[st] = (counts[st] ?? 0) + 1;
     }
@@ -2116,179 +2256,381 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     });
 
     final visibleListings = sortedListings.take(_listingsVisibleCount).toList();
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final isDesktop = screenWidth >= 960;
+    final horizontalPad = screenWidth < 360 ? 12.0 : 18.0;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    isSupportMode
-                        ? 'Hỗ trợ & Quản lý trạng thái chỗ nghỉ'
-                        : 'Chỗ nghỉ của tôi',
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  if (isSupportMode) ...[
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Kiểm tra trạng thái và gửi duyệt chỗ nghỉ.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  IconButton(
-                    tooltip: 'Tải lại',
-                    constraints:
-                        const BoxConstraints(minWidth: 48, minHeight: 48),
-                    onPressed: _loadingListings ? null : _fetchListings,
-                    icon: const Icon(
-                      AppSemanticIcons.retry,
-                      size: 18,
-                      color: AppColors.iconStrong,
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    key: const Key('properties_add_new_btn'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(150, 48),
-                      shape: const StadiumBorder(),
-                      elevation: 0,
-                    ),
-                    onPressed: () =>
-                        _switchSection(HostPortalSection.newProperty),
-                    icon: const Icon(LucideIcons.plus, size: 16),
-                    label: const Text('Thêm chỗ nghỉ'),
-                  ),
-                ],
-              ),
-            ],
+    final hiddenTotal = (counts['draft'] ?? 0) +
+        (counts['hidden'] ?? 0) +
+        (counts['rejected'] ?? 0);
+    final kpiItems = [
+      (
+        label: 'Tổng chỗ nghỉ',
+        value: _loadingListings && summarySource.isEmpty
+            ? '—'
+            : '${summarySource.length}',
+        icon: AppSemanticIcons.home,
+      ),
+      (
+        label: 'Đang hiển thị',
+        value: _loadingListings && summarySource.isEmpty
+            ? '—'
+            : '${counts['published'] ?? 0}',
+        icon: LucideIcons.eye,
+      ),
+      (
+        label: 'Chờ duyệt',
+        value: _loadingListings && summarySource.isEmpty
+            ? '—'
+            : '${counts['pending_approval'] ?? 0}',
+        icon: LucideIcons.clock,
+      ),
+      (
+        label: 'Chưa hiển thị',
+        value: _loadingListings && summarySource.isEmpty ? '—' : '$hiddenTotal',
+        icon: LucideIcons.eyeOff,
+      ),
+    ];
+
+    final headerSubtitle = isSupportMode
+        ? 'Kiểm tra trạng thái và gửi duyệt chỗ nghỉ.'
+        : (summarySource.isEmpty
+            ? 'Quản lý danh sách và trạng thái hiển thị chỗ nghỉ.'
+            : '${summarySource.length} chỗ nghỉ · ${counts['published'] ?? 0} đang hiển thị');
+
+    Widget buildAddButton() {
+      return ElevatedButton.icon(
+        key: const Key('properties_add_new_btn'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.iconOnBrand,
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: const StadiumBorder(),
+          elevation: 0,
+        ),
+        onPressed: () => _switchSection(HostPortalSection.newProperty),
+        icon: const Icon(
+          LucideIcons.plus,
+          size: 16,
+          color: AppColors.iconOnBrand,
+        ),
+        label: Text(
+          'Thêm chỗ nghỉ',
+          style: HostStudioTokens.pillText.copyWith(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppColors.iconOnBrand,
           ),
-          if (_listingsError != null) ...[
-            const SizedBox(height: 16),
-            _buildInlineError(
-              _listingsError!,
-              borderless: true,
-              onRetry: _fetchListings,
+        ),
+      );
+    }
+
+    Widget buildSortDropdown({required bool expanded}) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Center(
+          child: Container(
+            width: expanded ? double.infinity : null,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: HostStudioTokens.cardSurface,
+              borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+              border: Border.all(color: HostStudioTokens.hairline),
+              boxShadow: HostStudioTokens.cardShadow,
             ),
-          ],
-          const Divider(height: 28, color: AppColors.border),
-          _buildPropertySummary([
-            (
-              label: 'Tổng chỗ nghỉ',
-              value: '${_listings.length}',
-            ),
-            (
-              label: 'Đang hiển thị',
-              value: '${counts['published'] ?? 0}',
-            ),
-            (
-              label: 'Chờ duyệt',
-              value: '${counts['pending_approval'] ?? 0}',
-            ),
-            (
-              label: 'Chưa hiển thị',
-              value:
-                  '${(counts['draft'] ?? 0) + (counts['hidden'] ?? 0) + (counts['rejected'] ?? 0)}',
-            ),
-          ], borderless: true),
-          const Divider(height: 28, color: AppColors.border),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
             child: Row(
-              children: filterOptions.map((opt) {
-                final selected = _listingStatusFilter == opt.$1;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: _HostUnderlineTab(
-                    key: Key('listing_filter_${opt.$1}'),
-                    label: Text(opt.$2),
-                    selected: selected,
-                    onSelected: (_) {
-                      setState(() {
-                        _listingStatusFilter = opt.$1;
-                        _listingsVisibleCount = 10;
-                      });
-                      _fetchListings();
-                    },
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              key: const Key('listing_sort_dropdown'),
-              isExpanded: true,
-              value: _listingSortBy,
-              items: sortOptions
-                  .map((opt) => DropdownMenuItem(
-                        value: opt.$1,
-                        child: Text('Sắp xếp: ${opt.$2}'),
-                      ))
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) setState(() => _listingSortBy = value);
-              },
-            ),
-          ),
-          const Divider(height: 28, color: AppColors.border),
-          if (_loadingListings)
-            const Padding(
-              padding: EdgeInsets.all(32),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (sortedListings.isEmpty)
-            _buildEmptyBox('Chưa có chỗ nghỉ phù hợp bộ lọc.', borderless: true)
-          else ...[
-            for (var i = 0; i < visibleListings.length; i++) ...[
-              if (i > 0) const Divider(height: 28, color: AppColors.border),
-              _buildListingCard(visibleListings[i]),
-            ],
-            if (sortedListings.length > visibleListings.length)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: OutlinedButton(
-                  key: const Key('listings_load_more_btn'),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(160, 48),
-                    foregroundColor: AppColors.textPrimary,
-                    side: BorderSide.none,
-                    shape: const StadiumBorder(),
-                  ),
-                  onPressed: () {
-                    setState(() => _listingsVisibleCount += 10);
-                  },
-                  child: Text(
-                    'Xem thêm (${sortedListings.length - visibleListings.length} chỗ nghỉ)',
+              mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
+              children: [
+                const Icon(
+                  LucideIcons.arrowUpDown,
+                  size: 14,
+                  color: AppColors.iconMuted,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  fit: expanded ? FlexFit.tight : FlexFit.loose,
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      key: const Key('listing_sort_dropdown'),
+                      isExpanded: expanded,
+                      isDense: true,
+                      value: _listingSortBy,
+                      borderRadius: BorderRadius.circular(18),
+                      dropdownColor: AppColors.surfaceElevated,
+                      icon: const Padding(
+                        padding: EdgeInsets.only(left: 6),
+                        child: Icon(
+                          LucideIcons.chevronDown,
+                          size: 15,
+                          color: AppColors.iconStrong,
+                        ),
+                      ),
+                      style: HostStudioTokens.pillText.copyWith(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        color: HostStudioTokens.inkPrimary,
+                      ),
+                      items: sortOptions
+                          .map(
+                            (opt) => DropdownMenuItem(
+                              value: opt.$1,
+                              child: Text(
+                                'Sắp xếp: ${opt.$2}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _listingSortBy = value);
+                        }
+                      },
+                    ),
                   ),
                 ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _fetchListings,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(
+          horizontalPad,
+          10,
+          horizontalPad,
+          isDesktop ? 28 : 108,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final inlineHeader = !isSupportMode &&
+                    constraints.maxWidth >= 340 &&
+                    textScale <= 1.25;
+                final titleBlock = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isSupportMode
+                          ? 'Hỗ trợ & Quản lý trạng thái chỗ nghỉ'
+                          : 'Chỗ nghỉ của tôi',
+                      style: HostStudioTokens.headerTitle,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      headerSubtitle,
+                      style: HostStudioTokens.metaCaption,
+                    ),
+                  ],
+                );
+                if (inlineHeader) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(child: titleBlock),
+                      const SizedBox(width: 10),
+                      buildAddButton(),
+                    ],
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    titleBlock,
+                    const SizedBox(height: 10),
+                    buildAddButton(),
+                  ],
+                );
+              },
+            ),
+            if (_listingsError != null) ...[
+              const SizedBox(height: 14),
+              _buildInlineError(
+                _listingsError!,
+                borderless: true,
+                onRetry: _fetchListings,
               ),
+            ],
+            const SizedBox(height: 14),
+            HostStudioGroupCard(
+              padding: const EdgeInsets.all(10),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 640 ? 4 : 2;
+                  const spacing = 8.0;
+                  final tileWidth =
+                      (constraints.maxWidth - spacing * (columns - 1)) /
+                          columns;
+                  return Wrap(
+                    spacing: spacing,
+                    runSpacing: spacing,
+                    children: kpiItems
+                        .map(
+                          (item) => Container(
+                            width: tileWidth,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 13,
+                              vertical: 11,
+                            ),
+                            decoration: BoxDecoration(
+                              color: HostStudioTokens.cardSurface,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: HostStudioTokens.cardShadow,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Flexible(
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          item.value,
+                                          maxLines: 1,
+                                          style: HostStudioTokens.kpiValue
+                                              .copyWith(
+                                            fontSize: 21,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Icon(
+                                      item.icon,
+                                      size: 15,
+                                      color: AppColors.iconMuted,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  item.label,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: HostStudioTokens.kpiLabel.copyWith(
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: filterOptions.map((opt) {
+                  final selected = _listingStatusFilter == opt.$1;
+                  final int? badgeCount =
+                      hasSnapshot || _listingStatusFilter == 'all'
+                          ? (opt.$1 == 'all'
+                              ? summarySource.length
+                              : counts[opt.$1] ?? 0)
+                          : null;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _buildListingFilterPill(
+                      pillKey: Key('listing_filter_${opt.$1}'),
+                      label: opt.$2,
+                      count: badgeCount,
+                      selected: selected,
+                      onTap: () {
+                        setState(() {
+                          _listingStatusFilter = opt.$1;
+                          _listingsVisibleCount = 10;
+                        });
+                        _fetchListings();
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 4),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final inlineSort =
+                    constraints.maxWidth >= 420 && textScale <= 1.2;
+                if (inlineSort) {
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Hiển thị ${visibleListings.length}/${sortedListings.length} chỗ nghỉ',
+                          style: HostStudioTokens.metaCaption,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      buildSortDropdown(expanded: false),
+                    ],
+                  );
+                }
+                return buildSortDropdown(expanded: true);
+              },
+            ),
+            const SizedBox(height: 10),
+            if (_loadingListings)
+              const Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (sortedListings.isEmpty)
+              _buildEmptyBox(
+                'Chưa có chỗ nghỉ phù hợp bộ lọc.',
+                borderless: true,
+              )
+            else ...[
+              for (var i = 0; i < visibleListings.length; i++) ...[
+                if (i > 0) const SizedBox(height: 12),
+                _buildListingCard(visibleListings[i]),
+              ],
+              if (sortedListings.length > visibleListings.length)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Center(
+                    child: OutlinedButton(
+                      key: const Key('listings_load_more_btn'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(160, 48),
+                        backgroundColor: HostStudioTokens.cardSurface,
+                        foregroundColor: HostStudioTokens.inkPrimary,
+                        side: const BorderSide(
+                          color: HostStudioTokens.hairline,
+                        ),
+                        shape: const StadiumBorder(),
+                      ),
+                      onPressed: () {
+                        setState(() => _listingsVisibleCount += 10);
+                      },
+                      child: Text(
+                        'Xem thêm (${sortedListings.length - visibleListings.length} chỗ nghỉ)',
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -2301,8 +2643,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     final basePrice = listing['basePrice'] ?? listing['pricePerNight'] ?? 0;
     final weekendPrice = listing['weekendPrice'];
     final maxGuests = listing['maxGuests'] ?? 1;
-    final imageUrl =
-        (listing['imageUrl'] ?? listing['coverImageUrl'] ?? '').toString();
+    final imageUrl = _extractListingCoverUrl(listing);
     final rejectReason =
         (listing['rejectionReason'] ?? listing['rejectReason'] ?? '')
             .toString()
@@ -2319,14 +2660,26 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
     final isBusy = _busyListingActionId == id;
     final repo = ref.read(hostRepositoryProvider);
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final thumbSize = screenWidth < 350 ? 72.0 : 84.0;
+    final secondaryActionStyle = OutlinedButton.styleFrom(
+      minimumSize: const Size(84, 48),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      backgroundColor: HostStudioTokens.softCircle,
+      foregroundColor: HostStudioTokens.inkPrimary,
+      side: BorderSide.none,
+      shape: const StadiumBorder(),
+    );
 
     return Container(
       key: Key('host_listing_item_$id'),
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(24),
+        color: HostStudioTokens.cardSurface,
+        borderRadius: BorderRadius.circular(HostStudioTokens.cardRadius),
+        border: Border.all(color: HostStudioTokens.groupBorder),
+        boxShadow: HostStudioTokens.cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2334,59 +2687,94 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        width: 88,
-                        height: 68,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            _buildNoImagePlaceholder(),
-                      )
-                    : _buildNoImagePlaceholder(),
-              ),
-              const SizedBox(width: 14),
+              imageUrl.isNotEmpty
+                  ? AppImage(
+                      imageUrl: imageUrl,
+                      width: thumbSize,
+                      height: thumbSize,
+                      fit: BoxFit.cover,
+                      borderRadius: BorderRadius.circular(16),
+                    )
+                  : _buildNoImagePlaceholder(
+                      width: thumbSize,
+                      height: thumbSize,
+                      borderRadius: 16,
+                    ),
+              const SizedBox(width: 13),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    if (addressParts.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        addressParts,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 6),
                     Wrap(
-                      spacing: 10,
-                      runSpacing: 6,
+                      spacing: 8,
+                      runSpacing: 4,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         _buildStatusPill(statusEnum.labelVi, statusEnum.value),
                         Text(
-                          '${propType.labelVi} • ${formatHostVnd(basePrice)}/đêm'
-                          '${weekendPrice != null ? ' (CT: ${formatHostVnd(weekendPrice)})' : ''}'
-                          ' • $maxGuests khách',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
+                          '${propType.labelVi} · $maxGuests khách',
+                          style: HostStudioTokens.metaCaption,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: HostStudioTokens.cardTitle.copyWith(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (addressParts.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(
+                            LucideIcons.mapPin,
+                            size: 12.5,
+                            color: AppColors.iconMuted,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              addressParts,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: HostStudioTokens.metaCaption,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 7),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: formatHostVnd(basePrice),
+                                style: HostStudioTokens.priceEmphasis.copyWith(
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const TextSpan(
+                                text: '/đêm',
+                                style: HostStudioTokens.metaCaption,
+                              ),
+                            ],
                           ),
                         ),
+                        if (weekendPrice != null)
+                          Text(
+                            '· CT ${formatCompactHostVnd(weekendPrice)}',
+                            style: HostStudioTokens.metaCaption,
+                          ),
                       ],
                     ),
                   ],
@@ -2398,43 +2786,69 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               rejectReason.isNotEmpty) ...[
             const SizedBox(height: 10),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(11),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF1F2),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFFECDD3)),
-              ),
-              child: Text(
-                'Lý do từ chối: $rejectReason',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFFBE123C),
+                color: AppColors.errorSoft,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.error.withValues(alpha: 0.22),
                 ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(top: 1),
+                    child: Icon(
+                      AppSemanticIcons.errorAlert,
+                      size: 15,
+                      color: AppColors.iconStrong,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Lý do từ chối: $rejectReason',
+                      style: HostStudioTokens.bodyRegular.copyWith(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.error,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
-          const SizedBox(height: 12),
+          const Divider(
+            height: 20,
+            thickness: 1,
+            color: HostStudioTokens.hairline,
+          ),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               OutlinedButton.icon(
                 key: Key('listing_edit_btn_$id'),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(88, 48),
-                  foregroundColor: AppColors.textPrimary,
-                  side: BorderSide.none,
-                  shape: const StadiumBorder(),
-                ),
+                style: secondaryActionStyle,
                 onPressed: isBusy
                     ? null
                     : () => _switchSection(
                           HostPortalSection.newProperty,
                           editListingId: id,
                         ),
-                icon: const Icon(LucideIcons.pencil, size: 15),
-                label: const Text('Sửa'),
+                icon: const Icon(
+                  LucideIcons.pencil,
+                  size: 14.5,
+                  color: AppColors.iconStrong,
+                ),
+                label: Text(
+                  'Sửa',
+                  style: HostStudioTokens.pillText.copyWith(
+                    color: HostStudioTokens.inkPrimary,
+                  ),
+                ),
               ),
               if (statusEnum == HostListingStatus.draft ||
                   statusEnum == HostListingStatus.rejected)
@@ -2442,8 +2856,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   key: Key('listing_submit_approval_btn_$id'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(110, 48),
+                    foregroundColor: AppColors.iconOnBrand,
+                    minimumSize: const Size(104, 48),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     shape: const StadiumBorder(),
                     elevation: 0,
                   ),
@@ -2453,18 +2872,23 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                             id,
                             () => repo.submitListingForApproval(id),
                           ),
-                  icon: const Icon(LucideIcons.send, size: 15),
-                  label: const Text('Gửi duyệt'),
+                  icon: const Icon(
+                    LucideIcons.send,
+                    size: 14.5,
+                    color: AppColors.iconOnBrand,
+                  ),
+                  label: Text(
+                    'Gửi duyệt',
+                    style: HostStudioTokens.pillText.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.iconOnBrand,
+                    ),
+                  ),
                 ),
               if (statusEnum == HostListingStatus.pendingApproval)
                 OutlinedButton.icon(
                   key: Key('listing_withdraw_draft_btn_$id'),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(110, 48),
-                    foregroundColor: AppColors.textPrimary,
-                    side: BorderSide.none,
-                    shape: const StadiumBorder(),
-                  ),
+                  style: secondaryActionStyle,
                   onPressed: isBusy
                       ? null
                       : () => _runListingMutation(
@@ -2474,34 +2898,53 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                               {'status': HostListingStatus.draft.value},
                             ),
                           ),
-                  icon: const Icon(LucideIcons.rotateCcw, size: 15),
-                  label: const Text('Rút về nháp'),
+                  icon: const Icon(
+                    LucideIcons.rotateCcw,
+                    size: 14.5,
+                    color: AppColors.iconStrong,
+                  ),
+                  label: Text(
+                    'Rút về nháp',
+                    style: HostStudioTokens.pillText.copyWith(
+                      color: HostStudioTokens.inkPrimary,
+                    ),
+                  ),
                 ),
               if (statusEnum == HostListingStatus.published)
                 OutlinedButton.icon(
                   key: Key('listing_hide_btn_$id'),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(88, 48),
-                    foregroundColor: AppColors.textPrimary,
-                    side: BorderSide.none,
-                    shape: const StadiumBorder(),
-                  ),
+                  style: secondaryActionStyle,
                   onPressed: isBusy
                       ? null
                       : () => _runListingMutation(
                             id,
                             () => repo.hideHostListing(id),
                           ),
-                  icon: const Icon(LucideIcons.eyeOff, size: 15),
-                  label: const Text('Ẩn'),
+                  icon: const Icon(
+                    LucideIcons.eyeOff,
+                    size: 14.5,
+                    color: AppColors.iconStrong,
+                  ),
+                  label: Text(
+                    'Ẩn',
+                    style: HostStudioTokens.pillText.copyWith(
+                      color: HostStudioTokens.inkPrimary,
+                    ),
+                  ),
                 ),
               if (statusEnum == HostListingStatus.hidden)
                 OutlinedButton.icon(
                   key: Key('listing_publish_btn_$id'),
                   style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(88, 48),
-                    foregroundColor: AppColors.primary,
-                    side: const BorderSide(color: AppColors.primary),
+                    minimumSize: const Size(84, 48),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    backgroundColor: HostStudioTokens.cardSurface,
+                    foregroundColor: HostStudioTokens.inkPrimary,
+                    side: const BorderSide(color: AppColors.borderFocus),
                     shape: const StadiumBorder(),
                   ),
                   onPressed: isBusy
@@ -2510,13 +2953,29 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                             id,
                             () => repo.publishHostListing(id),
                           ),
-                  icon: const Icon(LucideIcons.eye, size: 15),
-                  label: const Text('Hiện'),
+                  icon: const Icon(
+                    LucideIcons.eye,
+                    size: 14.5,
+                    color: AppColors.iconStrong,
+                  ),
+                  label: Text(
+                    'Hiện',
+                    style: HostStudioTokens.pillText.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: HostStudioTokens.inkPrimary,
+                    ),
+                  ),
                 ),
               OutlinedButton.icon(
                 key: Key('listing_delete_btn_$id'),
                 style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(88, 48),
+                  minimumSize: const Size(84, 48),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  backgroundColor: AppColors.errorSoft,
                   foregroundColor: AppColors.error,
                   side: BorderSide.none,
                   shape: const StadiumBorder(),
@@ -2525,10 +2984,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     isBusy ? null : () => _confirmAndDeleteListing(listing),
                 icon: const Icon(
                   LucideIcons.trash2,
-                  size: 15,
+                  size: 14.5,
                   color: AppColors.iconStrong,
                 ),
-                label: const Text('Xóa'),
+                label: Text(
+                  'Xóa',
+                  style: HostStudioTokens.pillText.copyWith(
+                    color: AppColors.error,
+                  ),
+                ),
               ),
             ],
           ),
@@ -2537,15 +3001,23 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     );
   }
 
-  Widget _buildNoImagePlaceholder() {
+  Widget _buildNoImagePlaceholder({
+    double width = 84,
+    double height = 84,
+    double borderRadius = 16,
+  }) {
     return Container(
-      width: 88,
-      height: 68,
-      color: AppColors.surfaceMuted,
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
       alignment: Alignment.center,
-      child: const Text(
-        'Chưa có ảnh',
-        style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+      child: const Icon(
+        LucideIcons.image,
+        size: 22,
+        color: AppColors.iconMuted,
       ),
     );
   }
@@ -3334,9 +3806,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               final statusEnum = HostListingStatus.fromApi(listing['status']);
               final basePrice =
                   listing['basePrice'] ?? listing['pricePerNight'] ?? 0;
-              final imageUrl =
-                  (listing['imageUrl'] ?? listing['coverImageUrl'] ?? '')
-                      .toString();
+              final imageUrl = _extractListingCoverUrl(listing);
 
               String statusTextVi;
               switch (statusEnum) {
@@ -3378,19 +3848,19 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: imageUrl.isNotEmpty
-                              ? Image.network(
-                                  imageUrl,
-                                  width: 76,
-                                  height: 76,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) =>
-                                      _buildNoImagePlaceholder(),
-                                )
-                              : _buildNoImagePlaceholder(),
-                        ),
+                        imageUrl.isNotEmpty
+                            ? AppImage(
+                                imageUrl: imageUrl,
+                                width: 76,
+                                height: 76,
+                                fit: BoxFit.cover,
+                                borderRadius: BorderRadius.circular(12),
+                              )
+                            : _buildNoImagePlaceholder(
+                                width: 76,
+                                height: 76,
+                                borderRadius: 12,
+                              ),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Column(
@@ -6087,27 +6557,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   // ===========================================================================
 
   Widget _buildStatusPill(String label, String code) {
-    Color bg = const Color(0xFFF3F4F7);
-    Color fg = const Color(0xFF525866);
+    Color bg = HostStudioTokens.softCircle;
+    Color fg = HostStudioTokens.inkSecondary;
     if (code == 'published' ||
         code == 'confirmed' ||
         code == 'paid' ||
         code == 'completed' ||
         code == 'payout_paid') {
-      bg = const Color(0xFFECFDF5);
-      fg = const Color(0xFF047857);
+      bg = AppColors.successSoft;
+      fg = AppColors.success;
     } else if (code == 'pending_approval' ||
         code == 'pending_payment' ||
         code == 'pending' ||
         code == 'payout_pending') {
-      bg = const Color(0xFFFFFBEB);
-      fg = const Color(0xFFB45309);
+      bg = AppColors.warningSoft;
+      fg = AppColors.warning;
     } else if (code == 'rejected' ||
         code == 'failed' ||
         code.contains('cancelled') ||
         code == 'payment_expired') {
-      bg = const Color(0xFFFFF1F2);
-      fg = const Color(0xFFBE123C);
+      bg = AppColors.errorSoft;
+      fg = AppColors.error;
     }
 
     return Container(
