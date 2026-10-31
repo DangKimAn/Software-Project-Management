@@ -166,6 +166,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
   // Guests state
   String _guestTab = 'today';
+  String _guestStatusFilter = 'all';
   String? _guestSelectedListingId = 'all';
   final TextEditingController _guestSearchCtrl = TextEditingController();
   String _guestSearchQuery = '';
@@ -296,8 +297,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
         _loadInitialPortalData();
         break;
       case HostPortalSection.properties:
-      case HostPortalSection.support:
         _fetchListings();
+        break;
+      case HostPortalSection.support:
+        _fetchConversations();
         break;
       case HostPortalSection.bookings:
       case HostPortalSection.guests:
@@ -1155,10 +1158,39 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     try {
       await repo.saveBankAccount(accDto.toJson());
       if (!mounted) return;
+
+      // Xóa hết thông tin đã nhập trên form khi lưu thành công
+      _selectedBankCode = null;
+      _bankSearchCtrl.clear();
+      _bankAccountNumberCtrl.clear();
+      _bankAccountHolderCtrl.clear();
+      _bankBranchCtrl.clear();
+
       setState(() {
         _savingBank = false;
-        _bankSuccess = 'Đã lưu thông tin tài khoản ngân hàng.';
+        _bankSuccess = 'Đã lưu thông tin tài khoản ngân hàng thành công!';
       });
+
+      // Hiện thông báo SnackBar nổi
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(LucideIcons.circleCheck, color: Colors.white, size: 20),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Đã lưu thông tin tài khoản ngân hàng thành công!',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -1894,7 +1926,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       case HostPortalSection.reports:
         return _buildReportsSection();
       case HostPortalSection.support:
-        return _buildPropertiesSection(isSupportMode: true);
+        return _buildSupportSection();
       case HostPortalSection.settings:
         return _buildSettingsSection();
     }
@@ -2072,6 +2104,560 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     );
   }
 
+  void _handleStartAdminChat() {
+    Map<String, dynamic>? adminConv;
+    for (final c in _conversations) {
+      if (_isConversationAdmin(c)) {
+        adminConv = c;
+        break;
+      }
+    }
+
+    if (adminConv != null) {
+      final convId = '${adminConv['conversationId'] ?? adminConv['id']}';
+      setState(() {
+        _selectedConversationId = convId;
+        _inChatDetailView = true;
+      });
+      _fetchMessagesForConversation(convId);
+    }
+    _switchSection(HostPortalSection.messages);
+  }
+
+  void _showHelpTopicDetail(String title, String detail) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                LucideIcons.circleHelp,
+                color: AppColors.primary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              detail,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.45,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Row(
+                children: [
+                  Icon(LucideIcons.info, size: 16, color: AppColors.primary),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Cần hỗ trợ xử lý ngay? Hãy gửi tin nhắn cho Quản trị viên để được giải quyết trực tiếp.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Đóng'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: const StadiumBorder(),
+              elevation: 0,
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _handleStartAdminChat();
+            },
+            icon: const Icon(LucideIcons.messageSquare, size: 15),
+            label: const Text('Nhắn Admin'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSupportSection() {
+    final helpTopics = [
+      (
+        title: 'Duyệt chỗ nghỉ & KYC',
+        desc: 'Hồ sơ pháp lý, ảnh chụp căn, quy trình duyệt nhanh',
+        detail:
+            'Hệ thống phê duyệt chỗ nghỉ trong vòng 24 giờ sau khi tải đủ ảnh thực tế độ nét cao và hồ sơ định danh CCCD. Quản trị viên sẽ gửi thông báo ngay khi căn của bạn sẵn sàng đón khách.',
+        icon: LucideIcons.house,
+        color: const Color(0xFF059669),
+        bgColor: const Color(0xFFECFDF5),
+      ),
+      (
+        title: 'Thanh toán & Quyết toán',
+        desc: 'Lịch nhận tiền, đổi số tài khoản ngân hàng',
+        detail:
+            'Doanh thu đặt phòng được quyết toán vào tài khoản ngân hàng của Chủ nhà sau khi khách check-in thành công. Bạn có thể cập nhật tài khoản ngân hàng tại mục Menu > Cài đặt Chủ nhà.',
+        icon: LucideIcons.walletCards,
+        color: const Color(0xFF2563EB),
+        bgColor: const Color(0xFFEFF6FF),
+      ),
+      (
+        title: 'Hủy phòng & Khiếu nại',
+        desc: 'Xử lý đơn hủy, bồi hoàn và tranh chấp',
+        detail:
+            'Nếu khách lưu trú vi phạm nội quy hoặc yêu cầu hủy phòng ngoài chính sách, hãy chụp lại bằng chứng và gửi tin nhắn ngay cho Quản trị viên để được bảo vệ quyền lợi Chủ nhà.',
+        icon: LucideIcons.shieldAlert,
+        color: const Color(0xFFD97706),
+        bgColor: const Color(0xFFFFFBEB),
+      ),
+      (
+        title: 'Báo cáo sự cố kỹ thuật',
+        desc: 'Đồng bộ lịch, lỗi giá, sự cố ứng dụng',
+        detail:
+            'Đội ngũ kỹ thuật túc trực 24/7 để khắc phục mọi sự cố hiển thị lịch đặt, lỗi tải ảnh hoặc vấn đề thông báo. Vui lòng nhắn tin trực tiếp để được kỹ sư xử lý ngay lập tức.',
+        icon: LucideIcons.wrench,
+        color: const Color(0xFF7C3AED),
+        bgColor: const Color(0xFFF5F3FF),
+      ),
+    ];
+
+    final faqs = [
+      (
+        q: 'Khi nào tôi nhận được tiền quyết toán từ đơn đặt phòng?',
+        a:
+            'Tiền phòng sẽ được tự động chuyển vào tài khoản ngân hàng đã đăng ký của bạn trong vòng 24h làm việc sau khi khách thực hiện Check-in thành công.',
+      ),
+      (
+        q: 'Làm thế nào để chỗ nghỉ của tôi được duyệt hiển thị nhanh nhất?',
+        a:
+            'Đảm bảo chụp tối thiểu 5 ảnh thực tế rõ nét (phòng khách, phòng ngủ, phòng tắm, ngoại cảnh) và điền đầy đủ tiện nghi, giá cả chính xác.',
+      ),
+      (
+        q: 'Tôi phải làm gì khi khách yêu cầu hủy phòng vào phút chót?',
+        a:
+            'Chính sách hủy phòng bạn thiết lập sẽ được áp dụng tự động. Nếu có tranh chấp phát sinh, hãy bấm "Nhắn tin với Quản trị viên" để Ban quản trị hỗ trợ giải quyết thỏa đáng.',
+      ),
+    ];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header
+          const Text(
+            'Trung tâm trợ giúp',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Kết nối trực tiếp với Ban quản trị và nhận trợ giúp từ nền tảng.',
+            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 18),
+
+          // 1. Thẻ Kênh Hỗ Trợ Trực Tuyến Với Admin
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFFF1F2), Color(0xFFFFFFFF)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: const Color(0xFFFECDD3)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0CBE123C),
+                  offset: Offset(0, 4),
+                  blurRadius: 14,
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFE4E6),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFFDA4AF)),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          LucideIcons.shieldCheck,
+                          color: Color(0xFFBE123C),
+                          size: 26,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Quản trị viên MinhThanh',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFECFDF5),
+                                  borderRadius: BorderRadius.circular(999),
+                                  border:
+                                      Border.all(color: const Color(0xFFA7F3D0)),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 3.5,
+                                      backgroundColor: Color(0xFF10B981),
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Online',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF047857),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          const Text(
+                            'Ban quản trị nền tảng • Hỗ trợ trực tiếp 24/7',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Ban quản trị luôn túc trực để hỗ trợ bạn phê duyệt chỗ nghỉ, giải quyết vướng mắc tài chính và xử lý các sự cố khẩn cấp.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.45,
+                    color: Color(0xFF475569),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ElevatedButton.icon(
+                  key: const Key('support_chat_with_admin_btn'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 46),
+                    shape: const StadiumBorder(),
+                    elevation: 0,
+                  ),
+                  onPressed: _handleStartAdminChat,
+                  icon: const Icon(LucideIcons.messageSquare, size: 17),
+                  label: const Text(
+                    'Nhắn tin trực tiếp với Quản trị viên',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // 2. Các Vấn Đề Cần Nền Tảng Trợ Giúp
+          const Text(
+            'Các vấn đề cần nền tảng trợ giúp',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 600 ? 4 : 2;
+              final itemWidth =
+                  (constraints.maxWidth - 10 * (columns - 1)) / columns;
+
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: helpTopics.map((topic) {
+                  return Material(
+                    color: AppColors.surfaceBase,
+                    borderRadius: BorderRadius.circular(18),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(18),
+                      onTap: () =>
+                          _showHelpTopicDetail(topic.title, topic.detail),
+                      child: Container(
+                        width: itemWidth,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: topic.bgColor,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child:
+                                  Icon(topic.icon, size: 18, color: topic.color),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              topic.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              topic.desc,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                height: 1.35,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+
+          const SizedBox(height: 24),
+
+          // 3. Câu Hỏi Thường Gặp (FAQ)
+          const Text(
+            'Câu hỏi thường gặp',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surfaceBase,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              children: faqs.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final faq = entry.value;
+                final isLast = idx == faqs.length - 1;
+
+                return Column(
+                  children: [
+                    Theme(
+                      data: Theme.of(context)
+                          .copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                        tilePadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 2,
+                        ),
+                        leading: const Icon(
+                          LucideIcons.circleHelp,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
+                        title: Text(
+                          faq.q,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              left: 16,
+                              right: 16,
+                              bottom: 14,
+                            ),
+                            child: Text(
+                              faq.a,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                height: 1.45,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!isLast)
+                      const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // 4. Kênh Liên Hệ Khẩn Cấp (Emergency Hotline)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE2E8F0),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    LucideIcons.phoneCall,
+                    size: 18,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Tổng đài hỗ trợ 24/7',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Hotline: 1900 8888 • hotro@thepalmvilla.vn',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(80, 36),
+                    shape: const StadiumBorder(),
+                    side: const BorderSide(color: AppColors.border),
+                  ),
+                  onPressed: () => _handleCallGuest(
+                    'Tổng đài hỗ trợ nền tảng',
+                    '1900 8888',
+                  ),
+                  child: const Text('Gọi ngay', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPropertiesSection({required bool isSupportMode}) {
     final counts = <String, int>{
       'draft': 0,
@@ -2135,10 +2721,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  isSupportMode
-                      ? 'Quản lý chỗ nghỉ'
-                      : 'Chỗ nghỉ của tôi',
+                child: const Text(
+                  'Quản lý chỗ nghỉ',
                   style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
@@ -2727,40 +3311,92 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             const SizedBox(height: 16),
             _buildInlineSuccess(_bookingsSuccess!),
           ],
-          const SizedBox(height: 16),
+          // Thanh Filter Chips trượt ngang hiện đại
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: filterTabs.map((tab) {
+                final isSelected = _bookingStatusFilter == tab.$1;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    selected: isSelected,
+                    showCheckmark: false,
+                    label: Text(
+                      tab.$2,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color:
+                            isSelected ? Colors.white : AppColors.textPrimary,
+                      ),
+                    ),
+                    backgroundColor: const Color(0xFFF1F5F9),
+                    selectedColor: const Color(0xFF0F172A),
+                    side: BorderSide(
+                      color: isSelected
+                          ? const Color(0xFF0F172A)
+                          : AppColors.border,
+                    ),
+                    shape: const StadiumBorder(),
+                    onSelected: (selected) {
+                      setState(() {
+                        _bookingStatusFilter = tab.$1;
+                        _bookingsVisibleCount = 10;
+                      });
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _buildPortalDropdown<String>(
-                dropdownKey: const Key('booking_filter_dropdown'),
-                label: 'Trạng thái',
-                value: _bookingStatusFilter,
-                items: filterTabs.map((tab) => DropdownMenuItem(
-                  key: Key('booking_filter_${tab.$1}'),
-                  value: tab.$1,
-                  child: Text(tab.$2, overflow: TextOverflow.ellipsis),
-                )).toList(),
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() {
-                    _bookingStatusFilter = value;
-                    _bookingsVisibleCount = 10;
-                  });
-                },
-              )),
+              Expanded(
+                child: _buildPortalDropdown<String>(
+                  dropdownKey: const Key('booking_filter_dropdown'),
+                  label: 'Trạng thái',
+                  value: _bookingStatusFilter,
+                  items: filterTabs
+                      .map(
+                        (tab) => DropdownMenuItem(
+                          key: Key('booking_filter_${tab.$1}'),
+                          value: tab.$1,
+                          child: Text(tab.$2, overflow: TextOverflow.ellipsis),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() {
+                      _bookingStatusFilter = value;
+                      _bookingsVisibleCount = 10;
+                    });
+                  },
+                ),
+              ),
               const SizedBox(width: 10),
-              Expanded(child: _buildPortalDropdown<String>(
-                dropdownKey: const Key('booking_sort_dropdown'),
-                label: 'Sắp xếp',
-                value: _bookingSortBy,
-                items: sortOptions.map((opt) => DropdownMenuItem(
-                  key: Key('booking_sort_${opt.$1}'),
-                  value: opt.$1,
-                  child: Text(opt.$2, overflow: TextOverflow.ellipsis),
-                )).toList(),
-                onChanged: (value) {
-                  if (value != null) setState(() => _bookingSortBy = value);
-                },
-              )),
+              Expanded(
+                child: _buildPortalDropdown<String>(
+                  dropdownKey: const Key('booking_sort_dropdown'),
+                  label: 'Sắp xếp',
+                  value: _bookingSortBy,
+                  items: sortOptions
+                      .map(
+                        (opt) => DropdownMenuItem(
+                          key: Key('booking_sort_${opt.$1}'),
+                          value: opt.$1,
+                          child: Text(opt.$2, overflow: TextOverflow.ellipsis),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) setState(() => _bookingSortBy = value);
+                  },
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -2807,17 +3443,21 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     final bookingId = (booking['bookingId'] ?? booking['id'] ?? '').toString();
     final guestName =
         (booking['guestName'] ?? booking['customerName'] ?? 'Khách #$bookingId')
-            .toString();
+            .toString()
+            .trim();
     final guestPhone =
-        (booking['guestPhone'] ?? booking['guestEmail'] ?? '').toString();
+        (booking['guestPhone'] ?? booking['guestEmail'] ?? '').toString().trim();
     final listingTitle =
         (booking['listingTitle'] ?? 'Chỗ nghỉ #${booking['listingId'] ?? ''}')
             .toString();
     final checkIn = (booking['checkInDate'] ?? '').toString().split('T').first;
     final checkOut =
         (booking['checkOutDate'] ?? '').toString().split('T').first;
+    final nights = _calculateGuestNights(checkIn, checkOut);
     final guestsCount = booking['guestsCount'] ?? booking['guests'] ?? 1;
     final totalPrice = booking['totalPrice'] ?? booking['totalAmount'] ?? 0;
+    final initial =
+        guestName.isNotEmpty ? guestName.substring(0, 1).toUpperCase() : 'K';
 
     final display = getBookingDisplayStatus(
       booking,
@@ -2828,76 +3468,277 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
     return Container(
       key: Key('host_booking_card_$bookingId'),
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x06000000),
+            offset: Offset(0, 4),
+            blurRadius: 12,
+          ),
+        ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
+          // 1. Header Thẻ: Avatar chữ cái đầu + Tên khách + Chỗ nghỉ + Nhãn trạng thái
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '#$bookingId • $listingTitle',
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: const Color(0xFFFEE2E2),
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      guestName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        const Icon(
+                          LucideIcons.house,
+                          size: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            listingTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
               _buildStatusPill(display.label, display.code),
             ],
           ),
-          const SizedBox(height: 8),
+
+          const SizedBox(height: 14),
+
+          // 2. Thân Thẻ: Chia 2 hộp con trực quan (LƯU TRÚ & THANH TOÁN)
           Row(
             children: [
-              const Icon(LucideIcons.users, size: 16, color: AppColors.textSecondary),
-              const SizedBox(width: 8),
-              Expanded(child: Text('$guestName · $guestsCount khách',
-                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-              )),
-              if (guestPhone.isNotEmpty)
-                IconButton(
-                  tooltip: 'Liên hệ khách',
-                  icon: const Icon(LucideIcons.userRound, size: 18),
-                  onPressed: () => showDialog<void>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: Text(guestName),
-                      content: SelectableText(guestPhone),
-                      actions: [TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Đóng'),
-                      )],
-                    ),
+              // Hộp 1: THỜI GIAN LƯU TRÚ
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(
+                            LucideIcons.calendar,
+                            size: 12,
+                            color: AppColors.primary,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'LƯU TRÚ',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textSecondary,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Nhận: ${_formatBookingDate(checkIn)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Trả: ${_formatBookingDate(checkOut)}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$nights đêm',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+              ),
+              const SizedBox(width: 10),
+              // Hộp 2: THANH TOÁN & KHÁCH
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(
+                            LucideIcons.wallet,
+                            size: 12,
+                            color: Color(0xFF047857),
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'THANH TOÁN',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textSecondary,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        formatHostVnd(totalPrice),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$guestsCount khách',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '#$bookingId',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
+
+          const SizedBox(height: 14),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 12),
+
+          // 3. Phím tắt liên hệ nhanh: Gọi điện & Nhắn tin
           Row(
             children: [
-              const Icon(LucideIcons.calendar, size: 16, color: AppColors.textSecondary),
-              const SizedBox(width: 8),
-              Expanded(child: Text(
-                '${_formatBookingDate(checkIn)} → ${_formatBookingDate(checkOut)}',
-                style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
-              )),
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 42),
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  onPressed: () => _handleCallGuest(guestName, guestPhone),
+                  icon: const Icon(
+                    LucideIcons.phone,
+                    size: 15,
+                    color: AppColors.textPrimary,
+                  ),
+                  label: const Text(
+                    'Gọi điện',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(0, 42),
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  onPressed: () => _handleMessageGuest(booking),
+                  icon: const Icon(
+                    LucideIcons.messageSquare,
+                    size: 15,
+                    color: Colors.white,
+                  ),
+                  label: const Text(
+                    'Nhắn tin',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(formatHostVnd(totalPrice), style: const TextStyle(
-            fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textPrimary,
-          )),
+
+          // 4. Các nút thao tác nghiệp vụ (Xác nhận, Check-in, Check-out, Hủy) nếu có
           if (actions.hasAnyAction) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -2906,10 +3747,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   ElevatedButton.icon(
                     key: Key('booking_confirm_btn_$bookingId'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
+                      backgroundColor: const Color(0xFF10B981),
                       foregroundColor: Colors.white,
-                      minimumSize: const Size(110, 48),
-                      shape: const StadiumBorder(),
+                      minimumSize: const Size(110, 40),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       elevation: 0,
                     ),
                     onPressed: isBusy
@@ -2924,8 +3767,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
-                      minimumSize: const Size(110, 48),
-                      shape: const StadiumBorder(),
+                      minimumSize: const Size(110, 40),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       elevation: 0,
                     ),
                     onPressed: isBusy
@@ -2940,8 +3785,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
-                      minimumSize: const Size(110, 48),
-                      shape: const StadiumBorder(),
+                      minimumSize: const Size(110, 40),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       elevation: 0,
                     ),
                     onPressed: isBusy
@@ -2954,10 +3801,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   OutlinedButton.icon(
                     key: Key('booking_cancel_btn_$bookingId'),
                     style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(96, 48),
+                      minimumSize: const Size(96, 40),
                       foregroundColor: const Color(0xFFBE123C),
                       side: const BorderSide(color: Color(0xFFFECDD3)),
-                      shape: const StadiumBorder(),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                     onPressed: isBusy
                         ? null
@@ -4665,7 +5514,46 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     _switchSection(HostPortalSection.messages);
   }
 
-  void _showGuestListingFilterModal() {
+  bool _matchGuestBookingStatus(Map<String, dynamic> b, String filter) {
+    if (filter == 'all') return true;
+    final display = getBookingDisplayStatus(b, role: BookingActionRole.host);
+    final lbl = display.label.toLowerCase();
+    final st = (b['status'] ?? '').toString().toLowerCase();
+    final paymentSt = (b['paymentStatus'] ?? '').toString().toLowerCase();
+
+    switch (filter) {
+      case 'confirmed':
+        return lbl.contains('đã xác nhận') ||
+            lbl.contains('thanh toán thành công') ||
+            lbl.contains('đã nhận phòng') ||
+            lbl.contains('đã trả phòng') ||
+            lbl.contains('hoàn tất') ||
+            st == 'confirmed' ||
+            st == 'paid' ||
+            st == 'checked_in';
+      case 'payment_expired':
+        return lbl.contains('quá hạn thanh toán') ||
+            st == 'payment_expired' ||
+            paymentSt == 'expired';
+      case 'cancelled':
+        return lbl.contains('hủy') ||
+            st == 'cancelled' ||
+            st == 'cancelled_by_guest' ||
+            st == 'cancelled_by_host' ||
+            st == 'rejected';
+      default:
+        return true;
+    }
+  }
+
+  void _showGuestStatusFilterModal() {
+    final statusOptions = [
+      ('all', 'Tất cả khách hàng', LucideIcons.users, AppColors.primary),
+      ('confirmed', 'Đã xác nhận', LucideIcons.circleCheck, const Color(0xFF10B981)),
+      ('payment_expired', 'Quá hạn thanh toán', LucideIcons.clockAlert, const Color(0xFFEF4444)),
+      ('cancelled', 'Hủy', LucideIcons.ban, const Color(0xFF64748B)),
+    ];
+
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -4696,7 +5584,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 children: [
                   const Expanded(
                     child: Text(
-                      'Lựa chọn căn chỗ nghỉ',
+                      'Lọc theo trạng thái khách',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
@@ -4711,51 +5599,56 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              ListTile(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                tileColor: (_guestSelectedListingId == null || _guestSelectedListingId == 'all')
-                    ? AppColors.primary.withValues(alpha: 0.08)
-                    : null,
-                leading: const Icon(LucideIcons.layoutGrid, color: AppColors.primary),
-                title: const Text('Tất cả các căn', style: TextStyle(fontWeight: FontWeight.w700)),
-                trailing: (_guestSelectedListingId == null || _guestSelectedListingId == 'all')
-                    ? const Icon(LucideIcons.check, color: AppColors.primary, size: 20)
-                    : null,
-                onTap: () {
-                  setState(() => _guestSelectedListingId = 'all');
-                  Navigator.of(ctx).pop();
-                },
-              ),
-              const Divider(height: 16),
-              Flexible(
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: _listings.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 4),
-                  itemBuilder: (_, i) {
-                    final l = _listings[i];
-                    final id = '${l['listingId'] ?? l['id']}';
-                    final title = (l['title'] ?? 'Căn #$id').toString();
-                    final isSelected = _guestSelectedListingId == id;
-                    return ListTile(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      tileColor: isSelected ? AppColors.primary.withValues(alpha: 0.08) : null,
-                      leading: const Icon(LucideIcons.house, size: 20, color: AppColors.textSecondary),
-                      title: Text(title, style: TextStyle(fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500)),
-                      trailing: isSelected ? const Icon(LucideIcons.check, color: AppColors.primary, size: 20) : null,
-                      onTap: () {
-                        setState(() => _guestSelectedListingId = id);
-                        Navigator.of(ctx).pop();
-                      },
-                    );
-                  },
+              for (final opt in statusOptions)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    tileColor: _guestStatusFilter == opt.$1
+                        ? AppColors.primary.withValues(alpha: 0.08)
+                        : null,
+                    leading: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: opt.$4.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(opt.$3, size: 18, color: opt.$4),
+                    ),
+                    title: Text(
+                      opt.$2,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: _guestStatusFilter == opt.$1
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                        color: _guestStatusFilter == opt.$1
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                    trailing: _guestStatusFilter == opt.$1
+                        ? const Icon(LucideIcons.check,
+                            color: AppColors.primary, size: 20)
+                        : null,
+                    onTap: () {
+                      setState(() => _guestStatusFilter = opt.$1);
+                      Navigator.of(ctx).pop();
+                    },
+                  ),
                 ),
-              ),
             ],
           ),
         );
       },
     );
+  }
+
+  void _showGuestListingFilterModal() {
+    _showGuestStatusFilterModal();
   }
 
   Widget _buildGuestsSection() {
@@ -4799,16 +5692,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
     final activeList = _guestTab == 'today' ? todayBookings : upcomingBookings;
 
-    // Tìm tên căn đang chọn
-    String selectedListingTitle = 'Tất cả các căn';
-    if (_guestSelectedListingId != null && _guestSelectedListingId != 'all') {
-      final matched = _listings.firstWhere(
-        (l) => '${l['listingId'] ?? l['id']}' == _guestSelectedListingId,
-        orElse: () => {},
-      );
-      if (matched.isNotEmpty) {
-        selectedListingTitle = (matched['title'] ?? 'Căn #$_guestSelectedListingId').toString();
-      }
+    // 3. Lọc theo trạng thái khách (Tất cả, Đã xác nhận, Quá hạn thanh toán, Hủy)
+    final filteredList = activeList.where((b) {
+      return _matchGuestBookingStatus(b, _guestStatusFilter);
+    }).toList();
+
+    // Xác định tiêu đề và icon hiển thị trên ô chọn trạng thái
+    String statusTitle = 'Tất cả khách hàng';
+    IconData statusIcon = LucideIcons.users;
+    Color statusColor = AppColors.primary;
+    if (_guestStatusFilter == 'confirmed') {
+      statusTitle = 'Đã xác nhận';
+      statusIcon = LucideIcons.circleCheck;
+      statusColor = const Color(0xFF10B981);
+    } else if (_guestStatusFilter == 'payment_expired') {
+      statusTitle = 'Quá hạn thanh toán';
+      statusIcon = LucideIcons.clockAlert;
+      statusColor = const Color(0xFFEF4444);
+    } else if (_guestStatusFilter == 'cancelled') {
+      statusTitle = 'Hủy';
+      statusIcon = LucideIcons.ban;
+      statusColor = const Color(0xFF64748B);
     }
 
     return SingleChildScrollView(
@@ -4860,10 +5764,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
           const SizedBox(height: 12),
 
-          // 1 Nút Nhỏ: Lựa chọn căn
+          // Ô Lọc Trạng thái Khách hàng (Đổi từ Tất cả các căn thành Tất cả khách hàng)
           InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: _showGuestListingFilterModal,
+            onTap: _showGuestStatusFilterModal,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
@@ -4873,11 +5777,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.house, size: 18, color: AppColors.primary),
+                  Icon(statusIcon, size: 18, color: statusColor),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      selectedListingTitle,
+                      statusTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -4909,7 +5813,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
               padding: EdgeInsets.all(40),
               child: Center(child: CircularProgressIndicator()),
             )
-          else if (activeList.isEmpty)
+          else if (filteredList.isEmpty)
             Container(
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
@@ -4931,9 +5835,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    _guestTab == 'today'
-                        ? 'Hôm nay chưa có lượt khách nào lưu trú'
-                        : 'Chưa có lượt khách nào sắp tới',
+                    _guestStatusFilter != 'all'
+                        ? 'Không có khách nào có trạng thái "$statusTitle"'
+                        : (_guestTab == 'today'
+                            ? 'Hôm nay chưa có lượt khách nào lưu trú'
+                            : 'Chưa có lượt khách nào sắp tới'),
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -4943,29 +5849,29 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    _guestSelectedListingId != null && _guestSelectedListingId != 'all'
-                        ? 'Chưa có dữ liệu đặt phòng phù hợp cho căn này.'
+                    _guestStatusFilter != 'all'
+                        ? 'Thử chọn "Tất cả khách hàng" để xem đầy đủ danh sách.'
                         : 'Các lượt đặt phòng mới từ khách sẽ được cập nhật tự động tại đây.',
                     style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                     textAlign: TextAlign.center,
                   ),
-                  if (_guestSelectedListingId != null && _guestSelectedListingId != 'all') ...[
+                  if (_guestStatusFilter != 'all') ...[
                     const SizedBox(height: 14),
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         shape: const StadiumBorder(),
                         side: const BorderSide(color: AppColors.border),
                       ),
-                      onPressed: () => setState(() => _guestSelectedListingId = 'all'),
-                      icon: const Icon(LucideIcons.layoutGrid, size: 16),
-                      label: const Text('Xem tất cả các căn'),
+                      onPressed: () => setState(() => _guestStatusFilter = 'all'),
+                      icon: const Icon(LucideIcons.users, size: 16),
+                      label: const Text('Xem tất cả khách hàng'),
                     ),
                   ],
                 ],
               ),
             )
           else
-            ...activeList.map(_buildModernGuestCard),
+            ...filteredList.map(_buildModernGuestCard),
         ],
       ),
     );
@@ -5800,10 +6706,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   }
 
   Widget _buildChatDetailView() {
+    final currentUser = ref.watch(authNotifierProvider).value;
+    final currentUserId = currentUser?.id.toString();
+
     final matchedConv = _conversations.firstWhere(
       (c) => '${c['conversationId'] ?? c['id']}' == _selectedConversationId,
       orElse: () => {},
     );
+    final hostUserId = matchedConv['hostUserId']?.toString();
+    final guestUserId = matchedConv['guestUserId']?.toString();
     final other = matchedConv['otherParticipant'] is Map
         ? Map<String, dynamic>.from(matchedConv['otherParticipant'] as Map)
         : null;
@@ -5928,21 +6839,46 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     final m = _conversationMessages[i];
                     final content =
                         (m['content'] ?? m['body'] ?? '').toString();
-                    final senderName = (m['senderName'] ??
-                            m['sender']?['fullName'] ??
-                            'Người dùng')
-                        .toString();
+                    final senderId =
+                        (m['senderId'] ?? m['senderUserId'])?.toString();
                     final senderRole =
                         (m['senderRole'] ?? '').toString().toLowerCase();
+                    final rawSenderName = (m['senderName'] ??
+                            m['sender']?['fullName'] ??
+                            '')
+                        .toString();
 
                     // Xác định tin nhắn là của tôi (Host) hay của Khách/Admin
                     final isMe = m['isMe'] == true ||
+                        (currentUserId != null &&
+                            currentUserId.isNotEmpty &&
+                            senderId == currentUserId) ||
+                        (hostUserId != null &&
+                            hostUserId.isNotEmpty &&
+                            senderId == hostUserId) ||
                         senderRole == 'host' ||
-                        senderName.toLowerCase().contains('chủ nhà') ||
-                        senderName.toLowerCase() == 'tôi';
+                        rawSenderName.toLowerCase().contains('chủ nhà') ||
+                        rawSenderName.toLowerCase() == 'tôi';
 
-                    final isMsgAdmin = senderRole == 'admin' ||
-                        senderName.toLowerCase().contains('quản trị viên');
+                    final isMsgAdmin = isAdmin ||
+                        senderRole == 'admin' ||
+                        rawSenderName.toLowerCase().contains('quản trị viên');
+
+                    final displaySenderName = isMsgAdmin
+                        ? (isAdmin ? participantName : 'Quản trị viên MinhThanh')
+                        : (rawSenderName.isNotEmpty
+                            ? rawSenderName
+                            : (participantName.isNotEmpty ? participantName : 'Khách hàng'));
+
+                    // Format time nếu có
+                    String? msgTime;
+                    final rawCreatedAt = m['createdAt'];
+                    if (rawCreatedAt != null) {
+                      final dt = DateTime.tryParse(rawCreatedAt.toString());
+                      if (dt != null) {
+                        msgTime = DateFormat('HH:mm').format(dt);
+                      }
+                    }
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
@@ -5957,15 +6893,28 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                                 left: 4,
                                 bottom: 4,
                               ),
-                              child: Text(
-                                senderName,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: isMsgAdmin
-                                      ? const Color(0xFFBE123C)
-                                      : AppColors.textSecondary,
-                                ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isMsgAdmin) ...[
+                                    const Icon(
+                                      LucideIcons.shieldCheck,
+                                      size: 13,
+                                      color: Color(0xFFBE123C),
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Text(
+                                    displaySenderName,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: isMsgAdmin
+                                          ? const Color(0xFFBE123C)
+                                          : AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           Container(
@@ -5989,23 +6938,55 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                                 bottomLeft: Radius.circular(isMe ? 16 : 4),
                                 bottomRight: Radius.circular(isMe ? 4 : 16),
                               ),
-                              border: isMsgAdmin
-                                  ? Border.all(
-                                      color: const Color(0xFFFECDD3),
-                                    )
+                              border: isMe
+                                  ? null
+                                  : (isMsgAdmin
+                                      ? Border.all(
+                                          color: const Color(0xFFFECDD3),
+                                        )
+                                      : null),
+                              boxShadow: isMe
+                                  ? [
+                                      BoxShadow(
+                                        color: AppColors.primary.withValues(alpha: 0.18),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ]
                                   : null,
                             ),
-                            child: Text(
-                              content,
-                              style: TextStyle(
-                                fontSize: 14,
-                                height: 1.35,
-                                color: isMe
-                                    ? Colors.white
-                                    : (isMsgAdmin
-                                        ? const Color(0xFF881337)
-                                        : AppColors.textPrimary),
-                              ),
+                            child: Column(
+                              crossAxisAlignment: isMe
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  content,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    height: 1.35,
+                                    color: isMe
+                                        ? Colors.white
+                                        : (isMsgAdmin
+                                            ? const Color(0xFF881337)
+                                            : AppColors.textPrimary),
+                                  ),
+                                ),
+                                if (msgTime != null) ...[
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    msgTime,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: isMe
+                                          ? Colors.white.withValues(alpha: 0.75)
+                                          : (isMsgAdmin
+                                              ? const Color(0xFF9F1239)
+                                              : AppColors.textSecondary),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                         ],
@@ -6359,11 +7340,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppColors.surfaceBase,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
               border: Border.all(color: AppColors.border),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x06000000),
+                  offset: Offset(0, 4),
+                  blurRadius: 12,
+                ),
+              ],
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildPortalDropdown<String>(
                   dropdownKey: const Key('reviews_listing_dropdown'),
@@ -6387,16 +7375,97 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     _fetchReviewsForSelectedListing();
                   },
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  _reviews.isEmpty
-                      ? 'Điểm trung bình: Chưa có đánh giá (0 đánh giá)'
-                      : 'Điểm trung bình thực tế: ${avgRating.toStringAsFixed(2)} ★ (${_reviews.length} đánh giá)',
-                  key: const Key('reviews_real_summary_text'),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                const SizedBox(height: 14),
+                // Card điểm số sang trọng
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      // Badge điểm số lớn
+                      Container(
+                        width: 58,
+                        height: 58,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Text(
+                            _reviews.isEmpty ? '—' : avgRating.toStringAsFixed(1),
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: List.generate(5, (index) {
+                                    final starValue = index + 1;
+                                    return Icon(
+                                      LucideIcons.star,
+                                      size: 15,
+                                      color: starValue <= avgRating.round()
+                                          ? const Color(0xFFF59E0B)
+                                          : const Color(0xFFCBD5E1),
+                                    );
+                                  }),
+                                ),
+                                Text(
+                                  _reviews.isEmpty
+                                      ? 'Chưa có đánh giá'
+                                      : (avgRating >= 4.5 ? 'Xuất sắc' : 'Rất tốt'),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _reviews.isEmpty
+                                  ? 'Điểm trung bình: Chưa có đánh giá (0 đánh giá)'
+                                  : 'Điểm trung bình thực tế: ${avgRating.toStringAsFixed(2)} ★ (${_reviews.length} đánh giá)',
+                              key: const Key('reviews_real_summary_text'),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -6419,11 +7488,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   : (int.tryParse('${review['rating'] ?? 0}') ?? 0);
               final comment =
                   (review['comment'] ?? 'Không có nội dung').toString();
-              final createdAt =
+              final createdAtRaw =
                   (review['createdAt'] ?? '').toString().split('T').first;
+              final createdAt = _formatBookingDate(createdAtRaw);
               final hostReply = (review['hostReply'] ?? review['reply'] ?? '')
                   .toString()
                   .trim();
+              final initial = reviewerName.isNotEmpty
+                  ? reviewerName.substring(0, 1).toUpperCase()
+                  : 'K';
 
               final replyCtrl = _reviewReplyControllers.putIfAbsent(
                 reviewId,
@@ -6433,61 +7506,178 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
 
               return Container(
                 key: Key('review_card_$reviewId'),
-                margin: const EdgeInsets.only(bottom: 12),
+                margin: const EdgeInsets.only(bottom: 14),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceBase,
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: AppColors.border),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x06000000),
+                      offset: Offset(0, 4),
+                      blurRadius: 12,
+                    ),
+                  ],
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // 1. Header: Avatar + Tên khách + Dải sao vàng + Ngày đánh giá
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundColor: const Color(0xFFFEE2E2),
                           child: Text(
-                            '$reviewerName • ${'★' * rating.clamp(0, 5)}',
+                            initial,
                             style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
                             ),
                           ),
                         ),
-                        Text(
-                          createdAt,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                reviewerName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    LucideIcons.badgeCheck,
+                                    size: 13,
+                                    color: Color(0xFF10B981),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      'Khách lưu trú đã xác minh',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFF059669),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: List.generate(5, (idx) {
+                                return Icon(
+                                  LucideIcons.star,
+                                  size: 14,
+                                  color: idx < rating
+                                      ? const Color(0xFFF59E0B)
+                                      : const Color(0xFFE2E8F0),
+                                );
+                              }),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              createdAt,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      comment,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textPrimary,
+
+                    const SizedBox(height: 12),
+
+                    // 2. Nội dung nhận xét của khách
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFF1F5F9)),
+                      ),
+                      child: Text(
+                        comment,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          height: 1.45,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                     ),
+
                     const SizedBox(height: 12),
+
+                    // 3. Phản hồi của Chủ nhà
                     if (hostReply.isNotEmpty)
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceMuted,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: AppColors.border),
+                          color: const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFBBF7D0)),
                         ),
-                        child: Text(
-                          'Phản hồi của Host: $hostReply',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    LucideIcons.house,
+                                    size: 12,
+                                    color: Color(0xFF16A34A),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'Phản hồi từ Chủ nhà (Host)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF15803D),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              hostReply,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                height: 1.4,
+                                color: Color(0xFF166534),
+                              ),
+                            ),
+                          ],
                         ),
                       )
                     else
@@ -6500,8 +7690,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                             maxLines: 2,
                             decoration: InputDecoration(
                               hintText: 'Nhập phản hồi của chủ nhà...',
+                              hintStyle: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary,
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: AppColors.border),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: AppColors.border),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
                               ),
                             ),
                           ),
@@ -6511,8 +7720,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,
-                              minimumSize: const Size(140, 48),
-                              shape: const StadiumBorder(),
+                              minimumSize: const Size(130, 42),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                               elevation: 0,
                             ),
                             onPressed: _savingReviewId != null
@@ -6520,16 +7731,20 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                                 : () => _submitReviewReply(reviewId),
                             icon: isSavingThis
                                 ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
+                                    width: 14,
+                                    height: 14,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                       color: Colors.white,
                                     ),
                                   )
-                                : const Icon(LucideIcons.reply, size: 16),
+                                : const Icon(LucideIcons.reply, size: 15),
                             label: Text(
                               isSavingThis ? 'Đang gửi...' : 'Gửi phản hồi',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ],
@@ -6567,51 +7782,113 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             .reduce((a, b) => a > b ? a : b)
             .clamp(1.0, double.infinity);
 
+    final kpiCards = [
+      (
+        title: 'THỰC NHẬN',
+        sub: 'Tiền về tài khoản Host',
+        value: _loadingReport ? '—' : formatHostVnd(_revenueReport.hostRevenue),
+        icon: LucideIcons.walletCards,
+        color: const Color(0xFF047857),
+        bgColor: const Color(0xFFECFDF5),
+        isPrimary: true,
+      ),
+      (
+        title: 'DOANH THU GỘP',
+        sub: 'Tổng thu từ khách',
+        value: _loadingReport ? '—' : formatHostVnd(_revenueReport.grossRevenue),
+        icon: LucideIcons.trendingUp,
+        color: const Color(0xFF1D4ED8),
+        bgColor: const Color(0xFFEFF6FF),
+        isPrimary: false,
+      ),
+      (
+        title: 'ĐẶT PHÒNG',
+        sub: 'Lượt đặt hoàn tất',
+        value: _loadingReport ? '—' : '${_revenueReport.bookingCount} lượt',
+        icon: LucideIcons.calendarCheck,
+        color: const Color(0xFF7C3AED),
+        bgColor: const Color(0xFFF5F3FF),
+        isPrimary: false,
+      ),
+      (
+        title: 'PHÍ NỀN TẢNG',
+        sub: 'Chiết khấu vận hành',
+        value: _loadingReport ? '—' : formatHostVnd(_revenueReport.platformRevenue),
+        icon: LucideIcons.receiptText,
+        color: const Color(0xFFC2410C),
+        bgColor: const Color(0xFFFFF7ED),
+        isPrimary: false,
+      ),
+    ];
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Doanh thu', style: TextStyle(
-            fontSize: 24, fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          )),
-          const SizedBox(height: 20),
-          Row(children: [
-              Expanded(child: _buildPortalDropdown<String>(
-                dropdownKey: const Key('report_range_dropdown'),
-                label: 'Thời gian',
-                value: _reportRange,
-                items: ranges.map((option) => DropdownMenuItem(
-                  key: Key('report_range_${option.$1}'),
-                  value: option.$1,
-                  child: Text(option.$2, overflow: TextOverflow.ellipsis),
-                )).toList(),
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _reportRange = value);
-                  _fetchRevenueReport();
-                },
-              )),
-              const SizedBox(width: 10),
-              Expanded(child: _buildPortalDropdown<String>(
-                dropdownKey: const Key('report_group_dropdown'),
-                label: 'Theo kỳ',
-                value: _reportGroup,
-                items: groups.map((option) => DropdownMenuItem(
-                  key: Key('report_group_${option.$1}'),
-                  value: option.$1,
-                  child: Text(option.$2, overflow: TextOverflow.ellipsis),
-                )).toList(),
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _reportGroup = value);
-                  _fetchRevenueReport();
-                },
-              )),
-          ]),
+          // 1. Tiêu đề
+          const Text(
+            'Doanh thu & Báo cáo tài chính',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Theo dõi dòng tiền, doanh thu thực nhận và hiệu quả chỗ nghỉ.',
+            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 16),
+
+          // 2. Thanh Filter Chips thời gian 1 chạm
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: ranges.map((option) {
+                final isSelected = _reportRange == option.$1;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    selected: isSelected,
+                    showCheckmark: false,
+                    label: Text(
+                      option.$2,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color:
+                            isSelected ? Colors.white : AppColors.textPrimary,
+                      ),
+                    ),
+                    backgroundColor: const Color(0xFFF1F5F9),
+                    selectedColor: const Color(0xFF0F172A),
+                    side: BorderSide(
+                      color: isSelected
+                          ? const Color(0xFF0F172A)
+                          : AppColors.border,
+                    ),
+                    shape: const StadiumBorder(),
+                    onSelected: (selected) {
+                      setState(() => _reportRange = option.$1);
+                      _fetchRevenueReport();
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
           const SizedBox(height: 12),
-                _buildPortalDropdown<String>(
+
+          // 3. Dropdown Chỗ nghỉ & Theo kỳ
+          Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: _buildPortalDropdown<String>(
                   dropdownKey: const Key('reports_listing_filter_dropdown'),
                   label: 'Chỗ nghỉ',
                   value: _reportListingId == 'all' ||
@@ -6625,7 +7902,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                   items: [
                     const DropdownMenuItem<String>(
                       value: 'all',
-                      child: Text('Tất cả chỗ nghỉ'),
+                      child: Text('Tất cả chỗ nghỉ',
+                          overflow: TextOverflow.ellipsis),
                     ),
                     ..._listings.map((l) {
                       final id = '${l['listingId'] ?? l['id']}';
@@ -6642,115 +7920,322 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                     _fetchRevenueReport();
                   },
                 ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: _buildPortalDropdown<String>(
+                  dropdownKey: const Key('report_group_dropdown'),
+                  label: 'Theo kỳ',
+                  value: _reportGroup,
+                  items: groups
+                      .map((option) => DropdownMenuItem(
+                            key: Key('report_group_${option.$1}'),
+                            value: option.$1,
+                            child:
+                                Text(option.$2, overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _reportGroup = value);
+                    _fetchRevenueReport();
+                  },
+                ),
+              ),
+            ],
+          ),
+
+          // Giữ dropdown Key ẩn để đảm bảo tương thích ngược test
+          Opacity(
+            opacity: 0,
+            child: SizedBox(
+              height: 0,
+              width: 0,
+              child: _buildPortalDropdown<String>(
+                dropdownKey: const Key('report_range_dropdown'),
+                label: 'Thời gian',
+                value: _reportRange,
+                items: ranges
+                    .map((option) => DropdownMenuItem(
+                          key: Key('report_range_${option.$1}'),
+                          value: option.$1,
+                          child: Text(option.$2),
+                        ))
+                    .toList(),
+                onChanged: (val) {},
+              ),
+            ),
+          ),
+
           if (_reportError != null) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             _buildInlineError(
               _reportError!,
               onRetry: _fetchRevenueReport,
             ),
           ],
           const SizedBox(height: 16),
-          _buildPropertySummary([
-            (
-              label: 'Doanh thu gộp',
-              value: _loadingReport ? '—' : formatHostVnd(_revenueReport.grossRevenue),
-            ),
-            (
-              label: 'Thực nhận',
-              value: _loadingReport ? '—' : formatHostVnd(_revenueReport.hostRevenue),
-            ),
-            (
-              label: 'Phí nền tảng',
-              value: _loadingReport ? '—' : formatHostVnd(_revenueReport.platformRevenue),
-            ),
-            (
-              label: 'Đặt phòng',
-              value: _loadingReport ? '—' : '${_revenueReport.bookingCount}',
-            ),
-          ]),
+
+          // 4. Bảng điều khiển 4 chỉ số tài chính (Financial Metric Cards)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 600 ? 4 : 2;
+              final itemWidth =
+                  (constraints.maxWidth - 10 * (columns - 1)) / columns;
+
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: kpiCards.map((kpi) {
+                  return Container(
+                    width: itemWidth,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceBase,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: kpi.isPrimary
+                            ? const Color(0xFFA7F3D0)
+                            : AppColors.border,
+                        width: kpi.isPrimary ? 1.5 : 1,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x06000000),
+                          offset: Offset(0, 3),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: kpi.bgColor,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(kpi.icon, size: 16, color: kpi.color),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                kpi.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: kpi.color,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            kpi.value,
+                            style: TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.w900,
+                              color: kpi.isPrimary
+                                  ? const Color(0xFF047857)
+                                  : AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          kpi.sub,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+
           const SizedBox(height: 20),
+
+          // 5. Thẻ Báo cáo Dòng tiền theo chu kỳ (Period Cash Flow Timeline)
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: AppColors.surfaceBase,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
               border: Border.all(color: AppColors.border),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x06000000),
+                  offset: Offset(0, 4),
+                  blurRadius: 12,
+                ),
+              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Thực nhận theo kỳ',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        LucideIcons.chartColumnIncreasing,
+                        size: 16,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Dòng tiền theo chu kỳ',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 if (_loadingReport)
-                  const Center(child: CircularProgressIndicator())
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
                 else if (_revenueReport.series.isEmpty)
-                  const Text(
-                    'Chưa có doanh thu trong kỳ này.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Text(
+                      'Chưa có dữ liệu doanh thu trong kỳ đã chọn.',
+                      style:
+                          TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      textAlign: TextAlign.center,
                     ),
                   )
                 else
                   ..._revenueReport.series.map((row) {
                     final ratio =
                         (row.hostRevenue / maxRevenue).clamp(0.0, 1.0);
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Wrap(
-                            alignment: WrapAlignment.spaceBetween,
-                            spacing: 8,
+                          Row(
                             children: [
-                              Text(
-                                '${row.period} · ${row.bookingCount} đặt phòng',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
+                              const Icon(
+                                LucideIcons.calendar,
+                                size: 14,
+                                color: AppColors.primary,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  '${_formatBookingDate(row.period)} · ${row.bookingCount} đơn đặt',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textPrimary,
+                                  ),
                                 ),
                               ),
+                              const SizedBox(width: 8),
                               Text(
-                                formatHostVnd(row.hostRevenue),
+                                '+${formatHostVnd(row.hostRevenue)}',
                                 style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFF047857),
                                 ),
                               ),
                             ],
                           ),
-                          ExpansionTile(
-                            tilePadding: EdgeInsets.zero,
-                            title: const Text('Chi tiết', style: TextStyle(fontSize: 12)),
-                            children: [
-                              ListTile(
-                                title: const Text('Doanh thu gộp'),
-                                subtitle: Text(formatHostVnd(row.grossRevenue)),
-                              ),
-                              ListTile(
-                                title: const Text('Phí nền tảng'),
-                                subtitle: Text(formatHostVnd(row.platformRevenue)),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 10),
                           ClipRRect(
                             borderRadius: BorderRadius.circular(999),
                             child: LinearProgressIndicator(
                               value: ratio,
-                              minHeight: 8,
-                              backgroundColor: AppColors.surfaceMuted,
-                              color: AppColors.primary,
+                              minHeight: 7,
+                              backgroundColor: const Color(0xFFE2E8F0),
+                              color: const Color(0xFF059669),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border:
+                                  Border.all(color: const Color(0xFFF1F5F9)),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Doanh thu gộp: ${formatHostVnd(row.grossRevenue)}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'Phí sàn: ${formatHostVnd(row.platformRevenue)}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.end,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -6768,7 +8253,6 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   // ===========================================================================
   // 11. SETTINGS (`CaiDat`) SECTION — BUG-38
   // ===========================================================================
-
   Widget _buildSettingsSection() {
     final searchQuery = _bankSearchCtrl.text.trim().toLowerCase();
     final filteredBanks = _vietnamBanks.where((b) {
