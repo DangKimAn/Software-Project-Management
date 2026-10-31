@@ -1469,71 +1469,52 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 12,
-      runSpacing: 12,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _isEditMode
-                  ? 'Sửa chỗ nghỉ #$_activeListingId'
-                  : 'Thêm chỗ nghỉ mới',
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-              ),
+        Expanded(
+          child: Text(
+            _isEditMode
+                ? 'Sửa chỗ nghỉ #$_activeListingId'
+                : 'Thêm chỗ nghỉ mới',
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
             ),
-          ],
+          ),
         ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.embedded)
-              TextButton.icon(
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.textSecondary,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                ),
-                onPressed: () {
-                  setState(() {
-                    _useStepMode = !_useStepMode;
-                  });
-                },
-                icon: Icon(
-                  _useStepMode ? LucideIcons.layoutList : LucideIcons.listOrdered,
-                  size: 15,
-                ),
-                label: Text(
-                  _useStepMode ? 'Xem tất cả' : 'Theo từng bước',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-              ),
-            if (widget.onCancel != null) ...[
-              const SizedBox(width: 6),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(110, 42),
-                  foregroundColor: AppColors.textPrimary,
-                  side: BorderSide.none,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-                onPressed: widget.onCancel,
-                icon: const Icon(
-                  LucideIcons.arrowLeft,
-                  size: 16,
-                  color: AppColors.iconStrong,
-                ),
-                label: const Text('Quay lại'),
-              ),
-            ],
-          ],
+        TextButton.icon(
+          key: const Key('listing_header_back_btn'),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.textPrimary,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          ),
+          onPressed: () {
+            if (_effectiveStepMode && _currentStep > 0) {
+              _goToPrevStep();
+            } else if (widget.onCancel != null) {
+              widget.onCancel!();
+            } else if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/host');
+            }
+          },
+          icon: const Icon(
+            LucideIcons.arrowLeft,
+            size: 16,
+            color: AppColors.iconStrong,
+          ),
+          label: const Text(
+            'Quay lại',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
         ),
       ],
     );
@@ -3478,148 +3459,46 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
 
   Widget _buildStepperBar() {
     final score = _calculateCompletionScore();
-    final progress = (_currentStep + 1) / _steps.length.toDouble();
 
-    return Container(
-      margin: const EdgeInsets.only(top: 14, bottom: 20),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceBase,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Bước ${_currentStep + 1}/${_steps.length}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Độ hoàn thiện',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  '${_steps[_currentStep].title} • ${_steps[_currentStep].subtitle}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-              Text(
-                'Hoàn thiện: $score%',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 6,
-              backgroundColor: const Color(0xFFF1F5F9),
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
             ),
-          ),
-          const SizedBox(height: 14),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: List.generate(_steps.length, (idx) {
-                final isCurrent = idx == _currentStep;
-                final isPassed = idx < _currentStep;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      if (idx <= _currentStep || _validateCurrentStep()) {
-                        setState(() {
-                          _currentStep = idx;
-                          _errorMessage = null;
-                        });
-                      }
-                    },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isCurrent
-                            ? AppColors.primary
-                            : (isPassed
-                                ? const Color(0xFFF1F5F9)
-                                : Colors.transparent),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isCurrent
-                              ? AppColors.primary
-                              : (isPassed
-                                  ? const Color(0xFFCBD5E1)
-                                  : AppColors.border),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            isPassed ? LucideIcons.check : _steps[idx].icon,
-                            size: 13,
-                            color: isCurrent
-                                ? Colors.white
-                                : (isPassed
-                                    ? const Color(0xFF10B981)
-                                    : AppColors.textSecondary),
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            _steps[idx].title,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: isCurrent
-                                  ? FontWeight.w700
-                                  : (isPassed
-                                      ? FontWeight.w600
-                                      : FontWeight.w500),
-                              color: isCurrent
-                                  ? Colors.white
-                                  : (isPassed
-                                      ? AppColors.textPrimary
-                                      : AppColors.textSecondary),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }),
+            Text(
+              '$score%',
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
             ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: (score / 100.0).clamp(0.05, 1.0),
+            minHeight: 4,
+            backgroundColor: const Color(0xFFF1F5F9),
+            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1E293B)),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 18),
+        const Divider(height: 1, thickness: 1, color: AppColors.border),
+        const SizedBox(height: 14),
+      ],
     );
   }
 

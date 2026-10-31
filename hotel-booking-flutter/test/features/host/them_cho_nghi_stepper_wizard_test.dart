@@ -128,9 +128,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 1. Kiểm tra xuất hiện thanh Stepper Bar với Bước 1/7
-    expect(find.textContaining('Bước 1/7'), findsOneWidget);
-    expect(find.text('Cơ bản'), findsWidgets);
+    // 1. Kiểm tra xuất hiện thanh tiến trình tối giản với Độ hoàn thiện
+    expect(find.text('Độ hoàn thiện'), findsOneWidget);
+    expect(find.text('Thông tin cơ bản'), findsWidgets);
 
     // 2. Điền thông tin Bước 1 (Tên & Mô tả)
     await tester.enterText(
@@ -143,10 +143,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    Future<void> tapNext() async {
+      final btn = find.text('Tiếp tục');
+      await tester.ensureVisible(btn);
+      await tester.pumpAndSettle();
+      await tester.tap(btn);
+      await tester.pumpAndSettle();
+    }
+
     // 3. Nhấn Tiếp tục -> Chuyển sang Bước 2 (Vị trí)
-    await tester.tap(find.text('Tiếp tục'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Bước 2/7'), findsOneWidget);
+    await tapNext();
+    expect(find.text('Vị trí'), findsWidgets);
 
     // 4. Nhập địa chỉ Bước 2
     await tester.enterText(
@@ -155,15 +162,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 5. Cuộn ngang Stepper Bar và bấm vào tab 'Xem lại'
-    final reviewTab = find.text('Xem lại').first;
-    await tester.ensureVisible(reviewTab);
-    await tester.pumpAndSettle();
-    await tester.tap(reviewTab);
-    await tester.pumpAndSettle();
+    // 5. Nhấn Tiếp tục qua các bước cho đến bước cuối cùng (Xem lại & Xác nhận)
+    // Bước 2 -> 3 (Giá & Phòng)
+    await tapNext();
+    // Bước 3 -> 4 (Nội quy & Chính sách)
+    await tapNext();
+    // Bước 4 -> 5 (Tiện nghi & Dịch vụ)
+    await tapNext();
+    // Bước 5 -> 6 (Hình ảnh)
+    await tapNext();
+    // Bước 6 -> 7 (Kiểm tra & Xác nhận thông tin)
+    await tapNext();
 
     // Kiểm tra đã ở Bước 7: Xem lại thông tin
-    expect(find.textContaining('Bước 7/7'), findsOneWidget);
     expect(find.text('Kiểm tra & Xác nhận thông tin'), findsOneWidget);
     expect(find.text('The Palm Luxury Ocean Villa'), findsWidgets);
     expect(find.textContaining('120 Hạ Long'), findsOneWidget);
