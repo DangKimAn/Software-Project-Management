@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/di/providers.dart';
 import '../../../core/errors/app_failure.dart';
 import '../../../core/network/dio_client.dart';
+import '../../auth/presentation/view_models/auth_notifier.dart';
 
 enum MessageDeliveryStatus {
   sending,
@@ -814,5 +815,6 @@ final conversationsRepositoryProvider =
 
 final conversationsListProvider =
     FutureProvider.autoDispose<List<ConversationItem>>((ref) async {
+  ref.watch(authNotifierProvider.select((s) => s.valueOrNull?.id));
   return ref.watch(conversationsRepositoryProvider).getConversations();
 });
