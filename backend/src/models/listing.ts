@@ -75,6 +75,10 @@ export type ListingAvailabilityDayRecord = {
     date: string;
     isAvailable: boolean;
     isBlockedByHost: boolean;
+    isBlockedByAdmin?: boolean;
+    lockSource?: string | null;
+    syncRevision?: number;
+    lastSheetSyncedAt?: Date | string | null;
     priceOverride?: number | null;
     minNightsOverride?: number | null;
     notes?: string | null;

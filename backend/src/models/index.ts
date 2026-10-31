@@ -45,3 +45,8 @@ export { default as User } from "./user";
 export { default as UserDeviceToken } from "./user-device-token";
 export { default as UserProfile } from "./user-profile";
 export { default as Wishlist } from "./wishlist";
+export { default as HostSheetIntegration } from "./host-sheet-integration";
+export { default as HostSheetSyncJob } from "./host-sheet-sync-job";
+export { default as HostSheetCellSnapshot } from "./host-sheet-cell-snapshot";
+export { default as HostSheetSyncConflict } from "./host-sheet-sync-conflict";
+export { default as HostSheetChangeLog } from "./host-sheet-change-log";
