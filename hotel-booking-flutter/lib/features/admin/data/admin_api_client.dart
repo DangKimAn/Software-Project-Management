@@ -1075,7 +1075,8 @@ class AdminRepository {
   }
 
   Future<Map<String, dynamic>> getPlatformFeeStatus() async {
-    final response = await _dio.get<Map<String, dynamic>>('/api/admin/fees/current');
+    final response =
+        await _dio.get<Map<String, dynamic>>('/api/admin/fees/current');
     final data = response.data?['data'];
     if (data is Map<String, dynamic>) {
       return data;
@@ -1102,7 +1103,8 @@ class AdminRepository {
   }
 
   Future<Map<String, dynamic>> cancelScheduledPlatformFee() async {
-    final response = await _dio.post<Map<String, dynamic>>('/api/admin/fees/cancel');
+    final response =
+        await _dio.post<Map<String, dynamic>>('/api/admin/fees/cancel');
     final data = response.data?['data'];
     if (data is Map<String, dynamic>) {
       return data;

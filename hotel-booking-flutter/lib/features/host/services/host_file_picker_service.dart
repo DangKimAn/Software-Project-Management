@@ -185,7 +185,8 @@ class DefaultHostFilePickerService implements HostFilePickerService {
             for (final xf in xFiles) {
               final bytes = await xf.readAsBytes();
               if (bytes.isEmpty) continue;
-              final name = xf.name.trim().isNotEmpty ? xf.name.trim() : 'image.jpg';
+              final name =
+                  xf.name.trim().isNotEmpty ? xf.name.trim() : 'image.jpg';
               picked.add(
                 HostPickedFile(
                   name: name,
@@ -202,7 +203,8 @@ class DefaultHostFilePickerService implements HostFilePickerService {
             if (xf == null) return const <HostPickedFile>[];
             final bytes = await xf.readAsBytes();
             if (bytes.isEmpty) return const <HostPickedFile>[];
-            final name = xf.name.trim().isNotEmpty ? xf.name.trim() : 'image.jpg';
+            final name =
+                xf.name.trim().isNotEmpty ? xf.name.trim() : 'image.jpg';
             return [
               HostPickedFile(
                 name: name,
@@ -332,8 +334,8 @@ if (\$dlg.ShowDialog(\$topForm) -eq [System.Windows.Forms.DialogResult]::OK) {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(dialogContext)
-                      .pop(const <HostPickedFile>[]),
+                  onPressed: () =>
+                      Navigator.of(dialogContext).pop(const <HostPickedFile>[]),
                   child: const Text('Hủy'),
                 ),
                 ElevatedButton(

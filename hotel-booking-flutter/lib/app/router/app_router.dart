@@ -549,11 +549,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ── Host Portal (/chu-nha/* & /host/*) — Host-only ──
       GoRoute(
         path: '/chu-nha',
-        redirect: (context, state) => '/chu-nha/cho-nghi',
+        redirect: (context, state) => '/chu-nha/tong-quan',
       ),
       GoRoute(
         path: '/chu-nha/tong-quan',
-        redirect: (context, state) => '/chu-nha/cho-nghi',
+        pageBuilder: (context, state) => _buildProtectedSlidePage(
+          state: state,
+          accessLevel: RouteAccessLevel.hostOnly,
+          child: const HostPortalScreen(section: 'tong-quan'),
+        ),
       ),
       GoRoute(
         path: '/chu-nha/cho-nghi',
@@ -604,7 +608,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/host',
-        redirect: (context, state) => '/host/tin-nhan',
+        redirect: (context, state) => '/chu-nha/khach-luu-tru',
+      ),
+      GoRoute(
+        path: '/host/khach',
+        redirect: (context, state) => '/chu-nha/khach-luu-tru',
       ),
       GoRoute(
         path: '/host/tin-nhan',

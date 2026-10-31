@@ -46,7 +46,9 @@ class FakeCalendarAdapter implements HttpClientAdapter {
           ],
         }),
         200,
-        headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType]
+        },
       );
     }
     if (options.path.contains('/calendar')) {
@@ -76,10 +78,19 @@ class FakeCalendarAdapter implements HttpClientAdapter {
               'bookingStatus': 'confirmed',
               'guestName': 'Nguyễn Văn A',
             },
+            {
+              'date': '2026-10-31',
+              'basePrice': 1500000,
+              'effectivePrice': 2000000,
+              'isAvailable': true,
+              'isBlockedByHost': false,
+            },
           ],
         }),
         200,
-        headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType]
+        },
       );
     }
     if (options.path == '/api/host/bookings') {
@@ -98,13 +109,17 @@ class FakeCalendarAdapter implements HttpClientAdapter {
           ],
         }),
         200,
-        headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType]
+        },
       );
     }
     return ResponseBody.fromString(
       jsonEncode({'items': <dynamic>[]}),
       200,
-      headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType]
+      },
     );
   }
 
@@ -114,13 +129,19 @@ class FakeCalendarAdapter implements HttpClientAdapter {
 
 class FakeFilePickerService implements HostFilePickerService {
   @override
-  Future<HostPickedFile?> pickKycDocument({BuildContext? context, String title = ''}) async => null;
+  Future<HostPickedFile?> pickKycDocument(
+          {BuildContext? context, String title = ''}) async =>
+      null;
   @override
-  Future<List<HostPickedFile>> pickListingImages({BuildContext? context, int maxImages = 30}) async => [];
+  Future<List<HostPickedFile>> pickListingImages(
+          {BuildContext? context, int maxImages = 30}) async =>
+      [];
   @override
-  Future<HostPickedFile?> pickAvatarImage({BuildContext? context}) async => null;
+  Future<HostPickedFile?> pickAvatarImage({BuildContext? context}) async =>
+      null;
   @override
-  Future<HostPickedFile> readFromFilePath(String filePath) async => throw UnimplementedError();
+  Future<HostPickedFile> readFromFilePath(String filePath) async =>
+      throw UnimplementedError();
 }
 
 void main() {
@@ -136,7 +157,9 @@ void main() {
       fakePicker = FakeFilePickerService();
     });
 
-    testWidgets('Renders Airbnb Listing Overview, search, and switches to detailed calendar with Airbnb floating panel on tap', (tester) async {
+    testWidgets(
+        'Renders Airbnb Listing Overview, search, and switches to detailed calendar with Airbnb floating panel on tap',
+        (tester) async {
       await tester.binding.setSurfaceSize(const Size(375, 812));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -171,7 +194,10 @@ void main() {
 
       // 3. Yêu cầu 1: Kiểm tra có dòng to 'Lịch lưu trú & Giá theo ngày' và KHÔNG có dòng chữ nhỏ mô tả api/hướng dẫn dài
       expect(find.text('Lịch lưu trú & Giá theo ngày'), findsOneWidget);
-      expect(find.textContaining('Khóa/mở ngày trống và thiết lập giá riêng cho từng ngày qua /api/host/listings/:id/calendar'), findsNothing);
+      expect(
+          find.textContaining(
+              'Khóa/mở ngày trống và thiết lập giá riêng cho từng ngày qua /api/host/listings/:id/calendar'),
+          findsNothing);
 
       // 4. Yêu cầu 2: Lịch chi tiết 7 cột thu nhỏ, thấy ngay toàn bộ tháng
       expect(find.text('Tất cả chỗ nghỉ'), findsOneWidget);
@@ -208,7 +234,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('+10%'));
       await tester.pumpAndSettle();
-      final priceInputFinder = find.byKey(const Key('calendar_price_override_input'));
+      final priceInputFinder =
+          find.byKey(const Key('calendar_price_override_input'));
       expect(priceInputFinder, findsOneWidget);
       final priceInput = tester.widget<TextField>(priceInputFinder);
       expect(priceInput.controller?.text, '1650000'); // 1500000 * 1.1 = 1650000
@@ -222,6 +249,73 @@ void main() {
       expect(find.text('Villa Bãi Trước Hồ Bơi Riêng'), findsOneWidget);
 
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Quick select buttons toggle selection on tap and re-tap',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(430, 950));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(testRepo),
+            hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
+          ],
+          child: const MaterialApp(
+            home: HostPortalScreen(
+              initialSection: HostPortalSection.calendar,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Mở calendar chi tiết bằng cách click vào listing
+      await tester.ensureVisible(find.text('The Song 5 sao tại Vũng Tàu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('The Song 5 sao tại Vũng Tàu'));
+      await tester.pumpAndSettle();
+
+      // Ban đầu chưa chọn ngày nào: panel action chưa hiện
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsNothing);
+
+      // 1. Nhấn 'Cuối tuần (T7, CN)' -> Panel hiện ra (đã chọn)
+      final weekendBtn = find.text('Cuối tuần (T7, CN)');
+      await tester.ensureVisible(weekendBtn);
+      await tester.tap(weekendBtn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsOneWidget);
+
+      // Nhấn lại 'Cuối tuần (T7, CN)' -> Bỏ chọn quay lại ban đầu (panel biến mất)
+      await tester.tap(weekendBtn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsNothing);
+
+      // 2. Nhấn 'Ngày còn trống' -> Panel hiện ra
+      final availableBtn = find.text('Ngày còn trống');
+      await tester.ensureVisible(availableBtn);
+      await tester.tap(availableBtn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsOneWidget);
+
+      // Nhấn lại 'Ngày còn trống' -> Bỏ chọn quay lại ban đầu
+      await tester.tap(availableBtn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsNothing);
+
+      // 3. Nhấn 'Cả tháng' -> Panel hiện ra
+      final allMonthBtn = find.text('Cả tháng');
+      await tester.ensureVisible(allMonthBtn);
+      await tester.tap(allMonthBtn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsOneWidget);
+
+      // Nhấn lại 'Cả tháng' -> Bỏ chọn quay lại ban đầu
+      await tester.tap(allMonthBtn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsNothing);
     });
   });
 }

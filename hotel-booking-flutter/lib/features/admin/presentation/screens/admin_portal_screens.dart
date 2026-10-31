@@ -83,7 +83,8 @@ const List<AdminNavItem> kAdminNavItems = [
     route: '/admin/phi-nen-tang',
     icon: LucideIcons.badgePercent,
     title: 'Quản lý phí nền tảng',
-    subtitle: 'Áp dụng phí toàn sàn, thời gian thông báo 7 ngày và quản lý lịch sử.',
+    subtitle:
+        'Áp dụng phí toàn sàn, thời gian thông báo 7 ngày và quản lý lịch sử.',
   ),
 ];
 
@@ -1332,8 +1333,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              if (stats != null &&
-                                  stats.pendingStayRevenue > 0)
+                              if (stats != null && stats.pendingStayRevenue > 0)
                                 AdminStudioInnerCard(
                                   margin: const EdgeInsets.only(bottom: 10),
                                   padding: const EdgeInsets.symmetric(
@@ -1379,152 +1379,87 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                 )
                               else
                                 LayoutBuilder(
-                                builder: (context, chartConstraints) {
-                                  final textScale =
-                                      MediaQuery.textScalerOf(context).scale(1);
-                                  final compactChart =
-                                      chartConstraints.maxWidth < 460 ||
-                                          textScale > 1.25;
-                                  return Column(
-                                    children: series.take(14).map((point) {
-                                      final ratio = maxRevenue > 0
-                                          ? (point.grossRevenue / maxRevenue)
-                                              .clamp(0.05, 1.0)
-                                          : 0.05;
-                                      final amountLabel =
-                                          '${CurrencyFormatter.formatVnd(point.grossRevenue.round(), fallback: '0 ₫')} (${point.bookingCount} đơn)';
-                                      return AdminStudioInnerCard(
-                                        margin:
-                                            const EdgeInsets.only(bottom: 8),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 12,
-                                        ),
-                                        child: compactChart
-                                            ? Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Wrap(
-                                                    spacing: 8,
-                                                    runSpacing: 4,
-                                                    alignment: WrapAlignment
-                                                        .spaceBetween,
-                                                    crossAxisAlignment:
-                                                        WrapCrossAlignment
-                                                            .center,
-                                                    children: [
-                                                      Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
-                                                        children: [
-                                                          const Icon(
-                                                            LucideIcons
-                                                                .calendar,
-                                                            size: 13,
-                                                            color:
-                                                                AdminStudioTokens
-                                                                    .iconMuted,
-                                                          ),
-                                                          const SizedBox(
-                                                            width: 6,
-                                                          ),
-                                                          Text(
-                                                            point.period,
-                                                            style:
-                                                                AdminStudioTokens
-                                                                    .metaCaption,
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      Text(
-                                                        amountLabel,
-                                                        style: AdminStudioTokens
-                                                            .pillText
-                                                            .copyWith(
-                                                          fontSize: 12.5,
-                                                          color:
-                                                              AdminStudioTokens
-                                                                  .inkPrimary,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  const SizedBox(height: 8),
-                                                  ClipRRect(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                      AdminStudioTokens
-                                                          .pillRadius,
-                                                    ),
-                                                    child: Container(
-                                                      height: 7,
-                                                      color: AdminStudioTokens
-                                                          .softCircle,
-                                                      alignment:
-                                                          Alignment.centerLeft,
-                                                      child:
-                                                          FractionallySizedBox(
-                                                        widthFactor: ratio,
-                                                        child: Container(
-                                                          height: 7,
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            color:
-                                                                AdminStudioTokens
-                                                                    .obsidian,
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                              AdminStudioTokens
-                                                                  .pillRadius,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              )
-                                            : Row(
-                                                children: [
-                                                  SizedBox(
-                                                    width: 102,
-                                                    child: Row(
+                                  builder: (context, chartConstraints) {
+                                    final textScale =
+                                        MediaQuery.textScalerOf(context)
+                                            .scale(1);
+                                    final compactChart =
+                                        chartConstraints.maxWidth < 460 ||
+                                            textScale > 1.25;
+                                    return Column(
+                                      children: series.take(14).map((point) {
+                                        final ratio = maxRevenue > 0
+                                            ? (point.grossRevenue / maxRevenue)
+                                                .clamp(0.05, 1.0)
+                                            : 0.05;
+                                        final amountLabel =
+                                            '${CurrencyFormatter.formatVnd(point.grossRevenue.round(), fallback: '0 ₫')} (${point.bookingCount} đơn)';
+                                        return AdminStudioInnerCard(
+                                          margin:
+                                              const EdgeInsets.only(bottom: 8),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 12,
+                                          ),
+                                          child: compactChart
+                                              ? Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Wrap(
+                                                      spacing: 8,
+                                                      runSpacing: 4,
+                                                      alignment: WrapAlignment
+                                                          .spaceBetween,
+                                                      crossAxisAlignment:
+                                                          WrapCrossAlignment
+                                                              .center,
                                                       children: [
-                                                        const Icon(
-                                                          LucideIcons.calendar,
-                                                          size: 13,
-                                                          color:
+                                                        Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            const Icon(
+                                                              LucideIcons
+                                                                  .calendar,
+                                                              size: 13,
+                                                              color:
+                                                                  AdminStudioTokens
+                                                                      .iconMuted,
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 6,
+                                                            ),
+                                                            Text(
+                                                              point.period,
+                                                              style: AdminStudioTokens
+                                                                  .metaCaption,
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        Text(
+                                                          amountLabel,
+                                                          style:
                                                               AdminStudioTokens
-                                                                  .iconMuted,
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 6,
-                                                        ),
-                                                        Expanded(
-                                                          child: Text(
-                                                            point.period,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                            style:
+                                                                  .pillText
+                                                                  .copyWith(
+                                                            fontSize: 12.5,
+                                                            color:
                                                                 AdminStudioTokens
-                                                                    .metaCaption,
+                                                                    .inkPrimary,
                                                           ),
                                                         ),
                                                       ],
                                                     ),
-                                                  ),
-                                                  Expanded(
-                                                    child: ClipRRect(
+                                                    const SizedBox(height: 8),
+                                                    ClipRRect(
                                                       borderRadius:
                                                           BorderRadius.circular(
                                                         AdminStudioTokens
                                                             .pillRadius,
                                                       ),
                                                       child: Container(
-                                                        height: 8,
+                                                        height: 7,
                                                         color: AdminStudioTokens
                                                             .softCircle,
                                                         alignment: Alignment
@@ -1533,7 +1468,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                                             FractionallySizedBox(
                                                           widthFactor: ratio,
                                                           child: Container(
-                                                            height: 8,
+                                                            height: 7,
                                                             decoration:
                                                                 BoxDecoration(
                                                               color:
@@ -1550,30 +1485,99 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                                         ),
                                                       ),
                                                     ),
-                                                  ),
-                                                  const SizedBox(width: 12),
-                                                  SizedBox(
-                                                    width: 156,
-                                                    child: Text(
-                                                      amountLabel,
-                                                      textAlign:
-                                                          TextAlign.right,
-                                                      style: AdminStudioTokens
-                                                          .pillText
-                                                          .copyWith(
-                                                        fontSize: 12,
-                                                        color: AdminStudioTokens
-                                                            .inkPrimary,
+                                                  ],
+                                                )
+                                              : Row(
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 102,
+                                                      child: Row(
+                                                        children: [
+                                                          const Icon(
+                                                            LucideIcons
+                                                                .calendar,
+                                                            size: 13,
+                                                            color:
+                                                                AdminStudioTokens
+                                                                    .iconMuted,
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 6,
+                                                          ),
+                                                          Expanded(
+                                                            child: Text(
+                                                              point.period,
+                                                              overflow:
+                                                                  TextOverflow
+                                                                      .ellipsis,
+                                                              style: AdminStudioTokens
+                                                                  .metaCaption,
+                                                            ),
+                                                          ),
+                                                        ],
                                                       ),
                                                     ),
-                                                  ),
-                                                ],
-                                              ),
-                                      );
-                                    }).toList(),
-                                  );
-                                },
-                              ),
+                                                    Expanded(
+                                                      child: ClipRRect(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(
+                                                          AdminStudioTokens
+                                                              .pillRadius,
+                                                        ),
+                                                        child: Container(
+                                                          height: 8,
+                                                          color:
+                                                              AdminStudioTokens
+                                                                  .softCircle,
+                                                          alignment: Alignment
+                                                              .centerLeft,
+                                                          child:
+                                                              FractionallySizedBox(
+                                                            widthFactor: ratio,
+                                                            child: Container(
+                                                              height: 8,
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color:
+                                                                    AdminStudioTokens
+                                                                        .obsidian,
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                  AdminStudioTokens
+                                                                      .pillRadius,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 12),
+                                                    SizedBox(
+                                                      width: 156,
+                                                      child: Text(
+                                                        amountLabel,
+                                                        textAlign:
+                                                            TextAlign.right,
+                                                        style: AdminStudioTokens
+                                                            .pillText
+                                                            .copyWith(
+                                                          fontSize: 12,
+                                                          color:
+                                                              AdminStudioTokens
+                                                                  .inkPrimary,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                        );
+                                      }).toList(),
+                                    );
+                                  },
+                                ),
                             ],
                           ),
               ),
@@ -6139,8 +6143,8 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
                                               style: const TextStyle(
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.w600,
-                                                color:
-                                                    AdminStudioTokens.inkPrimary,
+                                                color: AdminStudioTokens
+                                                    .inkPrimary,
                                               ),
                                             ),
                                           ),

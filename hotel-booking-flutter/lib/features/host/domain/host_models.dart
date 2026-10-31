@@ -2048,10 +2048,14 @@ HostErrorInfo classifyHostError(Object error, [String? fallback]) {
       );
     }
     if (statusCode == 409) {
+      final msg =
+          (serverMsg != null && serverMsg.trim().toLowerCase() != 'conflict')
+              ? serverMsg
+              : 'Dữ liệu hoặc mã số bị trùng lặp / xung đột trạng thái (409).';
       return HostErrorInfo(
         type: HostErrorType.conflict,
         statusCode: 409,
-        message: serverMsg ?? 'Dữ liệu bị xung đột trạng thái (409).',
+        message: msg,
       );
     }
     if (statusCode == 400 || statusCode == 422) {
