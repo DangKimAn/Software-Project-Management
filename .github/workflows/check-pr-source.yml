@@ -15,8 +15,10 @@ jobs:
       # Bước kiểm tra nguồn PR
       - name: Check source branch
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ "${{ github.head_ref }}" != "develop" ]; then
+          if [ "$HEAD_REF" != "develop" ]; then
             echo "LỖI: Bạn chỉ được phép gộp code vào main từ nhánh develop!"
             exit 1
           fi

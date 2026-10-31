@@ -20,7 +20,7 @@ jobs:
         image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: root_password
-          MYSQL_DATABASE: hotel_booking_test  # Tạo sẵn database tên này
+          MYSQL_DATABASE: hotel_booking_test
           MYSQL_USER: test_user
           MYSQL_PASSWORD: test_password
         ports:
@@ -45,19 +45,23 @@ jobs:
       # Bước kiểm tra nguồn PR (chỉ cho phép gộp vào main từ develop)
       - name: Check source branch
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ "${{ github.head_ref }}" != "develop" ]; then
+          if [ "$HEAD_REF" != "develop" ]; then
             echo "LỖI: Bạn chỉ được phép gộp code vào main từ nhánh develop!"
             exit 1
           fi
 
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version: '20.x'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
@@ -76,7 +80,6 @@ jobs:
           TOKEN_HASH_SECRET: test_token_hash_secret_at_least_32_chars
           OTP_HASH_SECRET: test_otp_hash_secret_at_least_32_chars
           COOKIE_SECRET: test_cookie_secret_at_least_32_chars
-          # Cấp biến môi trường để code Node.js kết nối đúng vào MySQL ảo
           DB_HOST: 127.0.0.1
           DB_PORT: 3306
           DB_USERNAME: test_user
@@ -91,9 +94,7 @@ jobs:
           ALLOW_DATABASE_ROOT_USER: "true"
         run: |
           npm run db:ensure-runtime-schema
-          npm run db:migrate || true
-          # Nếu bạn có dữ liệu mẫu giả lập (seeders) thì chạy thêm lệnh dưới:
-          # npx sequelize-cli db:seed:all 
+          npm run db:migrate
 
       # 3. CHẠY KIỂM THỬ
       - name: Chạy Unit & Integration Tests

@@ -33,8 +33,10 @@ jobs:
       # Bước kiểm tra nguồn PR
       - name: Check source branch
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ "${{ github.head_ref }}" != "develop" ]; then
+          if [ "$HEAD_REF" != "develop" ]; then
             echo "LỖI: Bạn chỉ được phép gộp code vào main từ nhánh develop!"
             exit 1
           fi
@@ -44,10 +46,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js 22
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
 
@@ -96,10 +98,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js 22
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
 
@@ -131,7 +133,7 @@ jobs:
           ALLOW_DATABASE_ROOT_USER: "true"
         run: |
           npm run db:ensure-runtime-schema
-          npm run db:migrate || true
+          npm run db:migrate
 
       - name: Compile TypeScript
         run: npm run build
