@@ -197,12 +197,14 @@ class AdminStudioKpiCard extends StatelessWidget {
     required this.label,
     required this.value,
     required this.icon,
+    this.subtitle,
     this.onTap,
   });
 
   final String label;
   final String value;
   final IconData icon;
+  final String? subtitle;
   final VoidCallback? onTap;
 
   @override
@@ -270,6 +272,17 @@ class AdminStudioKpiCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: AdminStudioTokens.kpiLabel,
                 ),
+                if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AdminStudioTokens.metaCaption.copyWith(
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

@@ -85,6 +85,29 @@ bool _isActorAdmin(User? actor) {
   return actor.roles.any((r) => r.toLowerCase() == 'admin');
 }
 
+String _resolveAdminUserAvatarUrl(
+  Map<String, dynamic> rawUser, {
+  User? actor,
+  String? userId,
+}) {
+  final resolvedId =
+      (userId ?? '${rawUser['userId'] ?? rawUser['id'] ?? ''}').trim();
+  final actorAvatar = actor?.avatarUrl?.trim() ?? '';
+  if (actor != null &&
+      resolvedId.isNotEmpty &&
+      actor.id.trim() == resolvedId &&
+      actorAvatar.isNotEmpty) {
+    return actorAvatar;
+  }
+  final candidate =
+      '${rawUser['avatarUrl'] ?? rawUser['avatar'] ?? rawUser['avatar_url'] ?? ''}'
+          .trim();
+  if (candidate == 'null' || candidate == '-') {
+    return '';
+  }
+  return candidate;
+}
+
 double _responsivePagePadding(BuildContext context) {
   final width = MediaQuery.sizeOf(context).width;
   if (width < 380) return 12;
@@ -979,45 +1002,74 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
   @override
   Widget build(BuildContext context) {
     final stats = _stats;
+    final revenueSubtitle = _loading || stats == null
+        ? null
+        : stats.pendingStayRevenue > 0
+            ? 'Tạm giữ chờ ở: ${CurrencyFormatter.formatVnd(stats.pendingStayRevenue.round(), fallback: '0 ₫')} (${stats.pendingStayBookingCount} đơn)'
+            : 'Đơn đã hoàn tất lưu trú';
+    final bookingsSubtitle = _loading || stats == null
+        ? null
+        : (stats.completedBookings > 0 || stats.paidBookings > 0)
+            ? '${stats.completedBookings} hoàn tất · ${stats.paidBookings} chờ lưu trú'
+            : stats.bookings > stats.successfulBookings
+                ? 'Đã thanh toán / ${stats.bookings} đơn tạo'
+                : 'Đơn đã thanh toán';
+    final hostsSubtitle = _loading || stats == null
+        ? null
+        : stats.verifiedHosts > 0
+            ? '${stats.verifiedHosts} đã xác minh'
+            : 'Đang hoạt động';
+    final activeListingsSubtitle = _loading || stats == null
+        ? null
+        : stats.listingsCreated > 0
+            ? '+${stats.listingsCreated} mới trong kỳ'
+            : 'Đang mở đặt phòng';
+
     final cards = [
       (
         label: 'Người dùng',
         value: _loading ? '...' : '${stats?.users ?? 0}',
+        subtitle: null as String?,
         icon: LucideIcons.users,
         route: '/admin/nguoi-dung',
       ),
       (
         label: 'Chờ duyệt',
         value: _loading ? '...' : '${stats?.pendingListings ?? 0}',
+        subtitle: null as String?,
         icon: LucideIcons.clock,
         route: '/admin/kiem-duyet',
       ),
       (
-        label: 'Doanh thu',
+        label: 'Doanh thu thực nhận',
         value: _loading
             ? '...'
             : CurrencyFormatter.formatVnd(
                 (stats?.grossRevenue ?? 0).round(),
                 fallback: '0 ₫',
               ),
+        subtitle: revenueSubtitle,
         icon: AppSemanticIcons.revenue,
         route: null,
       ),
       (
-        label: 'Đơn đặt',
-        value: _loading ? '...' : '${stats?.bookings ?? 0}',
+        label: 'Đơn đặt thành công',
+        value: _loading ? '...' : '${stats?.successfulBookings ?? 0}',
+        subtitle: bookingsSubtitle,
         icon: AppSemanticIcons.bookings,
         route: null,
       ),
       (
         label: 'Chủ nhà',
         value: _loading ? '...' : '${stats?.hosts ?? 0}',
+        subtitle: hostsSubtitle,
         icon: AppSemanticIcons.becomeHost,
         route: '/admin/ho-so-host',
       ),
       (
         label: 'Phòng hoạt động',
         value: _loading ? '...' : '${stats?.activeListings ?? 0}',
+        subtitle: activeListingsSubtitle,
         icon: AppSemanticIcons.home,
         route: '/admin/kiem-duyet',
       ),
@@ -1180,6 +1232,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                             child: AdminStudioKpiCard(
                               label: card.label,
                               value: card.value,
+                              subtitle: card.subtitle,
                               icon: card.icon,
                               onTap: card.route != null &&
                                       GoRouter.maybeOf(context) != null
@@ -1265,19 +1318,56 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                               style: AdminStudioTokens.cardSubtitle,
                             ),
                           )
-                        : series.isEmpty
-                            ? const AdminStudioInnerCard(
-                                padding: EdgeInsets.symmetric(
-                                  vertical: 26,
-                                  horizontal: 16,
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (stats != null &&
+                                  stats.pendingStayRevenue > 0)
+                                AdminStudioInnerCard(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 11,
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 2),
+                                        child: Icon(
+                                          LucideIcons.clock,
+                                          size: 15,
+                                          color: AdminStudioTokens.iconInk,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 9),
+                                      Expanded(
+                                        child: Text(
+                                          'Tiền chờ lưu trú (tạm giữ): ${CurrencyFormatter.formatVnd(stats.pendingStayRevenue.round(), fallback: '0 ₫')} · ${stats.pendingStayBookingCount} đơn chưa check-out (Chủ nhà dự kiến: ${CurrencyFormatter.formatVnd(stats.pendingStayHostRevenue.round(), fallback: '0 ₫')})',
+                                          style: AdminStudioTokens.metaCaption
+                                              .copyWith(
+                                            color: AdminStudioTokens.inkPrimary,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                child: Text(
-                                  'Chưa có dữ liệu chuỗi doanh thu trong khoảng thời gian đã chọn.',
-                                  textAlign: TextAlign.center,
-                                  style: AdminStudioTokens.cardSubtitle,
-                                ),
-                              )
-                            : LayoutBuilder(
+                              if (series.isEmpty)
+                                const AdminStudioInnerCard(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: 26,
+                                    horizontal: 16,
+                                  ),
+                                  child: Text(
+                                    'Chưa có dữ liệu chuỗi doanh thu trong khoảng thời gian đã chọn.',
+                                    textAlign: TextAlign.center,
+                                    style: AdminStudioTokens.cardSubtitle,
+                                  ),
+                                )
+                              else
+                                LayoutBuilder(
                                 builder: (context, chartConstraints) {
                                   final textScale =
                                       MediaQuery.textScalerOf(context).scale(1);
@@ -1473,6 +1563,8 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                   );
                                 },
                               ),
+                            ],
+                          ),
               ),
             ],
           ),
@@ -1550,7 +1642,7 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
               );
       if (!mounted) return;
       setState(() {
-        _users = result.items;
+        _users = AdminModerationPolicy.sortAdminUsers(result.items);
         _page = result.page;
         _total = result.total;
         _totalPages = result.totalPages;
@@ -2000,13 +2092,19 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                             ),
                           )
                         : Column(
-                            children: _users.map((u) {
+                            children: AdminModerationPolicy.sortAdminUsers(
+                              _users,
+                            ).map((u) {
                               final userId = '${u['userId'] ?? u['id'] ?? ''}';
                               final name =
-                                  '${u['fullName'] ?? u['name'] ?? u['username'] ?? 'User #$userId'}';
-                              final avatarUrl =
-                                  '${u['avatarUrl'] ?? u['avatar'] ?? ''}'
-                                      .trim();
+                                  AdminModerationPolicy.resolveUserDisplayName(
+                                u,
+                              );
+                              final avatarUrl = _resolveAdminUserAvatarUrl(
+                                u,
+                                actor: actor,
+                                userId: userId,
+                              );
                               final rawEmail = '${u['email'] ?? ''}'.trim();
                               final email =
                                   rawEmail.isNotEmpty && rawEmail != '-'
@@ -2022,7 +2120,7 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                               ].join(' · ');
 
                               final role =
-                                  '${u['role'] ?? (u['roles'] is List && (u['roles'] as List).isNotEmpty ? (u['roles'] as List).first : 'guest')}';
+                                  AdminModerationPolicy.resolvePrimaryRole(u);
                               final status =
                                   '${u['status'] ?? 'active'}'.toLowerCase();
                               final locked = [
@@ -4013,7 +4111,8 @@ class _AdminHostApplicationsTabState
                             ),
                           ],
                           if (currentDetail['rejectReason'] != null &&
-                              '${currentDetail['rejectReason']}'.isNotEmpty) ...[
+                              '${currentDetail['rejectReason']}'
+                                  .isNotEmpty) ...[
                             const SizedBox(height: 10),
                             Container(
                               width: double.infinity,
@@ -4235,10 +4334,9 @@ class _AdminHostApplicationsTabState
                               children: [
                                 ElevatedButton(
                                   style: _kPillElevatedStyle,
-                                  onPressed:
-                                      !canManageHostApps || actionLoading
-                                          ? null
-                                          : handleApprove,
+                                  onPressed: !canManageHostApps || actionLoading
+                                      ? null
+                                      : handleApprove,
                                   child: Text(
                                     actionLoading
                                         ? 'Đang xử lý...'
@@ -4250,10 +4348,9 @@ class _AdminHostApplicationsTabState
                                     'admin_host_app_reject_btn',
                                   ),
                                   style: _kPillOutlinedStyle,
-                                  onPressed:
-                                      !canManageHostApps || actionLoading
-                                          ? null
-                                          : handleReject,
+                                  onPressed: !canManageHostApps || actionLoading
+                                      ? null
+                                      : handleReject,
                                   child: const Text('Từ chối'),
                                 ),
                               ],
@@ -4442,9 +4539,12 @@ class _AdminHostApplicationsTabState
                             : const <String, dynamic>{};
                         final name =
                             '${user['name'] ?? app['contactName'] ?? 'Host #$appId'}';
-                        final avatarUrl =
-                            '${user['avatarUrl'] ?? user['avatar'] ?? ''}'
-                                .trim();
+                        final avatarUrl = _resolveAdminUserAvatarUrl(
+                          user,
+                          actor: actor,
+                          userId:
+                              '${app['userId'] ?? user['id'] ?? user['userId'] ?? ''}',
+                        );
                         final rawEmail =
                             '${user['email'] ?? app['contactEmail'] ?? ''}'
                                 .trim();
@@ -4464,81 +4564,108 @@ class _AdminHostApplicationsTabState
                           onTap: _loadingDetail
                               ? null
                               : () => _openApplicationDetail(appId),
-                          child: Wrap(
-                            spacing: 12,
-                            runSpacing: 10,
-                            alignment: WrapAlignment.spaceBetween,
-                            crossAxisAlignment: WrapCrossAlignment.center,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  AdminStudioAvatar(
-                                    name: name,
-                                    imageUrl: avatarUrl,
-                                    size: 40,
-                                  ),
-                                  const SizedBox(width: 11),
-                                  Flexible(
-                                    child: ConstrainedBox(
-                                      constraints:
-                                          const BoxConstraints(maxWidth: 260),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            name,
-                                            style: AdminStudioTokens.cardTitle,
-                                          ),
-                                          if (contactLine.isNotEmpty)
-                                            Text(
-                                              contactLine,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: AdminStudioTokens
-                                                  .cardSubtitle,
-                                            ),
-                                          const SizedBox(height: 4),
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(
-                                                LucideIcons.fileText,
-                                                size: 12.5,
-                                                color:
-                                                    AdminStudioTokens.iconMuted,
-                                              ),
-                                              const SizedBox(width: 5),
-                                              Flexible(
-                                                child: Text(
-                                                  '${status == 'approved' ? 'Đã duyệt' : status == 'rejected' ? 'Đã từ chối' : 'Chờ duyệt'} · Giấy tờ: ${app['documentCount'] ?? 0}',
-                                                  style: AdminStudioTokens
-                                                      .metaCaption
-                                                      .copyWith(
-                                                    color: AdminStudioTokens
-                                                        .inkSecondary,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              AdminStudioAvatar(
+                                name: name,
+                                imageUrl: avatarUrl,
+                                size: 40,
                               ),
-                              OutlinedButton(
-                                style: _kCompactPillOutlinedStyle,
-                                onPressed: _loadingDetail
-                                    ? null
-                                    : () => _openApplicationDetail(appId),
-                                child: Text(
-                                  _loadingDetail && selected
-                                      ? 'Đang tải...'
-                                      : 'Chi tiết',
+                              const SizedBox(width: 11),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: AdminStudioTokens.cardTitle,
+                                    ),
+                                    if (contactLine.isNotEmpty)
+                                      Text(
+                                        contactLine,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: AdminStudioTokens.cardSubtitle,
+                                      ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          LucideIcons.fileText,
+                                          size: 12.5,
+                                          color: AdminStudioTokens.iconMuted,
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Flexible(
+                                          child: Text(
+                                            '${status == 'approved' ? 'Đã duyệt' : status == 'rejected' ? 'Đã từ chối' : 'Chờ duyệt'} · Giấy tờ: ${app['documentCount'] ?? 0}',
+                                            style: AdminStudioTokens.metaCaption
+                                                .copyWith(
+                                              color: AdminStudioTokens
+                                                  .inkSecondary,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Semantics(
+                                          button: true,
+                                          enabled: !_loadingDetail,
+                                          label: _loadingDetail && selected
+                                              ? 'Đang tải...'
+                                              : 'Chi tiết',
+                                          child: Tooltip(
+                                            message: _loadingDetail && selected
+                                                ? 'Đang tải...'
+                                                : 'Chi tiết',
+                                            child: InkWell(
+                                              key: ValueKey(
+                                                'admin-host-app-detail-$appId',
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                AdminStudioTokens.pillRadius,
+                                              ),
+                                              onTap: _loadingDetail
+                                                  ? null
+                                                  : () =>
+                                                      _openApplicationDetail(
+                                                        appId,
+                                                      ),
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.all(4),
+                                                child:
+                                                    _loadingDetail && selected
+                                                        ? const SizedBox(
+                                                            width: 14,
+                                                            height: 14,
+                                                            child:
+                                                                CircularProgressIndicator(
+                                                              strokeWidth: 1.6,
+                                                              color:
+                                                                  AdminStudioTokens
+                                                                      .iconInk,
+                                                            ),
+                                                          )
+                                                        : Icon(
+                                                            LucideIcons.info,
+                                                            size: 15,
+                                                            color: _loadingDetail
+                                                                ? AdminStudioTokens
+                                                                    .inkSubtle
+                                                                : AdminStudioTokens
+                                                                    .iconInk,
+                                                          ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -4666,8 +4793,16 @@ class _AdminHostApplicationsTabState
               children: _verifications.map((v) {
                 final verificationId =
                     '${v['verificationId'] ?? v['id'] ?? ''}';
+                final vUserMap = v['user'] is Map
+                    ? Map<String, dynamic>.from(v['user'] as Map)
+                    : v;
                 final hostName =
                     '${v['fullName'] ?? (v['user'] is Map ? v['user']['fullName'] : null) ?? 'Host #${v['userId'] ?? verificationId}'}';
+                final verificationAvatarUrl = _resolveAdminUserAvatarUrl(
+                  vUserMap,
+                  actor: actor,
+                  userId: '${v['hostId'] ?? v['userId'] ?? ''}',
+                );
                 final vType =
                     '${v['verificationType'] ?? v['documentType'] ?? 'identity'}';
                 final vStatus = '${v['status'] ?? 'pending'}';
@@ -4691,7 +4826,11 @@ class _AdminHostApplicationsTabState
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          AdminStudioAvatar(name: hostName, size: 38),
+                          AdminStudioAvatar(
+                            name: hostName,
+                            imageUrl: verificationAvatarUrl,
+                            size: 38,
+                          ),
                           const SizedBox(width: 10),
                           Flexible(
                             child: Column(
@@ -4918,12 +5057,11 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                 role: _roleFilter,
               );
       if (!mounted) return;
-      final list = paginated.items;
+      final list = AdminModerationPolicy.sortAdminUsers(paginated.items);
       final drafts = <String, String>{};
       for (final u in list) {
         final id = '${u['userId'] ?? u['id'] ?? ''}';
-        final role =
-            '${u['role'] ?? (u['roles'] is List && (u['roles'] as List).isNotEmpty ? (u['roles'] as List).first : 'guest')}';
+        final role = AdminModerationPolicy.resolvePrimaryRole(u);
         drafts[id] = _supportedRoles.contains(role) ? role : 'guest';
       }
       setState(() {
@@ -5146,16 +5284,22 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                             ),
                           )
                         : Column(
-                            children: _users.map((u) {
+                            children: AdminModerationPolicy.sortAdminUsers(
+                              _users,
+                            ).map((u) {
                               final userId = '${u['userId'] ?? u['id'] ?? ''}';
                               final name =
-                                  '${u['fullName'] ?? u['name'] ?? u['username'] ?? 'User #$userId'}';
-                              final avatarUrl =
-                                  '${u['avatarUrl'] ?? u['avatar'] ?? ''}'
-                                      .trim();
+                                  AdminModerationPolicy.resolveUserDisplayName(
+                                u,
+                              );
+                              final avatarUrl = _resolveAdminUserAvatarUrl(
+                                u,
+                                actor: actor,
+                                userId: userId,
+                              );
                               final email = '${u['email'] ?? '-'}';
                               final rawRole =
-                                  '${u['role'] ?? (u['roles'] is List && (u['roles'] as List).isNotEmpty ? (u['roles'] as List).first : 'guest')}';
+                                  AdminModerationPolicy.resolvePrimaryRole(u);
                               final currentRole =
                                   _supportedRoles.contains(rawRole)
                                       ? rawRole
