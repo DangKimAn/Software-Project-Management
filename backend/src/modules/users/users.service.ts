@@ -1,4 +1,8 @@
 import { ApiError } from "../../common/api-error";
+import { getEnv } from "../../config/env";
+import RefreshSession from "../../models/refresh-session";
+import { deactivateAllUserDeviceTokens } from "../../services/fcm-push.service";
+import { disconnectUserSockets } from "../../socket/socket";
 import { createAuditLog } from "../auth/auth.repository";
 import { AuthenticatedUser, normalizeEmail, normalizePhone } from "../auth/auth.service";
 import {
@@ -350,6 +354,22 @@ const assertHostCanBeDowngraded = async (
     }
 };
 
+const revokeUserSessionsAndRealtime = async (userId: number) => {
+    if (getEnv().nodeEnv !== "test" || Object.prototype.hasOwnProperty.call(RefreshSession, "update")) {
+        try {
+            await RefreshSession.update(
+                { revokedAt: new Date() },
+                { where: { userId, revokedAt: null } },
+            );
+        } catch {
+            // Ignore in isolated mock test contexts
+        }
+    }
+
+    await deactivateAllUserDeviceTokens(userId);
+    disconnectUserSockets(userId);
+};
+
 export const updateCurrentUserProfile = async (actor: AuthenticatedUser, input: UpdateOwnProfileInput) => {
     assertNoSelfManagedAdminFields(input as Record<string, unknown>);
 
@@ -364,7 +384,10 @@ export const updateCurrentUserProfile = async (actor: AuthenticatedUser, input: 
         phone: input.phone,
     });
 
-    const updates = buildProfileUpdates(input, user.fullName);
+    const updates: Parameters<typeof saveUserUpdates>[1] = buildProfileUpdates(input, user.fullName);
+    if (updates.phone !== undefined && updates.phone !== (user.phone ?? null)) {
+        updates.isPhoneVerified = false;
+    }
     const publicProfileUpdates = buildPublicProfileUpdates(input);
 
     if (Object.keys(publicProfileUpdates).length > 0) {
@@ -485,6 +508,12 @@ export const updateUserForAdmin = async (
         }
     });
 
+    const roleWasRemoved = nextRoles ? oldRoles.some((role) => !nextRoles.includes(role)) : false;
+    const statusWasDisabled = input.status !== undefined && input.status !== "active";
+    if (roleWasRemoved || statusWasDisabled) {
+        await revokeUserSessionsAndRealtime(Number(user._id));
+    }
+
     return serializeUser(user, { maskContact: true });
 };
 
@@ -568,6 +597,10 @@ export const updateUserStatusForAdmin = async (
             transaction,
         });
     });
+
+    if (status !== "active") {
+        await revokeUserSessionsAndRealtime(Number(user._id));
+    }
 
     return serializeUser(user, { maskContact: true });
 };

@@ -82,10 +82,7 @@ export const registerMyDeviceToken: RequestHandler = asyncHandler(async (req, re
 export const unregisterMyDeviceToken: RequestHandler = asyncHandler(async (req, res) => {
     const userId = Number(req.user?.id);
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const rawToken =
-        body.token ??
-        body.fcmToken ??
-        (typeof req.query.token === "string" ? req.query.token : undefined);
+    const rawToken = body.token ?? body.fcmToken;
 
     const result = await unregisterUserDeviceToken({
         userId,

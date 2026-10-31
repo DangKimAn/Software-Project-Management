@@ -1,7 +1,9 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { QueryTypes, type Transaction } from "sequelize";
 
 import { ApiError } from "../../common/api-error";
 import sequelize from "../../config/database";
+import { getEnv } from "../../config/env";
 import HostApplication, {
     HostApplicationDocument,
     HostApplicationStatus,
@@ -16,6 +18,7 @@ import HostIdentityDocument, {
 } from "../../models/host-identity-document";
 import User from "../../models/user";
 import {
+    assertValidPrivateIdentityFile,
     createPrivateSignedGetUrl,
     deletePrivateIdentityDocumentsQuietly,
     ensurePrivateR2StorageConfigured,
@@ -434,6 +437,21 @@ export const submitHostApplication = async (
     const documentType = normalizeDocumentType(input);
     const uploadPlan = buildDocumentUploadPlan(profileType, documentType, input.files);
 
+    for (const item of uploadPlan) {
+        assertValidPrivateIdentityFile(item.file);
+    }
+
+    const preCheckLatestApplication = await getLatestHostApplication(userId);
+    if (preCheckLatestApplication?.status === "pending") {
+        throw new ApiError(409, "Pending host application already exists");
+    }
+    if (
+        user.roles.includes("host") ||
+        (preCheckLatestApplication?.status === "approved" && user.roles.includes("host"))
+    ) {
+        throw new ApiError(409, "Host application is already approved");
+    }
+
     // Tier 2: Server-side AI Content Verification for Identity Documents
     const identityFrontItem = uploadPlan.find(
         (item) => item.side === "front" || item.documentType === "passport",
@@ -841,10 +859,94 @@ const getApplicationForAdminOrThrow = async (applicationId: number, transaction?
     return application;
 };
 
+const HOST_DOC_STREAM_TOKEN_TTL_SECONDS = 300;
+
+export const createHostDocStreamToken = (params: {
+    applicationId: number;
+    documentId: number;
+    adminUserId: string | number;
+    ttlSeconds?: number;
+}) => {
+    const ttl = params.ttlSeconds ?? HOST_DOC_STREAM_TOKEN_TTL_SECONDS;
+    const exp = Math.floor(Date.now() / 1000) + ttl;
+    const payload = Buffer.from(
+        JSON.stringify({
+            typ: "host_doc_stream",
+            appId: Number(params.applicationId),
+            docId: Number(params.documentId),
+            uid: String(params.adminUserId),
+            exp,
+        }),
+        "utf8",
+    ).toString("base64url");
+    const signature = createHmac("sha256", getEnv().tokenHashSecret)
+        .update(payload)
+        .digest("base64url");
+
+    return `${payload}.${signature}`;
+};
+
+export const verifyHostDocStreamToken = (
+    token: string,
+    expected: { applicationId: number; documentId: number },
+) => {
+    const trimmed = token.trim();
+    const dotIndex = trimmed.indexOf(".");
+
+    if (dotIndex <= 0 || dotIndex !== trimmed.lastIndexOf(".")) {
+        throw new ApiError(401, "Invalid or expired document stream token");
+    }
+
+    const payloadPart = trimmed.slice(0, dotIndex);
+    const sigPart = trimmed.slice(dotIndex + 1);
+    const expectedSig = createHmac("sha256", getEnv().tokenHashSecret)
+        .update(payloadPart)
+        .digest("base64url");
+
+    const actualBuf = Buffer.from(sigPart, "utf8");
+    const expectedBuf = Buffer.from(expectedSig, "utf8");
+
+    if (actualBuf.length !== expectedBuf.length || !timingSafeEqual(actualBuf, expectedBuf)) {
+        throw new ApiError(401, "Invalid or expired document stream token");
+    }
+
+    let decoded: {
+        typ?: unknown;
+        appId?: unknown;
+        docId?: unknown;
+        uid?: unknown;
+        exp?: unknown;
+    };
+
+    try {
+        decoded = JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf8"));
+    } catch {
+        throw new ApiError(401, "Invalid or expired document stream token");
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (
+        decoded.typ !== "host_doc_stream" ||
+        Number(decoded.appId) !== Number(expected.applicationId) ||
+        Number(decoded.docId) !== Number(expected.documentId) ||
+        typeof decoded.uid !== "string" ||
+        !decoded.uid.trim() ||
+        typeof decoded.exp !== "number" ||
+        decoded.exp <= nowSec
+    ) {
+        throw new ApiError(401, "Invalid or expired document stream token");
+    }
+
+    return {
+        adminUserId: decoded.uid,
+        expiresAt: decoded.exp,
+    };
+};
+
 export const getAdminHostApplicationDetail = async (
     admin: AuthenticatedUser,
     applicationId: number,
-    adminToken?: string,
+    _adminToken?: string,
 ) => {
     if (!admin.roles.includes("admin")) {
         throw new ApiError(403, "Forbidden");
@@ -860,8 +962,12 @@ export const getAdminHostApplicationDetail = async (
 
     const documentsWithSignedUrls = await Promise.all(
         documents.map(async (document) => {
-            const tokenQuery = adminToken ? `?token=${encodeURIComponent(adminToken)}` : "";
-            const fileUrl = `/api/admin/host-applications/${applicationId}/documents/${document.id}/file${tokenQuery}`;
+            const streamToken = createHostDocStreamToken({
+                applicationId,
+                documentId: Number(document.id),
+                adminUserId: admin.id,
+            });
+            const fileUrl = `/api/admin/host-applications/${applicationId}/documents/${document.id}/file?streamToken=${encodeURIComponent(streamToken)}`;
             return {
                 id: Number(document.id),
                 documentType: document.documentType,

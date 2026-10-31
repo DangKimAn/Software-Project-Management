@@ -89,11 +89,21 @@ const escapeHtml = (value: unknown) =>
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
 
+export const normalizeNotificationBrandText = (value: string | null | undefined): string | null => {
+    if (value === null || value === undefined) {
+        return null;
+    }
+
+    return String(value)
+        .replace(/Minh\s*Th(?:ành|anh)\s+Villa/gi, "The Palm Villa")
+        .replace(/MinhThanh\s+Luxury/gi, "The Palm Luxury");
+};
+
 const buildEmailHtml = (title: string, lines: Array<string | null | undefined>) => `
     <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
       <h2>${escapeHtml(title)}</h2>
       ${lines.filter(Boolean).map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
-      <p>Minh Thành Villa</p>
+      <p>The Palm Villa</p>
     </div>
 `;
 
@@ -124,8 +134,8 @@ const serializeNotification = (notification: NotificationLog) => ({
     eventType: notification.eventType,
     targetType: notification.targetType,
     targetId: notification.targetId,
-    title: notification.title ?? null,
-    body: notification.body ?? null,
+    title: normalizeNotificationBrandText(notification.title),
+    body: normalizeNotificationBrandText(notification.body),
     actionUrl: notification.actionUrl ?? null,
     payload: notification.payload ?? null,
     isRead: Boolean(notification.readAt),
@@ -177,8 +187,8 @@ const emitCreatedNotification = (userId: number, notification: NotificationLog) 
         eventType: notification.eventType,
         targetType: notification.targetType,
         targetId: notification.targetId,
-        title: notification.title ?? null,
-        body: notification.body ?? null,
+        title: normalizeNotificationBrandText(notification.title),
+        body: normalizeNotificationBrandText(notification.body),
         actionUrl: notification.actionUrl ?? null,
         payload: notification.payload ?? null,
         readAt: notification.readAt ?? null,
@@ -225,8 +235,8 @@ const createInAppNotificationOnce = async (
                 targetId: String(input.targetId),
                 recipient: `user:${recipient.userId}`,
                 recipientUserId: recipient.userId,
-                title: recipient.title,
-                body: recipient.body,
+                title: normalizeNotificationBrandText(recipient.title) ?? recipient.title,
+                body: normalizeNotificationBrandText(recipient.body) ?? recipient.body,
                 actionUrl: recipient.actionUrl ?? null,
                 payload: recipient.payload ?? null,
                 status: "sent",
@@ -242,8 +252,8 @@ const createInAppNotificationOnce = async (
         runAfterCommit(input.transaction, async () => {
             emitCreatedNotification(recipient.userId, notification);
             await sendPushToUser(recipient.userId, {
-                title: notification.title ?? "The Palm Villa",
-                body: notification.body ?? "",
+                title: normalizeNotificationBrandText(notification.title) ?? "The Palm Villa",
+                body: normalizeNotificationBrandText(notification.body) ?? "",
                 actionUrl: notification.actionUrl ?? null,
                 eventType: notification.eventType,
                 targetType: notification.targetType,
@@ -513,7 +523,7 @@ export const notifyUserRegistered = async (userId: number, transaction?: Transac
         recipients: [
             {
                 userId: user.userId,
-                title: "Chào mừng đến Minh Thành Villa",
+                title: "Chào mừng đến The Palm Villa",
                 body: "Tài khoản của bạn đã được tạo thành công.",
                 actionUrl: "/account/profile",
                 payload: {
@@ -741,7 +751,7 @@ export const notifyListingApproved = async (listingId: number, transaction?: Tra
                 email: host?.email
                     ? {
                           to: host.email,
-                          subject: "Listing đã được duyệt - Minh Thành Villa",
+                          subject: "Listing đã được duyệt - The Palm Villa",
                           text: lines.filter(Boolean).join("\n"),
                           html: buildEmailHtml(title, lines),
                       }
@@ -788,7 +798,7 @@ export const notifyListingRejected = async (listingId: number, transaction?: Tra
                 email: host?.email
                     ? {
                           to: host.email,
-                          subject: "Listing cần chỉnh sửa - Minh Thành Villa",
+                          subject: "Listing cần chỉnh sửa - The Palm Villa",
                           text: lines.filter(Boolean).join("\n"),
                           html: buildEmailHtml(title, lines),
                       }
@@ -896,7 +906,7 @@ export const notifyPaymentSuccess = async (paymentId: number, transaction?: Tran
                 email: context.guest?.email
                     ? {
                           to: context.guest.email,
-                          subject: "Thanh toán thành công - Minh Thành Villa",
+                          subject: "Thanh toán thành công - The Palm Villa",
                           text: lines.filter(Boolean).join("\n"),
                           html: buildEmailHtml(title, lines),
                       }
@@ -946,7 +956,7 @@ export const notifyPaymentExpired = async (bookingId: number, transaction?: Tran
         guestEmail: context.guest?.email
             ? {
                   to: context.guest.email,
-                  subject: "Phiên thanh toán đã hết hạn - Minh Thành Villa",
+                  subject: "Phiên thanh toán đã hết hạn - The Palm Villa",
                   text: lines.filter(Boolean).join("\n"),
                   html: buildEmailHtml(title, lines),
               }
@@ -980,7 +990,7 @@ export const notifyBookingConfirmed = async (bookingId: number, transaction?: Tr
         guestEmail: context.guest?.email
             ? {
                   to: context.guest.email,
-                  subject: "Đặt phòng đã được xác nhận - Minh Thành Villa",
+                  subject: "Đặt phòng đã được xác nhận - The Palm Villa",
                   text: lines.filter(Boolean).join("\n"),
                   html: buildEmailHtml(title, lines),
               }
@@ -1062,7 +1072,7 @@ export const notifyRefundCreated = async (refundId: number, transaction?: Transa
                 email: context.guest?.email
                     ? {
                           to: context.guest.email,
-                          subject: "Cập nhật hoàn tiền - Minh Thành Villa",
+                          subject: "Cập nhật hoàn tiền - The Palm Villa",
                           text: lines.filter(Boolean).join("\n"),
                           html: buildEmailHtml(title, lines),
                       }
@@ -1117,7 +1127,7 @@ export const notifyPayoutCreated = async (payoutId: number, transaction?: Transa
                 email: host?.email
                     ? {
                           to: host.email,
-                          subject: "Cập nhật payout - Minh Thành Villa",
+                          subject: "Cập nhật payout - The Palm Villa",
                           text: lines.filter(Boolean).join("\n"),
                           html: buildEmailHtml(title, lines),
                       }

@@ -65,6 +65,7 @@ const requestQdrant = async <T>(path: string, init: RequestInit): Promise<T> => 
 
     const response = await fetch(`${baseUrl}${path}`, {
         ...init,
+        signal: init.signal ?? AbortSignal.timeout(5_000),
         headers: {
             ...buildHeaders(),
             ...(init.headers ?? {}),
@@ -106,7 +107,11 @@ const getExistingCollection = async (): Promise<QdrantCollectionResponse | null>
     const collectionName = getQdrantCollectionName();
     const response = await fetch(
         `${baseUrl}/collections/${encodeURIComponent(collectionName)}`,
-        { method: "GET", headers: buildHeaders() },
+        {
+            method: "GET",
+            headers: buildHeaders(),
+            signal: AbortSignal.timeout(5_000),
+        },
     );
 
     if (response.status === 404) {

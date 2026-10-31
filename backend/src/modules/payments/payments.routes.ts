@@ -13,7 +13,10 @@ import {
     handleVnpayWebhook,
 } from "./payments.controller";
 import { authenticate } from "../../middlewares/authenticate.middleware";
-import { getPaymentCallbackRateLimiter } from "../../middlewares/rate-limit.middleware";
+import {
+    getPaymentCallbackRateLimiter,
+    getPaymentCreateRateLimiter,
+} from "../../middlewares/rate-limit.middleware";
 import { validate } from "../../middlewares/validate";
 import {
     createPaymentBodySchema,
@@ -120,6 +123,7 @@ router.use(authenticate);
 
 router.post(
     "/",
+    getPaymentCreateRateLimiter(),
     validate({ body: createPaymentBodySchema }),
     createPaymentRequest,
 );

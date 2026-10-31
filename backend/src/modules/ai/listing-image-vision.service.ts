@@ -337,7 +337,11 @@ const getSignedR2ReadUrl = async (objectKey?: string | null) => {
 
 const getImageUrlForVision = async (image: ListingImageDocument) => {
     const signedUrl = await getSignedR2ReadUrl(image.objectKey);
-    return signedUrl ?? image.url;
+    if (signedUrl) {
+        return signedUrl;
+    }
+    const { assertSafeExternalImageUrl } = await import("../../common/url-security");
+    return assertSafeExternalImageUrl(image.url, "url");
 };
 
 const callOpenAiVision = async (image: ListingImageDocument): Promise<OpenAiVisionResult> => {

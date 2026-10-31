@@ -1,6 +1,7 @@
 import express from "express";
 import { body, query } from "express-validator";
 
+import { isSafeExternalHttpUrl } from "../../common/url-security";
 import { getMyVerifications, submitVerification } from "./verifications.controller";
 import { authenticate } from "../../middlewares/authenticate.middleware";
 import { requireActiveUser } from "../../middlewares/require-active-user.middleware";
@@ -15,6 +16,10 @@ const allowedDocumentExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".p
 
 const isSafeDocumentUrl = (value: string) => {
     try {
+        if (!isSafeExternalHttpUrl(value, { allowLocalhostInDev: true })) {
+            return false;
+        }
+
         const url = new URL(value);
         const decodedPath = decodeURIComponent(url.pathname);
 
@@ -49,7 +54,7 @@ router.post(
             .withMessage("documentUrls must contain valid URLs")
             .isLength({ max: 1024 })
             .custom(isSafeDocumentUrl)
-            .withMessage("documentUrls must reference a supported document type"),
+            .withMessage("documentUrls must reference a supported public document URL"),
         body("notes").optional({ nullable: true }).isString().trim().isLength({ max: 2000 }),
     ],
     submitVerification,

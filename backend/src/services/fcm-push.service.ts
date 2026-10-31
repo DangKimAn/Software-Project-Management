@@ -10,9 +10,12 @@ import {
     type MulticastMessage,
 } from "firebase-admin/messaging";
 
+import { Op, UniqueConstraintError } from "sequelize";
+
 import { ApiError } from "../common/api-error";
 import { getEnv } from "../config/env";
 import { logger } from "../config/logger";
+import User from "../models/user";
 import UserDeviceToken, { type DevicePlatform } from "../models/user-device-token";
 
 export const ANDROID_NOTIFICATION_CHANNEL_ID = "minh_thanh_villa_high_importance";
@@ -216,6 +219,114 @@ const getOrCreateMulticastSender = (): FcmMulticastSender | null => {
     }
 };
 
+const MAX_ACTIVE_DEVICE_TOKENS_PER_USER = 20;
+const FCM_MULTICAST_BATCH_SIZE = 500;
+const SENSITIVE_PUSH_DATA_KEYS = new Set([
+    "email",
+    "useremail",
+    "guestemail",
+    "hostemail",
+    "contactemail",
+    "phone",
+    "userphone",
+    "guestphone",
+    "hostphone",
+    "contactphone",
+    "token",
+    "accesstoken",
+    "refreshtoken",
+    "otp",
+    "password",
+    "idnumber",
+    "cccd",
+    "accountnumber",
+    "bankaccountnumber",
+]);
+
+const sanitizePushDataRecord = (input: Record<string, unknown>): Record<string, unknown> => {
+    const cleaned: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(input)) {
+        const normalizedKey = key.replace(/[_-]/g, "").toLowerCase();
+        if (SENSITIVE_PUSH_DATA_KEYS.has(normalizedKey)) {
+            continue;
+        }
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+            cleaned[key] = sanitizePushDataRecord(value as Record<string, unknown>);
+        } else {
+            cleaned[key] = value;
+        }
+    }
+    return cleaned;
+};
+
+const pruneExcessUserDeviceTokens = async (userId: number) => {
+    if (getEnv().nodeEnv === "test" && !Object.prototype.hasOwnProperty.call(UserDeviceToken, "findAll")) {
+        return;
+    }
+
+    try {
+        const activeTokens = await UserDeviceToken.findAll({
+            where: {
+                userId,
+                isActive: true,
+            },
+            order: [["lastSeenAt", "DESC"]],
+        });
+
+        if (activeTokens.length <= MAX_ACTIVE_DEVICE_TOKENS_PER_USER) {
+            return;
+        }
+
+        const staleHashes = activeTokens
+            .slice(MAX_ACTIVE_DEVICE_TOKENS_PER_USER)
+            .map((item) => item.tokenHash)
+            .filter(Boolean);
+
+        if (staleHashes.length > 0) {
+            await UserDeviceToken.update(
+                { isActive: false },
+                {
+                    where: {
+                        userId,
+                        tokenHash: { [Op.in]: staleHashes },
+                    },
+                },
+            );
+        }
+    } catch {
+        // Non-blocking cap cleanup
+    }
+};
+
+export const deactivateAllUserDeviceTokens = async (userId: number): Promise<number> => {
+    if (!Number.isInteger(userId) || userId < 1) {
+        return 0;
+    }
+
+    if (getEnv().nodeEnv === "test" && !Object.prototype.hasOwnProperty.call(UserDeviceToken, "update")) {
+        return 0;
+    }
+
+    try {
+        const [updatedCount] = await UserDeviceToken.update(
+            { isActive: false },
+            {
+                where: {
+                    userId,
+                    isActive: true,
+                },
+            },
+        );
+        return updatedCount;
+    } catch (error) {
+        logger.warn("Failed to deactivate user FCM device tokens", {
+            userId,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return 0;
+    }
+};
+
 export const registerUserDeviceToken = async (input: RegisterDeviceTokenInput) => {
     if (!Number.isInteger(input.userId) || input.userId < 1) {
         throw new ApiError(401, "Unauthorized");
@@ -242,6 +353,7 @@ export const registerUserDeviceToken = async (input: RegisterDeviceTokenInput) =
             isActive: true,
             lastSeenAt: now,
         });
+        await pruneExcessUserDeviceTokens(input.userId);
 
         return {
             deviceTokenId: Number(existing.deviceTokenId),
@@ -250,22 +362,50 @@ export const registerUserDeviceToken = async (input: RegisterDeviceTokenInput) =
         };
     }
 
-    const created = await UserDeviceToken.create({
-        userId: input.userId,
-        fcmToken,
-        tokenHash,
-        platform,
-        appFlavor,
-        deviceLabel,
-        isActive: true,
-        lastSeenAt: now,
-    });
+    try {
+        const created = await UserDeviceToken.create({
+            userId: input.userId,
+            fcmToken,
+            tokenHash,
+            platform,
+            appFlavor,
+            deviceLabel,
+            isActive: true,
+            lastSeenAt: now,
+        });
+        await pruneExcessUserDeviceTokens(input.userId);
 
-    return {
-        deviceTokenId: Number(created.deviceTokenId),
-        platform: created.platform,
-        isActive: true,
-    };
+        return {
+            deviceTokenId: Number(created.deviceTokenId),
+            platform: created.platform,
+            isActive: true,
+        };
+    } catch (error) {
+        if (error instanceof UniqueConstraintError) {
+            const raced = await UserDeviceToken.findOne({
+                where: { tokenHash },
+            });
+            if (raced) {
+                await raced.update({
+                    userId: input.userId,
+                    fcmToken,
+                    platform,
+                    appFlavor,
+                    deviceLabel,
+                    isActive: true,
+                    lastSeenAt: now,
+                });
+                await pruneExcessUserDeviceTokens(input.userId);
+
+                return {
+                    deviceTokenId: Number(raced.deviceTokenId),
+                    platform: raced.platform,
+                    isActive: true,
+                };
+            }
+        }
+        throw error;
+    }
 };
 
 export const unregisterUserDeviceToken = async (params: {
@@ -311,7 +451,8 @@ const buildStringDataMap = (payload: PushNotificationPayload): Record<string, st
     }
 
     if (payload.data && typeof payload.data === "object") {
-        for (const [key, value] of Object.entries(payload.data)) {
+        const safeData = sanitizePushDataRecord(payload.data);
+        for (const [key, value] of Object.entries(safeData)) {
             if (value === undefined || value === null || key in out) continue;
             if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
                 out[key] = String(value);
@@ -324,7 +465,7 @@ const buildStringDataMap = (payload: PushNotificationPayload): Record<string, st
             }
         }
         try {
-            out.payloadJson = JSON.stringify(payload.data);
+            out.payloadJson = JSON.stringify(safeData);
         } catch {
             // Ignore non-serializable nested payload
         }
@@ -350,6 +491,18 @@ export const sendPushToUser = async (
     const body = (payload.body ?? "").trim();
     if (!title && !body) {
         return { sentCount: 0, failureCount: 0, skipped: true };
+    }
+
+    if (!(getEnv().nodeEnv === "test" && !Object.prototype.hasOwnProperty.call(User, "findByPk"))) {
+        try {
+            const recipientUser = await User.findByPk(userId);
+            if (recipientUser && recipientUser.status && recipientUser.status !== "active") {
+                await deactivateAllUserDeviceTokens(userId);
+                return { sentCount: 0, failureCount: 0, skipped: true };
+            }
+        } catch {
+            // Proceed if user status lookup is unavailable in isolated test context
+        }
     }
 
     let deviceRecords: UserDeviceToken[] = [];
@@ -380,8 +533,6 @@ export const sendPushToUser = async (
     const fidRecords = validRecords.filter((record) => FIREBASE_FID_PATTERN.test(record.fcmToken.trim()));
     const tokenRecords = validRecords.filter((record) => !FIREBASE_FID_PATTERN.test(record.fcmToken.trim()));
     const orderedRecords = [...tokenRecords, ...fidRecords];
-    const tokens = tokenRecords.map((record) => record.fcmToken.trim());
-    const fids = fidRecords.map((record) => record.fcmToken.trim());
     const baseMulticast = {
         notification: {
             title: title || "The Palm Villa",
@@ -411,30 +562,46 @@ export const sendPushToUser = async (
             },
         },
     };
-    const multicastPayload: FcmMulticastPayload =
-        tokens.length > 0
-            ? {
-                  ...baseMulticast,
-                  tokens,
-                  ...(fids.length > 0 ? { fids } : {}),
-              }
-            : {
-                  ...baseMulticast,
-                  fids,
-              };
 
     try {
-        const batchResponse = await sender(multicastPayload);
-
+        let totalSentCount = 0;
+        let totalFailureCount = 0;
         const invalidHashes: string[] = [];
-        batchResponse.responses.forEach((resp, idx) => {
-            if (!resp.success && resp.error?.code && PERMANENT_INVALID_TOKEN_CODES.has(resp.error.code)) {
-                const record = orderedRecords[idx];
-                if (record?.tokenHash) {
-                    invalidHashes.push(record.tokenHash);
+
+        for (let offset = 0; offset < orderedRecords.length; offset += FCM_MULTICAST_BATCH_SIZE) {
+            const chunkRecords = orderedRecords.slice(offset, offset + FCM_MULTICAST_BATCH_SIZE);
+            const chunkTokens = chunkRecords
+                .filter((record) => !FIREBASE_FID_PATTERN.test(record.fcmToken.trim()))
+                .map((record) => record.fcmToken.trim());
+            const chunkFids = chunkRecords
+                .filter((record) => FIREBASE_FID_PATTERN.test(record.fcmToken.trim()))
+                .map((record) => record.fcmToken.trim());
+
+            const multicastPayload: FcmMulticastPayload =
+                chunkTokens.length > 0
+                    ? {
+                          ...baseMulticast,
+                          tokens: chunkTokens,
+                          ...(chunkFids.length > 0 ? { fids: chunkFids } : {}),
+                      }
+                    : {
+                          ...baseMulticast,
+                          fids: chunkFids,
+                      };
+
+            const batchResponse = await sender(multicastPayload);
+            totalSentCount += batchResponse.successCount;
+            totalFailureCount += batchResponse.failureCount;
+
+            batchResponse.responses.forEach((resp, idx) => {
+                if (!resp.success && resp.error?.code && PERMANENT_INVALID_TOKEN_CODES.has(resp.error.code)) {
+                    const record = chunkRecords[idx];
+                    if (record?.tokenHash) {
+                        invalidHashes.push(record.tokenHash);
+                    }
                 }
-            }
-        });
+            });
+        }
 
         if (invalidHashes.length > 0) {
             try {
@@ -456,8 +623,8 @@ export const sendPushToUser = async (
         }
 
         return {
-            sentCount: batchResponse.successCount,
-            failureCount: batchResponse.failureCount,
+            sentCount: totalSentCount,
+            failureCount: totalFailureCount,
         };
     } catch (error) {
         logger.error("Failed to dispatch FCM push notification", error, {

@@ -113,6 +113,28 @@ const serializeCoupon = (coupon: InstanceType<typeof Coupon>) => ({
     updatedAt: coupon.updatedAt,
 });
 
+const serializePublicCoupon = (coupon: InstanceType<typeof Coupon>) => ({
+    couponId: coupon.couponId,
+    code: coupon.code,
+    title: coupon.title,
+    description: coupon.description ?? null,
+    type: coupon.type,
+    discountValue:
+        coupon.type === "percent" ? Number(coupon.discountValue) : vndToNumber(moneyToVnd(coupon.discountValue)),
+    maxDiscountAmount:
+        coupon.maxDiscountAmount === null || coupon.maxDiscountAmount === undefined
+            ? null
+            : vndToNumber(moneyToVnd(coupon.maxDiscountAmount)),
+    minOrderValue:
+        coupon.minOrderValue === null || coupon.minOrderValue === undefined
+            ? null
+            : vndToNumber(moneyToVnd(coupon.minOrderValue)),
+    startDate: coupon.startDate,
+    endDate: coupon.endDate,
+    limitPerUser: coupon.limitPerUser ?? null,
+    isActive: coupon.isActive,
+});
+
 const buildInvalidCouponResult = (reason: string) => ({
     valid: false,
     reason,
@@ -173,7 +195,7 @@ const validateCouponAvailability = async (
     return {
         valid: true,
         reason: null,
-        coupon: serializeCoupon(coupon),
+        coupon: serializePublicCoupon(coupon),
         discountAmount: vndToNumber(discountAmountVnd),
         finalAmount: vndToNumber(bookingAmountVnd - discountAmountVnd),
     };

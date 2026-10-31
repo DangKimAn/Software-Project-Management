@@ -126,7 +126,7 @@ const matchesMagicBytes = (buffer: Buffer, mimeType: string) => {
     return false;
 };
 
-const assertValidPrivateIdentityFile = (file: Express.Multer.File) => {
+export const assertValidPrivateIdentityFile = (file: Express.Multer.File) => {
     if (!allowedMimeTypes.has(file.mimetype)) {
         throw new ApiError(422, "Validation error", [
             {

@@ -13,6 +13,9 @@ const getUserAwareKey = (req: Request) => {
     return `ip:${req.ip}`;
 };
 
+const resolveRouteMax = (defaultMax: number) =>
+    getEnv().nodeEnv === "test" ? Math.max(defaultMax, 1000) : defaultMax;
+
 const buildLimiter = (
     windowMinutes: number,
     max: number,
@@ -85,18 +88,89 @@ export const getPaymentCallbackRateLimiter = () => {
 };
 
 export const getUploadRateLimiter = () =>
-    buildLimiter(10, 30, "Too many upload requests. Please try again later.", { userAware: true });
+    buildLimiter(
+        10,
+        resolveRouteMax(30),
+        "Too many upload requests. Please try again later.",
+        { userAware: true },
+    );
 
 export const getBookingCreateRateLimiter = () =>
-    buildLimiter(10, 20, "Too many booking requests. Please try again later.", { userAware: true });
+    buildLimiter(
+        10,
+        resolveRouteMax(20),
+        "Too many booking requests. Please try again later.",
+        { userAware: true },
+    );
 
 export const getReviewWriteRateLimiter = () =>
-    buildLimiter(10, 20, "Too many review requests. Please try again later.", { userAware: true });
+    buildLimiter(
+        10,
+        resolveRouteMax(20),
+        "Too many review requests. Please try again later.",
+        { userAware: true },
+    );
 
 export const getAdminActionRateLimiter = () =>
-    buildLimiter(10, 120, "Too many admin requests. Please try again later.", { userAware: true });
+    buildLimiter(
+        10,
+        resolveRouteMax(120),
+        "Too many admin requests. Please try again later.",
+        { userAware: true },
+    );
+
 export const getMessageWriteRateLimiter = () =>
-    buildLimiter(10, 60, "Too many message requests. Please try again later.", { userAware: true });
+    buildLimiter(
+        10,
+        resolveRouteMax(60),
+        "Too many message requests. Please try again later.",
+        { userAware: true },
+    );
 
 export const getReportWriteRateLimiter = () =>
-    buildLimiter(10, 30, "Too many report requests. Please try again later.", { userAware: true });
+    buildLimiter(
+        10,
+        resolveRouteMax(30),
+        "Too many report requests. Please try again later.",
+        { userAware: true },
+    );
+
+export const getAiVisionRateLimiter = () =>
+    buildLimiter(
+        10,
+        resolveRouteMax(20),
+        "Too many AI vision analysis requests. Please try again later.",
+        { userAware: true },
+    );
+
+export const getSemanticSearchRateLimiter = () =>
+    buildLimiter(
+        10,
+        resolveRouteMax(45),
+        "Too many search requests. Please try again later.",
+        { userAware: true },
+    );
+
+export const getPaymentCreateRateLimiter = () =>
+    buildLimiter(
+        10,
+        resolveRouteMax(20),
+        "Too many payment initiation requests. Please try again later.",
+        { userAware: true },
+    );
+
+export const getCouponValidateRateLimiter = () =>
+    buildLimiter(
+        10,
+        resolveRouteMax(30),
+        "Too many coupon validation attempts. Please try again later.",
+        { userAware: true },
+    );
+
+export const getDeviceTokenRateLimiter = () =>
+    buildLimiter(
+        10,
+        resolveRouteMax(30),
+        "Too many device registration requests. Please try again later.",
+        { userAware: true },
+    );

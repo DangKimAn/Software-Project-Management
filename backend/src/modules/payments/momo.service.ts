@@ -223,14 +223,23 @@ export const buildMomoPaymentUrl = async ({
         signature,
     };
 
-    const response = await fetch(config.endpoint, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-        },
-        body: JSON.stringify(requestBody),
-    });
+    let response: Response;
+    try {
+        response = await fetch(config.endpoint, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+            },
+            body: JSON.stringify(requestBody),
+            signal: AbortSignal.timeout(10_000),
+        });
+    } catch (error) {
+        if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+            throw new ApiError(504, "MoMo payment gateway request timed out");
+        }
+        throw new ApiError(502, "Failed to reach MoMo payment gateway");
+    }
 
     let payload: MomoCreateResponse;
 
