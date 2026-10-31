@@ -225,6 +225,8 @@ usersRepository.countActiveUsersWithRole = async (role: string) =>
     Array.from(users.values()).filter(
         (user) => user.status === "active" && (roles.get(String(user._id)) ?? []).includes(role),
     ).length;
+usersRepository.syncUserHostPromotion = async () => {};
+usersRepository.syncUserHostDemotion = async () => {};
 
 authRepository.createAuditLog = async (input: AuditLogRecord) => {
     auditLogs.push(input);

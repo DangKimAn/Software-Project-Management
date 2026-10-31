@@ -16,12 +16,26 @@ export type FeeSettingResponse = {
     createdAt: string;
 };
 
+let cachedActiveFeePct = 10;
+let cacheExpiresAt = Date.now() + 60 * 1000;
+
+export const invalidatePlatformFeeCache = () => {
+    cacheExpiresAt = 0;
+};
+
 /**
  * Ensures any scheduled fee that has reached its effective date
  * is automatically transitioned to 'active', while previous 'active' becomes 'superseded'.
  */
-export const syncEffectivePlatformFee = async (transaction?: Transaction): Promise<number> => {
+export const syncEffectivePlatformFee = async (
+    transaction?: Transaction,
+    forceSync = false,
+): Promise<number> => {
     const now = new Date();
+
+    if (!forceSync && cacheExpiresAt > now.getTime()) {
+        return cachedActiveFeePct;
+    }
 
     // Check if any scheduled record has reached its effective time
     const readyToActivate = await PlatformFeeSetting.findAll({
@@ -58,12 +72,14 @@ export const syncEffectivePlatformFee = async (transaction?: Transaction): Promi
         transaction,
     });
 
-    return activeSetting ? Number(activeSetting.feePct) : 10;
+    cachedActiveFeePct = activeSetting ? Number(activeSetting.feePct) : 10;
+    cacheExpiresAt = now.getTime() + 60 * 1000;
+    return cachedActiveFeePct;
 };
 
 export const getCurrentPlatformFeeStatus = async () => {
     // 1. Sync any ready-to-activate records
-    const activeFeePct = await syncEffectivePlatformFee();
+    const activeFeePct = await syncEffectivePlatformFee(undefined, true);
 
     const activeSetting = await PlatformFeeSetting.findOne({
         where: { status: "active" },
@@ -146,7 +162,7 @@ export const schedulePlatformFeeChange = async (params: {
     }
 
     // Sync active fee
-    const currentActiveFeePct = await syncEffectivePlatformFee();
+    const currentActiveFeePct = await syncEffectivePlatformFee(undefined, true);
 
     if (Math.abs(currentActiveFeePct - feePct) < 0.001) {
         throw new ApiError(400, `Mức phí nền tảng hiện tại đã là ${feePct}%. Vui lòng chọn mức phí khác.`);
@@ -180,6 +196,7 @@ export const schedulePlatformFeeChange = async (params: {
         reason: reason?.trim() || null,
         notificationSentAt: now,
     });
+    invalidatePlatformFeeCache();
 
     // Notify all active hosts via In-App, FCM Push, and Email
     try {
@@ -221,6 +238,7 @@ export const cancelScheduledPlatformFee = async (adminUserId: number) => {
     pendingScheduled.status = "cancelled";
     pendingScheduled.cancelledByAdminId = adminUserId;
     await pendingScheduled.save();
+    invalidatePlatformFeeCache();
 
     return {
         success: true,

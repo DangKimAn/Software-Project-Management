@@ -223,10 +223,14 @@ export const calculateBookingPricing = async (params: {
     )));
     const surchargeAmount = guestCount > surchargeIncludedGuests ? rawSurcharge : 0;
     let effectiveServiceFeePct = 10;
-    try {
-        effectiveServiceFeePct = await syncEffectivePlatformFee(transaction);
-    } catch {
-        effectiveServiceFeePct = listing.serviceFeePct != null ? toNumber(listing.serviceFeePct) : 10;
+    if (listing.serviceFeePct != null && listing.serviceFeePct !== undefined) {
+        effectiveServiceFeePct = toNumber(listing.serviceFeePct);
+    } else {
+        try {
+            effectiveServiceFeePct = await syncEffectivePlatformFee();
+        } catch {
+            effectiveServiceFeePct = 10;
+        }
     }
     const serviceFeeAmount = Math.round(accommodationAmount * (effectiveServiceFeePct / 100));
     const preDiscountTotal = accommodationAmount + cleaningFeeAmount + surchargeAmount + serviceFeeAmount;

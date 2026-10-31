@@ -17,6 +17,7 @@ const mailService = require("../dist/services/mail.service");
 const {
     cancelScheduledPlatformFee,
     getCurrentPlatformFeeStatus,
+    invalidatePlatformFeeCache,
     schedulePlatformFeeChange,
     syncEffectivePlatformFee,
 } = require("../dist/modules/admin/admin-fees.service");
@@ -226,6 +227,7 @@ describe("Admin Platform Fee Management (Unit & Integration Tests)", () => {
                 reason: "Kiểm thử tự động kích hoạt quá hạn",
             });
 
+            invalidatePlatformFeeCache();
             const activeFee = await syncEffectivePlatformFee();
             assert.strictEqual(activeFee, 12.5);
 
@@ -239,6 +241,7 @@ describe("Admin Platform Fee Management (Unit & Integration Tests)", () => {
                 reason: "Khôi phục 10% mặc định",
             });
 
+            invalidatePlatformFeeCache();
             const restoredFee = await syncEffectivePlatformFee();
             assert.strictEqual(restoredFee, 10);
         });
