@@ -77,6 +77,14 @@ const List<AdminNavItem> kAdminNavItems = [
     title: 'Phân quyền hệ thống',
     subtitle: 'Cập nhật vai trò người dùng (Guest, Host, Admin).',
   ),
+  AdminNavItem(
+    id: 'phi-nen-tang',
+    label: 'Phí nền tảng',
+    route: '/admin/phi-nen-tang',
+    icon: LucideIcons.badgePercent,
+    title: 'Quản lý phí nền tảng',
+    subtitle: 'Áp dụng phí toàn sàn, thời gian thông báo 7 ngày và quản lý lịch sử.',
+  ),
 ];
 
 bool _isActorAdmin(User? actor) {
@@ -815,7 +823,8 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
   }
 
   Widget _buildBottomNavBar(BuildContext context) {
-    final isMenuTabActive = _currentTab == 'phan-quyen';
+    final isMenuTabActive =
+        _currentTab == 'phan-quyen' || _currentTab == 'phi-nen-tang';
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final showCompactCircleOnly = textScale > 1.45;
 
@@ -939,6 +948,8 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
         return const _AdminHostApplicationsTab();
       case 'phan-quyen':
         return const _AdminRolesTab();
+      case 'phi-nen-tang':
+        return const _AdminPlatformFeeTab();
       case 'tong-quan':
       default:
         return const _AdminOverviewTab();
@@ -5532,6 +5543,662 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── 6. QUẢN LÝ PHÍ NỀN TẢNG (/admin/phi-nen-tang) ──
+class _AdminPlatformFeeTab extends ConsumerStatefulWidget {
+  const _AdminPlatformFeeTab();
+
+  @override
+  ConsumerState<_AdminPlatformFeeTab> createState() =>
+      _AdminPlatformFeeTabState();
+}
+
+class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
+  bool _loading = true;
+  bool _submitting = false;
+  String? _error;
+  String? _success;
+
+  Map<String, dynamic>? _activeFee;
+  Map<String, dynamic>? _scheduledFee;
+  int _totalPlatformRevenue = 0;
+  List<Map<String, dynamic>> _history = const [];
+
+  final TextEditingController _feeCtrl = TextEditingController();
+  final TextEditingController _reasonCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFeeStatus();
+  }
+
+  @override
+  void dispose() {
+    _feeCtrl.dispose();
+    _reasonCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadFeeStatus() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final data =
+          await ref.read(adminRepositoryProvider).getPlatformFeeStatus();
+      if (!mounted) return;
+
+      setState(() {
+        _activeFee = data['activeFee'] as Map<String, dynamic>?;
+        _scheduledFee = data['scheduledFee'] as Map<String, dynamic>?;
+        _totalPlatformRevenue =
+            (data['totalPlatformRevenue'] as num?)?.toInt() ?? 0;
+        final rawHist = data['history'];
+        if (rawHist is List) {
+          _history = rawHist.whereType<Map<String, dynamic>>().toList();
+        } else {
+          _history = const [];
+        }
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = AdminRepository.extractErrorMessage(
+          e,
+          'Không thể tải trạng thái phí nền tảng.',
+        );
+      });
+    }
+  }
+
+  Future<void> _handleSchedule() async {
+    final rawFee = double.tryParse(_feeCtrl.text.trim());
+    if (rawFee == null || rawFee < 0 || rawFee > 100) {
+      setState(() {
+        _error = 'Vui lòng nhập tỷ lệ phí hợp lệ từ 0% đến 100%.';
+      });
+      return;
+    }
+
+    final reason = _reasonCtrl.text.trim();
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AdminStudioTokens.cardSurface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AdminStudioTokens.modalRadius),
+        ),
+        title: const Text(
+          'Xác nhận điều chỉnh phí',
+          style: AdminStudioTokens.sectionTitle,
+        ),
+        content: Text(
+          'Mức phí mới $rawFee% sẽ được lên lịch và chính thức có hiệu lực sau 7 ngày.\n\n'
+          'Hệ thống sẽ tự động gửi thông báo (In-app, Push Notification, Email) đến toàn bộ các Host hiện tại.\n\n'
+          'Bạn có chắc chắn muốn áp dụng?',
+          style: AdminStudioTokens.bodyRegular,
+        ),
+        actions: [
+          OutlinedButton(
+            style: _kPillOutlinedStyle,
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            style: _kPillElevatedStyle,
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Đồng ý & Thông báo'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+      _success = null;
+    });
+
+    try {
+      await ref.read(adminRepositoryProvider).schedulePlatformFeeChange(
+            feePct: rawFee,
+            reason: reason.isEmpty ? null : reason,
+          );
+      if (!mounted) return;
+      _feeCtrl.clear();
+      _reasonCtrl.clear();
+      setState(() {
+        _submitting = false;
+        _success =
+            'Đã lên lịch áp dụng phí $rawFee% (hiệu lực sau 7 ngày) và gửi thông báo thành công đến các Host.';
+      });
+      await _loadFeeStatus();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = AdminRepository.extractErrorMessage(
+          e,
+          'Không thể lên lịch điều chỉnh phí.',
+        );
+      });
+    }
+  }
+
+  Future<void> _handleCancelSchedule() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AdminStudioTokens.cardSurface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AdminStudioTokens.modalRadius),
+        ),
+        title: const Text(
+          'Hủy lịch điều chỉnh phí',
+          style: AdminStudioTokens.sectionTitle,
+        ),
+        content: const Text(
+          'Bạn có chắc chắn muốn hủy kế hoạch điều chỉnh phí đang chờ kích hoạt này không?',
+          style: AdminStudioTokens.bodyRegular,
+        ),
+        actions: [
+          OutlinedButton(
+            style: _kPillOutlinedStyle,
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Đóng'),
+          ),
+          ElevatedButton(
+            style: _kPillElevatedStyle.copyWith(
+              backgroundColor:
+                  const WidgetStatePropertyAll(AdminStudioTokens.dangerInk),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Xác nhận hủy'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+
+    try {
+      await ref.read(adminRepositoryProvider).cancelScheduledPlatformFee();
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _success = 'Đã hủy lịch điều chỉnh phí thành công.';
+      });
+      await _loadFeeStatus();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = AdminRepository.extractErrorMessage(
+          e,
+          'Không thể hủy lịch điều chỉnh phí.',
+        );
+      });
+    }
+  }
+
+  String _formatIsoDate(String? iso) {
+    if (iso == null || iso.isEmpty) return '—';
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return iso;
+    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatCountdown(int seconds) {
+    if (seconds <= 0) return 'Đang kích hoạt...';
+    final days = seconds ~/ 86400;
+    final hours = (seconds % 86400) ~/ 3600;
+    final mins = (seconds % 3600) ~/ 60;
+    if (days > 0) {
+      return '$days ngày $hours giờ $mins phút';
+    }
+    return '$hours giờ $mins phút';
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color bg;
+    Color fg;
+    String label;
+    switch (status) {
+      case 'active':
+        bg = AdminStudioTokens.successTint;
+        fg = AdminStudioTokens.successInk;
+        label = 'Đang áp dụng';
+        break;
+      case 'scheduled':
+        bg = AdminStudioTokens.warningTint;
+        fg = AdminStudioTokens.warningInk;
+        label = 'Đã lên lịch (7 ngày)';
+        break;
+      case 'superseded':
+        bg = AdminStudioTokens.softCircle;
+        fg = AdminStudioTokens.inkSecondary;
+        label = 'Hết hiệu lực';
+        break;
+      case 'cancelled':
+      default:
+        bg = AdminStudioTokens.dangerTint;
+        fg = AdminStudioTokens.dangerInk;
+        label = 'Đã hủy';
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(AdminStudioTokens.pillRadius),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: fg),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final activeFeePct = _activeFee?['feePct'] ?? 10;
+
+    return RefreshIndicator(
+      color: AdminStudioTokens.obsidian,
+      onRefresh: _loadFeeStatus,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: _studioScrollPadding(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_error != null) ...[
+              _AdminErrorBanner(message: _error!, onRetry: _loadFeeStatus),
+              const SizedBox(height: 14),
+            ],
+            if (_success != null) ...[
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AdminStudioTokens.successTint,
+                  borderRadius:
+                      BorderRadius.circular(AdminStudioTokens.cardRadius),
+                  border: Border.all(
+                    color: AdminStudioTokens.successInk.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      LucideIcons.circleCheck,
+                      size: 18,
+                      color: AdminStudioTokens.successInk,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _success!,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AdminStudioTokens.successInk,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+
+            // 1. KPI Cards (Studio Bento Grid)
+            AdminStudioGroupCard(
+              title: 'Tổng quan phí nền tảng',
+              child: LayoutBuilder(
+                builder: (ctx, constraints) {
+                  final isNarrow = constraints.maxWidth < 520;
+                  final cards = [
+                    AdminStudioKpiCard(
+                      label: 'Phí sàn hiện tại',
+                      value: '$activeFeePct%',
+                      subtitle: 'Áp dụng chung toàn bộ ứng dụng',
+                      icon: LucideIcons.badgePercent,
+                    ),
+                    AdminStudioKpiCard(
+                      label: 'Tổng phí đã thu',
+                      value: CurrencyFormatter.formatVnd(_totalPlatformRevenue),
+                      subtitle: 'Doanh thu tích lũy nền tảng',
+                      icon: LucideIcons.wallet,
+                    ),
+                  ];
+
+                  if (isNarrow) {
+                    return Column(
+                      children: [
+                        cards[0],
+                        const SizedBox(height: 10),
+                        cards[1],
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: cards[0]),
+                      const SizedBox(width: 10),
+                      Expanded(child: cards[1]),
+                    ],
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // 2. Banner Scheduled (nếu có lịch chờ)
+            if (_scheduledFee != null) ...[
+              AdminStudioGroupCard(
+                title: 'Kế hoạch điều chỉnh phí đã được lên lịch',
+                trailing: _buildStatusBadge('scheduled'),
+                child: AdminStudioInnerCard(
+                  warningHighlight: true,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            LucideIcons.calendarClock,
+                            color: AdminStudioTokens.warningInk,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Mức phí mới: ${_scheduledFee!['feePct']}% (Thay đổi từ $activeFeePct%)',
+                              style: AdminStudioTokens.cardTitle,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Thời điểm có hiệu lực: ${_formatIsoDate(_scheduledFee!['effectiveAt']?.toString())}',
+                        style: AdminStudioTokens.cardSubtitle,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Thời gian còn lại: ${_formatCountdown((_scheduledFee!['countdownSeconds'] as num?)?.toInt() ?? 0)}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AdminStudioTokens.warningInk,
+                        ),
+                      ),
+                      if (_scheduledFee!['reason'] != null &&
+                          '${_scheduledFee!['reason']}'.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Lý do thông báo: ${_scheduledFee!['reason']}',
+                          style: AdminStudioTokens.bodyRegular.copyWith(
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 10,
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          const Text(
+                            'Toàn bộ Host đã được gửi thông báo. Các đơn đặt phòng tạo trước thời điểm hiệu lực vẫn áp dụng mức phí cũ.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AdminStudioTokens.inkSecondary,
+                            ),
+                          ),
+                          OutlinedButton(
+                            onPressed:
+                                _submitting ? null : _handleCancelSchedule,
+                            style: _kPillOutlinedStyle.copyWith(
+                              foregroundColor: const WidgetStatePropertyAll(
+                                AdminStudioTokens.dangerInk,
+                              ),
+                              side: const WidgetStatePropertyAll(
+                                BorderSide(color: AdminStudioTokens.dangerInk),
+                              ),
+                            ),
+                            child: const Text('Hủy lịch'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+
+            // 3. Form lên lịch điều chỉnh phí mới
+            AdminStudioGroupCard(
+              title: 'Lên lịch điều chỉnh phí nền tảng mới',
+              child: AdminStudioInnerCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Mức phí mới sẽ có hiệu lực sau đúng 7 ngày và hệ thống sẽ tự động gửi thông báo đến toàn bộ các Host.',
+                      style: AdminStudioTokens.cardSubtitle,
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _feeCtrl,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      style: AdminStudioTokens.bodyRegular,
+                      decoration: _multilineInputDecoration(
+                        labelText: 'Tỷ lệ phí mới (%)',
+                        hintText: 'Ví dụ: 12',
+                      ).copyWith(
+                        prefixIcon: const Icon(
+                          LucideIcons.percent,
+                          size: 16,
+                          color: AdminStudioTokens.iconMuted,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _reasonCtrl,
+                      maxLines: 2,
+                      style: AdminStudioTokens.bodyRegular,
+                      decoration: _multilineInputDecoration(
+                        labelText: 'Lý do điều chỉnh (gửi đến Host)',
+                        hintText:
+                            'Ví dụ: Nâng cấp hạ tầng dịch vụ và mở rộng tính năng hỗ trợ khách...',
+                      ).copyWith(
+                        prefixIcon: const Icon(
+                          LucideIcons.messageSquare,
+                          size: 16,
+                          color: AdminStudioTokens.iconMuted,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton.icon(
+                        style: _kPillElevatedStyle,
+                        onPressed: (_submitting || _scheduledFee != null)
+                            ? null
+                            : _handleSchedule,
+                        icon: _submitting
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(LucideIcons.send, size: 16),
+                        label: Text(
+                          _scheduledFee != null
+                              ? 'Đang có lịch chờ'
+                              : 'Lên lịch áp dụng (Sau 7 ngày) & Thông báo',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // 4. Lịch sử thay đổi phí (Audit Timeline)
+            AdminStudioGroupCard(
+              title: 'Lịch sử thay đổi phí nền tảng',
+              child: _loading
+                  ? const AdminStudioInnerCard(
+                      child: Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AdminStudioTokens.obsidian,
+                          ),
+                        ),
+                      ),
+                    )
+                  : _history.isEmpty
+                      ? const AdminStudioInnerCard(
+                          child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(
+                              child: Text(
+                                'Chưa có lịch sử thay đổi.',
+                                style: AdminStudioTokens.cardSubtitle,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Column(
+                          children: [
+                            for (var idx = 0; idx < _history.length; idx++) ...[
+                              if (idx > 0) const SizedBox(height: 10),
+                              Builder(
+                                builder: (ctx) {
+                                  final item = _history[idx];
+                                  final fee = item['feePct'] ?? 0;
+                                  final status = '${item['status']}';
+                                  final effectiveAt = _formatIsoDate(
+                                    item['effectiveAt']?.toString(),
+                                  );
+                                  final reason = item['reason'];
+
+                                  return AdminStudioInnerCard(
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          width: 42,
+                                          height: 42,
+                                          decoration: const BoxDecoration(
+                                            color: AdminStudioTokens.softCircle,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              '$fee%',
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color:
+                                                    AdminStudioTokens.inkPrimary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Wrap(
+                                                spacing: 8,
+                                                runSpacing: 6,
+                                                alignment:
+                                                    WrapAlignment.spaceBetween,
+                                                crossAxisAlignment:
+                                                    WrapCrossAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    'Mức phí: $fee%',
+                                                    style: AdminStudioTokens
+                                                        .cardTitle,
+                                                  ),
+                                                  _buildStatusBadge(status),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Thời điểm hiệu lực: $effectiveAt',
+                                                style: AdminStudioTokens
+                                                    .cardSubtitle,
+                                              ),
+                                              if (reason != null &&
+                                                  '$reason'.isNotEmpty) ...[
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  'Ghi chú: $reason',
+                                                  style: AdminStudioTokens
+                                                      .bodyRegular
+                                                      .copyWith(
+                                                    fontSize: 12,
+                                                    fontStyle: FontStyle.italic,
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
+            ),
+          ],
         ),
       ),
     );

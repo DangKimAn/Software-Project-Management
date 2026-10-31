@@ -696,6 +696,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           child: const AdminPortalScreen(activeTab: 'phan-quyen'),
         ),
       ),
+      GoRoute(
+        path: '/admin/phi-nen-tang',
+        pageBuilder: (context, state) => _buildProtectedSlidePage(
+          state: state,
+          accessLevel: RouteAccessLevel.adminOnly,
+          child: const AdminPortalScreen(activeTab: 'phi-nen-tang'),
+        ),
+      ),
     ],
   );
 });

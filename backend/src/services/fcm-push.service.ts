@@ -542,6 +542,7 @@ export const sendPushToUser = async (
         android: {
             priority: "high" as const,
             notification: {
+                icon: "ic_launcher",
                 channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
                 sound: "default",
                 defaultSound: true,

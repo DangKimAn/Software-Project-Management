@@ -320,6 +320,7 @@ ListingModel.init(
         serviceFeePct: {
             type: DataTypes.DECIMAL(5, 2),
             allowNull: true,
+            defaultValue: 10,
             field: "service_fee_pct",
         },
         extraGuestFee: {
