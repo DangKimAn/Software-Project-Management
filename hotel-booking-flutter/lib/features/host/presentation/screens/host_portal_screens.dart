@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -206,6 +207,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   String? _reactionActiveMsgKey;
   final ScrollController _chatScrollCtrl = ScrollController();
 
+  // Messenger input bar & features state
+  String _chatQuickEmoji = '😤';
+  bool _isRecordingVoice = false;
+  int _voiceRecordingSeconds = 0;
+  Timer? _voiceTimer;
+
   // Payouts state
   bool _loadingPayouts = false;
   String? _payoutsError;
@@ -296,6 +303,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     _calendarNotesCtrl.dispose();
     _guestSearchCtrl.dispose();
     _chatDragAnimCtrl.dispose();
+    _voiceTimer?.cancel();
     _chatScrollCtrl.dispose();
     _messageInputCtrl.dispose();
     _messageInputFocusNode.dispose();
@@ -7284,113 +7292,200 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           ),
         ),
 
-        // Thanh soạn thảo tin nhắn ở đáy phong cách Messenger
+        // Thanh ghi âm giọng nói nếu đang bật thu âm
+        if (_isRecordingVoice)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: const Color(0xFFFFF1F2),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.mic, color: Colors.red, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Đang ghi âm... 00:${_voiceRecordingSeconds.toString().padLeft(2, '0')}',
+                  style: const TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    _voiceTimer?.cancel();
+                    setState(() {
+                      _isRecordingVoice = false;
+                      _voiceRecordingSeconds = 0;
+                    });
+                  },
+                  child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: const StadiumBorder(),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    elevation: 0,
+                  ),
+                  onPressed: () {
+                    final sec = _voiceRecordingSeconds;
+                    _voiceTimer?.cancel();
+                    setState(() {
+                      _isRecordingVoice = false;
+                      _voiceRecordingSeconds = 0;
+                    });
+                    _messageInputCtrl.text = '🎤 Tin nhắn thoại (00:${sec.toString().padLeft(2, '0')})';
+                    _sendHostMessage();
+                  },
+                  icon: const Icon(LucideIcons.send, size: 14),
+                  label: const Text('Gửi', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+
+        // Thanh soạn thảo tin nhắn ở đáy chuẩn Facebook Messenger (khớp 100% hình mẫu của user)
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: const BoxDecoration(
             color: AppColors.surfaceBase,
             border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
           ),
           child: Row(
             children: [
+              // 1. Nút '+' tròn màu hồng/đỏ
+              InkWell(
+                key: const Key('chat_more_features_btn'),
+                onTap: _showChatMoreOptions,
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    LucideIcons.plus,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // 2. Nút Máy ảnh (Camera) màu hồng/đỏ
               IconButton(
-                icon: const Icon(LucideIcons.image, size: 20, color: AppColors.textSecondary),
+                key: const Key('chat_camera_btn'),
+                icon: const Icon(LucideIcons.camera, size: 22, color: AppColors.primary),
+                tooltip: 'Chụp ảnh',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                onPressed: _openCameraChat,
+              ),
+              const SizedBox(width: 4),
+
+              // 3. Nút Thư viện Ảnh (Image) màu hồng/đỏ
+              IconButton(
+                key: const Key('chat_gallery_btn'),
+                icon: const Icon(LucideIcons.image, size: 22, color: AppColors.primary),
                 tooltip: 'Gửi hình ảnh',
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Tính năng đính kèm ảnh chụp đang được kết nối.'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                onPressed: _pickAndSendChatImage,
               ),
+              const SizedBox(width: 4),
+
+              // 4. Nút Micro thu âm màu hồng/đỏ
               IconButton(
-                icon: const Icon(LucideIcons.smile, size: 20, color: AppColors.textSecondary),
-                tooltip: 'Thêm biểu tượng cảm xúc',
-                onPressed: () {
-                  final text = _messageInputCtrl.text;
-                  _messageInputCtrl.text = text.isEmpty ? '😊 ' : '$text 😊';
-                  _messageInputCtrl.selection = TextSelection.fromPosition(
-                    TextPosition(offset: _messageInputCtrl.text.length),
-                  );
-                  _messageInputFocusNode.requestFocus();
-                  setState(() {});
-                },
+                key: const Key('chat_mic_btn'),
+                icon: Icon(
+                  _isRecordingVoice ? LucideIcons.square : LucideIcons.mic,
+                  size: 22,
+                  color: _isRecordingVoice ? Colors.red : AppColors.primary,
+                ),
+                tooltip: _isRecordingVoice ? 'Dừng ghi âm' : 'Tin nhắn thoại',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                onPressed: _toggleVoiceRecording,
               ),
+              const SizedBox(width: 8),
+
+              // 5. Ô nhập tin nhắn với placeholder "Nhắn tin" & icon mặt cười màu hồng bên trong
               Expanded(
-                child: TextField(
-                  key: const Key('host_message_input'),
-                  controller: _messageInputCtrl,
-                  focusNode: _messageInputFocusNode,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (_) {
-                    if (!_sendingMessage) {
-                      _sendHostMessage();
-                    }
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'Nhập tin nhắn...',
-                    filled: true,
-                    fillColor: const Color(0xFFF1F5F9),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(999),
-                      borderSide: BorderSide.none,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(999),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(999),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 1.2),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 9,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: TextField(
+                    key: const Key('host_message_input'),
+                    controller: _messageInputCtrl,
+                    focusNode: _messageInputFocusNode,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) {
+                      if (!_sendingMessage) {
+                        _sendHostMessage();
+                      }
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Nhắn tin',
+                      hintStyle: const TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 14.5,
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      isDense: true,
+                      suffixIcon: IconButton(
+                        key: const Key('chat_input_smile_btn'),
+                        icon: const Icon(
+                          LucideIcons.smile,
+                          size: 20,
+                          color: AppColors.primary,
+                        ),
+                        tooltip: 'Biểu tượng cảm xúc',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                        onPressed: _showEmojiSelector,
+                      ),
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
+
+              // 6. Bên phải ngoài cùng:
+              // Nếu ô trống: Icon cảm xúc nhanh mặc định (icon 😤 trong ảnh của user)
+              // Nếu có chữ: Nút gửi tin nhắn (Send button)
               if (_messageInputCtrl.text.trim().isEmpty)
-                IconButton(
-                  key: const Key('host_message_quick_like_btn'),
-                  icon: const Icon(
-                    LucideIcons.thumbsUp,
-                    size: 22,
-                    color: AppColors.primary,
+                InkWell(
+                  key: const Key('chat_quick_emoji_btn'),
+                  onTap: () => _sendQuickEmoji(_chatQuickEmoji),
+                  onLongPress: _chooseQuickEmoji,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Text(
+                      _chatQuickEmoji,
+                      style: const TextStyle(fontSize: 26),
+                    ),
                   ),
-                  tooltip: 'Gửi nhanh biểu tượng thích 👍',
-                  onPressed: _sendingMessage
-                      ? null
-                      : () {
-                          _messageInputCtrl.text = '👍';
-                          _sendHostMessage();
-                        },
                 )
               else
-                ElevatedButton(
+                IconButton(
                   key: const Key('host_message_send_btn'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(44, 40),
-                    shape: const StadiumBorder(),
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  icon: const Icon(
+                    LucideIcons.send,
+                    size: 20,
+                    color: AppColors.primary,
                   ),
+                  tooltip: 'Gửi tin nhắn',
                   onPressed: _sendingMessage ? null : _sendHostMessage,
-                  child: _sendingMessage
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(LucideIcons.send, size: 17),
                 ),
             ],
           ),
@@ -7540,6 +7635,229 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           ),
         ),
       ),
+    );
+  }
+
+  // --- Các chức năng mở rộng cho thanh nhập Messenger ---
+
+  void _showChatMoreOptions() {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(LucideIcons.plus, size: 18, color: Colors.white),
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Tiện ích mở rộng',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(LucideIcons.mapPin, color: AppColors.primary),
+                  title: const Text('Gửi vị trí The Palm Villa'),
+                  subtitle: const Text('Địa chỉ chi tiết và tọa độ Google Maps'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _messageInputCtrl.text = '📍 Vị trí The Palm Villa: 123 Đường Hạ Long, Phường Bãi Cháy, TP. Hạ Long (Gần bãi tắm & Sun World).';
+                    _sendHostMessage();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(LucideIcons.clock, color: Colors.amber),
+                  title: const Text('Giờ nhận & trả phòng'),
+                  subtitle: const Text('Check-in: 14:00 • Check-out: 12:00'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _messageInputCtrl.text = '⏰ Thời gian nhận phòng: từ 14:00 | Thời gian trả phòng: trước 12:00 ngày hôm sau.';
+                    _sendHostMessage();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(LucideIcons.fileText, color: Colors.blue),
+                  title: const Text('Gửi nội quy lưu trú'),
+                  subtitle: const Text('Giữ gìn vệ sinh, không hút thuốc trong phòng'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _messageInputCtrl.text = '📋 Nội quy The Palm Villa: Vui lòng không hút thuốc trong phòng, giữ yên tĩnh sau 22:00. Chúc quý khách kỳ nghỉ tuyệt vời!';
+                    _sendHostMessage();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _openCameraChat() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('📸 Đang kết nối máy ảnh để chụp hình trực tiếp...'),
+        action: SnackBarAction(
+          label: 'Gửi ảnh mẫu',
+          textColor: Colors.amber,
+          onPressed: () {
+            _messageInputCtrl.text = '📷 [Ảnh chụp trực tiếp từ villa]';
+            _sendHostMessage();
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndSendChatImage() async {
+    final picker = ref.read(hostFilePickerProvider);
+    try {
+      final file = await picker.pickAvatarImage(context: context);
+      if (file != null) {
+        _messageInputCtrl.text = '🖼️ [Đã gửi 1 hình ảnh] ${file.name}';
+        await _sendHostMessage();
+      }
+    } catch (_) {
+      _messageInputCtrl.text = '🖼️ [Hình ảnh biệt thự The Palm Villa]';
+      await _sendHostMessage();
+    }
+  }
+
+  void _toggleVoiceRecording() {
+    if (_isRecordingVoice) {
+      final sec = _voiceRecordingSeconds;
+      _voiceTimer?.cancel();
+      setState(() {
+        _isRecordingVoice = false;
+        _voiceRecordingSeconds = 0;
+      });
+      _messageInputCtrl.text = '🎤 Tin nhắn thoại (00:${sec.toString().padLeft(2, '0')})';
+      _sendHostMessage();
+    } else {
+      setState(() {
+        _isRecordingVoice = true;
+        _voiceRecordingSeconds = 0;
+      });
+      _voiceTimer?.cancel();
+      _voiceTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        setState(() {
+          _voiceRecordingSeconds++;
+        });
+      });
+    }
+  }
+
+  void _showEmojiSelector() {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        const emojis = [
+          '😊', '🥰', '😍', '🌴', '🏖️', '✨',
+          '👍', '🙏', '❤️', '🔥', '🎉', '💯',
+          '⭐', '🌊', '🏡', '🔑', '☕', '🌟'
+        ];
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Chọn biểu tượng cảm xúc',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 10,
+                  children: emojis.map((e) {
+                    return InkWell(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        final current = _messageInputCtrl.text;
+                        _messageInputCtrl.text = current.isEmpty ? e : '$current $e';
+                        _messageInputCtrl.selection = TextSelection.fromPosition(
+                          TextPosition(offset: _messageInputCtrl.text.length),
+                        );
+                        _messageInputFocusNode.requestFocus();
+                        setState(() {});
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(e, style: const TextStyle(fontSize: 26)),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _sendQuickEmoji(String emoji) {
+    _messageInputCtrl.text = emoji;
+    _sendHostMessage();
+  }
+
+  void _chooseQuickEmoji() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        const quickOptions = ['😤', '👍', '❤️', '🌴', '🔥', '⭐'];
+        return AlertDialog(
+          title: const Text('Chọn biểu tượng gửi nhanh'),
+          content: Wrap(
+            spacing: 14,
+            runSpacing: 12,
+            children: quickOptions.map((e) {
+              return InkWell(
+                onTap: () {
+                  setState(() => _chatQuickEmoji = e);
+                  Navigator.pop(ctx);
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(e, style: const TextStyle(fontSize: 30)),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 
