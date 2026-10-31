@@ -3866,46 +3866,70 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   }
 
   void _selectWeekendDays() {
-    setState(() {
-      for (final d in _calendarDays) {
-        if (_isDayInPast(d)) continue;
-        final parsed = DateTime.tryParse(d.date);
-        if (parsed != null &&
-            (parsed.weekday == DateTime.saturday ||
-                parsed.weekday == DateTime.sunday)) {
-          final isBooked =
-              d.bookingStatus != null && d.bookingStatus!.isNotEmpty;
-          if (!isBooked) {
-            _selectedCalendarDates.add(d.date);
-          }
+    final targets = <String>{};
+    for (final d in _calendarDays) {
+      if (_isDayInPast(d)) continue;
+      final parsed = DateTime.tryParse(d.date);
+      if (parsed != null &&
+          (parsed.weekday == DateTime.saturday ||
+              parsed.weekday == DateTime.sunday)) {
+        final isBooked =
+            d.bookingStatus != null && d.bookingStatus!.isNotEmpty;
+        if (!isBooked) {
+          targets.add(d.date);
         }
+      }
+    }
+    if (targets.isEmpty) return;
+    setState(() {
+      final isAllSelected = targets.every(_selectedCalendarDates.contains);
+      if (isAllSelected) {
+        _selectedCalendarDates.removeAll(targets);
+      } else {
+        _selectedCalendarDates.addAll(targets);
       }
     });
   }
 
   void _selectAvailableDays() {
+    final targets = <String>{};
+    for (final d in _calendarDays) {
+      if (_isDayInPast(d)) continue;
+      final isBooked =
+          d.bookingStatus != null && d.bookingStatus!.isNotEmpty;
+      final isBlocked = !d.isAvailable || d.isBlockedByHost;
+      if (!isBooked && !isBlocked) {
+        targets.add(d.date);
+      }
+    }
+    if (targets.isEmpty) return;
     setState(() {
-      for (final d in _calendarDays) {
-        if (_isDayInPast(d)) continue;
-        final isBooked =
-            d.bookingStatus != null && d.bookingStatus!.isNotEmpty;
-        final isBlocked = !d.isAvailable || d.isBlockedByHost;
-        if (!isBooked && !isBlocked) {
-          _selectedCalendarDates.add(d.date);
-        }
+      final isAllSelected = targets.every(_selectedCalendarDates.contains);
+      if (isAllSelected) {
+        _selectedCalendarDates.removeAll(targets);
+      } else {
+        _selectedCalendarDates.addAll(targets);
       }
     });
   }
 
   void _selectAllMonthDays() {
+    final targets = <String>{};
+    for (final d in _calendarDays) {
+      if (_isDayInPast(d)) continue;
+      final isBooked =
+          d.bookingStatus != null && d.bookingStatus!.isNotEmpty;
+      if (!isBooked) {
+        targets.add(d.date);
+      }
+    }
+    if (targets.isEmpty) return;
     setState(() {
-      for (final d in _calendarDays) {
-        if (_isDayInPast(d)) continue;
-        final isBooked =
-            d.bookingStatus != null && d.bookingStatus!.isNotEmpty;
-        if (!isBooked) {
-          _selectedCalendarDates.add(d.date);
-        }
+      final isAllSelected = targets.every(_selectedCalendarDates.contains);
+      if (isAllSelected) {
+        _selectedCalendarDates.removeAll(targets);
+      } else {
+        _selectedCalendarDates.addAll(targets);
       }
     });
   }

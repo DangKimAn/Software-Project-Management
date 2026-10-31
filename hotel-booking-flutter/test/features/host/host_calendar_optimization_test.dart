@@ -76,6 +76,13 @@ class FakeCalendarAdapter implements HttpClientAdapter {
               'bookingStatus': 'confirmed',
               'guestName': 'Nguyễn Văn A',
             },
+            {
+              'date': '2026-10-31',
+              'basePrice': 1500000,
+              'effectivePrice': 2000000,
+              'isAvailable': true,
+              'isBlockedByHost': false,
+            },
           ],
         }),
         200,
@@ -219,6 +226,69 @@ void main() {
       expect(find.text('Villa Bãi Trước Hồ Bơi Riêng'), findsOneWidget);
 
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Quick select buttons toggle selection on tap and re-tap', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(430, 950));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(testRepo),
+            hostFilePickerProvider.overrideWithValue(fakePicker),
+          ],
+          child: const MaterialApp(
+            home: HostPortalScreen(
+              initialSection: HostPortalSection.calendar,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Mở calendar chi tiết bằng cách click vào listing
+      await tester.tap(find.text('The Song 5 sao tại Vũng Tàu'));
+      await tester.pumpAndSettle();
+
+      // Ban đầu chưa chọn ngày nào: panel action chưa hiện
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsNothing);
+
+      // 1. Nhấn 'Cuối tuần (T7, CN)' -> Panel hiện ra (đã chọn)
+      final weekendBtn = find.text('Cuối tuần (T7, CN)');
+      await tester.ensureVisible(weekendBtn);
+      await tester.tap(weekendBtn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsOneWidget);
+
+      // Nhấn lại 'Cuối tuần (T7, CN)' -> Bỏ chọn quay lại ban đầu (panel biến mất)
+      await tester.tap(weekendBtn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsNothing);
+
+      // 2. Nhấn 'Ngày còn trống' -> Panel hiện ra
+      final availableBtn = find.text('Ngày còn trống');
+      await tester.ensureVisible(availableBtn);
+      await tester.tap(availableBtn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsOneWidget);
+
+      // Nhấn lại 'Ngày còn trống' -> Bỏ chọn quay lại ban đầu
+      await tester.tap(availableBtn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsNothing);
+
+      // 3. Nhấn 'Cả tháng' -> Panel hiện ra
+      final allMonthBtn = find.text('Cả tháng');
+      await tester.ensureVisible(allMonthBtn);
+      await tester.tap(allMonthBtn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsOneWidget);
+
+      // Nhấn lại 'Cả tháng' -> Bỏ chọn quay lại ban đầu
+      await tester.tap(allMonthBtn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('calendar_unlock_save_btn')), findsNothing);
     });
   });
 }
