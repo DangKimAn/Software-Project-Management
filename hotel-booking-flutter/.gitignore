@@ -81,6 +81,8 @@ replay_pid*.log
 *.jks
 *.keystore
 key.properties
+**/google-services.json
+**/GoogleService-Info.plist
 
 # iOS / Xcode related
 **/ios/**/*.mode1v3

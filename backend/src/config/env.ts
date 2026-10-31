@@ -82,6 +82,8 @@ export type AppEnv = {
     paymentHoldMinutes: number;
     paymentExpirationSweepIntervalSeconds: number;
     allowDatabaseRootUser: boolean;
+    firebaseServiceAccountPath?: string;
+    firebaseServiceAccountJson?: string;
 };
 
 const parseNumber = (name: string, value: string | undefined, fallback: number) => {
@@ -562,5 +564,13 @@ export const getEnv = (): AppEnv => {
         ),
         openaiApiKey: assertResolvedEnv("OPENAI_API_KEY", process.env.OPENAI_API_KEY),
         openaiVisionModel: assertResolvedEnv("OPENAI_VISION_MODEL", process.env.OPENAI_VISION_MODEL) ?? "gpt-4.1-mini",
+        firebaseServiceAccountPath: assertResolvedEnv(
+            "FIREBASE_SERVICE_ACCOUNT_PATH",
+            process.env.FIREBASE_SERVICE_ACCOUNT_PATH,
+        ),
+        firebaseServiceAccountJson: assertResolvedEnv(
+            "FIREBASE_SERVICE_ACCOUNT_JSON",
+            process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+        ),
     };
 };

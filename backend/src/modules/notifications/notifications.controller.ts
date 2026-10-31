@@ -4,6 +4,10 @@ import { ApiError } from "../../common/api-error";
 import { asyncHandler } from "../../common/async-handler";
 import { sendSuccess } from "../../common/http";
 import {
+    registerUserDeviceToken,
+    unregisterUserDeviceToken,
+} from "../../services/fcm-push.service";
+import {
     listMyNotifications,
     markAllNotificationsRead,
     markNotificationRead,
@@ -54,6 +58,42 @@ export const markAllMyNotificationsRead: RequestHandler = asyncHandler(async (re
 
     return sendSuccess(res, {
         message: "Notifications marked as read",
+        data: result,
+    });
+});
+
+export const registerMyDeviceToken: RequestHandler = asyncHandler(async (req, res) => {
+    const userId = Number(req.user?.id);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const result = await registerUserDeviceToken({
+        userId,
+        token: typeof body.token === "string" ? body.token : String(body.fcmToken ?? ""),
+        platform: typeof body.platform === "string" ? body.platform : "android",
+        appFlavor: typeof body.appFlavor === "string" ? body.appFlavor : null,
+        deviceLabel: typeof body.deviceLabel === "string" ? body.deviceLabel : null,
+    });
+
+    return sendSuccess(res, {
+        message: "Device token registered",
+        data: result,
+    });
+});
+
+export const unregisterMyDeviceToken: RequestHandler = asyncHandler(async (req, res) => {
+    const userId = Number(req.user?.id);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const rawToken =
+        body.token ??
+        body.fcmToken ??
+        (typeof req.query.token === "string" ? req.query.token : undefined);
+
+    const result = await unregisterUserDeviceToken({
+        userId,
+        token: rawToken,
+    });
+
+    return sendSuccess(res, {
+        message: "Device token unregistered",
         data: result,
     });
 });

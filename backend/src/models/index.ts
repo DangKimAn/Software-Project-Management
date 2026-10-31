@@ -42,5 +42,6 @@ export { default as SemanticSynonym } from "./semantic-synonym";
 export { default as SocialAccount } from "./social-account";
 export { default as TagTaxonomy } from "./tag-taxonomy";
 export { default as User } from "./user";
+export { default as UserDeviceToken } from "./user-device-token";
 export { default as UserProfile } from "./user-profile";
 export { default as Wishlist } from "./wishlist";

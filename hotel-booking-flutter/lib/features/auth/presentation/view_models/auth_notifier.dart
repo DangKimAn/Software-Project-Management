@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/socket_service.dart';
+import '../../../../core/notifications/push_notification_service.dart';
 import '../../../../core/storage/preferences_service.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../data/services/google_auth_service.dart';
@@ -24,6 +26,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   final SocketService? _socket;
   final GoogleAuthService _googleAuthService;
   final DioClient? _dioClient;
+  final PushNotificationService? _pushNotifications;
 
   int _authOpEpoch = 0;
   bool _isCheckingResume = false;
@@ -45,10 +48,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     SocketService? socket,
     GoogleAuthService? googleAuthService,
     DioClient? dioClient,
+    PushNotificationService? pushNotifications,
   })  : _prefs = prefs,
         _socket = socket,
         _googleAuthService = googleAuthService ?? GoogleAuthService(),
         _dioClient = dioClient,
+        _pushNotifications = pushNotifications,
         super(const AsyncValue.loading()) {
     _dioClient?.addSessionExpiredListener(_onClientSessionExpired);
     _dioClient?.addSessionRefreshedListener(_onClientSessionRefreshed);
@@ -123,6 +128,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
   /// Invoked when `DioClient` detects an unrecoverable 401/403 during token refresh.
   Future<void> handleSessionExpired() async {
+    _pushNotifications?.clearLocalSyncState();
     final epoch = ++_authOpEpoch;
     _socket?.disconnect();
     if (mounted) {
@@ -292,6 +298,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   }
 
   Future<void> logout() async {
+    await _pushNotifications?.unregisterCurrentDevice();
     final epoch = ++_authOpEpoch;
     _socket?.disconnect();
     // Immediately clear authenticated user state so protected screens stop
@@ -392,11 +399,13 @@ final authNotifierProvider =
     prefs = null;
   }
   final socket = ref.watch(socketServiceProvider);
+  final pushNotifications = ref.watch(pushNotificationServiceProvider);
   return AuthNotifier(
     repository,
     prefs: prefs,
     socket: socket,
     googleAuthService: googleAuthService,
     dioClient: client,
+    pushNotifications: pushNotifications,
   );
 });

@@ -473,4 +473,126 @@ describe("Module notifications (NT-01 to NT-12)", () => {
         assert.ok(res.body.success);
         assert.equal(res.body.data.items.length, 1);
     });
+
+    it("NT-13: Đăng ký và hủy đăng ký FCM device token cho Android (POST /api/notifications/devices & /devices/unregister)", async () => {
+        const UserDeviceToken = require("../dist/models/user-device-token").default;
+        const sampleToken = "fcm_android_device_token_sample_1234567890_abcdef";
+        let storedRecord: any = null;
+
+        patch(UserDeviceToken, "findOne", async () => storedRecord);
+        patch(UserDeviceToken, "create", async (data: any) => {
+            storedRecord = {
+                ...data,
+                deviceTokenId: 77,
+                async update(fields: any) {
+                    Object.assign(this, fields);
+                    return this;
+                },
+            };
+            return storedRecord;
+        });
+        patch(UserDeviceToken, "update", async (fields: any) => {
+            if (storedRecord) {
+                Object.assign(storedRecord, fields);
+                return [1];
+            }
+            return [0];
+        });
+
+        const regRes = await request(app)
+            .post("/api/notifications/devices")
+            .set(userAAuth)
+            .send({
+                token: sampleToken,
+                platform: "android",
+                appFlavor: "dev",
+            });
+
+        assert.equal(regRes.status, 200);
+        assert.equal(regRes.body.success, true);
+        assert.equal(regRes.body.data.isActive, true);
+        assert.equal(storedRecord.userId, 201);
+
+        const unregRes = await request(app)
+            .post("/api/notifications/devices/unregister")
+            .set(userAAuth)
+            .send({ token: sampleToken });
+
+        assert.equal(unregRes.status, 200);
+        assert.equal(unregRes.body.data.unregistered, true);
+        assert.equal(storedRecord.isActive, false);
+    });
+
+    it("NT-14: Gửi thông báo đẩy FCM Android và tự động vô hiệu hóa token không còn hợp lệ", async () => {
+        const UserDeviceToken = require("../dist/models/user-device-token").default;
+        const fcmPushService = require("../dist/services/fcm-push.service");
+        const validToken = "valid_android_fcm_token_000000000000000001";
+        const deadToken = "expired_android_fcm_token_0000000000000002";
+
+        let deactivatedHashes: string[] = [];
+        let capturedMulticast: any = null;
+
+        fcmPushService.setFcmMulticastSenderForTesting(async (msg: any) => {
+            capturedMulticast = msg;
+            return {
+                successCount: 1,
+                failureCount: 1,
+                responses: [
+                    { success: true, messageId: "projects/test/messages/1" },
+                    {
+                        success: false,
+                        error: { code: "messaging/registration-token-not-registered", message: "NotRegistered" },
+                    },
+                ],
+            };
+        });
+
+        patch(UserDeviceToken, "findAll", async () => [
+            {
+                deviceTokenId: 1,
+                userId: 201,
+                fcmToken: validToken,
+                tokenHash: fcmPushService.hashDeviceToken(validToken),
+                platform: "android",
+                isActive: true,
+            },
+            {
+                deviceTokenId: 2,
+                userId: 201,
+                fcmToken: deadToken,
+                tokenHash: fcmPushService.hashDeviceToken(deadToken),
+                platform: "android",
+                isActive: true,
+            },
+        ]);
+
+        patch(UserDeviceToken, "update", async (_fields: any, options: any) => {
+            deactivatedHashes = options.where.tokenHash;
+            return [deactivatedHashes.length];
+        });
+
+        try {
+            const result = await fcmPushService.sendPushToUser(201, {
+                title: "Đặt phòng thành công",
+                body: "Booking #9001 đã xác nhận",
+                actionUrl: "/account/trips",
+                eventType: "BOOKING_CONFIRMED",
+                targetType: "booking",
+                targetId: 9001,
+                notificationLogId: 101,
+            });
+
+            assert.equal(result.sentCount, 1);
+            assert.equal(result.failureCount, 1);
+            assert.equal(capturedMulticast.android.priority, "high");
+            assert.equal(
+                capturedMulticast.android.notification.channelId,
+                "minh_thanh_villa_high_importance",
+            );
+            assert.equal(capturedMulticast.data.actionUrl, "/account/trips");
+            assert.deepEqual(deactivatedHashes, [fcmPushService.hashDeviceToken(deadToken)]);
+        } finally {
+            fcmPushService.resetFcmServiceCacheForTesting();
+        }
+    });
 });

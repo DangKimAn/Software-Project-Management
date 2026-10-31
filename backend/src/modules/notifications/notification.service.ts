@@ -12,6 +12,7 @@ import Refund from "../../models/refund";
 import Review from "../../models/review";
 import User, { type UserDocument } from "../../models/user";
 import { sendMail } from "../../services/mail.service";
+import { sendPushToUser } from "../../services/fcm-push.service";
 import { emitNotificationNew } from "../../socket/socket";
 import type { AuthenticatedUser } from "../auth/auth.service";
 
@@ -240,6 +241,16 @@ const createInAppNotificationOnce = async (
 
         runAfterCommit(input.transaction, async () => {
             emitCreatedNotification(recipient.userId, notification);
+            await sendPushToUser(recipient.userId, {
+                title: notification.title ?? "The Palm Villa",
+                body: notification.body ?? "",
+                actionUrl: notification.actionUrl ?? null,
+                eventType: notification.eventType,
+                targetType: notification.targetType,
+                targetId: notification.targetId,
+                notificationLogId: Number(notification.notificationLogId),
+                data: notification.payload ?? null,
+            });
         });
     } catch (error) {
         if (error instanceof UniqueConstraintError) {

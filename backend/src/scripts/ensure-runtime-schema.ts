@@ -117,8 +117,7 @@ const ensureEnumContains = async (
 
     const enumSql = values.map((value) => `'${value.replace(/'/g, "''")}'`).join(",");
     await sequelize.query(
-        `ALTER TABLE \`${tableName}\` MODIFY COLUMN \`${columnName}\` ENUM(${enumSql}) ${nullSql} ${
-            defaultSql ?? ""
+        `ALTER TABLE \`${tableName}\` MODIFY COLUMN \`${columnName}\` ENUM(${enumSql}) ${nullSql} ${defaultSql ?? ""
         }`,
     );
 };
@@ -437,6 +436,41 @@ const ensureNotificationLogsSchema = async () => {
     );
 };
 
+const ensureUserDeviceTokensSchema = async () => {
+    if (!(await tableExists("user_device_tokens"))) {
+        await sequelize.query(`
+            CREATE TABLE \`user_device_tokens\` (
+                \`device_token_id\` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                \`user_id\` BIGINT UNSIGNED NOT NULL,
+                \`fcm_token\` VARCHAR(512) NOT NULL,
+                \`token_hash\` CHAR(64) NOT NULL,
+                \`platform\` ENUM('android','ios','web') NOT NULL DEFAULT 'android',
+                \`app_flavor\` VARCHAR(32) NULL,
+                \`device_label\` VARCHAR(255) NULL,
+                \`is_active\` TINYINT(1) NOT NULL DEFAULT 1,
+                \`last_seen_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (\`device_token_id\`),
+                UNIQUE KEY \`uq_user_device_tokens_hash\` (\`token_hash\`),
+                INDEX \`idx_user_device_tokens_user_active\` (\`user_id\`, \`is_active\`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        return;
+    }
+
+    await ensureColumn("user_device_tokens", "app_flavor", "`app_flavor` VARCHAR(32) NULL AFTER `platform`");
+    await ensureColumn("user_device_tokens", "device_label", "`device_label` VARCHAR(255) NULL AFTER `app_flavor`");
+    await ensureColumn("user_device_tokens", "is_active", "`is_active` TINYINT(1) NOT NULL DEFAULT 1 AFTER `device_label`");
+    await ensureColumn(
+        "user_device_tokens",
+        "last_seen_at",
+        "`last_seen_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER `is_active`",
+    );
+    await ensureIndex("user_device_tokens", "uq_user_device_tokens_hash", "UNIQUE INDEX", "`token_hash`");
+    await ensureIndex("user_device_tokens", "idx_user_device_tokens_user_active", "INDEX", "`user_id`, `is_active`");
+};
+
 const ensurePayoutAccountSchema = async () => {
     if (!(await tableExists("payout_account"))) {
         return;
@@ -567,6 +601,7 @@ export const ensureRuntimeSchema = async () => {
     await ensureAuthOtpSchema();
     await ensureAuditLogsSchema();
     await ensureNotificationLogsSchema();
+    await ensureUserDeviceTokensSchema();
     await ensurePayoutAccountSchema();
     await ensureMessagingSchema();
 };
