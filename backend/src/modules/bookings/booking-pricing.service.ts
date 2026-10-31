@@ -4,6 +4,7 @@ import { ApiError } from "../../common/api-error";
 import Coupon from "../../models/coupon";
 import CouponRedemption from "../../models/coupon-redemption";
 import type { ListingDocument } from "../../models/listing";
+import { syncEffectivePlatformFee } from "../admin/admin-fees.service";
 
 export type NightlyPriceSource = "basePrice" | "weekendPrice" | "calendar";
 
@@ -221,7 +222,13 @@ export const calculateBookingPricing = async (params: {
         (listing as ListingWithExtraGuestPricing).includedGuests ?? listing.maxGuests,
     )));
     const surchargeAmount = guestCount > surchargeIncludedGuests ? rawSurcharge : 0;
-    const serviceFeeAmount = Math.round(accommodationAmount * (toNumber(listing.serviceFeePct) / 100));
+    let effectiveServiceFeePct = 10;
+    try {
+        effectiveServiceFeePct = await syncEffectivePlatformFee(transaction);
+    } catch {
+        effectiveServiceFeePct = listing.serviceFeePct != null ? toNumber(listing.serviceFeePct) : 10;
+    }
+    const serviceFeeAmount = Math.round(accommodationAmount * (effectiveServiceFeePct / 100));
     const preDiscountTotal = accommodationAmount + cleaningFeeAmount + surchargeAmount + serviceFeeAmount;
     const normalizedCouponCode = normalizeCouponCode(couponCode);
     const { coupon, discountAmount } = await getCouponDiscount(

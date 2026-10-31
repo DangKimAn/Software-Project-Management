@@ -434,6 +434,37 @@ const ensureNotificationLogsSchema = async () => {
         "INDEX",
         "`recipient_user_id`, `read_at`",
     );
+
+    // Migrate legacy branding text in existing notification logs to "The Palm Villa"
+    try {
+        await sequelize.query(`
+            UPDATE \`notification_logs\`
+            SET \`title\` = REPLACE(\`title\`, 'Chào mừng đến Minh Thành Villa', 'Xin chào đến với The Palm Villa')
+            WHERE \`title\` LIKE '%Chào mừng đến Minh Thành Villa%'
+        `);
+        await sequelize.query(`
+            UPDATE \`notification_logs\`
+            SET \`title\` = REPLACE(\`title\`, 'Minh Thành Villa', 'The Palm Villa')
+            WHERE \`title\` LIKE '%Minh Thành Villa%'
+        `);
+        await sequelize.query(`
+            UPDATE \`notification_logs\`
+            SET \`body\` = REPLACE(\`body\`, 'Chào mừng đến Minh Thành Villa', 'Chào mừng bạn đến với The Palm Villa')
+            WHERE \`body\` LIKE '%Chào mừng đến Minh Thành Villa%'
+        `);
+        await sequelize.query(`
+            UPDATE \`notification_logs\`
+            SET \`body\` = REPLACE(\`body\`, 'Minh Thành Villa', 'The Palm Villa')
+            WHERE \`body\` LIKE '%Minh Thành Villa%'
+        `);
+        await sequelize.query(`
+            UPDATE \`notification_logs\`
+            SET \`body\` = REPLACE(\`body\`, 'Nguyễn Minh Thành', 'The Palm Villa')
+            WHERE \`body\` LIKE '%Nguyễn Minh Thành%' AND \`event_type\` = 'BOOKING_CONFIRMED'
+        `);
+    } catch (e) {
+        console.warn("Could not backfill legacy notification branding", { error: e });
+    }
 };
 
 const ensureUserDeviceTokensSchema = async () => {
@@ -594,6 +625,35 @@ const ensureMessagingSchema = async () => {
     }
 };
 
+const ensurePlatformFeeSettingsSchema = async () => {
+    if (!(await tableExists("platform_fee_settings"))) {
+        await sequelize.query(`
+            CREATE TABLE \`platform_fee_settings\` (
+                \`id\` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                \`fee_pct\` DECIMAL(5,2) NOT NULL,
+                \`status\` ENUM('active','scheduled','superseded','cancelled') NOT NULL DEFAULT 'scheduled',
+                \`effective_at\` DATETIME NOT NULL,
+                \`created_by_admin_id\` BIGINT UNSIGNED NOT NULL,
+                \`cancelled_by_admin_id\` BIGINT UNSIGNED NULL,
+                \`reason\` VARCHAR(500) NULL,
+                \`notification_sent_at\` DATETIME NULL,
+                \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (\`id\`),
+                INDEX \`idx_fee_status_effective\` (\`status\`, \`effective_at\`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+
+        await sequelize.query(`
+            INSERT INTO \`platform_fee_settings\` (
+                \`fee_pct\`, \`status\`, \`effective_at\`, \`created_by_admin_id\`, \`reason\`, \`notification_sent_at\`
+            ) VALUES (
+                10.00, 'active', NOW(), 1, 'Initial default platform fee 10%', NOW()
+            )
+        `);
+    }
+};
+
 export const ensureRuntimeSchema = async () => {
     await ensureUsersSchema();
     await ensureUserProfilesSchema();
@@ -604,6 +664,7 @@ export const ensureRuntimeSchema = async () => {
     await ensureUserDeviceTokensSchema();
     await ensurePayoutAccountSchema();
     await ensureMessagingSchema();
+    await ensurePlatformFeeSettingsSchema();
 };
 
 if (require.main === module) {
