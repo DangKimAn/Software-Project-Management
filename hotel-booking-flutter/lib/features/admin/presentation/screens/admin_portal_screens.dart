@@ -75,6 +75,14 @@ const List<AdminNavItem> kAdminNavItems = [
     title: 'Phân quyền hệ thống',
     subtitle: 'Cập nhật vai trò người dùng (Guest, Host, Moderator, Admin).',
   ),
+  AdminNavItem(
+    id: 'phi-nen-tang',
+    label: 'Phí nền tảng',
+    route: '/admin/phi-nen-tang',
+    icon: LucideIcons.badgePercent,
+    title: 'Quản lý phí nền tảng',
+    subtitle: 'Áp dụng phí toàn sàn, thời gian thông báo 7 ngày và quản lý lịch sử.',
+  ),
 ];
 
 bool _isActorAdmin(User? actor) {
@@ -797,6 +805,8 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
         return const _AdminHostApplicationsTab();
       case 'phan-quyen':
         return const _AdminRolesTab();
+      case 'phi-nen-tang':
+        return const _AdminPlatformFeeTab();
       case 'tong-quan':
       default:
         return const _AdminOverviewTab();
@@ -5299,6 +5309,714 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── 6. QUẢN LÝ PHÍ NỀN TẢNG (/admin/phi-nen-tang) ──
+class _AdminPlatformFeeTab extends ConsumerStatefulWidget {
+  const _AdminPlatformFeeTab();
+
+  @override
+  ConsumerState<_AdminPlatformFeeTab> createState() =>
+      _AdminPlatformFeeTabState();
+}
+
+class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
+  bool _loading = true;
+  bool _submitting = false;
+  String? _error;
+  String? _success;
+
+  Map<String, dynamic>? _activeFee;
+  Map<String, dynamic>? _scheduledFee;
+  int _totalPlatformRevenue = 0;
+  List<Map<String, dynamic>> _history = const [];
+
+  final TextEditingController _feeCtrl = TextEditingController();
+  final TextEditingController _reasonCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFeeStatus();
+  }
+
+  @override
+  void dispose() {
+    _feeCtrl.dispose();
+    _reasonCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadFeeStatus() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final data =
+          await ref.read(adminRepositoryProvider).getPlatformFeeStatus();
+      if (!mounted) return;
+
+      setState(() {
+        _activeFee = data['activeFee'] as Map<String, dynamic>?;
+        _scheduledFee = data['scheduledFee'] as Map<String, dynamic>?;
+        _totalPlatformRevenue =
+            (data['totalPlatformRevenue'] as num?)?.toInt() ?? 0;
+        final rawHist = data['history'];
+        if (rawHist is List) {
+          _history = rawHist.whereType<Map<String, dynamic>>().toList();
+        } else {
+          _history = const [];
+        }
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = AdminRepository.extractErrorMessage(
+          e,
+          'Không thể tải trạng thái phí nền tảng.',
+        );
+      });
+    }
+  }
+
+  Future<void> _handleSchedule() async {
+    final rawFee = double.tryParse(_feeCtrl.text.trim());
+    if (rawFee == null || rawFee < 0 || rawFee > 100) {
+      setState(() {
+        _error = 'Vui lòng nhập tỷ lệ phí hợp lệ từ 0% đến 100%.';
+      });
+      return;
+    }
+
+    final reason = _reasonCtrl.text.trim();
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xác nhận điều chỉnh phí'),
+        content: Text(
+          'Mức phí mới $rawFee% sẽ được lên lịch và chính thức có hiệu lực sau 7 ngày.\n\n'
+          'Hệ thống sẽ tự động gửi thông báo (In-app, Push Notification, Email) đến toàn bộ các Host hiện tại.\n\n'
+          'Bạn có chắc chắn muốn áp dụng?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Đồng ý & Thông báo'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+      _success = null;
+    });
+
+    try {
+      await ref.read(adminRepositoryProvider).schedulePlatformFeeChange(
+            feePct: rawFee,
+            reason: reason.isEmpty ? null : reason,
+          );
+      if (!mounted) return;
+      _feeCtrl.clear();
+      _reasonCtrl.clear();
+      setState(() {
+        _submitting = false;
+        _success =
+            'Đã lên lịch áp dụng phí $rawFee% (hiệu lực sau 7 ngày) và gửi thông báo thành công đến các Host.';
+      });
+      await _loadFeeStatus();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = AdminRepository.extractErrorMessage(
+          e,
+          'Không thể lên lịch điều chỉnh phí.',
+        );
+      });
+    }
+  }
+
+  Future<void> _handleCancelSchedule() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hủy lịch điều chỉnh phí'),
+        content: const Text(
+          'Bạn có chắc chắn muốn hủy kế hoạch điều chỉnh phí đang chờ kích hoạt này không?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Đóng'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Xác nhận hủy'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+
+    try {
+      await ref.read(adminRepositoryProvider).cancelScheduledPlatformFee();
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _success = 'Đã hủy lịch điều chỉnh phí thành công.';
+      });
+      await _loadFeeStatus();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = AdminRepository.extractErrorMessage(
+          e,
+          'Không thể hủy lịch điều chỉnh phí.',
+        );
+      });
+    }
+  }
+
+  String _formatIsoDate(String? iso) {
+    if (iso == null || iso.isEmpty) return '—';
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return iso;
+    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatCountdown(int seconds) {
+    if (seconds <= 0) return 'Đang kích hoạt...';
+    final days = seconds ~/ 86400;
+    final hours = (seconds % 86400) ~/ 3600;
+    final mins = (seconds % 3600) ~/ 60;
+    if (days > 0) {
+      return '$days ngày $hours giờ $mins phút';
+    }
+    return '$hours giờ $mins phút';
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color bg;
+    Color fg;
+    String label;
+    switch (status) {
+      case 'active':
+        bg = AppColors.success.withValues(alpha: 0.15);
+        fg = AppColors.success;
+        label = 'Đang áp dụng';
+        break;
+      case 'scheduled':
+        bg = AppColors.warning.withValues(alpha: 0.15);
+        fg = AppColors.warning;
+        label = 'Đã lên lịch (7 ngày)';
+        break;
+      case 'superseded':
+        bg = AppColors.surfaceMuted;
+        fg = AppColors.textSecondary;
+        label = 'Hết hiệu lực';
+        break;
+      case 'cancelled':
+      default:
+        bg = AppColors.error.withValues(alpha: 0.15);
+        fg = AppColors.error;
+        label = 'Đã hủy';
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final padding = _responsivePagePadding(context);
+    final activeFeePct = _activeFee?['feePct'] ?? 10;
+
+    return RefreshIndicator(
+      onRefresh: _loadFeeStatus,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.all(padding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_error != null) ...[
+              _AdminErrorBanner(message: _error!, onRetry: _loadFeeStatus),
+              const SizedBox(height: 16),
+            ],
+            if (_success != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: AppColors.success.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.circleCheck,
+                        size: 20, color: AppColors.success),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _success!,
+                        style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.success,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // 1. KPI Cards
+            LayoutBuilder(
+              builder: (ctx, constraints) {
+                final isNarrow = constraints.maxWidth < 600;
+                final cards = [
+                  _buildKpiCard(
+                    title: 'Phí sàn hiện tại',
+                    value: '$activeFeePct%',
+                    subtitle: 'Áp dụng chung toàn bộ ứng dụng',
+                    icon: LucideIcons.badgePercent,
+                    color: AppColors.primary,
+                  ),
+                  _buildKpiCard(
+                    title: 'Tổng phí đã thu',
+                    value: CurrencyFormatter.formatVnd(_totalPlatformRevenue),
+                    subtitle: 'Doanh thu tích lũy nền tảng',
+                    icon: LucideIcons.wallet,
+                    color: AppColors.success,
+                  ),
+                ];
+
+                if (isNarrow) {
+                  return Column(
+                    children: [
+                      cards[0],
+                      const SizedBox(height: 12),
+                      cards[1],
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: cards[0]),
+                    const SizedBox(width: 16),
+                    Expanded(child: cards[1]),
+                  ],
+                );
+              },
+            ),
+
+            const SizedBox(height: 24),
+
+            // 2. Banner Scheduled (nếu có lịch chờ)
+            if (_scheduledFee != null) ...[
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF8E7),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFFFD580)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(LucideIcons.calendarClock,
+                            color: Color(0xFFD97706), size: 24),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Kế hoạch điều chỉnh phí đã được lên lịch',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF92400E),
+                            ),
+                          ),
+                        ),
+                        _buildStatusBadge('scheduled'),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Mức phí mới: ${_scheduledFee!['feePct']}% (Thay đổi từ $activeFeePct%)',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Thời điểm có hiệu lực: ${_formatIsoDate(_scheduledFee!['effectiveAt']?.toString())}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Thời gian còn lại: ${_formatCountdown((_scheduledFee!['countdownSeconds'] as num?)?.toInt() ?? 0)}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFD97706),
+                      ),
+                    ),
+                    if (_scheduledFee!['reason'] != null &&
+                        '${_scheduledFee!['reason']}'.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Lý do thông báo: ${_scheduledFee!['reason']}',
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontStyle: FontStyle.italic,
+                            color: AppColors.textPrimary),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Toàn bộ Host đã được gửi thông báo. Các đơn đặt phòng tạo trước thời điểm hiệu lực vẫn áp dụng mức phí cũ.',
+                            style: TextStyle(
+                                fontSize: 12, color: AppColors.textSecondary),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        OutlinedButton(
+                          onPressed:
+                              _submitting ? null : _handleCancelSchedule,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.error,
+                            side: const BorderSide(color: AppColors.error),
+                          ),
+                          child: const Text('Hủy lịch'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+
+            // 3. Form lên lịch điều chỉnh phí mới
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Lên lịch điều chỉnh phí nền tảng mới',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Mức phí mới sẽ có hiệu lực sau đúng 7 ngày và hệ thống sẽ tự động gửi thông báo đến toàn bộ các Host.',
+                    style:
+                        TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _feeCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: 'Tỷ lệ phí mới (%)',
+                      hintText: 'Ví dụ: 12',
+                      prefixIcon: const Icon(LucideIcons.percent, size: 20),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _reasonCtrl,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      labelText: 'Lý do điều chỉnh (gửi đến Host)',
+                      hintText:
+                          'Ví dụ: Nâng cấp hạ tầng dịch vụ và mở rộng tính năng hỗ trợ khách...',
+                      prefixIcon: const Icon(LucideIcons.messageSquare, size: 20),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: (_submitting || _scheduledFee != null)
+                            ? null
+                            : _handleSchedule,
+                        icon: _submitting
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(LucideIcons.send, size: 18),
+                        label: Text(
+                          _scheduledFee != null
+                              ? 'Đang có lịch chờ'
+                              : 'Lên lịch áp dụng (Sau 7 ngày) & Thông báo',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // 4. Lịch sử thay đổi phí (Audit Timeline)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Lịch sử thay đổi phí nền tảng',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_loading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else if (_history.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(
+                        child: Text(
+                          'Chưa có lịch sử thay đổi.',
+                          style: TextStyle(
+                              fontSize: 13, color: AppColors.textSecondary),
+                        ),
+                      ),
+                    )
+                  else
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _history.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 16, color: AppColors.border),
+                      itemBuilder: (ctx, idx) {
+                        final item = _history[idx];
+                        final fee = item['feePct'] ?? 0;
+                        final status = '${item['status']}';
+                        final effectiveAt =
+                            _formatIsoDate(item['effectiveAt']?.toString());
+                        final reason = item['reason'];
+
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: const BoxDecoration(
+                                color: AppColors.surfaceBase,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '$fee%',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Mức phí: $fee%',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      _buildStatusBadge(status),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Thời điểm hiệu lực: $effectiveAt',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  if (reason != null &&
+                                      '$reason'.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Ghi chú: $reason',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKpiCard({
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

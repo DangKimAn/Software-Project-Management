@@ -265,7 +265,7 @@ async function mockUpcomingBooking() {
             recipient: guestUser.email,
             recipientUserId: guestUser.userId,
             title: "Đặt phòng đã được xác nhận!",
-            body: `Chủ biệt thự Nguyễn Minh Thành đã xác nhận kỳ nghỉ #${bookingId} của bạn tại ${listing.title} từ ngày 01/11/2026 đến 03/11/2026.`,
+            body: `Chủ biệt thự The Palm Villa đã xác nhận kỳ nghỉ #${bookingId} của bạn tại ${listing.title} từ ngày 01/11/2026 đến 03/11/2026.`,
             actionUrl: `/trips/${bookingId}`,
             payload: { bookingId, listingId: listing.listingId },
             status: "sent",

@@ -510,12 +510,13 @@ class NotificationBell extends ConsumerWidget {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        const Padding(
-                                          padding: EdgeInsets.only(top: 2),
-                                          child: Icon(
-                                            LucideIcons.bell,
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 2),
+                                          child: AppBrandIcon.thePalmLogo(
                                             size: 18,
-                                            color: AppColors.iconStrong,
+                                            color: item.isRead
+                                                ? AppColors.iconMuted
+                                                : AppColors.iconStrong,
                                           ),
                                         ),
                                         const SizedBox(width: 12),

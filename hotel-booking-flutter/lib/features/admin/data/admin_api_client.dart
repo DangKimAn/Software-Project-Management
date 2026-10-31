@@ -814,4 +814,40 @@ class AdminRepository {
       data: {'reason': reason.trim()},
     );
   }
+
+  Future<Map<String, dynamic>> getPlatformFeeStatus() async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/admin/fees/current');
+    final data = response.data?['data'];
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    return <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> schedulePlatformFeeChange({
+    required double feePct,
+    String? reason,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/admin/fees/schedule',
+      data: {
+        'feePct': feePct,
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
+    final data = response.data?['data'];
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    return <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> cancelScheduledPlatformFee() async {
+    final response = await _dio.post<Map<String, dynamic>>('/api/admin/fees/cancel');
+    final data = response.data?['data'];
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    return <String, dynamic>{};
+  }
 }
