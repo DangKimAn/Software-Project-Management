@@ -220,7 +220,7 @@ class HostSheetSyncCard extends ConsumerWidget {
       useSafeArea: true,
       backgroundColor: AppColors.surfaceBase,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (sheetCtx) => _HostSheetConnectModal(
         initialPayload: statusPayload,
@@ -239,15 +239,17 @@ class HostSheetSyncCard extends ConsumerWidget {
       useSafeArea: true,
       backgroundColor: AppColors.surfaceBase,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (sheetCtx) => SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              const _ModalDragHandle(),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   const Expanded(
@@ -294,7 +296,7 @@ class HostSheetSyncCard extends ConsumerWidget {
       useSafeArea: true,
       backgroundColor: AppColors.surfaceBase,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (_) => const _HostSheetChangeLogsModal(),
     );
@@ -995,88 +997,105 @@ class HostSheetSyncCard extends ConsumerWidget {
     HostSheetSyncViewState viewState,
     HostSheetIntegrationInfo integration,
   ) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Đồng bộ tự động',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSecondary,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderSoft),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Đồng bộ tự động',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        integration.autoSyncEnabled
+                            ? 'Đang bật'
+                            : 'Đang tạm dừng',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    integration.autoSyncEnabled ? 'Đang bật' : 'Đang tạm dừng',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
+                ),
+                const SizedBox(width: 8),
+                Semantics(
+                  label: 'Bật hoặc tắt đồng bộ tự động Google Sheets',
+                  child: _buildSheetSwitch(
+                    switchKey: const Key('sheet_sync_auto_toggle'),
+                    value: integration.autoSyncEnabled,
+                    onChanged: viewState.isBusy
+                        ? null
+                        : (val) => ref
+                            .read(hostSheetSyncNotifierProvider.notifier)
+                            .toggleAutoSync(val),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            Semantics(
-              label: 'Bật hoặc tắt đồng bộ tự động Google Sheets',
-              child: Switch.adaptive(
-                key: const Key('sheet_sync_auto_toggle'),
-                activeTrackColor: AppColors.primary,
-                value: integration.autoSyncEnabled,
-                onChanged: viewState.isBusy
-                    ? null
-                    : (val) => ref
-                        .read(hostSheetSyncNotifierProvider.notifier)
-                        .toggleAutoSync(val),
-              ),
-            ),
-          ],
-        ),
-        Row(
-          children: [
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Kiểm tra trực tiếp trước khi khách đặt',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
+          ),
+          const Divider(height: 1, color: AppColors.borderSoft),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Kiểm tra trực tiếp trước khi khách đặt',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        'Chặn nhận trùng đơn khi vừa tô khóa trên Sheets',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    'Chặn nhận trùng đơn khi vừa tô khóa trên Sheets',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
+                ),
+                const SizedBox(width: 8),
+                Semantics(
+                  label:
+                      'Bật hoặc tắt kiểm tra trực tiếp Google Sheets trước khi đặt phòng',
+                  child: _buildSheetSwitch(
+                    switchKey: const Key('sheet_sync_precheck_toggle'),
+                    value: integration.strictBookingPrecheck,
+                    onChanged: viewState.isBusy
+                        ? null
+                        : (val) => ref
+                            .read(hostSheetSyncNotifierProvider.notifier)
+                            .toggleStrictBookingPrecheck(val),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            Semantics(
-              label:
-                  'Bật hoặc tắt kiểm tra trực tiếp Google Sheets trước khi đặt phòng',
-              child: Switch.adaptive(
-                key: const Key('sheet_sync_precheck_toggle'),
-                activeTrackColor: AppColors.primary,
-                value: integration.strictBookingPrecheck,
-                onChanged: viewState.isBusy
-                    ? null
-                    : (val) => ref
-                        .read(hostSheetSyncNotifierProvider.notifier)
-                        .toggleStrictBookingPrecheck(val),
-              ),
-            ),
-          ],
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -1278,33 +1297,165 @@ class HostSheetSyncCard extends ConsumerWidget {
   }
 }
 
-class _SheetColorLegendPanel extends StatelessWidget {
-  const _SheetColorLegendPanel();
+Widget _buildSheetSwitch({
+  Key? switchKey,
+  required bool value,
+  required ValueChanged<bool>? onChanged,
+}) {
+  return Switch(
+    key: switchKey,
+    value: value,
+    onChanged: onChanged,
+    thumbColor: WidgetStateProperty.all(AppColors.surfaceBase),
+    trackColor: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.disabled)) {
+        return AppColors.skeleton;
+      }
+      if (states.contains(WidgetState.selected)) {
+        return AppColors.primary;
+      }
+      return AppColors.skeleton;
+    }),
+    trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.selected)) {
+        return Colors.transparent;
+      }
+      return AppColors.border;
+    }),
+    materialTapTargetSize: MaterialTapTargetSize.padded,
+  );
+}
+
+class _ModalDragHandle extends StatelessWidget {
+  const _ModalDragHandle();
 
   @override
   Widget build(BuildContext context) {
-    const items = <({Color swatch, String title, String subtitle})>[
-      (
-        swatch: AppColors.sheetCellAvailable,
-        title: 'Nền trắng (Trống)',
-        subtitle: 'Phòng còn trống (nếu không bị khóa trên ứng dụng).',
+    return Center(
+      child: Container(
+        width: 36,
+        height: 4,
+        decoration: BoxDecoration(
+          color: AppColors.border,
+          borderRadius: BorderRadius.circular(999),
+        ),
       ),
-      (
-        swatch: AppColors.sheetCellPendingHold,
-        title: 'Màu cam · G #mã đơn',
-        subtitle: 'Đang giữ chỗ chờ khách thanh toán (hệ thống tự ghi).',
-      ),
-      (
-        swatch: AppColors.sheetCellBooked,
-        title: 'Màu xanh · Đ #mã đơn',
-        subtitle: 'Khách đã thanh toán / xác nhận (được bảo vệ bởi hệ thống).',
-      ),
-      (
-        swatch: AppColors.sheetCellHostBlocked,
-        title: 'Màu đỏ · K hoặc ghi chú',
-        subtitle: 'Chủ nhà / Sale khóa thủ công trên Google Sheets.',
-      ),
-    ];
+    );
+  }
+}
+
+class _SheetColorLegendPanel extends StatelessWidget {
+  final bool embedded;
+
+  const _SheetColorLegendPanel({this.embedded = false});
+
+  static const items =
+      <({Color swatch, String shortLabel, String title, String subtitle})>[
+    (
+      swatch: AppColors.sheetCellAvailable,
+      shortLabel: 'Trống',
+      title: 'Nền trắng (Trống)',
+      subtitle: 'Phòng còn trống (nếu không bị khóa trên ứng dụng).',
+    ),
+    (
+      swatch: AppColors.sheetCellPendingHold,
+      shortLabel: 'G #đơn · Giữ chỗ',
+      title: 'Màu cam · G #mã đơn',
+      subtitle: 'Đang giữ chỗ chờ khách thanh toán (hệ thống tự ghi).',
+    ),
+    (
+      swatch: AppColors.sheetCellBooked,
+      shortLabel: 'Đ #đơn · Đã đặt',
+      title: 'Màu xanh · Đ #mã đơn',
+      subtitle: 'Khách đã thanh toán / xác nhận (được bảo vệ bởi hệ thống).',
+    ),
+    (
+      swatch: AppColors.sheetCellHostBlocked,
+      shortLabel: 'K · Khóa lịch',
+      title: 'Màu đỏ · K hoặc ghi chú',
+      subtitle: 'Chủ nhà / Sale khóa thủ công trên Google Sheets.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...items.map(
+          (item) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 20,
+                  height: 20,
+                  margin: const EdgeInsets.only(top: 2),
+                  decoration: BoxDecoration(
+                    color: item.swatch,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.title,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        item.subtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          height: 1.35,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const Divider(height: 12, color: AppColors.border),
+        const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              LucideIcons.triangleAlert,
+              size: 16,
+              color: AppColors.warning,
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Lưu ý: Không tô màu trang trí lên cả hàng ngày và không tự sửa cột A (Mã căn). Khi thêm hoặc đổi tên căn trên ứng dụng, bảng tính sẽ tự động cập nhật.',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    if (embedded) {
+      return content;
+    }
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1313,78 +1464,71 @@ class _SheetColorLegendPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.borderSoft),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ...items.map(
-            (item) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    margin: const EdgeInsets.only(top: 1),
-                    decoration: BoxDecoration(
-                      color: item.swatch,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        Text(
-                          item.subtitle,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            height: 1.35,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+      child: content,
+    );
+  }
+}
+
+class _ConnectStepHeader extends StatelessWidget {
+  final String stepNumber;
+  final String title;
+  final String? subtitle;
+
+  const _ConnectStepHeader({
+    required this.stepNumber,
+    required this.title,
+    this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.textPrimary,
+                borderRadius: BorderRadius.circular(999),
               ),
-            ),
-          ),
-          const Divider(height: 12, color: AppColors.border),
-          const Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                LucideIcons.triangleAlert,
-                size: 16,
-                color: AppColors.warning,
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Lưu ý: Không tô màu trang trí lên cả hàng ngày và không tự sửa cột A (Mã căn). Khi thêm hoặc đổi tên căn trên ứng dụng, bảng tính sẽ tự động cập nhật.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.4,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
-                  ),
+              child: Text(
+                stepNumber,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textInverse,
                 ),
               ),
-            ],
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 5),
+          Text(
+            subtitle!,
+            style: const TextStyle(
+              fontSize: 12.5,
+              height: 1.4,
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
-      ),
+      ],
     );
   }
 }
@@ -1406,6 +1550,7 @@ class _HostSheetConnectModalState
   late final TextEditingController _editorEmailCtrl;
   bool _autoSyncEnabled = true;
   bool _strictBookingPrecheck = true;
+  bool _legendExpanded = false;
 
   @override
   void initState() {
@@ -1453,224 +1598,542 @@ class _HostSheetConnectModalState
     }
   }
 
+  InputDecoration _buildInputDecoration({
+    required String hintText,
+    required IconData prefixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hintText,
+      hintStyle: const TextStyle(
+        fontSize: 13.5,
+        color: AppColors.textMuted,
+      ),
+      prefixIcon: Icon(
+        prefixIcon,
+        size: 18,
+        color: AppColors.iconMuted,
+      ),
+      filled: true,
+      fillColor: AppColors.surfaceBase,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 13,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: AppColors.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: AppColors.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(
+          color: AppColors.borderFocus,
+          width: 1.5,
+        ),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: AppColors.error),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(
+          color: AppColors.error,
+          width: 1.5,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final viewState = ref.watch(hostSheetSyncNotifierProvider);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final maxModalHeight = MediaQuery.sizeOf(context).height * 0.92;
     final serviceEmail = widget.initialPayload.serviceAccountEmail;
     final defaultHostEmail = widget.initialPayload.defaultHostEditorEmail;
 
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(24, 18, 24, 24 + bottomInset),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Kết nối lịch Google Sheets',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Đóng hộp thoại',
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
-                    onPressed: viewState.isBusy
-                        ? null
-                        : () => Navigator.of(context).pop(false),
-                    icon: const Icon(
-                      LucideIcons.x,
-                      size: 20,
-                      color: AppColors.iconStrong,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Bước 1: Mở tệp Google Sheets của bạn, nhấn Chia sẻ (Share) và cấp quyền Chỉnh sửa (Editor) cho email dưới đây:',
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.4,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 10),
-              if (serviceEmail != null && serviceEmail.isNotEmpty) ...[
-                _EmailCopyRow(
-                  copyButtonKey: const Key('sheet_sync_copy_sa_email_btn'),
-                  label: 'Email bot đồng bộ (bắt buộc cấp quyền Editor)',
-                  email: serviceEmail,
-                  onCopy: () => _copyEmail(serviceEmail, 'email hệ thống'),
-                ),
-                const SizedBox(height: 8),
-              ],
-              _EmailCopyRow(
-                copyButtonKey: const Key('sheet_sync_copy_editor_email_btn'),
-                label: 'Email Chủ nhà cần thêm quyền Editor',
-                email: defaultHostEmail,
-                onCopy: () => _copyEmail(defaultHostEmail, 'email Chủ nhà'),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Bước 2: Dán đường dẫn Google Sheets',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                key: const Key('sheet_sync_url_input'),
-                controller: _urlCtrl,
-                keyboardType: TextInputType.url,
-                textInputAction: TextInputAction.next,
-                validator: (value) => validateGoogleSheetInput(value ?? ''),
-                decoration: InputDecoration(
-                  hintText: 'https://docs.google.com/spreadsheets/d/...',
-                  prefixIcon: const Icon(LucideIcons.link, size: 18),
-                  filled: true,
-                  fillColor: AppColors.surfaceBase,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    borderSide: const BorderSide(
-                      color: AppColors.borderFocus,
-                      width: 1.5,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Email quản lý chính của Chủ nhà',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                key: const Key('sheet_sync_editor_email_input'),
-                controller: _editorEmailCtrl,
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.done,
-                validator: validateOptionalEditorEmail,
-                decoration: InputDecoration(
-                  hintText: 'athanhnee@gmail.com',
-                  filled: true,
-                  fillColor: AppColors.surfaceBase,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    borderSide: const BorderSide(
-                      color: AppColors.borderFocus,
-                      width: 1.5,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Tự động đồng bộ hai chiều',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                  Switch.adaptive(
-                    activeTrackColor: AppColors.primary,
-                    value: _autoSyncEnabled,
-                    onChanged: (v) => setState(() => _autoSyncEnabled = v),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Kiểm tra trực tiếp Sheets trước khi nhận đơn',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                  Switch.adaptive(
-                    activeTrackColor: AppColors.primary,
-                    value: _strictBookingPrecheck,
-                    onChanged: (v) =>
-                        setState(() => _strictBookingPrecheck = v),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const _SheetColorLegendPanel(),
-              if (viewState.actionErrorMessage != null) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.errorSoft,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxModalHeight),
+      child: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(bottom: bottomInset),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 12, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Icon(
-                        LucideIcons.triangleAlert,
-                        size: 18,
-                        color: AppColors.error,
+                      const _ModalDragHandle(),
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Kết nối lịch Google Sheets',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    height: 1.25,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Đồng bộ giữ chỗ, thanh toán & khóa lịch 2 chiều',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Đóng hộp thoại',
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
+                            onPressed: viewState.isBusy
+                                ? null
+                                : () => Navigator.of(context).pop(false),
+                            icon: const Icon(
+                              LucideIcons.x,
+                              size: 20,
+                              color: AppColors.iconStrong,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          viewState.actionErrorMessage!,
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.borderSoft),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const _ConnectStepHeader(
+                          stepNumber: '1',
+                          title: 'Cấp quyền Chỉnh sửa (Editor)',
+                          subtitle:
+                              'Mở tệp Google Sheets, nhấn Chia sẻ (Share) và cấp quyền Editor cho email dưới đây:',
+                        ),
+                        const SizedBox(height: 10),
+                        if (serviceEmail != null &&
+                            serviceEmail.isNotEmpty) ...[
+                          _EmailCopyRow(
+                            copyButtonKey:
+                                const Key('sheet_sync_copy_sa_email_btn'),
+                            label: 'Email bot đồng bộ · Bắt buộc quyền Editor',
+                            email: serviceEmail,
+                            onCopy: () =>
+                                _copyEmail(serviceEmail, 'email hệ thống'),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        _EmailCopyRow(
+                          copyButtonKey:
+                              const Key('sheet_sync_copy_editor_email_btn'),
+                          label: 'Email Chủ nhà · Quyền Editor',
+                          email: defaultHostEmail,
+                          onCopy: () =>
+                              _copyEmail(defaultHostEmail, 'email Chủ nhà'),
+                        ),
+                        const SizedBox(height: 18),
+                        const _ConnectStepHeader(
+                          stepNumber: '2',
+                          title: 'Liên kết trang tính & Email quản lý',
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Đường dẫn Google Sheets',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          key: const Key('sheet_sync_url_input'),
+                          controller: _urlCtrl,
+                          keyboardType: TextInputType.url,
+                          textInputAction: TextInputAction.next,
                           style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.error,
-                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                            color: AppColors.textPrimary,
+                          ),
+                          validator: (value) =>
+                              validateGoogleSheetInput(value ?? ''),
+                          decoration: _buildInputDecoration(
+                            hintText:
+                                'https://docs.google.com/spreadsheets/d/...',
+                            prefixIcon: LucideIcons.link,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Email quản lý chính của Chủ nhà',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          key: const Key('sheet_sync_editor_email_input'),
+                          controller: _editorEmailCtrl,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.done,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textPrimary,
+                          ),
+                          validator: validateOptionalEditorEmail,
+                          decoration: _buildInputDecoration(
+                            hintText: 'athanhnee@gmail.com',
+                            prefixIcon: LucideIcons.mail,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceSecondary,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.borderSoft),
+                          ),
+                          child: Column(
+                            children: [
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Tự động đồng bộ hai chiều',
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          SizedBox(height: 1),
+                                          Text(
+                                            'Cập nhật giữ chỗ, thanh toán & khóa lịch tự động',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _buildSheetSwitch(
+                                      value: _autoSyncEnabled,
+                                      onChanged: (v) =>
+                                          setState(() => _autoSyncEnabled = v),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Divider(
+                                height: 1,
+                                color: AppColors.borderSoft,
+                              ),
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Kiểm tra trực tiếp Sheets trước khi nhận đơn',
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          SizedBox(height: 1),
+                                          Text(
+                                            'Chặn trùng lịch ngay khi vừa tô khóa trên trang tính',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _buildSheetSwitch(
+                                      value: _strictBookingPrecheck,
+                                      onChanged: (v) => setState(
+                                        () => _strictBookingPrecheck = v,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceSecondary,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.borderSoft),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  key:
+                                      const Key('sheet_sync_toggle_legend_btn'),
+                                  borderRadius: BorderRadius.circular(16),
+                                  onTap: () => setState(
+                                    () => _legendExpanded = !_legendExpanded,
+                                  ),
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minHeight: 48,
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 10,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                            LucideIcons.info,
+                                            size: 16,
+                                            color: AppColors.iconStrong,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          const Expanded(
+                                            child: Text(
+                                              'Quy ước màu ô lịch trên Sheets',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppColors.textPrimary,
+                                              ),
+                                            ),
+                                          ),
+                                          Text(
+                                            _legendExpanded
+                                                ? 'Thu gọn'
+                                                : 'Chi tiết',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Icon(
+                                            _legendExpanded
+                                                ? LucideIcons.chevronUp
+                                                : LucideIcons.chevronDown,
+                                            size: 16,
+                                            color: AppColors.iconMuted,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  14,
+                                  0,
+                                  14,
+                                  12,
+                                ),
+                                child: _legendExpanded
+                                    ? const _SheetColorLegendPanel(
+                                        embedded: true,
+                                      )
+                                    : Wrap(
+                                        spacing: 8,
+                                        runSpacing: 6,
+                                        children: _SheetColorLegendPanel.items
+                                            .map(
+                                              (item) => Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 9,
+                                                  vertical: 5,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.surfaceBase,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                    999,
+                                                  ),
+                                                  border: Border.all(
+                                                    color: AppColors.borderSoft,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Container(
+                                                      width: 12,
+                                                      height: 12,
+                                                      decoration: BoxDecoration(
+                                                        color: item.swatch,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                        border: Border.all(
+                                                          color:
+                                                              AppColors.border,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Flexible(
+                                                      child: Text(
+                                                        item.shortLabel,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: const TextStyle(
+                                                          fontSize: 11.5,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color: AppColors
+                                                              .textPrimary,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            )
+                                            .toList(),
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                  decoration: const BoxDecoration(
+                    color: AppColors.surfaceBase,
+                    border: Border(
+                      top: BorderSide(color: AppColors.borderSoft),
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (viewState.actionErrorMessage != null) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.errorSoft,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                LucideIcons.triangleAlert,
+                                size: 18,
+                                color: AppColors.error,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  viewState.actionErrorMessage!,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.error,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      FilledButton.icon(
+                        key: const Key('sheet_sync_submit_connect_btn'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: AppColors.textInverse,
+                          minimumSize: const Size.fromHeight(50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: viewState.isBusy ? null : _submit,
+                        icon: viewState.activeAction == 'connect'
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.textInverse,
+                                ),
+                              )
+                            : const Icon(
+                                LucideIcons.check,
+                                size: 18,
+                                color: AppColors.iconOnBrand,
+                              ),
+                        label: Text(
+                          viewState.activeAction == 'connect'
+                              ? 'Đang kiểm tra quyền & khởi tạo...'
+                              : 'Xác minh quyền & Kết nối',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
@@ -1678,42 +2141,7 @@ class _HostSheetConnectModalState
                   ),
                 ),
               ],
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                key: const Key('sheet_sync_submit_connect_btn'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.textInverse,
-                  minimumSize: const Size.fromHeight(52),
-                  shape: const StadiumBorder(),
-                ),
-                onPressed: viewState.isBusy ? null : _submit,
-                icon: viewState.activeAction == 'connect'
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.textInverse,
-                        ),
-                      )
-                    : const Icon(
-                        LucideIcons.check,
-                        size: 18,
-                        color: AppColors.iconOnBrand,
-                      ),
-                label: Text(
-                  viewState.activeAction == 'connect'
-                      ? 'Đang kiểm tra quyền & khởi tạo...'
-                      : 'Xác minh quyền & Kết nối',
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1737,7 +2165,7 @@ class _EmailCopyRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(12, 9, 6, 9),
       decoration: BoxDecoration(
         color: AppColors.surfaceSecondary,
         borderRadius: BorderRadius.circular(14),
@@ -1751,32 +2179,54 @@ class _EmailCopyRow extends StatelessWidget {
               children: [
                 Text(
                   label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
                     color: AppColors.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 2),
-                SelectableText(
-                  email,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                const SizedBox(height: 3),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SelectableText(
+                    email,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          IconButton(
-            key: copyButtonKey,
-            tooltip: 'Sao chép địa chỉ email',
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            onPressed: onCopy,
-            icon: const Icon(
-              LucideIcons.copy,
-              size: 18,
-              color: AppColors.iconStrong,
+          const SizedBox(width: 6),
+          Semantics(
+            button: true,
+            label: 'Sao chép $label',
+            child: IconButton(
+              key: copyButtonKey,
+              tooltip: 'Sao chép địa chỉ email',
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              onPressed: onCopy,
+              icon: Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceBase,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: const Icon(
+                  LucideIcons.copy,
+                  size: 16,
+                  color: AppColors.iconStrong,
+                ),
+              ),
             ),
           ),
         ],

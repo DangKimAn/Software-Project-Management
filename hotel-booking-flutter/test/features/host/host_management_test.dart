@@ -10,9 +10,11 @@ import 'package:hotel_booking_flutter/features/host/domain/host_models.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/screens/host_onboarding_screens.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/screens/host_portal_screens.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/screens/them_cho_nghi_screen.dart';
+import 'package:hotel_booking_flutter/features/host/presentation/widgets/host_studio_widgets.dart';
 import 'package:hotel_booking_flutter/features/host/services/host_file_picker_service.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class DioClient {
   final Dio dio = Dio(BaseOptions(baseUrl: 'http://localhost:4000'));
@@ -1200,6 +1202,11 @@ void main() {
               'grossRevenue': 50000000,
               'platformRevenue': 5000000,
               'hostRevenue': 45000000,
+              'pendingStayRevenue': 8300000,
+              'pendingStayPlatformRevenue': 800000,
+              'pendingStayHostRevenue': 7500000,
+              'pendingStayBookingCount': 1,
+              'refundedAmount': 500000,
               'bookingCount': 8,
               'paymentCount': 8,
             },
@@ -1224,6 +1231,10 @@ void main() {
         listingId: '15',
       );
       expect(report.hostRevenue, 45000000);
+      expect(report.pendingStayRevenue, 8300000);
+      expect(report.pendingStayHostRevenue, 7500000);
+      expect(report.pendingStayBookingCount, 1);
+      expect(report.refundedAmount, 500000);
       expect(report.group, 'day');
       expect(report.listingId, '15');
 
@@ -1492,7 +1503,10 @@ void main() {
 
       final listingCard = find.text('Villa Biển Vũng Tàu');
       if (listingCard.evaluate().isNotEmpty &&
-          find.byKey(const Key('calendar_listing_dropdown')).evaluate().isEmpty) {
+          find
+              .byKey(const Key('calendar_listing_dropdown'))
+              .evaluate()
+              .isEmpty) {
         await tester.tap(listingCard);
         await tester.pumpAndSettle();
       }
@@ -1814,6 +1828,152 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(CircleAvatar), findsNothing);
       expect(find.byIcon(AppSemanticIcons.changeAvatar), findsOneWidget);
+    });
+
+    testWidgets(
+        'HostPortalScreen Studio Minimalist Overview renders frosted header/dock, grouped Bento KPI cards, and clean booking card without overflow across 320-768dp',
+        (tester) async {
+      final apiAdapter = FakeRecordingHttpClientAdapter(
+        responder: (options) {
+          if (options.path == '/api/host/listings/mine') {
+            return jsonResponse({
+              'items': [
+                {'listingId': 1, 'title': 'Villa 1', 'status': 'published'},
+                {'listingId': 2, 'title': 'Villa 2', 'status': 'published'},
+                {'listingId': 3, 'title': 'Villa 3', 'status': 'published'},
+              ],
+            });
+          }
+          if (options.path == '/api/host/bookings') {
+            return jsonResponse({
+              'items': [
+                {
+                  'bookingId': 22,
+                  'listingTitle': 'Ocean Pearl Garden Villa Bãi Trước',
+                  'guestName': 'ĐẶNG KIM AN',
+                  'guestPhone': '0909123456',
+                  'guestsCount': 2,
+                  'checkInDate': '2026-10-29',
+                  'checkOutDate': '2026-10-31',
+                  'totalPrice': 7900000,
+                  'status': 'payment_expired',
+                  'paymentStatus': 'expired',
+                },
+                {
+                  'bookingId': 21,
+                  'listingTitle': 'Palm Beach Villa Bãi Sau',
+                  'guestName': 'Trần Minh Quân',
+                  'guestsCount': 6,
+                  'checkInDate': '2026-11-05',
+                  'checkOutDate': '2026-11-07',
+                  'totalPrice': 12500000,
+                  'status': 'confirmed',
+                  'paymentStatus': 'paid',
+                },
+              ],
+            });
+          }
+          if (options.path == '/api/host/payout-accounts') {
+            return jsonResponse({
+              'items': [
+                {
+                  'id': 1,
+                  'bankName': 'Vietcombank',
+                  'accountHolderName': 'CHU NHA VT',
+                  'accountNumber': '0071001122334',
+                },
+              ],
+            });
+          }
+          if (options.path == '/api/host/reports/revenue') {
+            return jsonResponse({
+              'totals': {'hostRevenue': 0},
+              'series': <dynamic>[],
+            });
+          }
+          return jsonResponse({'items': <dynamic>[]});
+        },
+      );
+      final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+      final repo = HostRepository(client, roleResolver: () => 'host');
+      final fakePicker = FakeTestFilePickerService();
+
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      for (final width in [320.0, 360.0, 390.0, 430.0, 768.0]) {
+        for (final scale in [1.0, 1.3, 1.6]) {
+          await tester.binding.setSurfaceSize(Size(width, 900));
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                hostRepositoryProvider.overrideWithValue(repo),
+                hostFilePickerProvider.overrideWithValue(fakePicker),
+                hostCurrentUserRoleProvider.overrideWithValue('host'),
+              ],
+              child: MediaQuery(
+                data: MediaQueryData(
+                  size: Size(width, 900),
+                  textScaler: TextScaler.linear(scale),
+                ),
+                child: const MaterialApp(
+                  home: HostPortalScreen(
+                    initialSection: HostPortalSection.overview,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        }
+      }
+
+      // Inspect detailed Studio layout at standard 390dp mobile viewport
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
+          ],
+          child: const MaterialApp(
+            home: HostPortalScreen(
+              initialSection: HostPortalSection.overview,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Frosted header + frosted bottom dock
+      expect(find.byType(BackdropFilter), findsAtLeastNWidgets(2));
+      expect(find.byKey(const Key('host_bottom_navigation')), findsOneWidget);
+
+      // Manual 'Tải lại' icon button is removed on Overview (RefreshIndicator preserved)
+      expect(find.byTooltip('Tải lại'), findsNothing);
+      expect(find.byType(RefreshIndicator), findsOneWidget);
+
+      // Grouped Bento KPI cards + circular arrowUpRight affordances
+      expect(find.byKey(const Key('host_overview_kpi_group')), findsOneWidget);
+      expect(find.byType(HostStudioKpiCard), findsNWidgets(4));
+      expect(find.byIcon(LucideIcons.arrowUpRight), findsAtLeastNWidgets(4));
+
+      // Recent bookings group + tidy booking card #22
+      expect(
+        find.byKey(const Key('host_overview_recent_bookings_group')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('host_booking_card_22')), findsOneWidget);
+      expect(find.text('#22'), findsOneWidget);
+      expect(
+        find.text('Ocean Pearl Garden Villa Bãi Trước'),
+        findsOneWidget,
+      );
+      expect(find.text('ĐẶNG KIM AN · 2 khách'), findsOneWidget);
+      expect(find.text('29/10/2026 → 31/10/2026'), findsOneWidget);
+      expect(find.textContaining('7.900.000'), findsOneWidget);
+      expect(find.byType(CircleAvatar), findsNothing);
     });
   });
 }
