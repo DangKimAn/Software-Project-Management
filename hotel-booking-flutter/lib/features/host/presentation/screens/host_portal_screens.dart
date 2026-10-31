@@ -193,6 +193,19 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   double _horizontalDragOffset = 0.0;
   late AnimationController _chatDragAnimCtrl;
 
+  // Messenger reactions & chat enhancements
+  static const List<String> _messengerReactions = [
+    '❤️',
+    '😆',
+    '😮',
+    '😢',
+    '😡',
+    '👍',
+  ];
+  final Map<String, String> _messageReactions = {};
+  String? _reactionActiveMsgKey;
+  final ScrollController _chatScrollCtrl = ScrollController();
+
   // Payouts state
   bool _loadingPayouts = false;
   String? _payoutsError;
@@ -249,6 +262,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       vsync: this,
       duration: const Duration(milliseconds: 220),
     );
+    _messageInputCtrl.addListener(() {
+      if (mounted) setState(() {});
+    });
 
     final vnNow = DateTime.now().toUtc().add(const Duration(hours: 7));
     _calendarMonth = vnNow.month;
@@ -280,6 +296,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     _calendarNotesCtrl.dispose();
     _guestSearchCtrl.dispose();
     _chatDragAnimCtrl.dispose();
+    _chatScrollCtrl.dispose();
     _messageInputCtrl.dispose();
     _messageInputFocusNode.dispose();
     _messagesSearchCtrl.dispose();
@@ -832,6 +849,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       setState(() {
         _conversationMessages = msgs;
       });
+      _scrollChatToBottom();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -855,6 +873,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       _messageInputCtrl.clear();
       if (mounted) _messageInputFocusNode.requestFocus();
       await _fetchMessagesForConversation(convId);
+      _scrollChatToBottom();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -6927,6 +6946,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 )
               : GestureDetector(
                   behavior: HitTestBehavior.translucent,
+                  onTap: () {
+                    if (_reactionActiveMsgKey != null) {
+                      setState(() => _reactionActiveMsgKey = null);
+                    }
+                  },
                   onHorizontalDragStart: (_) {
                     _horizontalDragOffset = 0.0;
                   },
@@ -6959,9 +6983,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                     _horizontalDragOffset = 0.0;
                   },
                   child: ListView.builder(
+                  controller: _chatScrollCtrl,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
+                    horizontal: 14,
+                    vertical: 12,
                   ),
                   itemCount: _conversationMessages.length,
                   itemBuilder: (ctx, i) {
@@ -6993,6 +7018,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                         senderRole == 'admin' ||
                         rawSenderName.toLowerCase().contains('quản trị viên');
 
+                    final msgKey =
+                        (m['messageId'] ?? m['id'] ?? 'msg_$i').toString();
+                    final reaction = _messageReactions[msgKey];
+                    final isReactionOpen = _reactionActiveMsgKey == msgKey;
+
                     // Format time nếu có
                     String? msgTime;
                     final rawCreatedAt = m['createdAt'];
@@ -7003,7 +7033,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       }
                     }
 
-                    // Render bong bóng tin nhắn tinh gọn kiểu Messenger (bỏ tên, bỏ thời gian tĩnh, kéo lộ khung thời gian)
+                    // Render bong bóng tin nhắn tinh gọn kiểu Messenger kèm reaction & avatar bên trái
                     return AnimatedBuilder(
                       animation: _chatDragAnimCtrl,
                       builder: (ctx, _) {
@@ -7012,100 +7042,217 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                         final timeOpacity = progress.clamp(0.0, 1.0);
 
                         return Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                          padding: EdgeInsets.only(
+                            bottom: reaction != null ? 10 : 6,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: isMe
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: Align(
-                                  alignment: isMe
-                                      ? Alignment.centerRight
-                                      : Alignment.centerLeft,
-                                  child: Container(
-                                    constraints: BoxConstraints(
-                                      maxWidth:
-                                          MediaQuery.of(context).size.width *
-                                              0.72,
+                              // Thanh chọn cảm xúc nổi khi đè vào tin nhắn
+                              if (isReactionOpen)
+                                _buildReactionPicker(msgKey),
+
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  // Hình đại diện nhỏ bên trái của người gửi (đối phương)
+                                  if (!isMe) ...[
+                                    _buildChatSmallAvatar(
+                                      isAdmin: isMsgAdmin,
+                                      name: participantName,
+                                      avatarUrl: other?['avatar']?.toString() ??
+                                          other?['avatarUrl']?.toString(),
                                     ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 9,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isMe
-                                          ? AppColors.primary
-                                          : (isMsgAdmin
-                                              ? const Color(0xFFFFF1F2)
-                                              : const Color(0xFFF1F5F9)),
-                                      borderRadius: BorderRadius.only(
-                                        topLeft: const Radius.circular(18),
-                                        topRight: const Radius.circular(18),
-                                        bottomLeft:
-                                            Radius.circular(isMe ? 18 : 6),
-                                        bottomRight:
-                                            Radius.circular(isMe ? 6 : 18),
-                                      ),
-                                      border: isMe
-                                          ? null
-                                          : (isMsgAdmin
-                                              ? Border.all(
-                                                  color:
-                                                      const Color(0xFFFECDD3),
-                                                )
-                                              : null),
-                                      boxShadow: isMe
-                                          ? [
-                                              BoxShadow(
-                                                color: AppColors.primary
-                                                    .withValues(alpha: 0.16),
-                                                blurRadius: 4,
-                                                offset: const Offset(0, 1),
+                                    const SizedBox(width: 8),
+                                  ],
+
+                                  // Bong bóng nội dung tin nhắn
+                                  Expanded(
+                                    child: Align(
+                                      alignment: isMe
+                                          ? Alignment.centerRight
+                                          : Alignment.centerLeft,
+                                      child: GestureDetector(
+                                        key: Key('chat_bubble_$msgKey'),
+                                        onLongPress: () {
+                                          setState(() {
+                                            _reactionActiveMsgKey =
+                                                isReactionOpen ? null : msgKey;
+                                          });
+                                        },
+                                        onSecondaryTap: () {
+                                          setState(() {
+                                            _reactionActiveMsgKey =
+                                                isReactionOpen ? null : msgKey;
+                                          });
+                                        },
+                                        child: Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            Container(
+                                              constraints: BoxConstraints(
+                                                maxWidth: MediaQuery.of(context)
+                                                        .size
+                                                        .width *
+                                                    0.68,
                                               ),
-                                            ]
-                                          : null,
-                                    ),
-                                    child: Text(
-                                      content,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        height: 1.35,
-                                        color: isMe
-                                            ? Colors.white
-                                            : (isMsgAdmin
-                                                ? const Color(0xFF881337)
-                                                : AppColors.textPrimary),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              if (progress > 0.01 && msgTime != null)
-                                Opacity(
-                                  opacity: timeOpacity,
-                                  child: Container(
-                                    width: timeWidth,
-                                    alignment: Alignment.centerRight,
-                                    padding: const EdgeInsets.only(left: 6),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 3,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFE2E8F0),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        msgTime,
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF475569),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 14,
+                                                vertical: 9,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: isMe
+                                                    ? AppColors.primary
+                                                    : (isMsgAdmin
+                                                        ? const Color(0xFFFFF1F2)
+                                                        : const Color(0xFFF1F5F9)),
+                                                borderRadius: BorderRadius.only(
+                                                  topLeft: const Radius.circular(18),
+                                                  topRight: const Radius.circular(18),
+                                                  bottomLeft: Radius.circular(isMe ? 18 : 6),
+                                                  bottomRight: Radius.circular(isMe ? 6 : 18),
+                                                ),
+                                                border: isMe
+                                                    ? null
+                                                    : (isMsgAdmin
+                                                        ? Border.all(
+                                                            color: const Color(0xFFFECDD3),
+                                                          )
+                                                        : null),
+                                                boxShadow: isMe
+                                                    ? [
+                                                        BoxShadow(
+                                                          color: AppColors.primary
+                                                              .withValues(alpha: 0.16),
+                                                          blurRadius: 4,
+                                                          offset: const Offset(0, 1),
+                                                        ),
+                                                      ]
+                                                    : null,
+                                              ),
+                                              child: Text(
+                                                content,
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  height: 1.35,
+                                                  color: isMe
+                                                      ? Colors.white
+                                                      : (isMsgAdmin
+                                                          ? const Color(0xFF881337)
+                                                          : AppColors.textPrimary),
+                                                ),
+                                              ),
+                                            ),
+
+                                            // Badge cảm xúc ở góc dưới của bong bóng tin nhắn
+                                            if (reaction != null)
+                                              Positioned(
+                                                bottom: -8,
+                                                right: isMe ? 8 : null,
+                                                left: isMe ? null : 8,
+                                                child: GestureDetector(
+                                                  onTap: () {
+                                                    setState(() {
+                                                      _reactionActiveMsgKey =
+                                                          isReactionOpen ? null : msgKey;
+                                                    });
+                                                  },
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(
+                                                      horizontal: 5,
+                                                      vertical: 2,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.white,
+                                                      borderRadius:
+                                                          BorderRadius.circular(12),
+                                                      border: Border.all(
+                                                        color: const Color(0xFFE2E8F0),
+                                                      ),
+                                                      boxShadow: [
+                                                        BoxShadow(
+                                                          color: Colors.black
+                                                              .withValues(alpha: 0.1),
+                                                          blurRadius: 4,
+                                                          offset: const Offset(0, 1),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    child: Text(
+                                                      reaction,
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
                                         ),
                                       ),
                                     ),
                                   ),
+
+                                  // Khung thời gian trượt ra khi kéo qua bên phải
+                                  if (progress > 0.01 && msgTime != null)
+                                    Opacity(
+                                      opacity: timeOpacity,
+                                      child: Container(
+                                        width: timeWidth,
+                                        alignment: Alignment.centerRight,
+                                        padding: const EdgeInsets.only(left: 6),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 3,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFE2E8F0),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            msgTime,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF475569),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+
+                              // Trạng thái đã gửi / đã xem ở tin nhắn cuối cùng của Host
+                              if (i == _conversationMessages.length - 1 && isMe) ...[
+                                const SizedBox(height: 6),
+                                const Padding(
+                                  padding: EdgeInsets.only(right: 4),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        LucideIcons.checkCheck,
+                                        size: 13,
+                                        color: AppColors.primary,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Đã gửi • Đã xem',
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
+                              ],
                             ],
                           ),
                         );
@@ -7116,15 +7263,61 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 ),
         ),
 
-        // Thanh soạn thảo tin nhắn ở đáy
+        // Gợi ý tin nhắn nhanh (Tối ưu góc trống dưới cùng)
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          color: AppColors.surfaceBase,
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                _buildQuickReplyChip('Dạ vâng, bên em đã nhận thông tin ạ!'),
+                const SizedBox(width: 8),
+                _buildQuickReplyChip('Quý khách nhận phòng lúc mấy giờ ạ?'),
+                const SizedBox(width: 8),
+                _buildQuickReplyChip('The Palm Villa xin chào bạn! 🌴'),
+                const SizedBox(width: 8),
+                _buildQuickReplyChip('Vị trí biệt thự em đã cập nhật trên hệ thống ạ.'),
+              ],
+            ),
+          ),
+        ),
+
+        // Thanh soạn thảo tin nhắn ở đáy phong cách Messenger
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: const BoxDecoration(
             color: AppColors.surfaceBase,
-            border: Border(top: BorderSide(color: AppColors.border)),
+            border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
           ),
           child: Row(
             children: [
+              IconButton(
+                icon: const Icon(LucideIcons.image, size: 20, color: AppColors.textSecondary),
+                tooltip: 'Gửi hình ảnh',
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Tính năng đính kèm ảnh chụp đang được kết nối.'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+              ),
+              IconButton(
+                icon: const Icon(LucideIcons.smile, size: 20, color: AppColors.textSecondary),
+                tooltip: 'Thêm biểu tượng cảm xúc',
+                onPressed: () {
+                  final text = _messageInputCtrl.text;
+                  _messageInputCtrl.text = text.isEmpty ? '😊 ' : '$text 😊';
+                  _messageInputCtrl.selection = TextSelection.fromPosition(
+                    TextPosition(offset: _messageInputCtrl.text.length),
+                  );
+                  _messageInputFocusNode.requestFocus();
+                  setState(() {});
+                },
+              ),
               Expanded(
                 child: TextField(
                   key: const Key('host_message_input'),
@@ -7138,47 +7331,215 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   },
                   decoration: InputDecoration(
                     hintText: 'Nhập tin nhắn...',
+                    filled: true,
+                    fillColor: const Color(0xFFF1F5F9),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(999),
+                      borderSide: BorderSide.none,
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(999),
-                      borderSide: const BorderSide(color: AppColors.border),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(999),
+                      borderSide: const BorderSide(color: AppColors.primary, width: 1.2),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
-                      vertical: 10,
+                      vertical: 9,
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              ElevatedButton(
-                key: const Key('host_message_send_btn'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(56, 44),
-                  shape: const StadiumBorder(),
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
+              if (_messageInputCtrl.text.trim().isEmpty)
+                IconButton(
+                  key: const Key('host_message_quick_like_btn'),
+                  icon: const Icon(
+                    LucideIcons.thumbsUp,
+                    size: 22,
+                    color: AppColors.primary,
+                  ),
+                  tooltip: 'Gửi nhanh biểu tượng thích 👍',
+                  onPressed: _sendingMessage
+                      ? null
+                      : () {
+                          _messageInputCtrl.text = '👍';
+                          _sendHostMessage();
+                        },
+                )
+              else
+                ElevatedButton(
+                  key: const Key('host_message_send_btn'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(44, 40),
+                    shape: const StadiumBorder(),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  onPressed: _sendingMessage ? null : _sendHostMessage,
+                  child: _sendingMessage
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(LucideIcons.send, size: 17),
                 ),
-                onPressed: _sendingMessage ? null : _sendHostMessage,
-                child: _sendingMessage
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(LucideIcons.send, size: 18),
-              ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  void _scrollChatToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_chatScrollCtrl.hasClients) {
+        _chatScrollCtrl.animateTo(
+          _chatScrollCtrl.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  Widget _buildChatSmallAvatar({
+    required bool isAdmin,
+    required String name,
+    String? avatarUrl,
+  }) {
+    if (isAdmin) {
+      return Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF1F2),
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFFFECDD3)),
+        ),
+        child: const Icon(
+          LucideIcons.shieldCheck,
+          size: 15,
+          color: Color(0xFFBE123C),
+        ),
+      );
+    }
+
+    if (avatarUrl != null && avatarUrl.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          avatarUrl,
+          width: 28,
+          height: 28,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _buildLetterAvatar(name),
+        ),
+      );
+    }
+
+    return _buildLetterAvatar(name);
+  }
+
+  Widget _buildLetterAvatar(String name) {
+    final trimmed = name.trim();
+    final letter = trimmed.isNotEmpty ? trimmed[0].toUpperCase() : 'K';
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: const BoxDecoration(
+        color: Color(0xFFE0E7FF),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        letter,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF4338CA),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReactionPicker(String msgKey) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: _messengerReactions.map((emoji) {
+          final isSelected = _messageReactions[msgKey] == emoji;
+          return InkWell(
+            key: Key('reaction_${emoji}_$msgKey'),
+            onTap: () {
+              setState(() {
+                if (isSelected) {
+                  _messageReactions.remove(msgKey);
+                } else {
+                  _messageReactions[msgKey] = emoji;
+                }
+                _reactionActiveMsgKey = null;
+              });
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+              child: Text(
+                emoji,
+                style: const TextStyle(fontSize: 22),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildQuickReplyChip(String text) {
+    return InkWell(
+      onTap: () {
+        _messageInputCtrl.text = text;
+        _messageInputFocusNode.requestFocus();
+        setState(() {});
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 12,
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
     );
   }
 

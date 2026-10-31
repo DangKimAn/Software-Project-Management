@@ -126,11 +126,14 @@ void main() {
       // The header title has "ĐẶNG KIM AN" exactly once, NOT duplicated above the bubble
       expect(find.text('ĐẶNG KIM AN'), findsOneWidget);
 
-      // 3. Timestamps 18:26 and 18:27 should initially NOT be visible in the tree (progress = 0)
+      // 3. Small Avatar should appear on the left of the guest message ('Đ')
+      expect(find.text('Đ'), findsOneWidget);
+
+      // 4. Timestamps 18:26 and 18:27 should initially NOT be visible in the tree (progress = 0)
       expect(find.text('18:26'), findsNothing);
       expect(find.text('18:27'), findsNothing);
 
-      // 4. Tap the clock toggle button to reveal timestamps
+      // 5. Tap the clock toggle button to reveal timestamps
       final toggleBtn = find.byKey(const Key('host_chat_toggle_timestamps_btn'));
       expect(toggleBtn, findsOneWidget);
       await tester.tap(toggleBtn);
@@ -140,21 +143,42 @@ void main() {
       expect(find.text('18:26'), findsOneWidget);
       expect(find.text('18:27'), findsOneWidget);
 
-      // 5. Tap again to hide timestamps
+      // 6. Tap again to hide timestamps
       await tester.tap(toggleBtn);
       await tester.pumpAndSettle();
       expect(find.text('18:26'), findsNothing);
       expect(find.text('18:27'), findsNothing);
 
-      // 6. Test dragging horizontally to the right (gesture reveal)
-      final listViewFinder = find.byType(ListView);
-      expect(listViewFinder, findsOneWidget);
-      await tester.drag(listViewFinder, const Offset(80, 0));
-      await tester.pump();
+      // 7. Long press (đè vào tin nhắn) to reveal 6 basic reaction icons
+      await tester.longPress(find.text('xin chao'));
+      await tester.pumpAndSettle();
 
-      // Timestamps appear while dragging
-      expect(find.text('18:26'), findsOneWidget);
-      expect(find.text('18:27'), findsOneWidget);
+      expect(find.text('❤️'), findsOneWidget);
+      expect(find.text('😆'), findsOneWidget);
+      expect(find.text('😮'), findsOneWidget);
+      expect(find.text('😢'), findsOneWidget);
+      expect(find.text('😡'), findsOneWidget);
+      expect(find.text('👍'), findsWidgets);
+
+      // Tap ❤️ to react
+      await tester.tap(find.text('❤️'));
+      await tester.pumpAndSettle();
+
+      // Reaction badge ❤️ is now attached to the bubble
+      expect(find.text('❤️'), findsOneWidget);
+
+      // 8. Test quick reply chips filling input
+      final quickChip = find.text('Dạ vâng, bên em đã nhận thông tin ạ!');
+      expect(quickChip, findsOneWidget);
+      await tester.tap(quickChip);
+      await tester.pumpAndSettle();
+
+      final inputFinder = find.byKey(const Key('host_message_input'));
+      final inputWidget = tester.widget<TextField>(inputFinder);
+      expect(inputWidget.controller?.text, 'Dạ vâng, bên em đã nhận thông tin ạ!');
+
+      // When text is non-empty, send button appears
+      expect(find.byKey(const Key('host_message_send_btn')), findsOneWidget);
     },
   );
 }
