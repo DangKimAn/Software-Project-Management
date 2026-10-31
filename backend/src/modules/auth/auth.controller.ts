@@ -248,11 +248,9 @@ export const getCurrentUser: RequestHandler = (req, res) => {
     const user = req.user!;
     const role = user.roles.includes("admin")
         ? "admin"
-        : user.roles.includes("moderator")
-            ? "moderator"
-            : user.roles.includes("host")
-                ? "host"
-                : "guest";
+        : user.roles.includes("host")
+            ? "host"
+            : "guest";
 
     return sendSuccess(res, {
         data: {

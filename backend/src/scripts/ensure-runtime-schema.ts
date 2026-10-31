@@ -5,7 +5,6 @@ import sequelize from "../config/database";
 const defaultRoles = [
     { code: "guest", name: "Guest" },
     { code: "host", name: "Host" },
-    { code: "moderator", name: "Moderator" },
     { code: "admin", name: "Admin" },
 ];
 

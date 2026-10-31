@@ -22,7 +22,7 @@ export const getUserRoles = async (userId: string | number, transaction?: Transa
         FROM user_role ur
         INNER JOIN roles r ON r.role_id = ur.role_id
         WHERE ur.user_id = ?
-        ORDER BY FIELD(r.code, 'admin', 'moderator', 'host', 'guest')
+        ORDER BY FIELD(r.code, 'admin', 'host', 'guest')
         `,
         {
             replacements: [Number(userId)],
@@ -298,7 +298,7 @@ export const listUsersForAdmin = async ({ search, role, status, page, limit }: A
                 u.host_application_status AS hostApplicationStatus,
                 u.created_at AS createdAt,
                 u.updated_at AS updatedAt,
-                GROUP_CONCAT(DISTINCT r.code ORDER BY FIELD(r.code, 'admin', 'moderator', 'host', 'guest')) AS roles
+                GROUP_CONCAT(DISTINCT r.code ORDER BY FIELD(r.code, 'admin', 'host', 'guest')) AS roles
             FROM users u
             LEFT JOIN user_role ur ON ur.user_id = u.user_id
             LEFT JOIN roles r ON r.role_id = ur.role_id
@@ -329,11 +329,12 @@ export const listUsersForAdmin = async ({ search, role, status, page, limit }: A
 
     return {
         items: rows.map((row) => {
-            const roles = row.roles
+            const parsedRoles = row.roles
                 ? row.roles
                     .split(",")
                     .filter((item): item is UserRole => (userRoleValues as readonly string[]).includes(item))
-                : ["guest"];
+                : [];
+            const roles: UserRole[] = parsedRoles.length > 0 ? parsedRoles : ["guest"];
 
             return {
                 id: String(row.userId),
