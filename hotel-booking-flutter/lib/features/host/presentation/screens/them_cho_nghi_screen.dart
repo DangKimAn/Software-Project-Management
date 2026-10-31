@@ -85,6 +85,7 @@ class ThemChoNghiScreen extends ConsumerStatefulWidget {
   final VoidCallback? onSaved;
   final VoidCallback? onCancel;
   final bool embedded;
+  final bool? stepMode;
 
   const ThemChoNghiScreen({
     super.key,
@@ -92,6 +93,7 @@ class ThemChoNghiScreen extends ConsumerStatefulWidget {
     this.onSaved,
     this.onCancel,
     this.embedded = false,
+    this.stepMode,
   });
 
   @override
@@ -119,6 +121,22 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
   final _minNightsController = TextEditingController(text: '1');
   final _maxNightsController = TextEditingController();
   final _quietHoursController = TextEditingController(text: '22:00 - 06:00');
+
+  // Step-by-step Wizard State
+  int _currentStep = 0;
+  bool _useStepMode = true;
+  bool get _effectiveStepMode =>
+      widget.stepMode ?? (widget.embedded ? _useStepMode : false);
+
+  final List<({String title, String subtitle, IconData icon})> _steps = const [
+    (title: 'Cơ bản', subtitle: 'Loại hình & tên chỗ nghỉ', icon: LucideIcons.home),
+    (title: 'Vị trí', subtitle: 'Địa chỉ & bản đồ', icon: LucideIcons.mapPin),
+    (title: 'Giá & Phòng', subtitle: 'Sức chứa & giá lưu trú', icon: LucideIcons.badgePercent),
+    (title: 'Nội quy', subtitle: 'Giờ giấc & quy định', icon: LucideIcons.clipboardList),
+    (title: 'Tiện nghi', subtitle: 'Dịch vụ & tiện ích', icon: LucideIcons.sparkles),
+    (title: 'Hình ảnh', subtitle: 'Thư viện ảnh & AI tag', icon: LucideIcons.image),
+    (title: 'Xem lại', subtitle: 'Kiểm tra & xác nhận', icon: LucideIcons.checkCheck),
+  ];
 
   HostPropertyType _propertyType = HostPropertyType.villa;
   HostRoomType _roomType = HostRoomType.entirePlace;
@@ -1202,6 +1220,16 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
       });
 
       widget.onSaved?.call();
+
+      if (mounted) {
+        _showSuccessDialog(
+          title: _titleController.text.trim().isNotEmpty
+              ? _titleController.text.trim()
+              : 'Chỗ nghỉ The Palm Villa',
+          listingId: listingId,
+          isEditMode: wasAlreadyEditMode,
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -1343,22 +1371,28 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                         icon: LucideIcons.scanSearch,
                       ),
                     ],
-                    _buildHostCoPilotCard(),
-                    const Divider(height: 32, color: AppColors.border),
-                    _buildBasicInfoCard(),
-                    const Divider(height: 32, color: AppColors.border),
-                    _buildLocationCard(),
-                    const Divider(height: 32, color: AppColors.border),
-                    _buildCapacityAndPricingCard(),
-                    const Divider(height: 32, color: AppColors.border),
-                    _buildPoliciesAndRulesCard(),
-                    const Divider(height: 32, color: AppColors.border),
-                    _buildAmenitiesCard(),
-                    const Divider(height: 32, color: AppColors.border),
-                    _buildImagesAndAiCard(),
-                    const SizedBox(height: 24),
-                    _buildFooterActions(),
-                    const SizedBox(height: 32),
+                    if (_effectiveStepMode) ...[
+                      _buildStepperBar(),
+                      _buildStepContent(),
+                      _buildStepFooterActions(),
+                    ] else ...[
+                      _buildHostCoPilotCard(),
+                      const Divider(height: 32, color: AppColors.border),
+                      _buildBasicInfoCard(),
+                      const Divider(height: 32, color: AppColors.border),
+                      _buildLocationCard(),
+                      const Divider(height: 32, color: AppColors.border),
+                      _buildCapacityAndPricingCard(),
+                      const Divider(height: 32, color: AppColors.border),
+                      _buildPoliciesAndRulesCard(),
+                      const Divider(height: 32, color: AppColors.border),
+                      _buildAmenitiesCard(),
+                      const Divider(height: 32, color: AppColors.border),
+                      _buildImagesAndAiCard(),
+                      const SizedBox(height: 24),
+                      _buildFooterActions(),
+                      const SizedBox(height: 32),
+                    ],
                   ],
                 ),
               ),
@@ -1456,24 +1490,51 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
             ),
           ],
         ),
-        if (widget.onCancel != null)
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(140, 48),
-              foregroundColor: AppColors.textPrimary,
-              side: BorderSide.none,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.embedded)
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.textSecondary,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _useStepMode = !_useStepMode;
+                  });
+                },
+                icon: Icon(
+                  _useStepMode ? LucideIcons.layoutList : LucideIcons.listOrdered,
+                  size: 15,
+                ),
+                label: Text(
+                  _useStepMode ? 'Xem tất cả' : 'Theo từng bước',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
               ),
-            ),
-            onPressed: widget.onCancel,
-            icon: const Icon(
-              LucideIcons.arrowLeft,
-              size: 16,
-              color: AppColors.iconStrong,
-            ),
-            label: const Text('Quay lại'),
-          ),
+            if (widget.onCancel != null) ...[
+              const SizedBox(width: 6),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(110, 42),
+                  foregroundColor: AppColors.textPrimary,
+                  side: BorderSide.none,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                onPressed: widget.onCancel,
+                icon: const Icon(
+                  LucideIcons.arrowLeft,
+                  size: 16,
+                  color: AppColors.iconStrong,
+                ),
+                label: const Text('Quay lại'),
+              ),
+            ],
+          ],
+        ),
       ],
     );
   }
@@ -3179,6 +3240,1063 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatVnd(dynamic amount) {
+    final val = double.tryParse('$amount') ?? 0;
+    if (val <= 0) return '0 ₫';
+    final intVal = val.round();
+    final parts = intVal.toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (Match m) => '${m[1]}.',
+        );
+    return '$parts ₫';
+  }
+
+  bool _validateCurrentStep() {
+    setState(() => _errorMessage = null);
+    if (_currentStep == 0) {
+      if (_titleController.text.trim().isEmpty) {
+        setState(() => _errorMessage = 'Vui lòng nhập tên chỗ nghỉ trước khi tiếp tục.');
+        return false;
+      }
+      if (_descriptionController.text.trim().isEmpty) {
+        setState(() => _errorMessage = 'Vui lòng nhập mô tả chỗ nghỉ trước khi tiếp tục.');
+        return false;
+      }
+    } else if (_currentStep == 1) {
+      if (_addressController.text.trim().isEmpty) {
+        setState(() => _errorMessage = 'Vui lòng nhập địa chỉ cụ thể trước khi tiếp tục.');
+        return false;
+      }
+    } else if (_currentStep == 2) {
+      final price = int.tryParse(
+            _basePriceController.text.replaceAll(RegExp(r'[^0-9]'), ''),
+          ) ??
+          0;
+      if (price <= 0) {
+        setState(() => _errorMessage = 'Vui lòng nhập giá cơ bản mỗi đêm hợp lệ.');
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _goToNextStep() {
+    if (!_validateCurrentStep()) return;
+    if (_currentStep < _steps.length - 1) {
+      setState(() {
+        _currentStep++;
+        _errorMessage = null;
+      });
+    }
+  }
+
+  void _goToPrevStep() {
+    if (_currentStep > 0) {
+      setState(() {
+        _currentStep--;
+        _errorMessage = null;
+      });
+    } else {
+      widget.onCancel?.call();
+    }
+  }
+
+  void _resetFormForNewListing() {
+    setState(() {
+      _activeListingId = null;
+      _currentStep = 0;
+      _titleController.clear();
+      _descriptionController.clear();
+      _addressController.clear();
+      _latController.text = kDefaultVungTauLat.toStringAsFixed(6);
+      _lngController.text = kDefaultVungTauLng.toStringAsFixed(6);
+      _maxGuestsController.text = '4';
+      _bedroomsController.text = '2';
+      _bedsController.text = '2';
+      _bathroomsController.text = '2';
+      _basePriceController.text = '1500000';
+      _weekendPriceController.text = '1500000';
+      _cleaningFeeController.text = '0';
+      _surchargeController.text = '0';
+      _minNightsController.text = '1';
+      _maxNightsController.clear();
+      _quietHoursController.text = '22:00 - 06:00';
+      _propertyType = HostPropertyType.villa;
+      _roomType = HostRoomType.entirePlace;
+      _cancellationPolicy = HostCancellationPolicy.flexible;
+      _selectedWard = kVungTauWards.first.name;
+      _checkInFrom = '14:00';
+      _checkOutBefore = '12:00';
+      _instantBookEnabled = false;
+      _weekendPriceManuallyChanged = false;
+      _smokingAllowed = false;
+      _petsAllowed = false;
+      _partyAllowed = false;
+      _selectedAmenityIds.clear();
+      _existingImages = [];
+      _queuedImages = [];
+      _errorMessage = null;
+      _successMessage = null;
+      _uploadStatusMessage = null;
+      _aiStatusMessage = null;
+    });
+  }
+
+  void _showSuccessDialog({
+    required String title,
+    required String listingId,
+    required bool isEditMode,
+  }) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFECFDF5),
+                border: Border.all(color: const Color(0xFFA7F3D0), width: 2),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x1A10B981),
+                    blurRadius: 18,
+                    spreadRadius: 4,
+                  ),
+                ],
+              ),
+              child: const Center(
+                child: Icon(
+                  LucideIcons.circleCheck,
+                  color: Color(0xFF059669),
+                  size: 40,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              isEditMode ? 'Cập nhật thành công!' : 'Thêm chỗ nghỉ thành công!',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              isEditMode
+                  ? 'Chỗ nghỉ #$listingId đã được cập nhật thông tin thành công lên hệ thống The Palm Villa.'
+                  : 'Chỗ nghỉ #$listingId đã được lưu thành công và sẵn sàng đón khách trên hệ thống The Palm Villa!',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: () {
+                Navigator.of(dialogCtx).pop();
+                widget.onCancel?.call();
+              },
+              icon: const Icon(LucideIcons.building2, size: 18),
+              label: const Text(
+                'Quản lý danh sách chỗ nghỉ',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+            ),
+            if (!isEditMode) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  minimumSize: const Size(double.infinity, 46),
+                  side: const BorderSide(color: AppColors.border),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.of(dialogCtx).pop();
+                  _resetFormForNewListing();
+                },
+                icon: const Icon(LucideIcons.plus, size: 18),
+                label: const Text(
+                  'Thêm tiếp chỗ nghỉ khác',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepperBar() {
+    final score = _calculateCompletionScore();
+    final progress = (_currentStep + 1) / _steps.length.toDouble();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 14, bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Bước ${_currentStep + 1}/${_steps.length}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '${_steps[_currentStep].title} • ${_steps[_currentStep].subtitle}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              Text(
+                'Hoàn thiện: $score%',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: const Color(0xFFF1F5F9),
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: List.generate(_steps.length, (idx) {
+                final isCurrent = idx == _currentStep;
+                final isPassed = idx < _currentStep;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      if (idx <= _currentStep || _validateCurrentStep()) {
+                        setState(() {
+                          _currentStep = idx;
+                          _errorMessage = null;
+                        });
+                      }
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isCurrent
+                            ? AppColors.primary
+                            : (isPassed
+                                ? const Color(0xFFF1F5F9)
+                                : Colors.transparent),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isCurrent
+                              ? AppColors.primary
+                              : (isPassed
+                                  ? const Color(0xFFCBD5E1)
+                                  : AppColors.border),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isPassed ? LucideIcons.check : _steps[idx].icon,
+                            size: 13,
+                            color: isCurrent
+                                ? Colors.white
+                                : (isPassed
+                                    ? const Color(0xFF10B981)
+                                    : AppColors.textSecondary),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            _steps[idx].title,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isCurrent
+                                  ? FontWeight.w700
+                                  : (isPassed
+                                      ? FontWeight.w600
+                                      : FontWeight.w500),
+                              color: isCurrent
+                                  ? Colors.white
+                                  : (isPassed
+                                      ? AppColors.textPrimary
+                                      : AppColors.textSecondary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepContent() {
+    switch (_currentStep) {
+      case 0:
+        return _buildBasicInfoCard();
+      case 1:
+        return _buildLocationCard();
+      case 2:
+        return _buildCapacityAndPricingCard();
+      case 3:
+        return _buildPoliciesAndRulesCard();
+      case 4:
+        return _buildAmenitiesCard();
+      case 5:
+        return _buildImagesAndAiCard();
+      case 6:
+        return _buildReviewAndConfirmCard();
+      default:
+        return _buildBasicInfoCard();
+    }
+  }
+
+  Widget _buildPlaceholderCover() {
+    return Container(
+      height: 180,
+      width: double.infinity,
+      color: const Color(0xFFF1F5F9),
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(LucideIcons.image, size: 36, color: Color(0xFF94A3B8)),
+            SizedBox(height: 6),
+            Text(
+              'Chưa có ảnh bìa',
+              style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReviewMiniStat({
+    required IconData icon,
+    required String label,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 16, color: AppColors.primary),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReviewAndConfirmCard() {
+    final basePrice = int.tryParse(
+          _basePriceController.text.replaceAll(RegExp(r'[^0-9]'), ''),
+        ) ??
+        0;
+    final weekendPrice = int.tryParse(
+          _weekendPriceController.text.replaceAll(RegExp(r'[^0-9]'), ''),
+        ) ??
+        basePrice;
+    final cleaningFee = int.tryParse(
+          _cleaningFeeController.text.replaceAll(RegExp(r'[^0-9]'), ''),
+        ) ??
+        0;
+
+    String? coverUrl;
+    if (_existingImages.isNotEmpty) {
+      final cover = _existingImages.firstWhere(
+        (img) => img.isCover,
+        orElse: () => _existingImages.first,
+      );
+      coverUrl = cover.url;
+    }
+    final totalImages = _existingImages.length + _queuedImages.length;
+
+    final selectedAmenitiesList = _availableAmenities
+        .where((a) => _selectedAmenityIds.contains(a['amenityId']))
+        .map((a) => a['name']?.toString() ?? '')
+        .where((n) => n.isNotEmpty)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1F2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Center(
+                child: Icon(
+                  LucideIcons.checkCheck,
+                  size: 20,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Kiểm tra & Xác nhận thông tin',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    'Xem lại toàn bộ chi tiết chỗ nghỉ trước khi lưu lên hệ thống.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // 1. Khối Tổng quan & Hình ảnh
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceBase,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Stack(
+                  children: [
+                    if (coverUrl != null && coverUrl.isNotEmpty)
+                      Image.network(
+                        coverUrl,
+                        height: 180,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _buildPlaceholderCover(),
+                      )
+                    else
+                      _buildPlaceholderCover(),
+                    Positioned(
+                      bottom: 10,
+                      right: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.images,
+                                size: 13, color: Colors.white),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$totalImages ảnh',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${_propertyType.labelVi} • ${_roomType.labelVi}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _titleController.text.trim().isNotEmpty
+                              ? _titleController.text.trim()
+                              : 'Chưa đặt tên chỗ nghỉ',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(LucideIcons.mapPin,
+                                size: 13, color: AppColors.textSecondary),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                '${_addressController.text.trim().isNotEmpty ? _addressController.text.trim() : 'Chưa nhập địa chỉ'}, $_selectedWard, Vũng Tàu',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                    onPressed: () => setState(() => _currentStep = 0),
+                    icon: const Icon(LucideIcons.pencil, size: 13),
+                    label: const Text('Sửa', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // 2. Khối Sức chứa & Giá lưu trú
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceBase,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Sức chứa & Giá phòng',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                    onPressed: () => setState(() => _currentStep = 2),
+                    icon: const Icon(LucideIcons.pencil, size: 13),
+                    label: const Text('Sửa', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              Row(
+                children: [
+                  _buildReviewMiniStat(
+                    icon: LucideIcons.users,
+                    label: '${_maxGuestsController.text} Khách',
+                  ),
+                  const SizedBox(width: 8),
+                  _buildReviewMiniStat(
+                    icon: LucideIcons.bedDouble,
+                    label: '${_bedroomsController.text} PN',
+                  ),
+                  const SizedBox(width: 8),
+                  _buildReviewMiniStat(
+                    icon: LucideIcons.bed,
+                    label: '${_bedsController.text} Giường',
+                  ),
+                  const SizedBox(width: 8),
+                  _buildReviewMiniStat(
+                    icon: LucideIcons.bath,
+                    label: '${_bathroomsController.text} PT',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Divider(height: 1, color: AppColors.border),
+              const SizedBox(height: 14),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Giá ngày thường',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_formatVnd(basePrice)} / đêm',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Giá cuối tuần (T7, CN)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_formatVnd(weekendPrice)} / đêm',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFBE123C),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (cleaningFee > 0) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Phí dọn dẹp: ${_formatVnd(cleaningFee)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // 3. Khối Tiện nghi nổi bật
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceBase,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Tiện nghi (${selectedAmenitiesList.length})',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                    onPressed: () => setState(() => _currentStep = 4),
+                    icon: const Icon(LucideIcons.pencil, size: 13),
+                    label: const Text('Sửa', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (selectedAmenitiesList.isEmpty)
+                const Text(
+                  'Chưa chọn tiện nghi bổ sung nào.',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                )
+              else
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: selectedAmenitiesList.take(8).map((name) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            LucideIcons.check,
+                            size: 11,
+                            color: Color(0xFF10B981),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // 4. Khối Quy tắc & Chính sách
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceBase,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Quy tắc & Giờ giấc',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                    onPressed: () => setState(() => _currentStep = 3),
+                    icon: const Icon(LucideIcons.pencil, size: 13),
+                    label: const Text('Sửa', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '• Nhận phòng từ $_checkInFrom  |  Trả phòng trước $_checkOutBefore',
+                style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '• Hút thuốc: ${_smokingAllowed ? 'Cho phép' : 'Không'}  |  Thú cưng: ${_petsAllowed ? 'Cho phép' : 'Không'}  |  Tiệc tùng: ${_partyAllowed ? 'Cho phép' : 'Không'}',
+                style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '• Chính sách hủy: ${_cancellationPolicy.labelVi}',
+                style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF1F2),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFFECDD3)),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.shieldCheck, size: 18, color: AppColors.primary),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Bằng việc nhấn "Lưu chỗ nghỉ", bạn xác nhận toàn bộ thông tin là chính xác và sẵn sàng tiếp đón khách lưu trú.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFFBE123C),
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepFooterActions() {
+    final isLastStep = _currentStep == _steps.length - 1;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 24, bottom: 32),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 50),
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: _saving ? null : _goToPrevStep,
+              icon: const Icon(LucideIcons.arrowLeft, size: 16),
+              label: Text(
+                _currentStep == 0 ? 'Quay lại' : 'Quay lại',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 3,
+            child: isLastStep
+                ? ElevatedButton.icon(
+                    key: const Key('listing_save_btn'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 50),
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: _saving ? null : () => _submitForm(),
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(LucideIcons.check, size: 18),
+                    label: Text(
+                      _saving
+                          ? 'Đang lưu...'
+                          : (_isEditMode ? 'Cập nhật ngay' : 'Lưu chỗ nghỉ'),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  )
+                : ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 50),
+                      elevation: 1,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: _goToNextStep,
+                    icon: const Icon(LucideIcons.arrowRight, size: 16),
+                    label: const Text(
+                      'Tiếp tục',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
