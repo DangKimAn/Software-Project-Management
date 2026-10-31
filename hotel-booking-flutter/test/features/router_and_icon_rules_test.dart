@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hotel_booking_flutter/app/router/app_router.dart';
 import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
 import 'package:hotel_booking_flutter/app/theme/app_theme.dart';
+import 'package:hotel_booking_flutter/app/theme/app_typography.dart';
 import 'package:hotel_booking_flutter/core/date/booking_date.dart';
 import 'package:hotel_booking_flutter/core/storage/preferences_service.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/auth_session.dart';
@@ -421,9 +422,31 @@ void main() {
       expect(find.text('Yêu thích'), findsNothing);
       expect(find.byIcon(LucideIcons.messageSquare), findsOneWidget);
 
+      final selectedExploreText = tester.widget<Text>(find.text('Khám phá'));
+      expect(
+        selectedExploreText.style?.fontFamily,
+        AppTypography.textFontFamily,
+      );
+      expect(selectedExploreText.style?.fontSize, 10.5);
+      expect(selectedExploreText.style?.fontWeight, FontWeight.w500);
+      expect(selectedExploreText.style?.color, AppColors.textStrong);
+
+      for (final unselectedLabel in ['Tin nhắn', 'Chuyến đi', 'Tài khoản']) {
+        final unselectedText = tester.widget<Text>(find.text(unselectedLabel));
+        expect(unselectedText.style?.fontFamily, AppTypography.textFontFamily);
+        expect(unselectedText.style?.fontSize, 10.5);
+        expect(unselectedText.style?.fontWeight, FontWeight.w400);
+        expect(unselectedText.style?.color, AppColors.textMuted);
+      }
+
       await tester.tap(find.text('Tin nhắn'));
       await tester.pumpAndSettle();
       expect(find.text('TAB_1'), findsOneWidget);
+
+      final selectedMessagesText = tester.widget<Text>(find.text('Tin nhắn'));
+      final unselectedExploreText = tester.widget<Text>(find.text('Khám phá'));
+      expect(selectedMessagesText.style?.fontWeight, FontWeight.w500);
+      expect(unselectedExploreText.style?.fontWeight, FontWeight.w400);
     });
   });
 

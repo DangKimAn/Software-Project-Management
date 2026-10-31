@@ -159,6 +159,9 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
               ? refreshed.lastName
               : existing.lastName,
           phone: refreshed.phone ?? existing.phone,
+          avatarUrl: userJson.containsKey('avatarUrl')
+              ? refreshed.avatarUrl
+              : existing.avatarUrl,
           role: userJson.containsKey('role') || userJson.containsKey('roles')
               ? refreshed.role
               : existing.role,
@@ -197,7 +200,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       await _socket?.connect();
       return session.user;
     } catch (e) {
-      if (mounted && epoch == _authOpEpoch) {
+      if (mounted && epoch != _authOpEpoch) {
         state = AsyncValue.data(previousUser);
       }
       rethrow;
@@ -223,7 +226,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       await _socket?.connect();
       return session.user;
     } catch (e) {
-      if (mounted && epoch == _authOpEpoch) {
+      if (mounted && epoch != _authOpEpoch) {
         state = AsyncValue.data(previousUser);
       }
       rethrow;
@@ -254,7 +257,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       await _socket?.connect();
       return session.user;
     } catch (e) {
-      if (mounted && epoch == _authOpEpoch) {
+      if (mounted && epoch != _authOpEpoch) {
         state = AsyncValue.data(previousUser);
       }
       rethrow;
@@ -295,6 +298,15 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       state = AsyncValue.data(updated);
     }
     return updated;
+  }
+
+  /// Syncs an already-persisted avatar URL into the in-memory auth user state.
+  void syncLocalAvatarUrl(String url) {
+    final trimmed = url.trim();
+    if (!mounted || trimmed.isEmpty) return;
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncValue.data(current.copyWith(avatarUrl: trimmed));
   }
 
   Future<void> logout() async {

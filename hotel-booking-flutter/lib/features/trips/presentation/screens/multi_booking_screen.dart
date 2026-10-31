@@ -483,7 +483,14 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                                                       .isForeignDisplayed) ...[
                                                     const SizedBox(height: 2),
                                                     Text(
-                                                      '${formatter.l10n.fxTotalPayableVnd(formatter.formatExactVnd(grandTotal, withCode: true))} • ${formatter.l10n.fxChargedInVndNotice}',
+                                                      formatter.l10n
+                                                          .fxTotalPayableVnd(
+                                                        formatter
+                                                            .formatExactVnd(
+                                                          grandTotal,
+                                                          withCode: true,
+                                                        ),
+                                                      ),
                                                       key: const Key(
                                                         'multi_booking_grand_total_vnd_note',
                                                       ),
@@ -948,7 +955,8 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                               if (confirmedRef.isForeignDisplayed) ...[
                                 const SizedBox(height: 2),
                                 Text(
-                                  '${formatter.l10n.fxEstimatedPrice(confirmedRef.formatted)} • ${formatter.l10n.fxChargedInVndNotice}',
+                                  formatter.l10n
+                                      .fxEstimatedPrice(confirmedRef.formatted),
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: AppColors.textSecondary,

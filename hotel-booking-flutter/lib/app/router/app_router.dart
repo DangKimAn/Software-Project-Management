@@ -933,18 +933,26 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
                                 : AppColors.iconMuted,
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            tab.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: isSelected
-                                  ? FontWeight.w800
-                                  : FontWeight.w700,
-                              color: isSelected
-                                  ? AppColors.textStrong
-                                  : AppColors.textSecondary,
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                            child: Text(
+                              tab.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: AppTypography.textFontFamily,
+                                fontFamilyFallback: AppTypography.fontFallbacks,
+                                fontSize: 10.5,
+                                fontWeight: isSelected
+                                    ? FontWeight.w500
+                                    : FontWeight.w400,
+                                letterSpacing: -0.02,
+                                height: 1.35,
+                                color: isSelected
+                                    ? AppColors.textStrong
+                                    : AppColors.textMuted,
+                              ),
                             ),
                           ),
                           Container(

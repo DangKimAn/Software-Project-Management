@@ -380,10 +380,8 @@ class _PaymentVerificationCardState extends State<PaymentVerificationCard>
             'Đơn đặt phòng': _bookingRecord!.statusDisplay,
           if (effectiveAmount > 0)
             'Số tiền': CurrencyFormatter.formatVnd(effectiveAmount),
-          if (isForeign && (effectiveAmount > 0 || isRefundStatus))
-            'Lưu ý tiền tệ': isRefundStatus
-                ? formatter.l10n.fxRefundInVndNotice
-                : formatter.l10n.fxChargedInVndNotice,
+          if (isForeign && isRefundStatus)
+            'Lưu ý tiền tệ': formatter.l10n.fxRefundInVndNotice,
         },
         onRecheck:
             canReverify ? () => _verifyTransaction(resetPollCount: true) : null,
@@ -646,10 +644,6 @@ class _ProfileAccountEditorCardState extends State<ProfileAccountEditorCard> {
             value: _currentUser.languages.isNotEmpty
                 ? _currentUser.languages.join(', ')
                 : 'Chưa cập nhật',
-          ),
-          _KvRow(
-            label: 'Xác minh danh tính',
-            value: _currentUser.isVerified ? 'Đã xác minh' : 'Chưa xác minh',
           ),
         ],
       ),

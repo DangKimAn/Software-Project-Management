@@ -393,11 +393,9 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen>
                               if (effectiveAmount > 0)
                                 'Số tiền': CurrencyFormatter.formatVnd(
                                     effectiveAmount),
-                              if (isForeign &&
-                                  (effectiveAmount > 0 || isRefundStatus))
-                                'Lưu ý tiền tệ': isRefundStatus
-                                    ? formatter.l10n.fxRefundInVndNotice
-                                    : formatter.l10n.fxChargedInVndNotice,
+                              if (isForeign && isRefundStatus)
+                                'Lưu ý tiền tệ':
+                                    formatter.l10n.fxRefundInVndNotice,
                             },
                             onRecheck: canReverify
                                 ? () => _verifyTransaction(resetPollCount: true)

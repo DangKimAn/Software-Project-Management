@@ -648,6 +648,12 @@ void main() {
 
         expect(find.text('VI · \$'), findsOneWidget);
         expect(find.textContaining('Từ ≈ \$140 / đêm'), findsOneWidget);
+        expect(
+          find.textContaining('Thanh toán thực tế bằng VND'),
+          findsNothing,
+        );
+        expect(find.textContaining('Tỷ giá tham khảo'), findsNothing);
+        expect(find.textContaining('frankfurter'), findsNothing);
 
         // FX-07: Restore Automatic mode -> immediately follows 'vi' -> VND
         await tester.ensureVisible(
@@ -934,7 +940,7 @@ void main() {
           find.text(
             'You will be charged in VND. Your bank may apply exchange rates and fees.',
           ),
-          findsOneWidget,
+          findsNothing,
         );
 
         // Truthful gateway title — NO unverified Visa/Master claim
@@ -1054,7 +1060,7 @@ void main() {
           find.text(
             'You will be charged in VND. Your bank may apply exchange rates and fees.',
           ),
-          findsOneWidget,
+          findsNothing,
         );
 
         await tester.pumpWidget(const SizedBox.shrink());

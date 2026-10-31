@@ -827,16 +827,6 @@ class AppTopHeader extends ConsumerWidget {
                             : const SizedBox.shrink(),
                       ),
 
-                      if (centerSearchTrigger == null ||
-                          screenWidth >= 380) ...[
-                        HeaderCurrencyLanguageButton(
-                          isOverlayTop: isOverlayTop,
-                          showCodePill:
-                              screenWidth >= 460 && centerSearchTrigger == null,
-                        ),
-                        const SizedBox(width: 2),
-                      ],
-
                       // Notification Bell (Icon thông báo)
                       NotificationBell(isOverlayTop: isOverlayTop),
                       const SizedBox(width: 2),

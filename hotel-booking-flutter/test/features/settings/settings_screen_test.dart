@@ -728,9 +728,38 @@ void main() {
 
       // Unverified guest
       expect(find.text('Khách lưu trú'), findsOneWidget);
-      expect(find.textContaining('Chưa xác minh'), findsOneWidget);
+      expect(find.byKey(const Key('settings_verification_status')), findsNothing);
+      expect(find.textContaining('Xác minh danh tính'), findsNothing);
       expect(find.byKey(const Key('menu_become_host')), findsOneWidget);
       expect(find.byKey(const Key('menu_admin_portal')), findsNothing);
+
+      // Action buttons are icon-only (no visible 'Đổi ảnh' / 'Sửa hồ sơ' button text)
+      expect(find.text('Đổi ảnh'), findsNothing);
+      expect(find.text('Sửa hồ sơ'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('settings_change_avatar_button')),
+          matching: find.byIcon(AppSemanticIcons.changeAvatar),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('settings_edit_profile_button')),
+          matching: find.byIcon(LucideIcons.pencil),
+        ),
+        findsOneWidget,
+      );
+
+      // Refined typography hierarchy
+      final fullNameText = tester.widget<Text>(
+        find.byKey(const Key('settings_user_fullname')),
+      );
+      final tripsTitleText = tester.widget<Text>(
+        find.text('Chuyến đi của tôi'),
+      );
+      expect(fullNameText.style?.fontSize, 15.5);
+      expect(tripsTitleText.style?.fontSize, 14.5);
 
       // Switch to New Host (pending host application) with isVerified: true
       const pendingHost = User(
@@ -746,7 +775,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Hồ sơ Chủ nhà đang chờ duyệt'), findsOneWidget);
-      expect(find.textContaining('Đã xác minh'), findsOneWidget);
+      expect(find.byKey(const Key('settings_verification_status')), findsNothing);
+      expect(find.textContaining('Xác minh danh tính'), findsNothing);
       expect(find.byKey(const Key('menu_host_status')), findsOneWidget);
 
       // Switch to Approved Host
