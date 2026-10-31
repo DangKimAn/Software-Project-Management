@@ -15,6 +15,7 @@ import {
     getAdminListingDetail,
     listPendingAdminListings,
     rejectAdminListing,
+    transferAdminListingHost,
 } from "./admin.service";
 
 export const listPendingListings: RequestHandler = asyncHandler(async (req, res) => {
@@ -50,6 +51,22 @@ export const approveListing: RequestHandler = asyncHandler(async (req, res) => {
 
     return sendSuccess(res, {
         message: "Listing approved",
+        data: result,
+    });
+});
+
+export const transferListingHostHandler: RequestHandler = asyncHandler(async (req, res) => {
+    assertValidRequest(req);
+
+    const params = getValidatedParams<{ listingId: number }>(req);
+    const body = getValidatedBody<{ newHostId: number }>(req);
+    const result = await transferAdminListingHost(params.listingId, body.newHostId, req.user!, {
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent") ?? null,
+    });
+
+    return sendSuccess(res, {
+        message: "Listing ownership transferred",
         data: result,
     });
 });

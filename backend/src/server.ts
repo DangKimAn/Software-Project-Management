@@ -15,6 +15,10 @@ import {
     stopPaymentExpirationSweep,
 } from "./services/booking-expiration.service";
 import { initQdrantCollections } from "./modules/semantic-search/qdrant-vector.service";
+import {
+    startHostSheetSyncWorker,
+    stopHostSheetSyncWorker,
+} from "./modules/host-sheet-sync/host-sheet-sync.worker";
 type ExitProcess = (code: number) => never | void;
 const HOST = process.env.HOST || "0.0.0.0";
 export const shutdownServer = async (
@@ -38,6 +42,7 @@ export const shutdownServer = async (
             });
         }
         stopPaymentExpirationSweep();
+        stopHostSheetSyncWorker();
         await sequelize.close();
         logger.info("Shutdown complete", { signal });
         exitProcess(0);
@@ -57,6 +62,13 @@ export const startServer = async () => {
     });
     process.once("SIGINT", () => {
         void shutdownServer(server, "SIGINT");
+    });
+    process.on("unhandledRejection", (reason) => {
+        logger.error("Unhandled promise rejection", reason);
+    });
+    process.on("uncaughtException", (error) => {
+        logger.error("Uncaught exception", error);
+        void shutdownServer(server, "SIGTERM");
     });
 
     try {
@@ -82,6 +94,7 @@ export const startServer = async () => {
         });
         if (env.nodeEnv !== "test") {
             startPaymentExpirationSweep();
+            startHostSheetSyncWorker();
         }
         return server;
     } catch (error) {

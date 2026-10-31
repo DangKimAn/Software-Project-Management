@@ -3,6 +3,7 @@ import { body, param, query } from "express-validator";
 
 import {
     approveListing,
+    transferListingHostHandler,
     getAdminListingDetailHandler,
     listPendingListings,
     rejectListing,
@@ -51,6 +52,19 @@ router.patch(
             .isLength({ max: 2000 }),
     ],
     rejectListing,
+);
+
+router.patch(
+    "/:listingId/transfer-host",
+    [authenticate, requireRole("admin")],
+    [
+        listingIdParamValidator,
+        body("newHostId")
+            .isInt({ min: 1 })
+            .withMessage("newHostId must be a positive integer")
+            .toInt(),
+    ],
+    transferListingHostHandler,
 );
 
 export default router;

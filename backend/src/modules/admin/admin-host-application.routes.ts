@@ -5,6 +5,7 @@ import { requireActiveUser } from "../../middlewares/require-active-user.middlew
 import { requireRole } from "../../middlewares/require-role.middleware";
 import {
     approveHostApplicationController,
+    authenticateAdminHostDocumentStream,
     getAdminHostApplicationDetailController,
     listAdminHostApplicationsController,
     rejectHostApplicationController,
@@ -13,12 +14,21 @@ import {
 
 const router = express.Router();
 
+router.get(
+    "/:applicationId/documents/:documentId/file",
+    authenticateAdminHostDocumentStream,
+    streamAdminHostDocumentController,
+);
+router.get(
+    "/:applicationId/documents/:documentId/view",
+    authenticateAdminHostDocumentStream,
+    streamAdminHostDocumentController,
+);
+
 router.use(authenticate, requireActiveUser, requireRole("admin"));
 
 router.get("/", listAdminHostApplicationsController);
 router.get("/:applicationId", getAdminHostApplicationDetailController);
-router.get("/:applicationId/documents/:documentId/file", streamAdminHostDocumentController);
-router.get("/:applicationId/documents/:documentId/view", streamAdminHostDocumentController);
 router.patch("/:applicationId/approve", approveHostApplicationController);
 router.patch("/:applicationId/reject", rejectHostApplicationController);
 

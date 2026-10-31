@@ -23,6 +23,7 @@ import {
     getMyListings,
     ListMineQuery,
     replaceListingAmenities,
+    restoreListing,
     ReplaceAmenitiesInput,
     setListingImageCover,
     toHostActor,
@@ -165,6 +166,18 @@ export const updateHostListing: RequestHandler = asyncHandler(async (req, res) =
 
     return sendSuccess(res, {
         message: "Listing updated",
+        data: result,
+    });
+});
+
+export const restoreHostListing: RequestHandler = asyncHandler(async (req, res) => {
+    assertValidRequest(req);
+
+    const params = getValidatedParams<{ listingId: number }>(req);
+    const result = await restoreListing(params.listingId, toHostActor(req.user!));
+
+    return sendSuccess(res, {
+        message: "Listing restored",
         data: result,
     });
 });

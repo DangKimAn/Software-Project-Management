@@ -1,6 +1,7 @@
-import type { Transaction } from "sequelize";
+import { Op, type Transaction } from "sequelize";
 
 import { ApiError } from "../../common/api-error";
+import Booking from "../../models/booking";
 import Coupon from "../../models/coupon";
 import CouponRedemption from "../../models/coupon-redemption";
 import type { ListingDocument } from "../../models/listing";
@@ -170,7 +171,26 @@ const getCouponDiscount = async (
             transaction,
         });
 
-        if (redemptionCount >= coupon.limitPerUser) {
+        let pendingHoldCount = 0;
+        const canQueryBookingCount =
+            Boolean((transaction as { commit?: unknown })?.commit) ||
+            Object.prototype.hasOwnProperty.call(Booking, "count");
+
+        if (canQueryBookingCount) {
+            pendingHoldCount = await Booking.count({
+                where: {
+                    guestUserId: userId,
+                    couponId: coupon.couponId,
+                    status: "pending_payment",
+                    lockedUntil: {
+                        [Op.gt]: now,
+                    },
+                },
+                transaction,
+            });
+        }
+
+        if (redemptionCount + pendingHoldCount >= coupon.limitPerUser) {
             throw new ApiError(422, "Coupon usage limit has been reached");
         }
     }

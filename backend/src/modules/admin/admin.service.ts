@@ -20,6 +20,7 @@ import {
     notifyListingRejected,
 } from "../notifications/notification.service";
 import { scheduleSemanticReindex } from "../semantic-search/semantic-search.indexer";
+import { enqueueHostSheetSyncJobSafe } from "../host-sheet-sync/host-sheet-sync.service";
 
 export type AdminListingQuery = {
     page?: number;
@@ -48,8 +49,9 @@ const assertCanModerateListings = (user: AuthenticatedUser) => {
     }
 };
 
-const serializeAdminListing = (listing: ListingDocument, images = listing.images) => {
-    const coverImage = getCoverImage(images);
+const serializeAdminListing = (listing: ListingDocument, images = listing.images ?? []) => {
+    const safeImages = Array.isArray(images) ? images : [];
+    const coverImage = getCoverImage(safeImages);
     const serializedCoverImage = coverImage ? serializeListingImage(coverImage) : null;
 
     return {
@@ -69,7 +71,7 @@ const serializeAdminListing = (listing: ListingDocument, images = listing.images
         imageUrl: serializedCoverImage?.url ?? null,
         coverImageUrl: serializedCoverImage?.url ?? null,
         coverImage: serializedCoverImage,
-        images: images.map(serializeListingImage),
+        images: safeImages.map(serializeListingImage),
         rejectionReason: listing.rejectionReason ?? null,
         approvedBy: listing.approvedBy ?? null,
         approvedAt: listing.approvedAt ?? null,
@@ -168,6 +170,11 @@ export const approveAdminListing = async (
     });
 
     scheduleSemanticReindex(listingId, "listing_approved");
+    enqueueHostSheetSyncJobSafe({
+        hostUserId: Number(result.hostId),
+        jobType: "listing_updated",
+        listingId,
+    });
     return result;
 };
 
@@ -219,9 +226,79 @@ export const rejectAdminListing = async (
             transaction,
         });
         await notifyListingRejected(listing.listingId, transaction);
+        const rejectedHostId = Number(listing.hostId);
+        setImmediate(() => {
+            enqueueHostSheetSyncJobSafe({
+                hostUserId: rejectedHostId,
+                jobType: "listing_updated",
+                listingId: listing.listingId,
+            });
+        });
 
         return serializeAdminListing(listing);
     });
+
+export const transferAdminListingHost = async (
+    listingId: number,
+    newHostId: number,
+    admin: AuthenticatedUser,
+    context: AdminListingActionContext = {},
+) => {
+    if (!admin.roles.includes("admin")) {
+        throw new ApiError(403, "Only administrators can transfer listing ownership");
+    }
+
+    let previousHostId = 0;
+
+    const result = await sequelize.transaction(async (transaction) => {
+        const listing = await getListingOrThrow(listingId, transaction);
+        previousHostId = Number(listing.hostId);
+
+        if (previousHostId === Number(newHostId)) {
+            return serializeAdminListing(listing);
+        }
+
+        const targetHost = await User.findByPk(newHostId, { transaction });
+        if (!targetHost || targetHost.status !== "active") {
+            throw new ApiError(404, "Target host account not found or inactive");
+        }
+
+        listing.hostId = Number(newHostId);
+        await listing.save({ transaction });
+
+        await writeAuditLog({
+            actorId: Number(admin.id),
+            action: "listing.transfer_host",
+            targetType: "listing",
+            targetId: listing.listingId,
+            metadata: {
+                previousHostId,
+                newHostId: Number(newHostId),
+            },
+            ipAddress: context.ipAddress,
+            userAgent: context.userAgent,
+            transaction,
+        });
+
+        return serializeAdminListing(listing);
+    });
+
+    if (previousHostId && previousHostId !== Number(newHostId)) {
+        enqueueHostSheetSyncJobSafe({
+            hostUserId: previousHostId,
+            jobType: "listing_transferred",
+            listingId,
+        });
+        enqueueHostSheetSyncJobSafe({
+            hostUserId: Number(newHostId),
+            jobType: "listing_transferred",
+            listingId,
+        });
+    }
+
+    scheduleSemanticReindex(listingId, "listing_transfer_host");
+    return result;
+};
 
 export async function getAdminListingDetail(listingId: number) {
     const listing = await Listing.findOne({
@@ -261,8 +338,9 @@ export async function getAdminListingDetail(listingId: number) {
             order: [["amenityId", "ASC"]],
         })
         : [];
-    const serializedImages = images.map(serializeListingImage);
-    const coverImage = getCoverImage(images);
+    const safeImages = Array.isArray(images) ? images : [];
+    const serializedImages = safeImages.map(serializeListingImage);
+    const coverImage = getCoverImage(safeImages);
     const serializedCoverImage = coverImage ? serializeListingImage(coverImage) : null;
 
     return {

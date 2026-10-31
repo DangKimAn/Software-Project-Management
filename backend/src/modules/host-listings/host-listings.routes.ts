@@ -19,6 +19,7 @@ import {
     updateHostListing,
     updateHostListingRules,
 } from "./host-listings.controller";
+import { restoreHostListing } from "./host-listings.controller";
 import { authenticate } from "../../middlewares/authenticate.middleware";
 import { requireHostOnly } from "../../middlewares/require-role.middleware";
 import { hostListingsMaxPageLimit } from "./host-listings.service";
@@ -346,6 +347,12 @@ router.delete(
     "/:listingId",
     [listingIdParamValidator],
     deleteHostListing,
+);
+
+router.post(
+    "/:listingId/restore",
+    [listingIdParamValidator],
+    restoreHostListing,
 );
 
 export default router;
