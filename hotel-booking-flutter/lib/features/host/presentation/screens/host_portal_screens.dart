@@ -3121,15 +3121,29 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Text(
-                                id.isNotEmpty
-                                    ? 'Mã #$id · $statusTextVi'
-                                    : statusTextVi,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.textSecondary,
-                                ),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 2,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  if (id.isNotEmpty)
+                                    Text(
+                                      'Mã #$id ·',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  Text(
+                                    statusTextVi,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 4),
                               Text(

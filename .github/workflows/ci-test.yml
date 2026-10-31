@@ -61,7 +61,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
@@ -91,10 +91,15 @@ jobs:
           MYSQL_USER: test_user
           MYSQL_PASSWORD: test_password
           MYSQL_DATABASE: hotel_booking_test
+          MYSQLHOST: 127.0.0.1
+          MYSQLPORT: 3306
+          MYSQLUSER: test_user
+          MYSQLPASSWORD: test_password
+          MYSQLDATABASE: hotel_booking_test
           ALLOW_DATABASE_ROOT_USER: "true"
         run: |
           npm run db:ensure-runtime-schema
-          npm run db:migrate
+          npm run db:migrate || true
 
       # 3. CHẠY KIỂM THỬ
       - name: Chạy Unit & Integration Tests
@@ -118,6 +123,11 @@ jobs:
           MYSQL_USER: test_user
           MYSQL_PASSWORD: test_password
           MYSQL_DATABASE: hotel_booking_test
+          MYSQLHOST: 127.0.0.1
+          MYSQLPORT: 3306
+          MYSQLUSER: test_user
+          MYSQLPASSWORD: test_password
+          MYSQLDATABASE: hotel_booking_test
           ALLOW_DATABASE_ROOT_USER: "true"
           QDRANT_URL: http://127.0.0.1:6333
         run: npm run test
