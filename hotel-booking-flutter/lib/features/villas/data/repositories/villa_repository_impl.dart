@@ -427,14 +427,15 @@ class VillaRepositoryImpl implements VillaRepository {
           final dateStr = map['date']?.toString() ?? checkIn.toIsoDate();
           final parsedDate = BookingDate.parse(dateStr);
           if (!parsedDate.isBefore(checkIn) && parsedDate.isBefore(checkOut)) {
+            final available = map['isAvailable'] as bool? ??
+                (map['is_available'] as bool? ?? true);
             allDays.add(
               NightlyPrice(
                 date: parsedDate,
                 priceVnd: (map['price'] as num?)?.toInt() ?? 0,
                 isWeekend: parsedDate.isWeekend,
-                isAvailable: map['isAvailable'] as bool? ??
-                    (map['is_available'] as bool? ?? true),
-                note: map['note'] as String?,
+                isAvailable: available,
+                note: available ? (map['note'] as String?) : null,
               ),
             );
           }

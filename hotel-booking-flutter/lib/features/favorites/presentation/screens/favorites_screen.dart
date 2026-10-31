@@ -9,6 +9,7 @@ import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_loading.dart';
+import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../../villas/domain/entities/villa.dart';
 import '../../../villas/presentation/widgets/property_card.dart';
@@ -107,7 +108,7 @@ class FavoritesScreen extends ConsumerWidget {
                                     Row(
                                       children: [
                                         const Icon(
-                                          LucideIcons.circleAlert,
+                                          AppSemanticIcons.errorAlert,
                                           size: 16,
                                           color: AppColors.iconMuted,
                                         ),
@@ -138,7 +139,7 @@ class FavoritesScreen extends ConsumerWidget {
                                     Row(
                                       children: [
                                         const Icon(
-                                          LucideIcons.triangleAlert,
+                                          AppSemanticIcons.errorAlert,
                                           size: 16,
                                           color: AppColors.iconStrong,
                                         ),

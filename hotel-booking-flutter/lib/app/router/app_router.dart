@@ -29,6 +29,7 @@ import '../../features/villas/presentation/screens/villa_list_screen.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../../shared/widgets/app_semantic_icons.dart';
 
 enum RouteAccessLevel {
   public,
@@ -79,7 +80,8 @@ bool _isProtectedRoutePath(String path) {
       path == '/tro-thanh-host/dang-ky' ||
       path == '/tro-thanh-host/trang-thai' ||
       path == '/thanh-toan/ket-qua' ||
-      path.startsWith('/thanh-toan/');
+      path.startsWith('/thanh-toan/') ||
+      (path.startsWith('/villa/') && path.endsWith('/nhan-tin-host'));
 }
 
 String? _sanitizeRedirectParam(String? rawRedirectTo) {
@@ -879,9 +881,9 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
 
   static const _tabs = [
     (icon: LucideIcons.compass, label: 'Khám phá'),
-    (icon: LucideIcons.messageSquare, label: 'Tin nhắn'),
-    (icon: LucideIcons.calendarCheck, label: 'Chuyến đi'),
-    (icon: LucideIcons.user, label: 'Tài khoản'),
+    (icon: AppSemanticIcons.messageHost, label: 'Tin nhắn'),
+    (icon: AppSemanticIcons.bookings, label: 'Chuyến đi'),
+    (icon: AppSemanticIcons.userProfile, label: 'Tài khoản'),
   ];
 
   @override

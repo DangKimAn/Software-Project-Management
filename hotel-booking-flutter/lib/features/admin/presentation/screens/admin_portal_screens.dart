@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
 import 'package:hotel_booking_flutter/core/formatters/currency_formatter.dart';
+import 'package:hotel_booking_flutter/core/security/url_security_validator.dart';
 import 'package:hotel_booking_flutter/features/admin/data/admin_repository.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
 import 'package:hotel_booking_flutter/features/auth/presentation/view_models/auth_notifier.dart';
@@ -39,7 +40,7 @@ const List<AdminNavItem> kAdminNavItems = [
     id: 'tong-quan',
     label: 'Tổng quan',
     route: '/admin',
-    icon: LucideIcons.layoutGrid,
+    icon: AppSemanticIcons.dashboard,
     title: 'Tổng quan Admin',
     subtitle: 'Dữ liệu tổng quan hệ thống và biểu đồ doanh thu.',
   ),
@@ -63,7 +64,7 @@ const List<AdminNavItem> kAdminNavItems = [
     id: 'ho-so-host',
     label: 'Hồ sơ đăng ký host',
     route: '/admin/ho-so-host',
-    icon: LucideIcons.fileText,
+    icon: AppSemanticIcons.hostApplications,
     title: 'Hồ sơ host',
     subtitle: 'Duyệt hồ sơ đăng ký chủ nhà và xác minh danh tính.',
   ),
@@ -78,13 +79,13 @@ const List<AdminNavItem> kAdminNavItems = [
 ];
 
 bool _isActorAdmin(User? actor) {
-  if (actor == null) return true;
+  if (actor == null) return false;
   if (actor.role.toLowerCase() == 'admin') return true;
   return actor.roles.any((r) => r.toLowerCase() == 'admin');
 }
 
 bool _isActorModeratorOrAdmin(User? actor) {
-  if (actor == null) return true;
+  if (actor == null) return false;
   if (_isActorAdmin(actor)) return true;
   if (actor.role.toLowerCase() == 'moderator') return true;
   return actor.roles.any((r) => r.toLowerCase() == 'moderator');
@@ -200,7 +201,7 @@ class _AdminErrorBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  isOffline ? LucideIcons.wifiOff : LucideIcons.circleAlert,
+                  isOffline ? LucideIcons.wifiOff : AppSemanticIcons.errorAlert,
                   size: 18,
                   color: AppColors.iconStrong,
                 ),
@@ -241,7 +242,7 @@ class _AdminErrorBanner extends StatelessWidget {
                 style: _kPillOutlinedStyle,
                 onPressed: onRetry,
                 icon: const Icon(
-                  LucideIcons.refreshCw,
+                  AppSemanticIcons.retry,
                   size: 15,
                   color: AppColors.iconStrong,
                 ),
@@ -349,7 +350,7 @@ const List<AdminBottomNavItem> kAdminBottomNavItems = [
     id: 'ho-so-host',
     label: 'Hồ sơ',
     route: '/admin/ho-so-host',
-    icon: LucideIcons.fileText,
+    icon: AppSemanticIcons.hostApplications,
   ),
   AdminBottomNavItem(
     id: 'menu',
@@ -527,7 +528,9 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                           Icon(
                             item.icon,
                             size: 18,
-                            color: AppColors.iconStrong,
+                            color: selected
+                                ? AppColors.iconStrong
+                                : AppColors.iconMuted,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -586,7 +589,19 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                         if (inDrawer) Navigator.of(context).pop();
                         _navigateExternalRoute(context, '/');
                       },
-                      child: const Text('Về trang khách'),
+                      child: const Wrap(
+                        spacing: 8,
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Icon(
+                            AppSemanticIcons.home,
+                            size: 15,
+                            color: AppColors.iconStrong,
+                          ),
+                          Text('Về trang khách'),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -607,7 +622,7 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Icon(
-                            LucideIcons.logOut,
+                            AppSemanticIcons.logout,
                             size: 15,
                             color: AppColors.iconStrong,
                           ),
@@ -871,7 +886,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
       (
         label: 'Chờ duyệt',
         value: _loading ? '...' : '${stats?.pendingListings ?? 0}',
-        icon: LucideIcons.clipboard,
+        icon: LucideIcons.clock,
         route: '/admin/kiem-duyet',
       ),
       (
@@ -882,25 +897,25 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                 (stats?.grossRevenue ?? 0).round(),
                 fallback: '0 ₫',
               ),
-        icon: LucideIcons.dollarSign,
+        icon: AppSemanticIcons.revenue,
         route: null,
       ),
       (
         label: 'Đơn đặt',
         value: _loading ? '...' : '${stats?.bookings ?? 0}',
-        icon: LucideIcons.circleCheck,
+        icon: AppSemanticIcons.bookings,
         route: null,
       ),
       (
         label: 'Chủ nhà',
         value: _loading ? '...' : '${stats?.hosts ?? 0}',
-        icon: LucideIcons.users,
+        icon: AppSemanticIcons.becomeHost,
         route: '/admin/ho-so-host',
       ),
       (
         label: 'Phòng hoạt động',
         value: _loading ? '...' : '${stats?.activeListings ?? 0}',
-        icon: LucideIcons.clipboard,
+        icon: AppSemanticIcons.home,
         route: '/admin/kiem-duyet',
       ),
     ];
@@ -3770,7 +3785,7 @@ class _AdminHostApplicationsTabState
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.circleCheck, size: 14, color: AppColors.success),
+            Icon(LucideIcons.circleCheck, size: 14, color: AppColors.iconStrong),
             SizedBox(width: 6),
             Text(
               'Đã phê duyệt (Đã cấp quyền Host)',
@@ -3795,7 +3810,7 @@ class _AdminHostApplicationsTabState
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.circleX, size: 14, color: AppColors.error),
+            Icon(LucideIcons.circleX, size: 14, color: AppColors.iconStrong),
             SizedBox(width: 6),
             Text(
               'Đã từ chối',
@@ -3819,7 +3834,7 @@ class _AdminHostApplicationsTabState
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(LucideIcons.clock, size: 14, color: AppColors.warning),
+          Icon(LucideIcons.clock, size: 14, color: AppColors.iconStrong),
           SizedBox(width: 6),
           Text(
             'Chờ phê duyệt',
@@ -4202,14 +4217,32 @@ class _AdminHostApplicationsTabState
                                         final target = signedUrl.isNotEmpty
                                             ? signedUrl
                                             : previewUrl;
-                                        final uri = Uri.tryParse(target.startsWith('http')
-                                            ? target
-                                            : AppImage.resolveNetworkUrl(target));
-                                        if (uri != null) {
+                                        final resolvedTarget =
+                                            target.startsWith('http')
+                                                ? target
+                                                : AppImage.resolveNetworkUrl(
+                                                    target,
+                                                  );
+                                        final uri =
+                                            Uri.tryParse(resolvedTarget);
+                                        if (uri != null &&
+                                            UrlSecurityValidator
+                                                .isTrustedAdminDocumentUrl(
+                                              resolvedTarget,
+                                            )) {
                                           await launchUrl(
                                             uri,
                                             mode:
                                                 LaunchMode.externalApplication,
+                                          );
+                                        } else if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Liên kết tài liệu không thuộc nguồn tin cậy hoặc không an toàn.',
+                                              ),
+                                            ),
                                           );
                                         }
                                       },
@@ -4241,7 +4274,7 @@ class _AdminHostApplicationsTabState
                               children: [
                                 Icon(
                                   LucideIcons.circleCheck,
-                                  color: AppColors.success,
+                                  color: AppColors.iconStrong,
                                   size: 20,
                                 ),
                                 SizedBox(width: 10),
@@ -4275,7 +4308,7 @@ class _AdminHostApplicationsTabState
                               children: [
                                 const Icon(
                                   LucideIcons.circleX,
-                                  color: AppColors.error,
+                                  color: AppColors.iconStrong,
                                   size: 20,
                                 ),
                                 const SizedBox(width: 10),
