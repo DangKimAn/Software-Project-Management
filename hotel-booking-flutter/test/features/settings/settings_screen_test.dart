@@ -17,7 +17,9 @@ import 'package:hotel_booking_flutter/features/settings/domain/account_profile_m
 import 'package:hotel_booking_flutter/features/settings/presentation/screens/settings_screen.dart';
 import 'package:hotel_booking_flutter/features/settings/presentation/view_models/account_settings_view_model.dart';
 import 'package:hotel_booking_flutter/features/settings/services/avatar_upload_service.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FakeAuthRepository implements AuthRepository {
@@ -1093,6 +1095,20 @@ void main() {
 
       final logoutBtn = find.byKey(const Key('settings_bottom_logout_button'));
       await tester.ensureVisible(logoutBtn);
+      expect(
+        find.descendant(
+          of: logoutBtn,
+          matching: find.byIcon(AppSemanticIcons.logout),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: logoutBtn,
+          matching: find.byIcon(LucideIcons.doorOpen),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(logoutBtn);
       await tester.pumpAndSettle();
 

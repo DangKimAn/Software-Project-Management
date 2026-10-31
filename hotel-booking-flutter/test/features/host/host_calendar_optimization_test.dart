@@ -145,6 +145,7 @@ void main() {
           overrides: [
             hostRepositoryProvider.overrideWithValue(testRepo),
             hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
           ],
           child: const MaterialApp(
             home: HostPortalScreen(

@@ -4,12 +4,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
 import 'package:hotel_booking_flutter/features/host/data/host_repository.dart';
 import 'package:hotel_booking_flutter/features/host/domain/host_models.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/screens/host_onboarding_screens.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/screens/host_portal_screens.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/screens/them_cho_nghi_screen.dart';
 import 'package:hotel_booking_flutter/features/host/services/host_file_picker_service.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
 
 class DioClient {
   final Dio dio = Dio(BaseOptions(baseUrl: 'http://localhost:4000'));
@@ -888,6 +891,7 @@ void main() {
           overrides: [
             hostRepositoryProvider.overrideWithValue(testRepo),
             hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
           ],
           child: const MaterialApp(
             home: HostPortalScreen(
@@ -910,6 +914,7 @@ void main() {
           overrides: [
             hostRepositoryProvider.overrideWithValue(testRepo),
             hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
           ],
           child: const MaterialApp(
             home: ThemChoNghiScreen(),
@@ -1337,6 +1342,7 @@ void main() {
           overrides: [
             hostRepositoryProvider.overrideWithValue(repo),
             hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
           ],
           child: const MaterialApp(
             home: ThemChoNghiScreen(),
@@ -1473,6 +1479,7 @@ void main() {
         ProviderScope(
           overrides: [
             hostRepositoryProvider.overrideWithValue(repo),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
           ],
           child: const MaterialApp(
             home: HostPortalScreen(
@@ -1582,6 +1589,7 @@ void main() {
             ProviderScope(
               overrides: [
                 hostRepositoryProvider.overrideWithValue(repo),
+                hostCurrentUserRoleProvider.overrideWithValue('host'),
               ],
               child: MediaQuery(
                 data: MediaQueryData(
@@ -1710,6 +1718,7 @@ void main() {
           overrides: [
             hostRepositoryProvider.overrideWithValue(repo),
             hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
           ],
           child: const MaterialApp(
             home: ThemChoNghiScreen(listingId: '99'),
@@ -1747,6 +1756,64 @@ void main() {
 
       expect(r2PutCount, 1);
       expect(find.textContaining('AI Vision tạm quá tải'), findsWidgets);
+    });
+
+    testWidgets(
+        'HostPortalScreen synchronizes monochrome icons, NotificationBell, logout & home actions across desktop and mobile',
+        (tester) async {
+      final adapter = FakeRecordingHttpClientAdapter(
+        responder: (_) => jsonResponse({'items': <dynamic>[]}),
+      );
+      final client = DioClient()..dio.httpClientAdapter = adapter;
+      final repo = HostRepository(client, roleResolver: () => 'host');
+      final fakePicker = FakeTestFilePickerService();
+
+      // Desktop viewport (1280x900)
+      await tester.binding.setSurfaceSize(const Size(1280, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
+          ],
+          child: const MaterialApp(
+            home: HostPortalScreen(
+              initialSection: HostPortalSection.overview,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // NotificationBell & synchronized logout/home buttons exist on Host Portal
+      expect(find.byType(NotificationBell), findsOneWidget);
+      expect(find.byKey(const Key('host_portal_home_btn')), findsOneWidget);
+      expect(find.byKey(const Key('host_portal_logout_btn')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('host_portal_logout_btn')),
+          matching: find.byIcon(AppSemanticIcons.logout),
+        ),
+        findsOneWidget,
+      );
+
+      // Active sidebar item uses monochrome AppColors.iconStrong (#222222)
+      final activeSidebarIcon = tester.widget<Icon>(
+        find.descendant(
+          of: find.byKey(const Key('host_sidebar_overview')),
+          matching: find.byIcon(AppSemanticIcons.dashboard),
+        ),
+      );
+      expect(activeSidebarIcon.color, AppColors.iconStrong);
+
+      // Switch to Settings -> zero CircleAvatar icon background & uses camera icon
+      await tester.tap(find.byKey(const Key('host_sidebar_settings')));
+      await tester.pumpAndSettle();
+      expect(find.byType(CircleAvatar), findsNothing);
+      expect(find.byIcon(AppSemanticIcons.changeAvatar), findsOneWidget);
     });
   });
 }
