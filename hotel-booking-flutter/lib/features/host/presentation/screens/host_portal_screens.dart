@@ -2107,7 +2107,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     );
   }
 
-  void _handleStartAdminChat() {
+  Future<void> _handleStartAdminChat() async {
+    // 1. Nếu danh sách hội thoại rỗng, fetch ngay
+    if (_conversations.isEmpty) {
+      await _fetchConversations();
+    }
+
+    // 2. Tìm cuộc hội thoại với Admin
     Map<String, dynamic>? adminConv;
     for (final c in _conversations) {
       if (_isConversationAdmin(c)) {
@@ -2116,15 +2122,70 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
       }
     }
 
+    // 3. Nếu chưa thấy, thử fetch từ server một lần nữa
+    if (adminConv == null) {
+      final repo = ref.read(hostRepositoryProvider);
+      try {
+        final list = await repo.getHostConversations(page: 1, limit: 50);
+        if (mounted && list.isNotEmpty) {
+          setState(() => _conversations = list);
+          for (final c in list) {
+            if (_isConversationAdmin(c)) {
+              adminConv = c;
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 4. Nếu tìm thấy cuộc hội thoại Admin -> Mở ngay màn hình chat
     if (adminConv != null) {
       final convId = '${adminConv['conversationId'] ?? adminConv['id']}';
+      if (!mounted) return;
       setState(() {
         _selectedConversationId = convId;
         _inChatDetailView = true;
+        _activeSection = HostPortalSection.messages;
       });
-      _fetchMessagesForConversation(convId);
+      await _fetchMessagesForConversation(convId);
+      return;
     }
-    _switchSection(HostPortalSection.messages);
+
+    // 5. Nếu chưa có conversation Admin nào trong DB -> mở màn hình chat hỗ trợ Quản trị viên The Palm Villa
+    if (!mounted) return;
+    final fallbackAdminConv = <String, dynamic>{
+      'conversationId': 'admin_support',
+      'id': 'admin_support',
+      'title': 'Quản trị viên The Palm Villa',
+      'otherParticipant': {
+        'fullName': 'Quản trị viên The Palm Villa',
+        'role': 'admin',
+      },
+      'lastMessage': 'Xin chào, Ban quản trị The Palm Villa có thể hỗ trợ gì cho bạn?',
+      'updatedAt': DateTime.now().toIso8601String(),
+    };
+
+    setState(() {
+      if (!_conversations.any((c) => '${c['conversationId'] ?? c['id']}' == 'admin_support')) {
+        _conversations.insert(0, fallbackAdminConv);
+      }
+      _selectedConversationId = 'admin_support';
+      _inChatDetailView = true;
+      _activeSection = HostPortalSection.messages;
+      if (_conversationMessages.isEmpty) {
+        _conversationMessages = [
+          {
+            'messageId': 'welcome_admin',
+            'content': 'Xin chào! Ban quản trị The Palm Villa luôn sẵn sàng hỗ trợ bạn 24/7. Bạn cần trợ giúp vấn đề gì hôm nay?',
+            'senderRole': 'admin',
+            'senderName': 'Quản trị viên The Palm Villa',
+            'createdAt': DateTime.now().toIso8601String(),
+            'isMe': false,
+          }
+        ];
+      }
+    });
   }
 
   void _showHelpTopicDetail(String title, String detail) {
@@ -2344,7 +2405,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                             children: [
                               const Expanded(
                                 child: Text(
-                                  'Quản trị viên MinhThanh',
+                                  'Quản trị viên The Palm Villa',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
@@ -3796,9 +3857,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     });
   }
 
+  bool _isDayInPast(HostCalendarDay d) {
+    if (d.isPast) return true;
+    final now = DateTime.now();
+    final todayStr =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    return d.date.isNotEmpty && d.date.compareTo(todayStr) < 0;
+  }
+
   void _selectWeekendDays() {
     setState(() {
       for (final d in _calendarDays) {
+        if (_isDayInPast(d)) continue;
         final parsed = DateTime.tryParse(d.date);
         if (parsed != null &&
             (parsed.weekday == DateTime.saturday ||
@@ -3816,6 +3886,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   void _selectAvailableDays() {
     setState(() {
       for (final d in _calendarDays) {
+        if (_isDayInPast(d)) continue;
         final isBooked =
             d.bookingStatus != null && d.bookingStatus!.isNotEmpty;
         final isBlocked = !d.isAvailable || d.isBlockedByHost;
@@ -3829,6 +3900,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   void _selectAllMonthDays() {
     setState(() {
       for (final d in _calendarDays) {
+        if (_isDayInPast(d)) continue;
         final isBooked =
             d.bookingStatus != null && d.bookingStatus!.isNotEmpty;
         if (!isBooked) {
@@ -4643,14 +4715,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         return const SizedBox.shrink();
                       }
                       final day = _calendarDays[index - leadOffset];
-                      final isSelected =
+                      final now = DateTime.now();
+                      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+                      final isToday = day.date == todayStr;
+                      final isPast = day.isPast ||
+                          (day.date.isNotEmpty && day.date.compareTo(todayStr) < 0 && !isToday);
+                      final isSelected = !isPast &&
                           _selectedCalendarDates.contains(day.date);
                       final isBooked = day.isBooked ||
                           (day.bookingStatus != null &&
                               day.bookingStatus!.isNotEmpty);
-                      final isPast = day.isPast;
-                      final isEditable =
-                          day.isEditable() && !isBooked && !isPast;
+                      final isEditable = day.isEditable() && !isBooked && !day.isPast;
+                          day.isEditable(todayVietnam: todayStr) && !isBooked && !isPast;
                       final isBlocked =
                           !day.isAvailable || day.isBlockedByHost;
 
@@ -4664,6 +4740,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         bgColor = AppColors.primary;
                         dayNumColor = Colors.white;
                         priceColor = Colors.white;
+                      } else if (isToday) {
+                        // Ngày hiện tại: tô đỏ nổi bật
+                        borderColor = AppColors.primary;
+                        bgColor = const Color(0xFFFFF1F2);
+                        dayNumColor = AppColors.primary;
+                        priceColor = const Color(0xFFBE123C);
+                      } else if (isPast) {
+                        // Ngày đã qua: tô xám nhẹ và chữ xám mờ
+                        borderColor = const Color(0xFFE2E8F0);
+                        bgColor = const Color(0xFFF1F5F9);
+                        dayNumColor = const Color(0xFF94A3B8);
+                        priceColor = const Color(0xFFCBD5E1);
                       } else if (isBooked) {
                         borderColor = const Color(0xFFA7F3D0);
                         bgColor = const Color(0xFFF8FAFC);
@@ -4680,11 +4768,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         key: Key('calendar_day_${day.date}'),
                         borderRadius: BorderRadius.circular(10),
                         onTap: () {
-                          if (!isEditable) {
+                          if (day.isPast || !isEditable) {
                             setState(() {
                               _calendarError = isBooked
                                   ? 'Ngày ${day.date} đã có khách đặt phòng, không thể chỉnh sửa.'
-                                  : 'Ngày ${day.date} đã qua hoặc không thuộc quyền chỉnh sửa.';
+                                  : 'Ngày ${day.date} đã qua, không thể chỉnh sửa.';
                             });
                             return;
                           }
@@ -4713,14 +4801,39 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
-                                day.date.split('-').last.replaceFirst(RegExp(r'^0'), ''),
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: dayNumColor,
+                              if (isToday && !isSelected)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    day.date.split('-').last.replaceFirst(RegExp(r'^0'), ''),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                )
+                              else
+                                Text(
+                                  day.date.split('-').last.replaceFirst(RegExp(r'^0'), ''),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: dayNumColor,
+                                    decoration: (isPast && !isSelected)
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                    decorationColor: const Color(0xFF94A3B8),
+                                    decorationThickness: 1.5,
+                                  ),
                                 ),
-                              ),
                               const SizedBox(height: 1),
                               Text(
                                 formatCompactHostVnd(day.effectivePrice),
@@ -6143,11 +6256,16 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
             '')
         .toString()
         .toLowerCase();
+    final hasNoListing = c['listingId'] == null || '${c['listingId']}' == '0';
     return role == 'admin' ||
         role == 'system' ||
         name.contains('quản trị viên') ||
         name.contains('admin') ||
-        name.contains('bql');
+        name.contains('bql') ||
+        name.contains('the palm') ||
+        name.contains('palm villa') ||
+        name.contains('ban quản trị') ||
+        (hasNoListing && (name.contains('palm') || name.contains('hệ thống') || name.contains('hỗ trợ')));
   }
 
   String? _getConversationVillaImage(Map<String, dynamic> c) {
@@ -6406,19 +6524,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     final other = c['otherParticipant'] is Map
         ? Map<String, dynamic>.from(c['otherParticipant'] as Map)
         : null;
-    final name = (other?['fullName'] ??
+    final isAdmin = _isConversationAdmin(c);
+    var name = (other?['fullName'] ??
             other?['name'] ??
             c['guestName'] ??
             c['title'] ??
             'Hội thoại #$convId')
         .toString();
+    if (isAdmin) {
+      if (name.toLowerCase().contains('quản trị viên')) {
+        name = name.replaceAll(RegExp(r'quản trị viên\s*', caseSensitive: false), '').trim();
+      }
+      if (name.isEmpty || name.toLowerCase().contains('cuộc trò chuyện') || name.toLowerCase().contains('hội thoại')) {
+        name = 'The Palm Villa';
+      }
+    }
     final listingTitle = (c['listingTitle'] ?? '').toString().trim();
     final lastMsg = (c['lastMessage'] is Map
             ? c['lastMessage']['content'] ?? c['lastMessage']['body']
             : c['lastMessage']) ??
         c['lastMessageContent'] ??
         'Chưa có tin nhắn nào';
-    final isAdmin = _isConversationAdmin(c);
     final villaImage = _getConversationVillaImage(c);
 
     // Format time
@@ -6773,7 +6899,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                         rawSenderName.toLowerCase().contains('quản trị viên');
 
                     final displaySenderName = isMsgAdmin
-                        ? (isAdmin ? participantName : 'Quản trị viên MinhThanh')
+                        ? (isAdmin && participantName.isNotEmpty && !participantName.toLowerCase().contains('cuộc trò chuyện') ? (participantName.toLowerCase().contains('quản trị viên') ? participantName : 'Quản trị viên $participantName') : 'Quản trị viên The Palm Villa')
                         : (rawSenderName.isNotEmpty
                             ? rawSenderName
                             : (participantName.isNotEmpty ? participantName : 'Khách hàng'));
