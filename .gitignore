@@ -33,7 +33,7 @@ Source goc.zip
 *.rar
 *.7z
 *.tar.gz
-
+pic
 # Internal AI audit & fix reports
 docs/ai-fix/
 **/docs/ai-fix/
@@ -60,6 +60,7 @@ docs/ai-fix/
 **/.env.production.local
 !**/.env.example
 !**/.env.*.example
+goldens
 
 # Certificates, keys and credentials
 certs/
@@ -68,6 +69,12 @@ secrets/
 **/secrets/
 private/
 **/private/
+Setup Notifications/
+"Setup Notifications/"
+**/google-services.json
+**/GoogleService-Info.plist
+**/firebase-adminsdk*.json
+**/service-account*.json
 *.pem
 **/*.pem
 *.key
@@ -112,7 +119,7 @@ app.*.map.txt
 *.hprof
 hs_err_pid*.log
 replay_pid*.log
-
+agent
 # iOS / macOS / Linux / Windows ephemeral and pods
 **/ios/Flutter/ephemeral/
 **/ios/Flutter/App.framework

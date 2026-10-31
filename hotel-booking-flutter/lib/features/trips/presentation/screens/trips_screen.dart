@@ -8,7 +8,6 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/formatters/currency_formatter.dart';
 import '../../../../shared/widgets/app_button.dart';
-import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
@@ -470,8 +469,8 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
     final pb = booking.priceBreakdown;
     final remainingHoldSeconds = booking.computeRemainingPaymentSeconds();
 
-    return AppCard(
-      padding: EdgeInsets.zero,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () {
         if (booking.listingId.isNotEmpty) {
           context.push('/villa/${booking.listingId}');

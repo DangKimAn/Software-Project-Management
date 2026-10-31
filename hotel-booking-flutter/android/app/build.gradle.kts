@@ -1,9 +1,9 @@
 import java.io.FileInputStream
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
-    id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -46,12 +46,13 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    buildFeatures {
+        resValues = true
     }
 
     defaultConfig {
@@ -109,6 +110,12 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
 gradle.taskGraph.whenReady {
     val isReleaseTaskRequested = allTasks.any { task ->
         task.name.contains("Release", ignoreCase = true)
@@ -128,4 +135,31 @@ flutter {
 
 tasks.matching { it.name.startsWith("copyFlutterAssets") }.configureEach {
     doNotTrackState("Avoid Gradle 9 state tracking error when flutter_assets are recreated")
+}
+
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+
+val googleServicesJsonFile = file("google-services.json")
+if (googleServicesJsonFile.exists()) {
+    apply(plugin = "com.google.gms.google-services")
+    val gsContent = googleServicesJsonFile.readText()
+    val flavorAppIds = mapOf(
+        "Dev" to "com.bronc3.hotel_booking_flutter.dev",
+        "Staging" to "com.bronc3.hotel_booking_flutter.staging",
+        "Prod" to "com.bronc3.hotel_booking_flutter",
+    )
+    flavorAppIds.forEach { (flavorCap, appId) ->
+        val hasExactPackage =
+            Regex(""""package_name"\s*:\s*"${Regex.escape(appId)}"""").containsMatchIn(gsContent)
+        if (!hasExactPackage) {
+            tasks.matching {
+                it.name.startsWith("process$flavorCap") && it.name.endsWith("GoogleServices")
+            }.configureEach {
+                enabled = false
+            }
+        }
+    }
 }

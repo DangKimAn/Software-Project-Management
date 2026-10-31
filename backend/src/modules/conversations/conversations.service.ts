@@ -6,6 +6,7 @@ import Conversation from "../../models/conversation";
 import ConversationParticipant from "../../models/conversation-participant";
 import Message, { MessageAttachment, MessageDocument, MessageType } from "../../models/message";
 import { emitMessageNew } from "../../socket/socket";
+import { sendPushToUser } from "../../services/fcm-push.service";
 import { sanitizeAndModerateText, sanitizeUserText } from "../../services/trust-safety-service";
 import { assertBasicUserExists } from "../../services/user-access-service";
 import type { AuthenticatedUser } from "../auth/auth.service";
@@ -945,6 +946,32 @@ export const sendConversationMessage = async (
             hostUserId: result.hostUserId,
         },
         receiverUserId: result.receiverUserId,
+    });
+
+    const senderDisplayName = user.name?.trim() || "Tin nhắn mới";
+    const listingSuffix = conversation.listing?.title ? ` • ${conversation.listing.title}` : "";
+    const previewBody =
+        message.messageType === "image"
+            ? "Đã gửi một hình ảnh"
+            : message.messageType === "file"
+              ? "Đã gửi một tệp đính kèm"
+              : message.content;
+
+    void sendPushToUser(result.receiverUserId, {
+        title: `${senderDisplayName}${listingSuffix}`,
+        body: previewBody,
+        actionUrl:
+            result.receiverUserId === result.hostUserId
+                ? "/host/tin-nhan"
+                : `/tin-nhan?conversationId=${conversationId}`,
+        eventType: "MESSAGE_NEW",
+        targetType: "conversation",
+        targetId: conversationId,
+        data: {
+            conversationId,
+            messageId: message.messageId,
+            senderUserId: userId,
+        },
     });
 
     return {

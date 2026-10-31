@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/date/booking_date.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/socket_service.dart';
+import '../../core/notifications/device_token_repository.dart';
+import '../../core/notifications/push_notification_service.dart';
 import '../../core/security/secure_storage_service.dart';
 import '../../core/storage/preferences_service.dart';
 import '../../features/auth/presentation/view_models/auth_notifier.dart';
@@ -37,6 +39,23 @@ final socketServiceProvider = Provider<SocketService>((ref) {
 
 /// Overridden in bootstrap when initialized; falls back to active or in-memory
 /// PreferencesService in isolated widget/unit test containers.
+final deviceTokenRepositoryProvider = Provider<DeviceTokenRepository>((ref) {
+  final client = ref.watch(dioClientProvider);
+  return DeviceTokenRepositoryImpl(client);
+});
+
+final pushNotificationServiceProvider =
+    Provider<PushNotificationService>((ref) {
+  final repo = ref.watch(deviceTokenRepositoryProvider);
+  final socket = ref.watch(socketServiceProvider);
+  final service = PushNotificationService(
+    deviceTokenRepository: repo,
+    socketService: socket,
+  );
+  ref.onDispose(service.dispose);
+  return service;
+});
+
 final preferencesServiceProvider = Provider<PreferencesService>((ref) {
   return PreferencesService.activeInstance ?? PreferencesService.inMemory();
 });
