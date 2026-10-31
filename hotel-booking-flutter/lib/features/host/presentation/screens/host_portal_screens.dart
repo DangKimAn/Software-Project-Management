@@ -185,6 +185,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
   List<Map<String, dynamic>> _conversationMessages = [];
   bool _sendingMessage = false;
   final TextEditingController _messageInputCtrl = TextEditingController();
+  final FocusNode _messageInputFocusNode = FocusNode();
 
   // Payouts state
   bool _loadingPayouts = false;
@@ -268,6 +269,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     _calendarNotesCtrl.dispose();
     _guestSearchCtrl.dispose();
     _messageInputCtrl.dispose();
+    _messageInputFocusNode.dispose();
     _messagesSearchCtrl.dispose();
     for (final ctrl in _reviewReplyControllers.values) {
       ctrl.dispose();
@@ -839,6 +841,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
     try {
       await repo.sendConversationMessage(convId, text);
       _messageInputCtrl.clear();
+      if (mounted) _messageInputFocusNode.requestFocus();
       await _fetchMessagesForConversation(convId);
     } catch (e) {
       if (!mounted) return;
@@ -6981,7 +6984,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                                   0.75,
                             ),
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
+                              horizontal: 16,
                               vertical: 10,
                             ),
                             decoration: BoxDecoration(
@@ -6991,10 +6994,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                                       ? const Color(0xFFFFF1F2)
                                       : const Color(0xFFF1F5F9)),
                               borderRadius: BorderRadius.only(
-                                topLeft: const Radius.circular(16),
-                                topRight: const Radius.circular(16),
-                                bottomLeft: Radius.circular(isMe ? 16 : 4),
-                                bottomRight: Radius.circular(isMe ? 4 : 16),
+                                topLeft: const Radius.circular(20),
+                                topRight: const Radius.circular(20),
+                                bottomLeft: Radius.circular(isMe ? 20 : 8),
+                                bottomRight: Radius.circular(isMe ? 8 : 20),
                               ),
                               border: isMe
                                   ? null
@@ -7067,6 +7070,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen> {
                 child: TextField(
                   key: const Key('host_message_input'),
                   controller: _messageInputCtrl,
+                  focusNode: _messageInputFocusNode,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) {
+                    if (!_sendingMessage) {
+                      _sendHostMessage();
+                    }
+                  },
                   decoration: InputDecoration(
                     hintText: 'Nhập tin nhắn...',
                     border: OutlineInputBorder(
