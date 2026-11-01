@@ -113,6 +113,25 @@ export const escapeSheetTitleForA1 = (title: string): string => {
     return `'${title.replace(/'/g, "''")}'`;
 };
 
+export const columnIndexToA1Letter = (colIndex: number): string => {
+    let n = Math.max(0, Math.floor(colIndex)) + 1;
+    let letters = "";
+    while (n > 0) {
+        const rem = (n - 1) % 26;
+        letters = String.fromCharCode(65 + rem) + letters;
+        n = Math.floor((n - 1) / 26);
+    }
+    return letters;
+};
+
+export const buildMonthTabA1Range = (tab: RawSheetTab, listingCountHint = 0): string => {
+    const gridCols = tab.properties.gridProperties?.columnCount ?? SHEET_TOTAL_COLUMNS;
+    const totalCols = Math.max(SHEET_TOTAL_COLUMNS, gridCols, listingCountHint + 10);
+    const endColLetter = columnIndexToA1Letter(totalCols - 1);
+    const maxRows = Math.max(60, SHEET_CALENDAR_START_ROW_INDEX + 35, listingCountHint + 20);
+    return `${escapeSheetTitleForA1(tab.properties.title)}!A1:${endColLetter}${maxRows}`;
+};
+
 export const resolveDirectorySheetTab = (sheets: RawSheetTab[]): RawSheetTab | undefined => {
     const byMetadata = sheets.find((sheet) =>
         (sheet.developerMetadata ?? []).some(
@@ -153,11 +172,13 @@ export type ExtractedSheetListingRow = {
 };
 
 export type ExtractedMonthSheetStructure = {
+    isVerticalLayout: boolean;
     columnsByListingId: Map<number, ExtractedSheetListingRow[]>;
     rowsByListingId: Map<number, ExtractedSheetListingRow[]>;
     duplicateListingIds: Set<number>;
     tamperedColumnIndices: Array<{ colIndex: number; headerIdText: string; metadataListingId: number | null }>;
     tamperedRowIndices: Array<{ rowIndex: number; colAText: string; metadataListingId: number | null }>;
+    columnMetadataEntriesByCol: Map<number, RawDeveloperMetadata[]>;
     nextAppendColIndex: number;
     nextAppendRowIndex: number;
 };
@@ -209,12 +230,29 @@ const findRowDeveloperMetadataListingId = (
     return null;
 };
 
-const findColumnDeveloperMetadataListingId = (
+const collectColumnListingMetadataEntries = (
     tab: RawSheetTab,
     colIndex: number,
-): number | null => {
+    gridColMeta?: { developerMetadata?: RawDeveloperMetadata[] },
+): RawDeveloperMetadata[] => {
+    const entries: RawDeveloperMetadata[] = [];
+    const seenIds = new Set<number>();
+
+    for (const meta of gridColMeta?.developerMetadata ?? []) {
+        if (meta.metadataKey !== SHEET_METADATA_KEYS.LISTING_ROW) {
+            continue;
+        }
+        if (meta.metadataId !== undefined) {
+            seenIds.add(meta.metadataId);
+        }
+        entries.push(meta);
+    }
+
     for (const meta of tab.developerMetadata ?? []) {
         if (meta.metadataKey !== SHEET_METADATA_KEYS.LISTING_ROW) {
+            continue;
+        }
+        if (meta.metadataId !== undefined && seenIds.has(meta.metadataId)) {
             continue;
         }
         const range = meta.location?.dimensionRange;
@@ -224,10 +262,22 @@ const findColumnDeveloperMetadataListingId = (
             range.startIndex === colIndex &&
             range.endIndex === colIndex + 1
         ) {
-            const parsed = parsePositiveListingId(meta.metadataValue);
-            if (parsed) {
-                return parsed;
-            }
+            entries.push(meta);
+        }
+    }
+
+    return entries;
+};
+
+const findColumnDeveloperMetadataListingId = (
+    tab: RawSheetTab,
+    colIndex: number,
+    gridColMeta?: { developerMetadata?: RawDeveloperMetadata[] },
+): number | null => {
+    for (const meta of collectColumnListingMetadataEntries(tab, colIndex, gridColMeta)) {
+        const parsed = parsePositiveListingId(meta.metadataValue);
+        if (parsed) {
+            return parsed;
         }
     }
 
@@ -237,28 +287,86 @@ const findColumnDeveloperMetadataListingId = (
 export const extractMonthSheetStructure = (tab: RawSheetTab): ExtractedMonthSheetStructure => {
     const grid = tab.data?.[0];
     const rowData = grid?.rowData ?? [];
+    const rowMetadata = grid?.rowMetadata ?? [];
+    const columnMetadata = grid?.columnMetadata ?? [];
 
     const rowsByListingId = new Map<number, ExtractedSheetListingRow[]>();
     const duplicateListingIds = new Set<number>();
     const tamperedRowIndices: Array<{ rowIndex: number; colAText: string; metadataListingId: number | null }> = [];
+    const columnMetadataEntriesByCol = new Map<number, RawDeveloperMetadata[]>();
 
-    // Header row 9 has listing ID, Header row 10 has listing Title
+    // Header row 9 (0-based 8) has listing ID, Header row 10 (0-based 9) has listing Title
     const idRowValues = rowData[SHEET_GUIDE_ROW_COUNT]?.values ?? [];
     const titleRowValues = rowData[SHEET_GUIDE_ROW_COUNT + 1]?.values ?? [];
+
+    const row1ColAText = extractCellRawText(rowData[1]?.values?.[0]);
+    const hasHorizontalHeader = row1ColAText.startsWith("Mã căn");
+    const hasRowDeveloperMetadata = rowMetadata.some((rm) =>
+        (rm?.developerMetadata ?? []).some((m) => m.metadataKey === SHEET_METADATA_KEYS.LISTING_ROW),
+    );
+    const row8ColAText = extractCellRawText(rowData[SHEET_GUIDE_ROW_COUNT]?.values?.[0]);
+    const row9ColAText = extractCellRawText(rowData[SHEET_GUIDE_ROW_COUNT + 1]?.values?.[0]);
+    const row10ColAText = extractCellRawText(rowData[SHEET_CALENDAR_START_ROW_INDEX]?.values?.[0]);
+    const hasColumnDeveloperMetadata =
+        columnMetadata.some((cm) =>
+            (cm?.developerMetadata ?? []).some((m) => m.metadataKey === SHEET_METADATA_KEYS.LISTING_ROW),
+        ) ||
+        (tab.developerMetadata ?? []).some(
+            (m) =>
+                m.metadataKey === SHEET_METADATA_KEYS.LISTING_ROW &&
+                m.location?.dimensionRange?.dimension === "COLUMNS",
+        );
+    const hasVerticalIdInRow8 = idRowValues
+        .slice(SHEET_DAY_COLUMN_OFFSET)
+        .some((cell) => parsePositiveListingId(extractCellRawText(cell)) !== null);
+
     const isVerticalLayout =
-        idRowValues.length > 0 ||
-        rowData[0]?.values?.[0]?.userEnteredValue?.stringValue === "HƯỚNG DẪN" ||
-        rowData[SHEET_CALENDAR_START_ROW_INDEX]?.values?.[0]?.userEnteredValue?.stringValue?.includes("/");
+        !hasHorizontalHeader &&
+        !hasRowDeveloperMetadata &&
+        (rowData.length === 0 ||
+            row8ColAText.startsWith("Mã căn") ||
+            row9ColAText.startsWith("Ngày") ||
+            /^\d{2}\/\d{2}\/\d{4}$/.test(row10ColAText) ||
+            hasColumnDeveloperMetadata ||
+            hasVerticalIdInRow8);
 
     if (isVerticalLayout) {
         let maxUsedColIndex = 0;
-        const maxCols = Math.max(idRowValues.length, titleRowValues.length);
+        let maxMetaColPlusOne = 0;
+        for (const meta of tab.developerMetadata ?? []) {
+            if (
+                meta.metadataKey === SHEET_METADATA_KEYS.LISTING_ROW &&
+                meta.location?.dimensionRange?.dimension === "COLUMNS" &&
+                typeof meta.location.dimensionRange.endIndex === "number"
+            ) {
+                maxMetaColPlusOne = Math.max(maxMetaColPlusOne, meta.location.dimensionRange.endIndex);
+            }
+        }
+        const maxCols = Math.max(
+            idRowValues.length,
+            titleRowValues.length,
+            columnMetadata.length,
+            maxMetaColPlusOne,
+        );
 
         for (let colIndex = SHEET_DAY_COLUMN_OFFSET; colIndex < maxCols; colIndex += 1) {
+            const colMetaEntries = collectColumnListingMetadataEntries(
+                tab,
+                colIndex,
+                columnMetadata[colIndex],
+            );
+            if (colMetaEntries.length > 0) {
+                columnMetadataEntriesByCol.set(colIndex, colMetaEntries);
+            }
+
             const headerIdText = extractCellRawText(idRowValues[colIndex]);
             const headerTitleText = extractCellRawText(titleRowValues[colIndex]);
             const headerListingId = parsePositiveListingId(headerIdText);
-            const metadataListingId = findColumnDeveloperMetadataListingId(tab, colIndex);
+            const metadataListingId = findColumnDeveloperMetadataListingId(
+                tab,
+                colIndex,
+                columnMetadata[colIndex],
+            );
 
             const hasAnyContent = headerIdText !== "" || headerTitleText !== "" || metadataListingId !== null;
             if (hasAnyContent) {
@@ -306,6 +414,7 @@ export const extractMonthSheetStructure = (tab: RawSheetTab): ExtractedMonthShee
         }
 
         return {
+            isVerticalLayout: true,
             columnsByListingId: rowsByListingId,
             rowsByListingId,
             duplicateListingIds,
@@ -315,13 +424,13 @@ export const extractMonthSheetStructure = (tab: RawSheetTab): ExtractedMonthShee
                 metadataListingId: t.metadataListingId,
             })),
             tamperedRowIndices,
+            columnMetadataEntriesByCol,
             nextAppendColIndex: maxUsedColIndex === 0 ? SHEET_DAY_COLUMN_OFFSET : maxUsedColIndex + 1,
             nextAppendRowIndex: maxUsedColIndex === 0 ? SHEET_DAY_COLUMN_OFFSET : maxUsedColIndex + 1,
         };
     }
 
     // Fallback: horizontal layout (Row = Listing, Col = Day)
-    const rowMetadata = grid?.rowMetadata ?? [];
     let maxUsedRowIndex = 1;
 
     for (let offset = 0; offset < rowData.length; offset += 1) {
@@ -384,6 +493,7 @@ export const extractMonthSheetStructure = (tab: RawSheetTab): ExtractedMonthShee
     }
 
     return {
+        isVerticalLayout: false,
         columnsByListingId: rowsByListingId,
         rowsByListingId,
         duplicateListingIds,
@@ -393,6 +503,7 @@ export const extractMonthSheetStructure = (tab: RawSheetTab): ExtractedMonthShee
             metadataListingId: t.metadataListingId,
         })),
         tamperedRowIndices,
+        columnMetadataEntriesByCol,
         nextAppendColIndex: Math.max(SHEET_DAY_COLUMN_OFFSET, maxUsedRowIndex + 1),
         nextAppendRowIndex: Math.max(SHEET_DAY_COLUMN_OFFSET, maxUsedRowIndex + 1),
     };
@@ -562,23 +673,26 @@ export const buildMonthTabHeaderRequests = (
                 ),
             ],
         },
+    ];
+
+    const colATableRows: Array<{ values: RawSheetCell[] }> = [
         // Row 8: Table Header 1 - Mã căn
         {
             values: [
                 makeStyledHeaderCell("Mã căn (ID)", SHEET_COLORS.SUBHEADER_BG, { bold: true, align: "CENTER" }),
             ],
         },
-        // Row 9: Table Header 2 - Ngày/Tháng/Năm
+        // Row 9: Table Header 2 - Ngày \ Tên căn
         {
             values: [
-                makeStyledHeaderCell("Ngày / Tháng / Năm", SHEET_COLORS.SUBHEADER_BG, { bold: true, align: "CENTER" }),
+                makeStyledHeaderCell("Ngày \\ Tên căn", SHEET_COLORS.SUBHEADER_BG, { bold: true, align: "CENTER" }),
             ],
         },
     ];
 
-    // Rows 11 to 10 + daysInMonth: Ngày tháng năm ở Cột A
+    // Rows 10 to 9 + daysInMonth (0-indexed): Ngày tháng năm ở Cột A
     for (let day = 1; day <= monthSpec.daysInMonth; day += 1) {
-        rows.push({
+        colATableRows.push({
             values: [
                 makeStyledHeaderCell(
                     formatDisplayDate(monthSpec.year, monthSpec.month, day),
@@ -589,16 +703,33 @@ export const buildMonthTabHeaderRequests = (
         });
     }
 
+    // Write Guide rows (Rows 0..7) across Col A..B ONLY
     requests.push({
         updateCells: {
             range: {
                 sheetId,
                 startRowIndex: 0,
-                endRowIndex: rows.length,
+                endRowIndex: SHEET_GUIDE_ROW_COUNT,
                 startColumnIndex: 0,
                 endColumnIndex: 2,
             },
             rows,
+            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold)",
+        },
+    });
+
+    // Write Table Headers & Date labels (Rows 8..10+daysInMonth) strictly in Col A ONLY
+    // so Listing #1 in Col B (B9:B41) is NEVER wiped out by UpdateCellsRequest range clearing!
+    requests.push({
+        updateCells: {
+            range: {
+                sheetId,
+                startRowIndex: SHEET_GUIDE_ROW_COUNT,
+                endRowIndex: SHEET_GUIDE_ROW_COUNT + colATableRows.length,
+                startColumnIndex: 0,
+                endColumnIndex: 1,
+            },
+            rows: colATableRows,
             fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold)",
         },
     });
@@ -616,6 +747,25 @@ export const buildMonthTabHeaderRequests = (
                         endColumnIndex: 1,
                     },
                     description: `agy_protect_col_a_${monthSpec.tabKey}`,
+                    warningOnly: true,
+                },
+            },
+        });
+    }
+
+    const hasHeaderProtection = (tab.protectedRanges ?? []).some(
+        (range) => range.description === `agy_protect_header_rows_${monthSpec.tabKey}`,
+    );
+    if (!hasHeaderProtection) {
+        requests.push({
+            addProtectedRange: {
+                protectedRange: {
+                    range: {
+                        sheetId,
+                        startRowIndex: 0,
+                        endRowIndex: SHEET_HEADER_ROW_COUNT,
+                    },
+                    description: `agy_protect_header_rows_${monthSpec.tabKey}`,
                     warningOnly: true,
                 },
             },

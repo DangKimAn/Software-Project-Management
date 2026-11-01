@@ -652,6 +652,7 @@ const ensurePlatformFeeSettingsSchema = async () => {
         `);
     }
 };
+
 const ensureHostSheetSyncSchema = async () => {
     if (await tableExists("availability_calendars")) {
         await ensureColumn(

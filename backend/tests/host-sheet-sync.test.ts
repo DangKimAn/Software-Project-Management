@@ -69,6 +69,30 @@ type InMemoryTab = {
     protectedRanges: Array<{ protectedRangeId: number; description?: string; warningOnly?: boolean }>;
     rows: Map<number, RawSheetCell[]>;
     rowDeveloperMetadata: Map<number, RawDeveloperMetadata[]>;
+    colDeveloperMetadata: Map<number, RawDeveloperMetadata[]>;
+};
+
+const a1LettersToColIndex = (letters: string): number => {
+    let idx = 0;
+    for (const ch of letters.toUpperCase()) {
+        idx = idx * 26 + (ch.charCodeAt(0) - 64);
+    }
+    return idx - 1;
+};
+
+const parseA1Bounds = (
+    expr: string,
+): { maxColInclusive: number | null; maxRowInclusive: number | null } => {
+    const parts = expr.split(":");
+    const endPart = parts[1] ?? parts[0] ?? "";
+    const m = /^([A-Za-z]+)?(\d+)?$/.exec(endPart.trim());
+    if (!m) {
+        return { maxColInclusive: null, maxRowInclusive: null };
+    }
+    return {
+        maxColInclusive: m[1] ? a1LettersToColIndex(m[1]) : null,
+        maxRowInclusive: m[2] ? Number(m[2]) - 1 : null,
+    };
 };
 
 type InMemorySpreadsheet = {
@@ -85,6 +109,7 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
     public nextBatchUpdateError: InstanceType<typeof GoogleSheetsClientError> | null = null;
     public recordedGetFields: string[] = [];
     public recordedUpdateCellsFields: string[] = [];
+    public createColumnMetadataCount = 0;
     private nextMetaId = 5000;
     private nextSheetId = 100;
 
@@ -106,6 +131,7 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
                     protectedRanges: [],
                     rows: new Map(),
                     rowDeveloperMetadata: new Map(),
+                    colDeveloperMetadata: new Map(),
                 },
             ],
         };
@@ -139,17 +165,23 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
         }
 
         const requestedTitles = new Set<string>();
+        const boundsByTitle = new Map<
+            string,
+            { maxColInclusive: number | null; maxRowInclusive: number | null }
+        >();
         if (params.ranges && params.ranges.length > 0) {
             for (const r of params.ranges) {
                 const bangIdx = r.lastIndexOf("!");
                 if (bangIdx > 0) {
                     const rawTitle = r.slice(0, bangIdx).replace(/^'|'$/g, "").replace(/''/g, "'");
                     requestedTitles.add(rawTitle);
+                    boundsByTitle.set(rawTitle, parseA1Bounds(r.slice(bangIdx + 1)));
                 }
             }
         }
 
         const stripEffectiveFormat = Boolean(params.fields && !params.fields.includes("effectiveFormat"));
+        const includeColumnMetadata = !params.fields || params.fields.includes("columnMetadata");
 
         const sheets: RawSheetTab[] = doc.tabs
             .filter((t) => requestedTitles.size === 0 || requestedTitles.has(t.title))
@@ -172,21 +204,40 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
                 };
 
                 if (params.includeGridData) {
+                    const bounds = boundsByTitle.get(t.title);
                     let maxRow = -1;
-                    for (const rIdx of t.rows.keys()) {
+                    let maxCol = -1;
+                    for (const [rIdx, cells] of t.rows.entries()) {
                         if (rIdx > maxRow) maxRow = rIdx;
+                        if (cells && cells.length - 1 > maxCol) maxCol = cells.length - 1;
                     }
                     for (const rIdx of t.rowDeveloperMetadata.keys()) {
                         if (rIdx > maxRow) maxRow = rIdx;
                     }
+                    for (const cIdx of t.colDeveloperMetadata.keys()) {
+                        if (cIdx > maxCol) maxCol = cIdx;
+                    }
+
+                    const effectiveMaxRow =
+                        bounds?.maxRowInclusive !== null && bounds?.maxRowInclusive !== undefined
+                            ? Math.min(Math.max(maxRow, 1), bounds.maxRowInclusive)
+                            : Math.max(maxRow, 1);
+                    const effectiveMaxCol =
+                        bounds?.maxColInclusive !== null && bounds?.maxColInclusive !== undefined
+                            ? bounds.maxColInclusive
+                            : null;
 
                     const rowData: Array<{ values?: RawSheetCell[] }> = [];
                     const rowMetadata: Array<{ developerMetadata?: RawDeveloperMetadata[] }> = [];
-                    for (let r = 0; r <= Math.max(maxRow, 1); r += 1) {
+                    for (let r = 0; r <= effectiveMaxRow; r += 1) {
                         const cells = t.rows.get(r);
+                        const slicedCells =
+                            cells && effectiveMaxCol !== null
+                                ? cells.slice(0, effectiveMaxCol + 1)
+                                : cells;
                         rowData.push({
-                            values: cells
-                                ? cells.map((cell) => {
+                            values: slicedCells
+                                ? slicedCells.map((cell) => {
                                       if (!cell) return {};
                                       const cloned: RawSheetCell = JSON.parse(JSON.stringify(cell));
                                       if (stripEffectiveFormat) {
@@ -201,12 +252,24 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
                         });
                     }
 
+                    const columnMetadata: Array<{ developerMetadata?: RawDeveloperMetadata[] }> = [];
+                    if (includeColumnMetadata) {
+                        const colLimit =
+                            effectiveMaxCol !== null ? Math.min(maxCol, effectiveMaxCol) : maxCol;
+                        for (let c = 0; c <= Math.max(colLimit, 0); c += 1) {
+                            columnMetadata.push({
+                                developerMetadata: [...(t.colDeveloperMetadata.get(c) ?? [])],
+                            });
+                        }
+                    }
+
                     baseTab.data = [
                         {
                             startRow: 0,
                             startColumn: 0,
                             rowData,
                             rowMetadata,
+                            ...(includeColumnMetadata ? { columnMetadata } : {}),
                         },
                     ];
                 }
@@ -258,6 +321,7 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
                     protectedRanges: [],
                     rows: new Map(),
                     rowDeveloperMetadata: new Map(),
+                    colDeveloperMetadata: new Map(),
                 });
             } else if (req.updateSpreadsheetProperties) {
                 const props = (req.updateSpreadsheetProperties as any).properties ?? {};
@@ -270,22 +334,17 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
                 if (idx >= 0) {
                     doc.tabs.splice(idx, 1);
                 }
-            } else if (req.deleteDimension) {
-                const dd = (req.deleteDimension as any).range;
-                const tab = doc.tabs.find((t) => t.sheetId === dd?.sheetId);
-                if (tab && dd?.dimension === "COLUMNS") {
-                    const start = Number(dd.startIndex ?? 0);
-                    const end = Number(dd.endIndex ?? start + 1);
-                    const count = end - start;
-                    for (const [rIdx, row] of tab.rows.entries()) {
-                        row.splice(start, count);
-                    }
-                }
             } else if (req.updateSheetProperties) {
                 const props = (req.updateSheetProperties as any).properties ?? {};
                 const tab = doc.tabs.find((t) => t.sheetId === props.sheetId);
                 if (tab) {
                     if (props.title !== undefined) tab.title = props.title;
+                    if (props.gridProperties?.rowCount !== undefined) {
+                        tab.rowCount = props.gridProperties.rowCount;
+                    }
+                    if (props.gridProperties?.columnCount !== undefined) {
+                        tab.columnCount = props.gridProperties.columnCount;
+                    }
                     if (props.gridProperties?.frozenRowCount !== undefined) {
                         tab.frozenRowCount = props.gridProperties.frozenRowCount;
                     }
@@ -298,6 +357,8 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
                 const tab = doc.tabs.find((t) => t.sheetId === ad.sheetId);
                 if (tab && ad.dimension === "ROWS") {
                     tab.rowCount += Number(ad.length ?? 0);
+                } else if (tab && ad.dimension === "COLUMNS") {
+                    tab.columnCount += Number(ad.length ?? 0);
                 }
             } else if (req.createDeveloperMetadata) {
                 const dm = (req.createDeveloperMetadata as any).developerMetadata as RawDeveloperMetadata;
@@ -323,19 +384,40 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
                     const range = dm.location.dimensionRange;
                     const tab = doc.tabs.find((t) => t.sheetId === range.sheetId);
                     if (tab && range.startIndex !== undefined) {
-                        const existing = (tab.rowDeveloperMetadata.get(range.startIndex) ?? []).filter(
-                            (m) => m.metadataKey !== entry.metadataKey,
-                        );
+                        const existing = tab.rowDeveloperMetadata.get(range.startIndex) ?? [];
                         existing.push(entry);
                         tab.rowDeveloperMetadata.set(range.startIndex, existing);
+                    }
+                } else if (dm.location?.dimensionRange?.dimension === "COLUMNS") {
+                    this.createColumnMetadataCount += 1;
+                    const range = dm.location.dimensionRange;
+                    const tab = doc.tabs.find((t) => t.sheetId === range.sheetId);
+                    if (tab && range.startIndex !== undefined) {
+                        const existing = tab.colDeveloperMetadata.get(range.startIndex) ?? [];
+                        existing.push(entry);
+                        tab.colDeveloperMetadata.set(range.startIndex, existing);
                     }
                 }
             } else if (req.deleteDeveloperMetadata) {
                 const lookup = (req.deleteDeveloperMetadata as any).dataFilter?.developerMetadataLookup;
                 if (lookup?.metadataId !== undefined) {
-                    doc.developerMetadata = doc.developerMetadata.filter(
-                        (m) => m.metadataId !== lookup.metadataId,
-                    );
+                    const targetId = lookup.metadataId;
+                    doc.developerMetadata = doc.developerMetadata.filter((m) => m.metadataId !== targetId);
+                    for (const tab of doc.tabs) {
+                        tab.developerMetadata = tab.developerMetadata.filter((m) => m.metadataId !== targetId);
+                        for (const [rIdx, list] of tab.rowDeveloperMetadata.entries()) {
+                            tab.rowDeveloperMetadata.set(
+                                rIdx,
+                                list.filter((m) => m.metadataId !== targetId),
+                            );
+                        }
+                        for (const [cIdx, list] of tab.colDeveloperMetadata.entries()) {
+                            tab.colDeveloperMetadata.set(
+                                cIdx,
+                                list.filter((m) => m.metadataId !== targetId),
+                            );
+                        }
+                    }
                 }
             } else if (req.addProtectedRange) {
                 const pr = (req.addProtectedRange as any).protectedRange;
@@ -359,13 +441,24 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
                     const startRow = Number(range.startRowIndex ?? 0);
                     const startCol = Number(range.startColumnIndex ?? 0);
                     const inputRows: Array<{ values?: RawSheetCell[] }> = uc.rows ?? [];
-                    for (let rOffset = 0; rOffset < inputRows.length; rOffset += 1) {
-                        const rowIdx = startRow + rOffset;
+                    const endRow =
+                        range.endRowIndex !== undefined
+                            ? Number(range.endRowIndex)
+                            : startRow + inputRows.length;
+                    const endCol =
+                        range.endColumnIndex !== undefined ? Number(range.endColumnIndex) : null;
+
+                    // Match Google Sheets API v4 UpdateCellsRequest semantics:
+                    // Any cell inside `range` not covered by `rows` has its targeted fields cleared!
+                    for (let rowIdx = startRow; rowIdx < endRow; rowIdx += 1) {
+                        const rOffset = rowIdx - startRow;
                         const rowArr = tab.rows.get(rowIdx) ?? [];
                         const values = inputRows[rOffset]?.values ?? [];
-                        for (let cOffset = 0; cOffset < values.length; cOffset += 1) {
-                            const colIdx = startCol + cOffset;
-                            rowArr[colIdx] = JSON.parse(JSON.stringify(values[cOffset] ?? {}));
+                        const colStop = endCol !== null ? endCol : startCol + values.length;
+                        for (let colIdx = startCol; colIdx < colStop; colIdx += 1) {
+                            const cOffset = colIdx - startCol;
+                            const provided = values[cOffset];
+                            rowArr[colIdx] = provided ? JSON.parse(JSON.stringify(provided)) : {};
                         }
                         tab.rows.set(rowIdx, rowArr);
                     }
@@ -1150,13 +1243,14 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         });
         await request(app).post("/api/host/sheet-sync/sync-now").set(hostAAuth);
 
-        // 1. Host accidentally deletes row for listing #801 in nextMonth tab
+        // 1. Host accidentally deletes column for listing #801 in nextMonth tab (both cells & column metadata)
         const tab = fakeSheets.findMonthTab(sheetIdA, nextMonth.tabKey)!;
         const idx801 = fakeSheets.findListingColIndex(tab, 801);
         const idRow = tab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT);
         if (idRow) idRow[idx801] = {};
         const titleRow = tab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT + 1);
         if (titleRow) titleRow[idx801] = {};
+        tab.colDeveloperMetadata.delete(idx801);
 
         // Also rename the month tab to "Tháng Đổi Tên" -> DeveloperMetadata agy_month_tab still resolves it!
         tab.title = "Tháng Đổi Tên";
@@ -1578,5 +1672,246 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         const day3Cal = calendarStore.find((c) => Number(c.listingId) === 801 && c.date === day3);
         assert.ok(day3Cal);
         assert.equal(day3Cal.isBlockedByHost, true);
+    });
+
+    it("SS-14: Column DeveloperMetadata idempotency (zero quota leak), B9 tamper recovery & header row protection", async () => {
+        fakeSheets.createColumnMetadataCount = 0;
+
+        await request(app)
+            .post("/api/host/sheet-sync/connect")
+            .set(hostAAuth)
+            .send({ spreadsheetUrlOrId: sheetUrlA });
+
+        const initialCreateCount = fakeSheets.createColumnMetadataCount;
+        // 2 listings * 6 rolling month tabs = 12 column metadata entries created once on init
+        assert.equal(initialCreateCount, 12);
+
+        // Subsequent sync-now cycles MUST emit 0 new createDeveloperMetadata calls (prevents 30,000-char quota leak!)
+        await request(app).post("/api/host/sheet-sync/sync-now").set(hostAAuth);
+        await request(app).post("/api/host/sheet-sync/sync-now").set(hostAAuth);
+        assert.equal(
+            fakeSheets.createColumnMetadataCount,
+            initialCreateCount,
+            "Subsequent sync cycles must reuse columnMetadata without creating duplicate DeveloperMetadata",
+        );
+
+        const rolling = hostSheetLayout.buildRollingMonthSpecs(
+            getTodayInVietnamDateString(),
+            6,
+        );
+        const nextMonth = rolling[1];
+        const tab = fakeSheets.findMonthTab(sheetIdA, nextMonth.tabKey)!;
+
+        // Both Column A and Header Rows (0..10) must have warningOnly protected ranges
+        assert.ok(
+            tab.protectedRanges.some(
+                (p) => p.description === `agy_protect_header_rows_${nextMonth.tabKey}` && p.warningOnly === true,
+            ),
+        );
+
+        // Host paints Day 12 Red on Listing #801 (Col B), and ALSO accidentally overwrites B9 ("801" -> "99999")
+        fakeSheets.paintHostDay(sheetIdA, nextMonth.tabKey, 801, 12, {
+            text: "Bảo trì điện",
+            bgColor: SHEET_COLORS.HOST_BLOCKED_RED,
+        });
+        const col801 = fakeSheets.findListingColIndex(tab, 801);
+        assert.equal(col801, 1);
+        const idRow = tab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT)!;
+        idRow[col801] = { userEnteredValue: { stringValue: "99999" } };
+
+        await request(app).post("/api/host/sheet-sync/sync-now").set(hostAAuth);
+
+        // Column DeveloperMetadata ("801") recovered identity, imported Day 12 block, and repaired B9 back to "801"!
+        const d12 = hostSheetLayout.formatIsoDate(nextMonth.year, nextMonth.month, 12);
+        const cal12 = calendarStore.find((c) => Number(c.listingId) === 801 && c.date === d12);
+        assert.ok(cal12, "Expected Day 12 block to be imported even when B9 text was tampered");
+        assert.equal(cal12.isBlockedByHost, true);
+        assert.equal(
+            tab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT)![col801]?.userEnteredValue?.stringValue,
+            "801",
+            "Tampered B9 header ID must be auto-repaired back to '801'",
+        );
+        assert.equal(fakeSheets.createColumnMetadataCount, initialCreateCount);
+    });
+
+    it("SS-15: Agency scale beyond 32 listings (Columns B..AK > AG) syncs & blocks double-booking via live pre-check", async () => {
+        // Add 34 more active listings for Host A (total 36 listings -> reaches Column AK, colIndex = 36 > AG = 32)
+        for (let i = 1; i <= 34; i += 1) {
+            makeRecord(listingsStore, "listingId", {
+                listingId: 810 + i,
+                hostId: 101,
+                title: `Palm Villa Agency Unit #${i}`,
+                district: "Vũng Tàu",
+                city: "Bà Rịa - Vũng Tàu",
+                basePrice: 3_500_000,
+                status: "active",
+                deletedAt: null,
+                createdAt: new Date("2026-01-15T00:00:00.000Z"),
+            });
+        }
+
+        await request(app)
+            .post("/api/host/sheet-sync/connect")
+            .set(hostAAuth)
+            .send({ spreadsheetUrlOrId: sheetUrlA, strictBookingPrecheck: true });
+
+        const rolling = hostSheetLayout.buildRollingMonthSpecs(
+            getTodayInVietnamDateString(),
+            6,
+        );
+        const nextMonth = rolling[1];
+        const tab = fakeSheets.findMonthTab(sheetIdA, nextMonth.tabKey)!;
+        const lastListingId = 844; // 36th listing -> colIndex = 36 (Column AK)
+        const colLast = fakeSheets.findListingColIndex(tab, lastListingId);
+        assert.ok(colLast > 32, `Expected 36th listing to sit beyond Column AG (32), got colIndex=${colLast}`);
+
+        // 1. Host blocks Day 14 on Listing #844 (Column AK) -> sync-now must read beyond AG with 0 false missing_listing_row!
+        fakeSheets.paintHostDay(sheetIdA, nextMonth.tabKey, lastListingId, 14, {
+            text: "Đoàn công ty",
+            bgColor: SHEET_COLORS.HOST_BLOCKED_RED,
+        });
+
+        const syncRes = await request(app).post("/api/host/sheet-sync/sync-now").set(hostAAuth);
+        assert.equal(syncRes.status, 200);
+        assert.equal(
+            conflictsStore.filter((c) => c.conflictType === "missing_listing_row").length,
+            0,
+            "Must NOT report false missing_listing_row for listings past Column AG",
+        );
+        const d14 = hostSheetLayout.formatIsoDate(nextMonth.year, nextMonth.month, 14);
+        assert.equal(
+            calendarStore.find((c) => Number(c.listingId) === lastListingId && c.date === d14)?.isBlockedByHost,
+            true,
+        );
+
+        // 2. Live booking pre-check on Listing #844 (Column AK) must catch a just-painted Red cell (409)!
+        fakeSheets.paintHostDay(sheetIdA, nextMonth.tabKey, lastListingId, 19, {
+            text: "Khách quen",
+            bgColor: SHEET_COLORS.HOST_BLOCKED_RED,
+        });
+        const checkIn19 = hostSheetLayout.formatIsoDate(nextMonth.year, nextMonth.month, 19);
+        const checkOut20 = hostSheetLayout.formatIsoDate(nextMonth.year, nextMonth.month, 20);
+
+        await assert.rejects(
+            () =>
+                hostSheetSyncService.verifySheetAvailabilityBeforeBooking({
+                    listingId: lastListingId,
+                    hostUserId: 101,
+                    checkInDate: checkIn19,
+                    checkOutDate: checkOut20,
+                }),
+            (err: any) => err?.statusCode === 409,
+        );
+    });
+
+    it("SS-16: Preserves non-empty Sheet1 notes, migrates legacy horizontal tab & retains archived [ĐÃ NGỪNG] column on init-calendar", async () => {
+        // 1. Put Host's custom revenue note inside "Sheet1" AND add an empty "Trang tính 1" tab
+        const doc = fakeSheets.spreadsheets.get(sheetIdA)!;
+        doc.title = "Untitled spreadsheet";
+        const sheet1 = doc.tabs.find((t) => t.title === "Sheet1")!;
+        sheet1.rows.set(0, [{ userEnteredValue: { stringValue: "Sổ ghi chú doanh thu nội bộ Host" } }]);
+        doc.tabs.push({
+            sheetId: 99,
+            title: "Trang tính 1",
+            index: 1,
+            rowCount: 100,
+            columnCount: 26,
+            frozenRowCount: 0,
+            frozenColumnCount: 0,
+            developerMetadata: [],
+            protectedRanges: [],
+            rows: new Map(),
+            rowDeveloperMetadata: new Map(),
+            colDeveloperMetadata: new Map(),
+        });
+
+        const rolling = hostSheetLayout.buildRollingMonthSpecs(
+            getTodayInVietnamDateString(),
+            6,
+        );
+        const nextMonth = rolling[1];
+
+        // Pre-populate nextMonth as a LEGACY HORIZONTAL tab (Row 0 = HƯỚNG DẪN, Row 1 = Mã căn (Khóa), Row 2 = Listing 801 with Day 16 Red)
+        const legacyRows = new Map<number, RawSheetCell[]>();
+        legacyRows.set(0, [{ userEnteredValue: { stringValue: "HƯỚNG DẪN" } }]);
+        legacyRows.set(1, [
+            { userEnteredValue: { stringValue: "Mã căn (Khóa)" } },
+            { userEnteredValue: { stringValue: "Tên căn hộ / Villa" } },
+        ]);
+        const legacyRow801: RawSheetCell[] = [
+            { userEnteredValue: { stringValue: "801" } },
+            { userEnteredValue: { stringValue: "Palm Villa Bãi Sau 4PN" } },
+        ];
+        legacyRow801[2 + 15] = {
+            userEnteredValue: { stringValue: "K" },
+            userEnteredFormat: { backgroundColorStyle: { rgbColor: SHEET_COLORS.HOST_BLOCKED_RED } },
+        };
+        legacyRows.set(2, legacyRow801);
+        doc.tabs.push({
+            sheetId: 77,
+            title: nextMonth.tabKey,
+            index: 2,
+            rowCount: 200,
+            columnCount: 33,
+            frozenRowCount: 2,
+            frozenColumnCount: 2,
+            developerMetadata: [
+                {
+                    metadataId: 4999,
+                    metadataKey: "agy_month_tab",
+                    metadataValue: nextMonth.tabKey,
+                    visibility: "DOCUMENT",
+                    location: { sheetId: 77 },
+                },
+            ],
+            protectedRanges: [],
+            rows: legacyRows,
+            rowDeveloperMetadata: new Map(),
+            colDeveloperMetadata: new Map(),
+        });
+
+        await request(app)
+            .post("/api/host/sheet-sync/connect")
+            .set(hostAAuth)
+            .send({ spreadsheetUrlOrId: sheetUrlA });
+
+        // Non-empty Sheet1 MUST still exist; empty "Trang tính 1" MUST be deleted; untitled doc renamed!
+        assert.equal(doc.title, "Lịch Quản Lý Đặt Phòng - The Palm Villa");
+        assert.ok(doc.tabs.some((t) => t.title === "Sheet1"), "Non-empty Sheet1 with Host notes must NOT be deleted");
+        assert.ok(!doc.tabs.some((t) => t.title === "Trang tính 1"), "Empty default 'Trang tính 1' must be auto-deleted");
+
+        // Legacy horizontal Day 16 Red block on #801 must have been imported AND migrated to vertical layout!
+        const d16 = hostSheetLayout.formatIsoDate(nextMonth.year, nextMonth.month, 16);
+        assert.equal(
+            calendarStore.find((c) => Number(c.listingId) === 801 && c.date === d16)?.isBlockedByHost,
+            true,
+            "Legacy horizontal Red block on Day 16 must be preserved during vertical migration",
+        );
+        const migratedTab = fakeSheets.findMonthTab(sheetIdA, nextMonth.tabKey)!;
+        assert.equal(
+            migratedTab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT)?.[0]?.userEnteredValue?.stringValue,
+            "Mã căn (ID)",
+        );
+
+        // 2. Soft-delete Listing #801 (currently at Col B) and run init-calendar -> #802 moves to Col B, #801 preserved at Col C as [ĐÃ NGỪNG]!
+        const l801 = listingsStore.find((l) => l.listingId === 801)!;
+        l801.deletedAt = new Date();
+
+        const initRes = await request(app).post("/api/host/sheet-sync/init-calendar").set(hostAAuth);
+        assert.equal(initRes.status, 200);
+
+        const col802After = fakeSheets.findListingColIndex(migratedTab, 802);
+        const col801Archived = fakeSheets.findListingColIndex(migratedTab, 801);
+        assert.equal(col802After, 1, "Active listing #802 should align to Column B (1)");
+        assert.equal(col801Archived, 2, "Archived listing #801 column must be preserved at Column C (2), not wiped!");
+        assert.equal(
+            migratedTab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT + 1)?.[col801Archived]?.userEnteredValue?.stringValue,
+            "[ĐÃ NGỪNG] Villa Bãi Sau 5PN",
+        );
+        assert.equal(
+            migratedTab.rows.get(hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 15)?.[col801Archived]?.userEnteredValue?.stringValue,
+            "K",
+            "Archived listing #801 historical blocked cell on Day 16 must remain intact",
+        );
     });
 });
