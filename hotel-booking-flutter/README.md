@@ -157,3 +157,4 @@ flutter test test/integration/e2e_all_flows_test.dart test/integration/visual_ui
 2. **Bảo vệ Khóa Bí mật (*Zero Client Secrets*):** Các tệp `config/*.json` chỉ chứa cấu hình định tuyến công khai (`API_BASE_URL`, `GOOGLE_SERVER_CLIENT_ID`). Tuyệt đối không nhúng khóa OpenAI, R2 hay khóa ký thanh toán vào gói ứng dụng.
 3. **Lưu trữ An toàn & Bảo vệ PII:** Token phiên đăng nhập trên thiết bị di động được mã hóa qua `FlutterSecureStorage`; bộ ghi nhật ký `AppLogger` tự động lược bỏ thông tin định danh cá nhân (PII) và tiêu đề `Authorization`.
 4. **Toàn vẹn Giao thức TLS:** Nghiêm cấm vô hiệu hóa xác thực chứng chỉ SSL/TLS (`badCertificateCallback`) trên mọi môi trường thực thi.
+5. **Đồng bộ Lịch Host:** Hỗ trợ chuẩn hóa quản lý lịch dọc và đồng bộ tự động 2 chiều qua Google Sheets.
