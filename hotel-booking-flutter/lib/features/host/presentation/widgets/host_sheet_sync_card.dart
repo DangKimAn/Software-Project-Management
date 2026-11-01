@@ -22,6 +22,10 @@ class HostSheetSyncCard extends ConsumerWidget {
   final VoidCallback? onCalendarChanged;
   final ExternalSpreadsheetLauncher externalLauncher;
 
+  static const Color _studioDark = Color(0xFF141416);
+  static const Color _studioSoftSurface = Color(0xFFF8F9FB);
+  static const Color _studioBorder = Color(0xFFE7E9EE);
+
   const HostSheetSyncCard({
     super.key,
     this.onCalendarChanged,
@@ -136,8 +140,9 @@ class HostSheetSyncCard extends ConsumerWidget {
           FilledButton(
             key: const Key('sheet_sync_init_confirm_submit_btn'),
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary,
+              backgroundColor: _studioDark,
               foregroundColor: AppColors.textInverse,
+              elevation: 0,
               minimumSize: const Size(96, 48),
               shape: const StadiumBorder(),
             ),
@@ -314,11 +319,18 @@ class HostSheetSyncCard extends ConsumerWidget {
       label: 'Thẻ quản lý đồng bộ lịch Google Sheets của Chủ nhà',
       child: Container(
         key: const Key('host_sheet_sync_card'),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: AppColors.surfaceBase,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: _studioBorder),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0A101828),
+              blurRadius: 18,
+              offset: Offset(0, 6),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -328,7 +340,7 @@ class HostSheetSyncCard extends ConsumerWidget {
               const SizedBox(height: 12),
               const LinearProgressIndicator(
                 minHeight: 3,
-                color: AppColors.primary,
+                color: _studioDark,
                 backgroundColor: AppColors.surfaceSecondary,
               ),
             ] else if (viewState.loadError != null && !payload.connected) ...[
@@ -356,7 +368,7 @@ class HostSheetSyncCard extends ConsumerWidget {
                 'Quản lý toàn bộ các căn trên một tệp Google Sheets duy nhất (tự động đồng bộ giữ chỗ, thanh toán và khóa lịch 6 tháng).',
                 style: TextStyle(
                   fontSize: 13,
-                  height: 1.4,
+                  height: 1.45,
                   color: AppColors.textSecondary,
                 ),
               ),
@@ -378,15 +390,16 @@ class HostSheetSyncCard extends ConsumerWidget {
                   message: viewState.actionErrorMessage!,
                 ),
               ],
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   Flexible(
                     child: FilledButton.icon(
                       key: const Key('sheet_sync_open_connect_btn'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: _studioDark,
                         foregroundColor: AppColors.textInverse,
+                        elevation: 0,
                         minimumSize: const Size(0, 48),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 18,
@@ -418,30 +431,9 @@ class HostSheetSyncCard extends ConsumerWidget {
                 ],
               ),
             ] else ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 12,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    integration.spreadsheetTitle,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  Text(
-                    'Đồng bộ gần nhất: ${_formatDateTimeVi(integration.lastSyncedAt)}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
+              _buildConnectedSheetBanner(integration),
+              const SizedBox(height: 12),
               _buildKpiGrid(payload.stats),
               if (integration.status.hasError ||
                   (integration.lastErrorMessage != null &&
@@ -488,8 +480,13 @@ class HostSheetSyncCard extends ConsumerWidget {
                     ),
               ],
               const SizedBox(height: 12),
-              const Divider(height: 1, color: AppColors.divider),
-              const SizedBox(height: 8),
+              _buildPrimarySyncActions(
+                context,
+                ref,
+                viewState,
+                integration,
+              ),
+              const SizedBox(height: 14),
               _buildTogglesSection(ref, viewState, integration),
               const SizedBox(height: 12),
               _buildConnectedActionsRow(
@@ -502,6 +499,68 @@ class HostSheetSyncCard extends ConsumerWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildConnectedSheetBanner(HostSheetIntegrationInfo integration) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: _studioSoftSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _studioBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Icon(
+            LucideIcons.fileSpreadsheet,
+            size: 20,
+            color: AppColors.iconStrong,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  integration.spreadsheetTitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    height: 1.3,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    const Icon(
+                      LucideIcons.clock,
+                      size: 12,
+                      color: AppColors.iconMuted,
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        'Đồng bộ gần nhất: ${_formatDateTimeVi(integration.lastSyncedAt)}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -550,13 +609,29 @@ class HostSheetSyncCard extends ConsumerWidget {
             borderRadius: BorderRadius.circular(999),
             border: Border.all(color: badgeInfo.border),
           ),
-          child: Text(
-            badgeInfo.label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: badgeInfo.foreground,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: badgeInfo.foreground,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  badgeInfo.label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: badgeInfo.foreground,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -626,55 +701,174 @@ class HostSheetSyncCard extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final textScale = MediaQuery.textScalerOf(context).scale(1.0);
-        final columns =
-            (constraints.maxWidth >= 340 && textScale <= 1.35) ? 3 : 2;
-        final itemWidth = (constraints.maxWidth - (columns - 1) * 10) / columns;
+        final useUnifiedThreeColumns =
+            constraints.maxWidth >= 260 && textScale <= 1.35;
 
-        return Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: items.map((item) {
-            return Container(
-              key: item.key,
-              width: itemWidth > 0 ? itemWidth : constraints.maxWidth,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        if (useUnifiedThreeColumns) {
+          return Container(
+            decoration: BoxDecoration(
+              color: _studioSoftSurface,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: _studioBorder),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < items.length; i++) ...[
+                    if (i > 0)
+                      const VerticalDivider(
+                        width: 1,
+                        thickness: 1,
+                        indent: 10,
+                        endIndent: 10,
+                        color: _studioBorder,
+                      ),
+                    Expanded(
+                      child: Container(
+                        key: items[i].key,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 12,
+                        ),
+                        color: items[i].isAlert
+                            ? AppColors.errorSoft
+                            : Colors.transparent,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              items[i].value,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                height: 1.15,
+                                color: items[i].isAlert
+                                    ? AppColors.error
+                                    : AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              items[i].label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: items[i].isAlert
+                                    ? AppColors.error
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }
+
+        Widget buildCompactTile(
+          ({Key key, String label, String value, bool isAlert}) item,
+        ) {
+          return Container(
+            key: item.key,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: item.isAlert ? AppColors.errorSoft : _studioSoftSurface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: item.isAlert ? AppColors.error : _studioBorder,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.value,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color:
+                        item.isAlert ? AppColors.error : AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  item.label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: item.isAlert
+                        ? AppColors.error
+                        : AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final errorItem = items[2];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(child: buildCompactTile(items[0])),
+                const SizedBox(width: 8),
+                Expanded(child: buildCompactTile(items[1])),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              key: errorItem.key,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: item.isAlert
+                color: errorItem.isAlert
                     ? AppColors.errorSoft
-                    : AppColors.surfaceSecondary,
+                    : _studioSoftSurface,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: item.isAlert ? AppColors.error : AppColors.borderSoft,
+                  color: errorItem.isAlert ? AppColors.error : _studioBorder,
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
+                  Expanded(
+                    child: Text(
+                      errorItem.label,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: errorItem.isAlert
+                            ? AppColors.error
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Text(
-                    item.value,
+                    errorItem.value,
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      color: item.isAlert
+                      color: errorItem.isAlert
                           ? AppColors.error
                           : AppColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    item.label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: item.isAlert
-                          ? AppColors.error
-                          : AppColors.textSecondary,
-                    ),
-                  ),
                 ],
               ),
-            );
-          }).toList(),
+            ),
+          ],
         );
       },
     );
@@ -967,6 +1161,105 @@ class HostSheetSyncCard extends ConsumerWidget {
     );
   }
 
+  Widget _buildPrimarySyncActions(
+    BuildContext context,
+    WidgetRef ref,
+    HostSheetSyncViewState viewState,
+    HostSheetIntegrationInfo integration,
+  ) {
+    final isSyncingNow = viewState.activeAction == 'sync_now';
+
+    final syncNowButton = FilledButton.icon(
+      key: const Key('sheet_sync_now_btn'),
+      style: FilledButton.styleFrom(
+        backgroundColor: _studioDark,
+        foregroundColor: AppColors.textInverse,
+        elevation: 0,
+        minimumSize: const Size(0, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: const StadiumBorder(),
+      ),
+      onPressed: viewState.isBusy
+          ? null
+          : () async {
+              final ok = await ref
+                  .read(hostSheetSyncNotifierProvider.notifier)
+                  .syncNow();
+              if (ok) {
+                onCalendarChanged?.call();
+              }
+            },
+      icon: isSyncingNow
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.textInverse,
+              ),
+            )
+          : const Icon(
+              LucideIcons.refreshCw,
+              size: 16,
+              color: AppColors.iconOnBrand,
+            ),
+      label: Text(
+        isSyncingNow ? 'Đang đồng bộ...' : 'Đồng bộ ngay',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+      ),
+    );
+
+    final openSheetButton = OutlinedButton.icon(
+      key: const Key('sheet_sync_open_url_btn'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.textPrimary,
+        backgroundColor: AppColors.surfaceBase,
+        side: const BorderSide(color: Color(0xFFD5D9E2)),
+        minimumSize: const Size(0, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: const StadiumBorder(),
+      ),
+      onPressed: () => _handleOpenSpreadsheet(context, integration),
+      icon: const Icon(
+        LucideIcons.externalLink,
+        size: 16,
+        color: AppColors.iconStrong,
+      ),
+      label: const Text(
+        'Mở trang tính',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+        final sideBySide = constraints.maxWidth >= 290 && textScale <= 1.3;
+        if (sideBySide) {
+          return Row(
+            children: [
+              Expanded(child: syncNowButton),
+              const SizedBox(width: 10),
+              Expanded(child: openSheetButton),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            syncNowButton,
+            const SizedBox(height: 8),
+            openSheetButton,
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildTogglesSection(
     WidgetRef ref,
     HostSheetSyncViewState viewState,
@@ -975,16 +1268,22 @@ class HostSheetSyncCard extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.surfaceSecondary,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderSoft),
+        color: _studioSoftSurface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _studioBorder),
       ),
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(
               children: [
+                const Icon(
+                  LucideIcons.refreshCw,
+                  size: 17,
+                  color: AppColors.iconMuted,
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -992,14 +1291,15 @@ class HostSheetSyncCard extends ConsumerWidget {
                       const Text(
                         'Đồng bộ tự động',
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 13.5,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textPrimary,
                         ),
                       ),
+                      const SizedBox(height: 1),
                       Text(
                         integration.autoSyncEnabled
-                            ? 'Đang bật'
+                            ? 'Đang bật · Cập nhật lịch hai chiều'
                             : 'Đang tạm dừng',
                         style: const TextStyle(
                           fontSize: 12,
@@ -1025,11 +1325,17 @@ class HostSheetSyncCard extends ConsumerWidget {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+          const Divider(height: 1, indent: 27, color: _studioBorder),
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(
               children: [
+                const Icon(
+                  LucideIcons.shieldCheck,
+                  size: 17,
+                  color: AppColors.iconMuted,
+                ),
+                const SizedBox(width: 10),
                 const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1037,13 +1343,14 @@ class HostSheetSyncCard extends ConsumerWidget {
                       Text(
                         'Kiểm tra trực tiếp trước khi khách đặt',
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 13.5,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textPrimary,
                         ),
                       ),
+                      SizedBox(height: 1),
                       Text(
-                        'Chặn nhận trùng đơn khi vừa tô khóa trên Sheets',
+                        'Chặn trùng đơn ngay khi vừa tô khóa trên Sheets',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary,
@@ -1081,136 +1388,146 @@ class HostSheetSyncCard extends ConsumerWidget {
     HostSheetSyncStatusPayload payload,
     HostSheetIntegrationInfo integration,
   ) {
-    final isSyncingNow = viewState.activeAction == 'sync_now';
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        FilledButton.icon(
-          key: const Key('sheet_sync_now_btn'),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: AppColors.textInverse,
-            minimumSize: const Size(140, 48),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: const StadiumBorder(),
-          ),
-          onPressed: viewState.isBusy
-              ? null
-              : () async {
-                  final ok = await ref
-                      .read(hostSheetSyncNotifierProvider.notifier)
-                      .syncNow();
-                  if (ok) {
-                    onCalendarChanged?.call();
-                  }
-                },
-          icon: isSyncingNow
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.textInverse,
-                  ),
-                )
-              : const Icon(
-                  LucideIcons.refreshCw,
-                  size: 17,
-                  color: AppColors.iconOnBrand,
+    Widget buildUtilityRow({
+      required Key tileKey,
+      required IconData icon,
+      required String title,
+      required String subtitle,
+      required VoidCallback? onTap,
+      String? tooltipMessage,
+    }) {
+      Widget tile = InkWell(
+        key: tileKey,
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 54),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: onTap == null
+                      ? AppColors.iconMuted
+                      : AppColors.iconStrong,
                 ),
-          label: Text(
-            isSyncingNow ? 'Đang đồng bộ...' : 'Đồng bộ ngay',
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: onTap == null
+                              ? AppColors.textMuted
+                              : AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(
+                  LucideIcons.chevronRight,
+                  size: 16,
+                  color: AppColors.iconMuted,
+                ),
+              ],
+            ),
           ),
         ),
-        OutlinedButton.icon(
-          key: const Key('sheet_sync_open_url_btn'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.textPrimary,
-            side: const BorderSide(color: AppColors.border),
-            minimumSize: const Size(128, 48),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            shape: const StadiumBorder(),
+      );
+
+      if (tooltipMessage != null) {
+        tile = Tooltip(
+          message: tooltipMessage,
+          child: tile,
+        );
+      }
+      return tile;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surfaceBase,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: _studioBorder),
           ),
-          onPressed: () => _handleOpenSpreadsheet(context, integration),
-          icon: const Icon(
-            LucideIcons.externalLink,
-            size: 17,
-            color: AppColors.iconStrong,
-          ),
-          label: const Text(
-            'Mở trang tính',
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          ),
-        ),
-        OutlinedButton.icon(
-          key: const Key('sheet_sync_init_calendar_btn'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.textPrimary,
-            side: const BorderSide(color: AppColors.border),
-            minimumSize: const Size(128, 48),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            shape: const StadiumBorder(),
-          ),
-          onPressed: viewState.isBusy
-              ? null
-              : () => _confirmInitializeCalendar(context, ref),
-          icon: const Icon(
-            LucideIcons.calendarDays,
-            size: 17,
-            color: AppColors.iconStrong,
-          ),
-          label: const Text(
-            'Khởi tạo lịch chuẩn',
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-          ),
-        ),
-        OutlinedButton.icon(
-          key: const Key('sheet_sync_logs_btn'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.textPrimary,
-            side: const BorderSide(color: AppColors.border),
-            minimumSize: const Size(108, 48),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            shape: const StadiumBorder(),
-          ),
-          onPressed: () => _showChangeLogsSheet(context, ref),
-          icon: const Icon(
-            LucideIcons.history,
-            size: 17,
-            color: AppColors.iconStrong,
-          ),
-          label: const Text(
-            'Nhật ký',
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          clipBehavior: Clip.antiAlias,
+          child: Material(
+            color: Colors.transparent,
+            child: Column(
+              children: [
+                buildUtilityRow(
+                  tileKey: const Key('sheet_sync_init_calendar_btn'),
+                  icon: LucideIcons.calendarDays,
+                  title: 'Khởi tạo lịch chuẩn',
+                  subtitle: 'Tạo hoặc bổ sung đủ tab 6 tháng an toàn',
+                  onTap: viewState.isBusy
+                      ? null
+                      : () => _confirmInitializeCalendar(context, ref),
+                ),
+                const Divider(height: 1, indent: 44, color: _studioBorder),
+                buildUtilityRow(
+                  tileKey: const Key('sheet_sync_logs_btn'),
+                  icon: LucideIcons.history,
+                  title: 'Nhật ký đồng bộ',
+                  subtitle: 'Tra cứu lịch sử thay đổi trên trang tính',
+                  onTap: () => _showChangeLogsSheet(context, ref),
+                ),
+                const Divider(height: 1, indent: 44, color: _studioBorder),
+                buildUtilityRow(
+                  tileKey: const Key('sheet_sync_guide_btn'),
+                  icon: LucideIcons.info,
+                  title: 'Hướng dẫn màu lịch',
+                  subtitle: 'Ý nghĩa các màu trống, giữ chỗ & khóa lịch',
+                  tooltipMessage: 'Quy ước màu',
+                  onTap: () => _showGuideDialog(context),
+                ),
+              ],
+            ),
           ),
         ),
-        _buildGuideIconButton(context),
-        TextButton.icon(
-          key: const Key('sheet_sync_disconnect_btn'),
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.error,
-            minimumSize: const Size(116, 48),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            shape: const StadiumBorder(),
-          ),
-          onPressed:
-              viewState.isBusy ? null : () => _confirmDisconnect(context, ref),
-          icon: const Icon(
-            LucideIcons.unlink,
-            size: 16,
-            color: AppColors.error,
-          ),
-          label: const Text(
-            'Ngắt kết nối',
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        const SizedBox(height: 6),
+        Center(
+          child: TextButton.icon(
+            key: const Key('sheet_sync_disconnect_btn'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.error,
+              minimumSize: const Size(120, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: const StadiumBorder(),
+            ),
+            onPressed: viewState.isBusy
+                ? null
+                : () => _confirmDisconnect(context, ref),
+            icon: const Icon(
+              LucideIcons.unlink,
+              size: 15,
+              color: AppColors.error,
+            ),
+            label: const Text(
+              'Ngắt kết nối Google Sheets',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
           ),
         ),
       ],
@@ -1289,15 +1606,15 @@ Widget _buildSheetSwitch({
         return AppColors.skeleton;
       }
       if (states.contains(WidgetState.selected)) {
-        return AppColors.primary;
+        return const Color(0xFF141416);
       }
-      return AppColors.skeleton;
+      return const Color(0xFFE4E7EC);
     }),
     trackOutlineColor: WidgetStateProperty.resolveWith((states) {
       if (states.contains(WidgetState.selected)) {
         return Colors.transparent;
       }
-      return AppColors.border;
+      return const Color(0xFFD5D9E2);
     }),
     materialTapTargetSize: MaterialTapTargetSize.padded,
   );
