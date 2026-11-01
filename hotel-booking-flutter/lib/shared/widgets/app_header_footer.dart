@@ -453,7 +453,6 @@ class NotificationBell extends ConsumerWidget {
           _navigateForNotification(context, item);
         }
       },
-      },
     );
   }
 
