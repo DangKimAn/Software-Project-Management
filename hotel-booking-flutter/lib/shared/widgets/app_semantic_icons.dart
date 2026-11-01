@@ -272,6 +272,13 @@ class AppBrandIcon extends StatelessWidget {
     this.color = AppColors.iconStrong,
   }) : _type = _BrandType.google;
 
+  /// Official 4-color Google Identity 'G' mark for Google Sign-In buttons.
+  const AppBrandIcon.googleLogo({
+    super.key,
+    this.size = 20,
+  })  : _type = _BrandType.googleLogo,
+        color = AppColors.iconStrong;
+
   /// TikTok note mark (`FaTiktok` in `Footer.tsx`) rendered in monochrome stroke.
   const AppBrandIcon.tiktok({
     super.key,
@@ -352,6 +359,14 @@ class AppBrandIcon extends StatelessWidget {
             painter: _GoogleGStrokePainter(color: color),
           ),
         );
+      case _BrandType.googleLogo:
+        return SizedBox(
+          width: size,
+          height: size,
+          child: const CustomPaint(
+            painter: _GoogleOfficialLogoPainter(),
+          ),
+        );
       case _BrandType.minhThanhLogo:
         return SizedBox(
           width: size,
@@ -378,6 +393,7 @@ class AppBrandIcon extends StatelessWidget {
 enum _BrandType {
   minhThanhLogo,
   google,
+  googleLogo,
   tiktok,
   threads,
   youtube,
@@ -537,6 +553,93 @@ class _GoogleGStrokePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _GoogleGStrokePainter oldDelegate) =>
       oldDelegate.color != color;
+}
+
+class _GoogleOfficialLogoPainter extends CustomPainter {
+  const _GoogleOfficialLogoPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final side = math.min(size.width, size.height);
+    final s = side / 48.0;
+    final dx = (size.width - side) / 2.0;
+    final dy = (size.height - side) / 2.0;
+
+    canvas.save();
+    if (dx != 0 || dy != 0) {
+      canvas.translate(dx, dy);
+    }
+
+    // Official Google Identity 48x48 'G' vector segments
+    final redPaint = Paint()
+      ..color = const Color(0xFFEA4335)
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final redPath = Path()
+      ..moveTo(24.0 * s, 9.5 * s)
+      ..cubicTo(27.54 * s, 9.5 * s, 30.71 * s, 10.72 * s, 33.21 * s, 13.1 * s)
+      ..lineTo(40.06 * s, 6.25 * s)
+      ..cubicTo(35.9 * s, 2.38 * s, 30.47 * s, 0.0, 24.0 * s, 0.0)
+      ..cubicTo(14.62 * s, 0.0, 6.51 * s, 5.38 * s, 2.56 * s, 13.22 * s)
+      ..lineTo(10.54 * s, 19.41 * s)
+      ..cubicTo(12.43 * s, 13.72 * s, 17.74 * s, 9.5 * s, 24.0 * s, 9.5 * s)
+      ..close();
+    canvas.drawPath(redPath, redPaint);
+
+    final bluePaint = Paint()
+      ..color = const Color(0xFF4285F4)
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final bluePath = Path()
+      ..moveTo(46.98 * s, 24.55 * s)
+      ..cubicTo(46.98 * s, 22.98 * s, 46.83 * s, 21.46 * s, 46.60 * s, 20.0 * s)
+      ..lineTo(24.0 * s, 20.0 * s)
+      ..lineTo(24.0 * s, 29.02 * s)
+      ..lineTo(36.94 * s, 29.02 * s)
+      ..cubicTo(
+          36.36 * s, 31.98 * s, 34.68 * s, 34.50 * s, 32.16 * s, 36.20 * s)
+      ..lineTo(39.89 * s, 42.20 * s)
+      ..cubicTo(
+          44.40 * s, 38.02 * s, 46.98 * s, 31.84 * s, 46.98 * s, 24.55 * s)
+      ..close();
+    canvas.drawPath(bluePath, bluePaint);
+
+    final yellowPaint = Paint()
+      ..color = const Color(0xFFFBBC05)
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final yellowPath = Path()
+      ..moveTo(10.53 * s, 28.59 * s)
+      ..cubicTo(10.05 * s, 27.14 * s, 9.77 * s, 25.60 * s, 9.77 * s, 24.0 * s)
+      ..cubicTo(9.77 * s, 22.40 * s, 10.04 * s, 20.86 * s, 10.53 * s, 19.41 * s)
+      ..lineTo(2.55 * s, 13.22 * s)
+      ..cubicTo(0.92 * s, 16.46 * s, 0.0, 20.12 * s, 0.0, 24.0 * s)
+      ..cubicTo(0.0, 27.88 * s, 0.92 * s, 31.54 * s, 2.56 * s, 34.78 * s)
+      ..lineTo(10.53 * s, 28.59 * s)
+      ..close();
+    canvas.drawPath(yellowPath, yellowPaint);
+
+    final greenPaint = Paint()
+      ..color = const Color(0xFF34A853)
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final greenPath = Path()
+      ..moveTo(24.0 * s, 48.0 * s)
+      ..cubicTo(30.48 * s, 48.0 * s, 35.93 * s, 45.87 * s, 39.89 * s, 42.19 * s)
+      ..lineTo(32.16 * s, 36.19 * s)
+      ..cubicTo(30.01 * s, 37.64 * s, 27.24 * s, 38.49 * s, 24.0 * s, 38.49 * s)
+      ..cubicTo(
+          17.74 * s, 38.49 * s, 12.43 * s, 34.27 * s, 10.53 * s, 28.58 * s)
+      ..lineTo(2.55 * s, 34.77 * s)
+      ..cubicTo(6.51 * s, 42.62 * s, 14.62 * s, 48.0 * s, 24.0 * s, 48.0 * s)
+      ..close();
+    canvas.drawPath(greenPath, greenPaint);
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _GoogleOfficialLogoPainter oldDelegate) => false;
 }
 
 class _TikTokStrokePainter extends CustomPainter {

@@ -127,5 +127,32 @@ void main() {
       expect(bookingBar.contains('AppSemanticIcons.messageHost'), isTrue);
       expect(bookingBar.contains('LucideIcons.messageCircle'), isFalse);
     });
+
+    testWidgets(
+        'LoginScreen and RegisterScreen use official AppBrandIcon.googleLogo instead of LucideIcons.logIn',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: AppBrandIcon.googleLogo(size: 20),
+            ),
+          ),
+        ),
+      );
+      expect(find.byType(AppBrandIcon), findsOneWidget);
+
+      final loginSource = File(
+        'lib/features/auth/presentation/screens/login_screen.dart',
+      ).readAsStringSync();
+      final registerSource = File(
+        'lib/features/auth/presentation/screens/register_screen.dart',
+      ).readAsStringSync();
+
+      expect(loginSource.contains('AppBrandIcon.googleLogo'), isTrue);
+      expect(loginSource.contains('LucideIcons.logIn'), isFalse);
+      expect(registerSource.contains('AppBrandIcon.googleLogo'), isTrue);
+      expect(registerSource.contains('LucideIcons.logIn'), isFalse);
+    });
   });
 }
