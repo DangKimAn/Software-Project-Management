@@ -10,6 +10,8 @@ import 'package:hotel_booking_flutter/features/admin/presentation/theme/admin_st
 import 'package:hotel_booking_flutter/features/admin/presentation/widgets/admin_studio_widgets.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
 import 'package:hotel_booking_flutter/features/auth/presentation/view_models/auth_notifier.dart';
+import 'package:hotel_booking_flutter/features/messages/data/conversations_repository.dart';
+import 'package:hotel_booking_flutter/features/messages/presentation/screens/messages_screen.dart';
 import 'package:hotel_booking_flutter/shared/animations/fade_slide_in.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_dialog.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
@@ -85,6 +87,14 @@ const List<AdminNavItem> kAdminNavItems = [
     title: 'Quản lý phí nền tảng',
     subtitle:
         'Áp dụng phí toàn sàn, thời gian thông báo 7 ngày và quản lý lịch sử.',
+  ),
+  AdminNavItem(
+    id: 'tin-nhan',
+    label: 'Tin nhắn',
+    route: '/admin/tin-nhan',
+    icon: AppSemanticIcons.messageHost,
+    title: 'Tin nhắn hỗ trợ',
+    subtitle: 'Trao đổi trực tiếp với Chủ nhà và Khách hàng trên toàn hệ thống.',
   ),
 ];
 
@@ -403,9 +413,11 @@ class AdminPortalScreen extends ConsumerStatefulWidget {
   const AdminPortalScreen({
     super.key,
     required this.activeTab,
+    this.initialConversationId,
   });
 
   final String activeTab;
+  final String? initialConversationId;
 
   @override
   ConsumerState<AdminPortalScreen> createState() => _AdminPortalScreenState();
@@ -696,7 +708,7 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: AdminStudioTokens.canvas,
-      extendBody: !isDesktop,
+      extendBody: !isDesktop && _currentTab != 'tin-nhan',
       drawer: Drawer(
         width: math.min(292, width * 0.88),
         backgroundColor: AdminStudioTokens.groupSurface,
@@ -824,8 +836,9 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
   }
 
   Widget _buildBottomNavBar(BuildContext context) {
-    final isMenuTabActive =
-        _currentTab == 'phan-quyen' || _currentTab == 'phi-nen-tang';
+    final isMenuTabActive = _currentTab == 'phan-quyen' ||
+        _currentTab == 'phi-nen-tang' ||
+        _currentTab == 'tin-nhan';
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final showCompactCircleOnly = textScale > 1.45;
 
@@ -951,6 +964,10 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
         return const _AdminRolesTab();
       case 'phi-nen-tang':
         return const _AdminPlatformFeeTab();
+      case 'tin-nhan':
+        return _AdminMessagesTab(
+          initialConversationId: widget.initialConversationId,
+        );
       case 'tong-quan':
       default:
         return const _AdminOverviewTab();
@@ -6205,6 +6222,361 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── 7. TIN NHẮN HỖ TRỢ (/admin/tin-nhan) ──
+class _AdminMessagesTab extends ConsumerStatefulWidget {
+  const _AdminMessagesTab({this.initialConversationId});
+
+  final String? initialConversationId;
+
+  @override
+  ConsumerState<_AdminMessagesTab> createState() => _AdminMessagesTabState();
+}
+
+class _AdminMessagesTabState extends ConsumerState<_AdminMessagesTab> {
+  String? _selectedConversationId;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedConversationId = widget.initialConversationId;
+  }
+
+  @override
+  void didUpdateWidget(covariant _AdminMessagesTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialConversationId != oldWidget.initialConversationId &&
+        widget.initialConversationId != null) {
+      _selectedConversationId = widget.initialConversationId;
+    }
+  }
+
+  Future<void> _openNewSupportChatSheet() async {
+    final searchCtrl = TextEditingController();
+    List<Map<String, dynamic>> users = const [];
+    bool loading = true;
+    String? errorMsg;
+
+    Future<void> fetchUsers(
+      void Function(void Function()) setModalState,
+      String keyword,
+    ) async {
+      setModalState(() {
+        loading = true;
+        errorMsg = null;
+      });
+      try {
+        final res =
+            await ref.read(adminRepositoryProvider).getAdminUsersPaginated(
+                  page: 1,
+                  limit: 20,
+                  search: keyword.trim(),
+                );
+        final actorId = ref.read(authNotifierProvider).valueOrNull?.id ?? '';
+        final parsed = res.items
+            .where((u) => '${u['userId'] ?? u['id'] ?? ''}'.trim() != actorId)
+            .toList();
+        setModalState(() {
+          users = parsed;
+          loading = false;
+        });
+      } catch (e) {
+        setModalState(() {
+          loading = false;
+          errorMsg = AdminRepository.extractErrorMessage(
+            e,
+            'Không thể tải danh sách người dùng.',
+          );
+        });
+      }
+    }
+
+    var initialized = false;
+    final pickedUserId = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AdminStudioTokens.groupSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            if (!initialized) {
+              initialized = true;
+              unawaited(fetchUsers(setModalState, ''));
+            }
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 16,
+                  bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(ctx).height * 0.72,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Bắt đầu trò chuyện hỗ trợ',
+                              style: AdminStudioTokens.sectionTitle,
+                            ),
+                          ),
+                          AdminStudioCircleButton(
+                            icon: LucideIcons.x,
+                            tooltip: 'Đóng',
+                            onTap: () => Navigator.of(ctx).pop(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: searchCtrl,
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: (v) => fetchUsers(setModalState, v),
+                        decoration: InputDecoration(
+                          hintText: 'Tìm tên, email hoặc SĐT Chủ nhà / Khách...',
+                          prefixIcon: const Icon(LucideIcons.search, size: 18),
+                          suffixIcon: IconButton(
+                            tooltip: 'Tìm kiếm người dùng',
+                            icon: const Icon(LucideIcons.arrowRight, size: 18),
+                            onPressed: () =>
+                                fetchUsers(setModalState, searchCtrl.text),
+                          ),
+                          isDense: true,
+                          filled: true,
+                          fillColor: AdminStudioTokens.cardSurface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(999),
+                            borderSide: const BorderSide(
+                              color: AdminStudioTokens.hairline,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(999),
+                            borderSide: const BorderSide(
+                              color: AdminStudioTokens.hairline,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (loading)
+                        const Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AdminStudioTokens.obsidian,
+                            ),
+                          ),
+                        )
+                      else if (errorMsg != null)
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            errorMsg!,
+                            style: AdminStudioTokens.cardSubtitle,
+                          ),
+                        )
+                      else if (users.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text(
+                            'Không tìm thấy người dùng phù hợp.',
+                            style: AdminStudioTokens.cardSubtitle,
+                          ),
+                        )
+                      else
+                        Flexible(
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: users.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (_, idx) {
+                              final u = users[idx];
+                              final uid =
+                                  '${u['userId'] ?? u['id'] ?? ''}'.trim();
+                              final name = '${u['fullName'] ?? u['email'] ?? 'Người dùng #$uid'}'
+                                  .trim();
+                              final email = '${u['email'] ?? ''}'.trim();
+                              final role = '${u['role'] ?? 'guest'}'
+                                  .trim()
+                                  .toUpperCase();
+                              return InkWell(
+                                borderRadius: BorderRadius.circular(16),
+                                onTap: () => Navigator.of(ctx).pop(uid),
+                                child: AdminStudioInnerCard(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      AdminStudioAvatar(
+                                        name: name,
+                                        imageUrl: _resolveAdminUserAvatarUrl(u),
+                                        size: 38,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style:
+                                                  AdminStudioTokens.cardTitle,
+                                            ),
+                                            if (email.isNotEmpty)
+                                              Text(
+                                                '$email · $role',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: AdminStudioTokens
+                                                    .cardSubtitle,
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      const Icon(
+                                        AppSemanticIcons.messageHost,
+                                        size: 17,
+                                        color: AdminStudioTokens.iconInk,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    searchCtrl.dispose();
+
+    if (pickedUserId == null || pickedUserId.isEmpty || !mounted) return;
+    try {
+      final conv = await ref
+          .read(conversationsRepositoryProvider)
+          .getOrCreateDirectConversation(pickedUserId);
+      ref.invalidate(conversationsListProvider);
+      if (!mounted) return;
+      setState(() {
+        _selectedConversationId = conv.id;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      final msg = AdminRepository.extractErrorMessage(
+        e,
+        'Không thể khởi tạo cuộc trò chuyện hỗ trợ.',
+      );
+      AppToast.show(context, msg, type: AppToastType.error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final isDesktop = width >= 1024;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+
+    final chatView = MessagesScreen(
+      isAdminPortal: true,
+      initialConversationId: _selectedConversationId,
+    );
+
+    final toolbar = Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 18 : 12,
+        vertical: 8,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: AdminStudioTokens.hairline),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            AppSemanticIcons.messageHost,
+            size: 17,
+            color: AdminStudioTokens.iconInk,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Kênh hỗ trợ Chủ nhà & Khách hàng',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AdminStudioTokens.cardTitle.copyWith(fontSize: 13.5),
+            ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            key: const Key('admin_new_chat_button'),
+            style: _kPillOutlinedStyle,
+            onPressed: _openNewSupportChatSheet,
+            icon: const Icon(
+              LucideIcons.plus,
+              size: 15,
+              color: AdminStudioTokens.iconInk,
+            ),
+            label: const Text('Nhắn tin mới'),
+          ),
+        ],
+      ),
+    );
+
+    if (isDesktop) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(AdminStudioTokens.cardRadius),
+            border: Border.all(color: AdminStudioTokens.groupBorder),
+            boxShadow: AdminStudioTokens.cardShadow,
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              toolbar,
+              Expanded(child: chatView),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        if (!keyboardOpen) toolbar,
+        Expanded(child: chatView),
+      ],
     );
   }
 }

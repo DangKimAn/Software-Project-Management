@@ -712,6 +712,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           child: const AdminPortalScreen(activeTab: 'phi-nen-tang'),
         ),
       ),
+      GoRoute(
+        path: '/admin/tin-nhan',
+        pageBuilder: (context, state) {
+          final convId = state.uri.queryParameters['conversationId'];
+          return _buildProtectedSlidePage(
+            state: state,
+            accessLevel: RouteAccessLevel.adminOnly,
+            child: AdminPortalScreen(
+              activeTab: 'tin-nhan',
+              initialConversationId: convId,
+            ),
+          );
+        },
+      ),
     ],
   );
 });

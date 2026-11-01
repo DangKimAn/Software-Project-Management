@@ -174,6 +174,11 @@ class AppNotificationItem {
         eType.contains('message') ||
         eType.contains('chat')) {
       final convId = targetId ?? payload?['conversationId']?.toString() ?? '';
+      if (forAdmin) {
+        return convId.isNotEmpty
+            ? '/admin/tin-nhan?conversationId=$convId'
+            : '/admin/tin-nhan';
+      }
       if (convId.isNotEmpty) {
         return '/messages?conversationId=$convId';
       }
@@ -211,6 +216,7 @@ class AppNotificationItem {
     if (route == '/host/listings') return '/chu-nha/cho-nghi';
     if (route == '/admin/moderation') return '/admin/kiem-duyet';
     if (route == '/admin/host-applications') return '/admin/ho-so-host';
+    if (route == '/admin/messages') return '/admin/tin-nhan';
     return route;
   }
 
@@ -861,7 +867,11 @@ class AppTopHeader extends ConsumerWidget {
                               unawaited(context.push('/yeu-thich'));
                               break;
                             case 'messages':
-                              unawaited(context.push('/messages'));
+                              if (authUser != null && authUser.isAdmin) {
+                                unawaited(context.push('/admin/tin-nhan'));
+                              } else {
+                                unawaited(context.push('/messages'));
+                              }
                               break;
                             case 'ai-search':
                               unawaited(context.push('/tim-kiem-ai'));
