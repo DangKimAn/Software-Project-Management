@@ -613,7 +613,7 @@ describe("Module notifications (NT-01 to NT-12)", () => {
 
         await notificationService.notifyUserRegistered(201);
         assert.ok(createdInApp);
-        assert.equal(createdInApp.title, "Chào mừng đến The Palm Villa");
+        assert.equal(createdInApp.title, "Xin chào đến với The Palm Villa");
 
         patch(NotificationLog, "findAll", async () => [
             buildNotification({
