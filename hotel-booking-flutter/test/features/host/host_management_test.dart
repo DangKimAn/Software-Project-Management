@@ -2115,9 +2115,15 @@ void main() {
       expect(find.byIcon(LucideIcons.chevronDown), findsWidgets);
       expect(find.byIcon(Icons.arrow_drop_down), findsNothing);
 
+      // Duplicate body 'Thêm chỗ nghỉ' button is removed (top header '+' quick button handles adding)
+      expect(find.byKey(const Key('properties_add_new_btn')), findsNothing);
+
       // Touch targets >= 48dp
       expect(
-        tester.getSize(find.byKey(const Key('properties_add_new_btn'))).height,
+        tester
+            .getSize(
+                find.byKey(const Key('host_portal_add_property_quick_btn')))
+            .height,
         greaterThanOrEqualTo(48),
       );
       expect(
@@ -2138,6 +2144,162 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Chưa có chỗ nghỉ phù hợp bộ lọc.'), findsOneWidget);
       expect(find.text('3'), findsWidgets);
+    });
+
+    testWidgets(
+        'Guests and Reports sections use capsule pill borders and naked monochrome icons cleanly',
+        (tester) async {
+      final todayIso = DateTime.now().toIso8601String().split('T').first;
+      final apiAdapter = FakeRecordingHttpClientAdapter(
+        responder: (options) {
+          if (options.path == '/api/host/bookings') {
+            return jsonResponse({
+              'items': [
+                {
+                  'bookingId': 501,
+                  'guestName': 'Nguyễn Minh',
+                  'guestPhone': '0901234567',
+                  'listingId': 105,
+                  'listingTitle': 'The Palm Villa',
+                  'checkInDate': todayIso,
+                  'checkOutDate': todayIso,
+                  'guestsCount': 2,
+                  'totalPrice': 3500000,
+                  'status': 'confirmed',
+                },
+              ],
+            });
+          }
+          if (options.path == '/api/host/reports/revenue') {
+            return jsonResponse({
+              'grossRevenue': 4550000,
+              'platformRevenue': 420000,
+              'hostRevenue': 4130000,
+              'bookingCount': 1,
+              'series': <dynamic>[],
+            });
+          }
+          return jsonResponse({'items': <dynamic>[]});
+        },
+      );
+      final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+      final repo = HostRepository(client, roleResolver: () => 'host');
+      final fakePicker = FakeTestFilePickerService();
+
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
+          ],
+          child: const MaterialApp(
+            home: HostPortalScreen(
+              initialSection: HostPortalSection.guests,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify Gọi điện and Nhắn tin buttons use StadiumBorder (full capsule pill)
+      final callBtn = tester.widget<OutlinedButton>(
+        find.ancestor(
+          of: find.text('Gọi điện'),
+          matching: find.bySubtype<OutlinedButton>(),
+        ),
+      );
+      final msgBtn = tester.widget<FilledButton>(
+        find.ancestor(
+          of: find.text('Nhắn tin'),
+          matching: find.bySubtype<FilledButton>(),
+        ),
+      );
+      expect(
+        callBtn.style?.shape?.resolve({}),
+        isA<StadiumBorder>(),
+      );
+      expect(
+        msgBtn.style?.shape?.resolve({}),
+        isA<StadiumBorder>(),
+      );
+
+      // Open the guest status filter modal
+      await tester.tap(find.text('Tất cả khách hàng'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Lọc theo trạng thái khách'), findsOneWidget);
+      expect(find.text('Đã xác nhận'), findsWidgets);
+      expect(find.text('Quá hạn thanh toán'), findsOneWidget);
+      expect(find.text('Đã hủy'), findsOneWidget);
+
+      // Close button has >= 48dp hit target and uses LucideIcons.x
+      final closeBtn = find.widgetWithIcon(IconButton, LucideIcons.x);
+      expect(closeBtn, findsOneWidget);
+      expect(tester.getSize(closeBtn).width, greaterThanOrEqualTo(48));
+      expect(tester.getSize(closeBtn).height, greaterThanOrEqualTo(48));
+
+      // Select 'Quá hạn thanh toán' and verify modal closes and updates trigger text cleanly
+      await tester.tap(find.text('Quá hạn thanh toán'));
+      await tester.pumpAndSettle();
+      expect(find.text('Lọc theo trạng thái khách'), findsNothing);
+      expect(find.text('Quá hạn thanh toán'), findsOneWidget);
+
+      // Also verify Reports section renders capsule segmented switcher and dropdowns cleanly
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
+          ],
+          child: MaterialApp(
+            home: HostPortalScreen(
+              key: UniqueKey(),
+              initialSection: HostPortalSection.reports,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('30 ngày'), findsWidgets);
+      expect(find.text('90 ngày'), findsWidgets);
+      expect(find.text('1 năm'), findsWidgets);
+      expect(find.byKey(const Key('reports_listing_filter_dropdown')),
+          findsOneWidget);
+
+      // Verify redundant inner titles and manual 'Tải lại' icon buttons are removed in Bookings, Payouts, and Calendar
+      for (final section in [
+        HostPortalSection.bookings,
+        HostPortalSection.payouts,
+        HostPortalSection.calendar,
+      ]) {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(repo),
+              hostFilePickerProvider.overrideWithValue(fakePicker),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: MaterialApp(
+              home: HostPortalScreen(
+                key: UniqueKey(),
+                initialSection: section,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Tải lại'), findsNothing);
+        expect(
+          find.text('Tổng quan lịch chỗ nghỉ & tình trạng phòng'),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+      }
     });
   });
 }

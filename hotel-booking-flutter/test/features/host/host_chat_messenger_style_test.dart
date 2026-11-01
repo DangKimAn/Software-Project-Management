@@ -127,8 +127,8 @@ void main() {
       // The header title has "ĐẶNG KIM AN" exactly once, NOT duplicated above the bubble
       expect(find.text('ĐẶNG KIM AN'), findsOneWidget);
 
-      // 3. Small Avatar should appear on the left of the guest message ('Đ')
-      expect(find.text('Đ'), findsOneWidget);
+      // 3. Circular participant avatar ('Đ') appears in chat header and on the left of the guest message
+      expect(find.text('Đ'), findsNWidgets(2));
 
       // 4. Timestamps 18:26 and 18:27 should initially NOT be visible in the tree (progress = 0)
       expect(find.text('18:26'), findsNothing);
@@ -195,6 +195,98 @@ void main() {
       expect(find.byKey(const Key('chat_quick_emoji_btn')), findsOneWidget);
       expect(find.text('😤'), findsOneWidget);
       expect(find.text('Nhắn tin'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Host conversation list matches unified MessagesScreen layout (circular avatar, full name + dd/MM HH:mm, primary listing title, preview & hairline divider)',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final client = _FakeDioClient();
+      client.dio.httpClientAdapter = _ChatRecordingAdapter(
+        responder: (options) {
+          if (options.path == '/api/conversations') {
+            return _jsonResponse({
+              'items': [
+                {
+                  'id': 'conv-admin',
+                  'conversationId': 'conv-admin',
+                  'listingId': 12,
+                  'listingTitle': 'Seaside Sunset Homestay & Studio Hạ Long',
+                  'otherParticipant': {
+                    'fullName': 'Quản trị viên The Palm Villa',
+                    'role': 'admin',
+                  },
+                  'lastMessage': {
+                    'content': 'Hồ bơi của biệt thự là nước mặn hay nước ngọt?',
+                    'createdAt': '2026-10-31T12:21:00.000Z',
+                  },
+                  'unreadCount': 0,
+                },
+                {
+                  'id': 'conv-guest',
+                  'conversationId': 'conv-guest',
+                  'listingId': 12,
+                  'listingTitle': 'Seaside Sunset Homestay & Studio Hạ Long',
+                  'guestName': 'ĐẶNG KIM AN',
+                  'otherParticipant': {
+                    'fullName': 'ĐẶNG KIM AN',
+                    'role': 'guest',
+                  },
+                  'lastMessage': {
+                    'content': '👍',
+                    'createdAt': '2026-10-31T11:49:00.000Z',
+                  },
+                  'unreadCount': 2,
+                },
+              ],
+            });
+          }
+          return _jsonResponse({'items': <dynamic>[]});
+        },
+      );
+
+      final repo = HostRepository(
+        client as dynamic,
+        roleResolver: () => 'host',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
+          ],
+          child: const MaterialApp(
+            home: HostPortalScreen(
+              initialSection: HostPortalSection.messages,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // Full participant names without separate 'Quản trị viên' pill badge
+      expect(find.text('Quản trị viên The Palm Villa'), findsOneWidget);
+      expect(find.text('ĐẶNG KIM AN'), findsOneWidget);
+      expect(find.text('Quản trị viên'), findsNothing);
+
+      // Listing title rendered below participant name on both rows
+      expect(
+        find.text('Seaside Sunset Homestay & Studio Hạ Long'),
+        findsNWidgets(2),
+      );
+
+      // Message previews & unread count pill (only on unread conversation)
+      expect(
+        find.text('Hồ bơi của biệt thự là nước mặn hay nước ngọt?'),
+        findsOneWidget,
+      );
+      expect(find.text('👍'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
     },
   );
 }
