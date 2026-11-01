@@ -47,10 +47,14 @@ import {
     extractMonthSheetStructure,
     formatIsoDate,
     monthTabKeyFromIsoDate,
+    parsePositiveListingId,
     resolveDirectorySheetTab,
     resolveMonthSheetTab,
     RollingMonthSpec,
+    SHEET_CALENDAR_START_ROW_INDEX,
     SHEET_DAY_COLUMN_OFFSET,
+    SHEET_GUIDE_ROW_COUNT,
+    SHEET_HEADER_ROW_COUNT,
     SHEET_METADATA_KEYS,
     SHEET_TOTAL_COLUMNS,
 } from "./host-sheet-sync.layout";
@@ -509,6 +513,25 @@ export const runHostSheetSyncCycle = async (
         const createTabRequests: Array<Record<string, unknown>> = [];
         let conflictsDetectedCount = 0;
 
+        // Auto-rename untitled spreadsheet to standard title
+        const currentSpreadsheetTitle = metaSpreadsheet.properties?.title?.trim() ?? "";
+        const isUntitled =
+            !currentSpreadsheetTitle ||
+            currentSpreadsheetTitle.toLowerCase().includes("untitled") ||
+            currentSpreadsheetTitle.toLowerCase().includes("chưa có tiêu đề");
+        if (isUntitled) {
+            const standardTitle = "Lịch Quản Lý Đặt Phòng - The Palm Villa";
+            createTabRequests.push({
+                updateSpreadsheetProperties: {
+                    properties: {
+                        title: standardTitle,
+                    },
+                    fields: "title",
+                },
+            });
+            integration.spreadsheetTitle = standardTitle;
+        }
+
         if (!resolveDirectorySheetTab(sheetsList)) {
             createTabRequests.push({
                 addSheet: {
@@ -546,12 +569,38 @@ export const runHostSheetSyncCycle = async (
                         properties: {
                             title: monthSpec.tabKey,
                             gridProperties: {
-                                rowCount: Math.max(200, activeOrManagedListings.length + 30),
-                                columnCount: SHEET_TOTAL_COLUMNS,
-                                frozenRowCount: 2,
-                                frozenColumnCount: 2,
+                                rowCount: Math.max(70, SHEET_HEADER_ROW_COUNT + monthSpec.daysInMonth + 15),
+                                columnCount: Math.max(SHEET_TOTAL_COLUMNS, activeOrManagedListings.length + 5),
+                                frozenRowCount: SHEET_HEADER_ROW_COUNT,
+                                frozenColumnCount: 1,
                             },
                         },
+                    },
+                });
+            }
+        }
+
+        // Auto-delete empty default "Sheet1" tab if other valid tabs exist
+        const defaultUnusedTabs = sheetsList.filter((s) => {
+            const title = s.properties.title.trim().toLowerCase();
+            const isDefaultName =
+                title === "sheet1" ||
+                title === "sheet 1" ||
+                title === "trang tính 1" ||
+                title === "trang tính1" ||
+                title === "trangtinh1";
+            const hasNoDevMetadata = !s.developerMetadata || s.developerMetadata.length === 0;
+            return isDefaultName && hasNoDevMetadata;
+        });
+
+        if (
+            defaultUnusedTabs.length > 0 &&
+            (sheetsList.length > defaultUnusedTabs.length || createTabRequests.some((r) => r.addSheet))
+        ) {
+            for (const unusedTab of defaultUnusedTabs) {
+                createTabRequests.push({
+                    deleteSheet: {
+                        sheetId: unusedTab.properties.sheetId,
                     },
                 });
             }
@@ -977,37 +1026,37 @@ export const runHostSheetSyncCycle = async (
             const sheetId = tab.properties.sheetId;
             const structure = monthStructures.get(monthSpec.tabKey) ?? extractMonthSheetStructure(tab);
 
-            if (options.mode === "initialize" || (tab.data?.[0]?.rowData?.length ?? 0) < 2) {
-                batchRequests.push(...buildMonthTabHeaderRequests(tab, monthSpec));
+            if (options.mode === "initialize" || (tab.data?.[0]?.rowData?.length ?? 0) < SHEET_HEADER_ROW_COUNT) {
+                batchRequests.push(...buildMonthTabHeaderRequests(tab, monthSpec, { listingCount: activeOrManagedListings.length }));
             }
 
-            let nextAppendRowIndex = structure.nextAppendRowIndex;
-            const currentGridRowCount = tab.properties.gridProperties?.rowCount ?? 200;
-            const requiredRowCount = nextAppendRowIndex + activeOrManagedListings.length + 10;
-            if (requiredRowCount > currentGridRowCount) {
+            let nextAppendColIndex = structure.nextAppendColIndex ?? structure.nextAppendRowIndex;
+            const currentGridColCount = tab.properties.gridProperties?.columnCount ?? 26;
+            const requiredColCount = nextAppendColIndex + activeOrManagedListings.length + 5;
+            if (requiredColCount > currentGridColCount) {
                 batchRequests.push({
                     appendDimension: {
                         sheetId,
-                        dimension: "ROWS",
-                        length: requiredRowCount - currentGridRowCount,
+                        dimension: "COLUMNS",
+                        length: requiredColCount - currentGridColCount,
                     },
                 });
             }
 
-            // Mark soft-deleted listings' existing rows clearly if present without shifting other rows' IDs
+            // Mark soft-deleted listings' existing columns clearly if present without shifting other cols' IDs
             for (const archivedListing of hostListings.filter((l) => Boolean(l.deletedAt))) {
                 const existingArchivedRows = structure.rowsByListingId.get(archivedListing.listingId) ?? [];
-                for (const row of existingArchivedRows) {
+                for (const col of existingArchivedRows) {
                     const archivedTitle = sanitizeSheetTextValue(`[ĐÃ NGỪNG] ${archivedListing.title}`);
-                    if (row.colBTitle !== archivedTitle) {
+                    if (col.colBTitle !== archivedTitle) {
                         batchRequests.push({
                             updateCells: {
                                 range: {
                                     sheetId,
-                                    startRowIndex: row.rowIndex,
-                                    endRowIndex: row.rowIndex + 1,
-                                    startColumnIndex: 1,
-                                    endColumnIndex: 2,
+                                    startRowIndex: SHEET_GUIDE_ROW_COUNT + 1, // Row 10: Tên căn
+                                    endRowIndex: SHEET_GUIDE_ROW_COUNT + 2,
+                                    startColumnIndex: col.colIndex,
+                                    endColumnIndex: col.colIndex + 1,
                                 },
                                 rows: [
                                     {
@@ -1029,13 +1078,39 @@ export const runHostSheetSyncCycle = async (
                 }
             }
 
-            for (const listing of activeOrManagedListings) {
+            const hasListingAtCol1 = Array.from(structure.rowsByListingId.values()).some((rows) =>
+                rows.some((r) => r.colIndex === SHEET_DAY_COLUMN_OFFSET),
+            );
+            const shouldRealignSequential = options.mode === "initialize" || !hasListingAtCol1;
+
+            if (shouldRealignSequential) {
+                const lastAssignedColIndex = SHEET_DAY_COLUMN_OFFSET + activeOrManagedListings.length - 1;
+                const maxOldColIndex = Math.max(structure.nextAppendColIndex, 5);
+                if (maxOldColIndex > lastAssignedColIndex) {
+                    batchRequests.push({
+                        updateCells: {
+                            range: {
+                                sheetId,
+                                startRowIndex: SHEET_GUIDE_ROW_COUNT,
+                                endRowIndex: SHEET_CALENDAR_START_ROW_INDEX + monthSpec.daysInMonth,
+                                startColumnIndex: lastAssignedColIndex + 1,
+                                endColumnIndex: maxOldColIndex + 2,
+                            },
+                            fields: "userEnteredValue,userEnteredFormat,note",
+                        },
+                    });
+                }
+            }
+
+            for (const [listingIdx, listing] of activeOrManagedListings.entries()) {
                 const existingRows = structure.rowsByListingId.get(listing.listingId) ?? [];
                 const targetRow = existingRows.length >= 1 ? existingRows[0] : null;
-                const rowIndex = targetRow ? targetRow.rowIndex : nextAppendRowIndex++;
-                const isNewRow = !targetRow;
+                const colIndex = shouldRealignSequential
+                    ? SHEET_DAY_COLUMN_OFFSET + listingIdx
+                    : (targetRow ? targetRow.colIndex : nextAppendColIndex++);
+                const isNewCol = !targetRow || colIndex !== targetRow.colIndex;
 
-                if (isNewRow) {
+                if (isNewCol) {
                     appendedListingRowsCount += 1;
                 }
 
@@ -1045,45 +1120,45 @@ export const runHostSheetSyncCycle = async (
                         ? sanitizeSheetTextValue(`[TẠM ẨN] ${listing.title}`)
                         : sanitizeSheetTextValue(listing.title);
 
-                // Ensure Col A (immutable plain-text listing_id), Col B (title), and Row DeveloperMetadata
+                const colIdCell = buildCalendarCellWriteData({
+                    text: String(listing.listingId),
+                    bgColor: SHEET_COLORS.SUBHEADER_BG,
+                    bold: true,
+                    forcePlainText: true,
+                }).cell;
+
+                const colTitleCell: RawSheetCell = {
+                    userEnteredValue: { stringValue: safeTitle },
+                    userEnteredFormat: {
+                        backgroundColorStyle: { rgbColor: SHEET_COLORS.WHITE },
+                        horizontalAlignment: "LEFT",
+                        textFormat: { bold: true },
+                    },
+                };
+
+                // Ensure Col Header 1 (Listing ID at Row 9: ô B9, C9...) & Col Header 2 (Title at Row 10: ô B10, C10...)
                 if (
-                    isNewRow ||
+                    isNewCol ||
                     targetRow.colAText !== String(listing.listingId) ||
                     targetRow.colBTitle !== safeTitle ||
                     targetRow.colMismatch
                 ) {
-                    const colACell = buildCalendarCellWriteData({
-                        text: String(listing.listingId),
-                        bgColor: SHEET_COLORS.SUBHEADER_BG,
-                        bold: true,
-                        forcePlainText: true,
-                    }).cell;
-
-                    const colBCell: RawSheetCell = {
-                        userEnteredValue: { stringValue: safeTitle },
-                        userEnteredFormat: {
-                            backgroundColorStyle: { rgbColor: SHEET_COLORS.WHITE },
-                            horizontalAlignment: "LEFT",
-                            textFormat: { bold: false },
-                        },
-                    };
-
                     batchRequests.push({
                         updateCells: {
                             range: {
                                 sheetId,
-                                startRowIndex: rowIndex,
-                                endRowIndex: rowIndex + 1,
-                                startColumnIndex: 0,
-                                endColumnIndex: 2,
+                                startRowIndex: SHEET_GUIDE_ROW_COUNT, // Row 9
+                                endRowIndex: SHEET_HEADER_ROW_COUNT, // Row 11
+                                startColumnIndex: colIndex,
+                                endColumnIndex: colIndex + 1,
                             },
-                            rows: [{ values: [colACell, colBCell] }],
+                            rows: [{ values: [colIdCell] }, { values: [colTitleCell] }],
                             fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,numberFormat)",
                         },
                     });
                 }
 
-                if (isNewRow || targetRow.metadataListingId !== listing.listingId) {
+                if (isNewCol || targetRow.metadataListingId !== listing.listingId) {
                     batchRequests.push({
                         createDeveloperMetadata: {
                             developerMetadata: {
@@ -1092,9 +1167,9 @@ export const runHostSheetSyncCycle = async (
                                 location: {
                                     dimensionRange: {
                                         sheetId,
-                                        dimension: "ROWS",
-                                        startIndex: rowIndex,
-                                        endIndex: rowIndex + 1,
+                                        dimension: "COLUMNS",
+                                        startIndex: colIndex,
+                                        endIndex: colIndex + 1,
                                     },
                                 },
                                 visibility: "DOCUMENT",
@@ -1103,27 +1178,12 @@ export const runHostSheetSyncCycle = async (
                     });
                 }
 
-                // Build day cells 01..31
-                const fullRowCells: RawSheetCell[] = [];
-                let anyDayChangedInRow = isNewRow;
+                // Build day cells 1..daysInMonth down rows 11..(10+daysInMonth)
+                const fullColCells: RawSheetCell[] = [];
+                let anyDayChangedInCol = isNewCol;
 
-                for (let day = 1; day <= 31; day += 1) {
+                for (let day = 1; day <= monthSpec.daysInMonth; day += 1) {
                     const existingCell = targetRow?.cellsByDay.get(day);
-
-                    if (day > monthSpec.daysInMonth) {
-                        const invalidCell = buildCalendarCellWriteData({
-                            text: "✕",
-                            bgColor: SHEET_COLORS.INVALID_DAY_GRAY,
-                            bold: false,
-                            note: "Ngày không tồn tại trong tháng",
-                        }).cell;
-                        fullRowCells.push(invalidCell);
-                        if (!isCellDisplayEqual(existingCell, "✕", SHEET_COLORS.INVALID_DAY_GRAY)) {
-                            anyDayChangedInRow = true;
-                        }
-                        continue;
-                    }
-
                     const isoDate = formatIsoDate(monthSpec.year, monthSpec.month, day);
                     const cellKey = `${listing.listingId}:${isoDate}`;
                     const authBooking = findAuthoritativeBookingForDate(
@@ -1169,10 +1229,8 @@ export const runHostSheetSyncCycle = async (
                     } else if (cal?.isBlockedByHost || cal?.isAvailable === false) {
                         const existingClassified = classifySheetCalendarCell(existingCell);
                         const preservedCustomText =
-                            customHostTextMap.get(cellKey) ??
-                            (cal?.lockSource === "sheet_manual" &&
-                            existingClassified.state === "host_blocked" &&
-                            existingClassified.rawValue
+                            customHostTextMap.get(cellKey) ||
+                            (existingClassified.state === "host_blocked" && existingClassified.rawValue
                                 ? sanitizeSheetTextValue(existingClassified.rawValue, 24)
                                 : "K");
                         desiredText = preservedCustomText || "K";
@@ -1182,18 +1240,22 @@ export const runHostSheetSyncCycle = async (
                         snapState = "host_blocked";
                         snapLockSource =
                             cal?.lockSource === "sheet_manual" ? "sheet_manual" : "app_manual";
+                    } else {
+                        snapState = "empty";
+                        snapLockSource = "none";
                     }
 
-                    const built = buildCalendarCellWriteData({
+                    const dayCell = buildCalendarCellWriteData({
                         text: desiredText,
                         bgColor: desiredColor,
                         bold: desiredBold,
                         note: desiredNote,
-                    });
-                    fullRowCells.push(built.cell);
+                    }).cell;
+
+                    fullColCells.push(dayCell);
 
                     if (!isCellDisplayEqual(existingCell, desiredText, desiredColor)) {
-                        anyDayChangedInRow = true;
+                        anyDayChangedInCol = true;
                         exportedCellsCount += 1;
                     }
 
@@ -1212,17 +1274,17 @@ export const runHostSheetSyncCycle = async (
                     });
                 }
 
-                if (anyDayChangedInRow) {
+                if (anyDayChangedInCol) {
                     batchRequests.push({
                         updateCells: {
                             range: {
                                 sheetId,
-                                startRowIndex: rowIndex,
-                                endRowIndex: rowIndex + 1,
-                                startColumnIndex: SHEET_DAY_COLUMN_OFFSET,
-                                endColumnIndex: SHEET_TOTAL_COLUMNS,
+                                startRowIndex: SHEET_CALENDAR_START_ROW_INDEX,
+                                endRowIndex: SHEET_CALENDAR_START_ROW_INDEX + monthSpec.daysInMonth,
+                                startColumnIndex: colIndex,
+                                endColumnIndex: colIndex + 1,
                             },
-                            rows: [{ values: fullRowCells }],
+                            rows: fullColCells.map((c) => ({ values: [c] })),
                             fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold),note",
                         },
                     });
@@ -1355,12 +1417,19 @@ export const connectHostSpreadsheet = async (
     const now = new Date();
     const nextPollAt = new Date(now.getTime() + env.googleSheetsSyncIntervalSeconds * 1000);
 
+    const initialTitle =
+        !verifiedAccess.title ||
+        verifiedAccess.title.toLowerCase().includes("untitled") ||
+        verifiedAccess.title.toLowerCase().includes("chưa có tiêu đề")
+            ? "Lịch Quản Lý Đặt Phòng - The Palm Villa"
+            : verifiedAccess.title;
+
     if (!integration) {
         integration = await HostSheetIntegration.create({
             hostUserId,
             spreadsheetId,
             spreadsheetUrl: canonicalUrl,
-            spreadsheetTitle: verifiedAccess.title,
+            spreadsheetTitle: initialTitle,
             hostEditorEmail,
             serviceAccountEmail: verifiedAccess.serviceAccountEmail,
             status: "connected",
@@ -1376,7 +1445,7 @@ export const connectHostSpreadsheet = async (
     } else {
         integration.spreadsheetId = spreadsheetId;
         integration.spreadsheetUrl = canonicalUrl;
-        integration.spreadsheetTitle = verifiedAccess.title;
+        integration.spreadsheetTitle = initialTitle;
         integration.hostEditorEmail = hostEditorEmail;
         integration.serviceAccountEmail = verifiedAccess.serviceAccountEmail;
         integration.status = "connected";
@@ -2176,7 +2245,7 @@ const updateSheetCellsAfterBulkUndo = async (
             return;
         }
 
-        const rowIndex = rows[0].rowIndex;
+        const colIndex = rows[0].colIndex;
         const requests: Array<Record<string, unknown>> = [];
         const whiteCell = buildCalendarCellWriteData({
             text: "",
@@ -2187,7 +2256,7 @@ const updateSheetCellsAfterBulkUndo = async (
 
         for (const isoDate of revertedDates) {
             const day = Number(isoDate.slice(8, 10));
-            const colIndex = SHEET_DAY_COLUMN_OFFSET + (day - 1);
+            const rowIndex = SHEET_CALENDAR_START_ROW_INDEX + (day - 1);
             requests.push({
                 updateCells: {
                     range: {

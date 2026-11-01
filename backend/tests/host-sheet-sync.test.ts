@@ -258,6 +258,28 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
                     rows: new Map(),
                     rowDeveloperMetadata: new Map(),
                 });
+            } else if (req.updateSpreadsheetProperties) {
+                const props = (req.updateSpreadsheetProperties as any).properties ?? {};
+                if (props.title !== undefined) {
+                    doc.title = props.title;
+                }
+            } else if (req.deleteSheet) {
+                const sheetId = (req.deleteSheet as any).sheetId;
+                const idx = doc.tabs.findIndex((t) => t.sheetId === sheetId);
+                if (idx >= 0) {
+                    doc.tabs.splice(idx, 1);
+                }
+            } else if (req.deleteDimension) {
+                const dd = (req.deleteDimension as any).range;
+                const tab = doc.tabs.find((t) => t.sheetId === dd?.sheetId);
+                if (tab && dd?.dimension === "COLUMNS") {
+                    const start = Number(dd.startIndex ?? 0);
+                    const end = Number(dd.endIndex ?? start + 1);
+                    const count = end - start;
+                    for (const [rIdx, row] of tab.rows.entries()) {
+                        row.splice(start, count);
+                    }
+                }
             } else if (req.updateSheetProperties) {
                 const props = (req.updateSheetProperties as any).properties ?? {};
                 const tab = doc.tabs.find((t) => t.sheetId === props.sheetId);
@@ -365,7 +387,21 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
         );
     }
 
+    findListingColIndex(tab: InMemoryTab, listingId: number): number {
+        const idRow = tab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT);
+        if (idRow) {
+            for (let cIdx = 1; cIdx < idRow.length; cIdx++) {
+                if (idRow[cIdx]?.userEnteredValue?.stringValue === String(listingId)) {
+                    return cIdx;
+                }
+            }
+        }
+        return -1;
+    }
+
     findListingRowIndex(tab: InMemoryTab, listingId: number): number {
+        const colIdx = this.findListingColIndex(tab, listingId);
+        if (colIdx !== -1) return colIdx;
         for (const [rIdx, cells] of tab.rows.entries()) {
             if (rIdx < 2) continue;
             const colA = cells[0]?.userEnteredValue?.stringValue;
@@ -391,10 +427,10 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
         if (!tab) {
             throw new Error(`Expected month tab ${monthTabKey} to exist`);
         }
-        const rIdx = this.findListingRowIndex(tab, listingId);
-        assert.ok(rIdx >= 2, `Expected row for listing ${listingId} in ${monthTabKey}`);
+        const colIdx = this.findListingColIndex(tab, listingId);
+        assert.ok(colIdx >= 1, `Expected column for listing ${listingId} in ${monthTabKey}`);
+        const rIdx = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + (day - 1);
         const row = tab.rows.get(rIdx) ?? [];
-        const colIdx = 2 + (day - 1);
         const cell: RawSheetCell = {};
         if (options.text !== undefined) {
             cell.userEnteredValue = options.text ? { stringValue: options.text } : {};
@@ -900,15 +936,16 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
             6,
         );
         const firstTab = fakeSheets.findMonthTab(sheetIdA, rolling[0].tabKey)!;
-        const row801Idx = fakeSheets.findListingRowIndex(firstTab, 801);
-        assert.ok(row801Idx >= 2);
-        const row801 = firstTab.rows.get(row801Idx)!;
+        const col801Idx = fakeSheets.findListingColIndex(firstTab, 801);
+        assert.ok(col801Idx >= 1);
+        const idCell = firstTab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT)![col801Idx]!;
+        const titleCell = firstTab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT + 1)![col801Idx]!;
 
-        // Col A must be plain TEXT string "801"
-        assert.equal(row801[0].userEnteredValue?.stringValue, "801");
-        assert.equal(row801[0].userEnteredFormat?.numberFormat?.type, "TEXT");
-        // Col B title must be escaped with leading apostrophe so Google Sheets never executes formula
-        assert.ok(row801[1].userEnteredValue?.stringValue?.startsWith("'="));
+        // Header ID must be plain TEXT string "801"
+        assert.equal(idCell.userEnteredValue?.stringValue, "801");
+        assert.equal(idCell.userEnteredFormat?.numberFormat?.type, "TEXT");
+        // Title must be escaped with leading apostrophe so Google Sheets never executes formula
+        assert.ok(titleCell.userEnteredValue?.stringValue?.startsWith("'="));
     });
 
     it("SS-03 & SS-04: Real Editor write check (403 on read-only) & idempotent init-calendar preserves Host Red blocks", async () => {
@@ -946,8 +983,8 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         );
         const targetMonth = rolling[1]; // Next month (guaranteed all days in the future!)
         const monthTab = fakeSheets.findMonthTab(sheetIdA, targetMonth.tabKey)!;
-        assert.equal(monthTab.frozenRowCount, 2);
-        assert.equal(monthTab.frozenColumnCount, 2);
+        assert.equal(monthTab.frozenRowCount, hostSheetLayout.SHEET_HEADER_ROW_COUNT);
+        assert.equal(monthTab.frozenColumnCount, 1);
         assert.ok(monthTab.protectedRanges.some((p) => p.warningOnly === true));
 
         // Host paints Day 15 Red ("Bảo trì hồ bơi") on Sheet
@@ -980,10 +1017,12 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         assert.equal(lockedCalAfter.isBlockedByHost, true);
         assert.equal(lockedCalAfter.isAvailable, false);
 
-        const rowAfter = monthTab.rows.get(fakeSheets.findListingRowIndex(monthTab, 801))!;
-        const day15Cell = rowAfter[2 + 14];
+        const col801 = fakeSheets.findListingColIndex(monthTab, 801);
+        const rDay15 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 14;
+        const day15Cell = monthTab.rows.get(rDay15)?.[col801];
+        assert.ok(day15Cell, "Day 15 cell must exist");
         assert.equal(
-            rgbToHex(day15Cell.userEnteredFormat!.backgroundColorStyle!.rgbColor!),
+            rgbToHex(day15Cell!.userEnteredFormat!.backgroundColorStyle!.rgbColor!),
             rgbToHex(SHEET_COLORS.HOST_BLOCKED_RED),
         );
     });
@@ -1015,11 +1054,11 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
 
         await request(app).post("/api/host/sheet-sync/sync-now").set(hostAAuth);
         const tab = fakeSheets.findMonthTab(sheetIdA, nextMonth.tabKey)!;
-        const idx801 = fakeSheets.findListingRowIndex(tab, 801);
-        const idx803 = fakeSheets.findListingRowIndex(tab, 803);
-        assert.ok(idx801 >= 2);
-        assert.ok(idx803 > idx801, "New listing #803 must be appended below existing listings");
-        assert.equal(tab.rows.get(idx801)![1].userEnteredValue?.stringValue, "Villa Bãi Sau 5PN VIP");
+        const idx801 = fakeSheets.findListingColIndex(tab, 801);
+        const idx803 = fakeSheets.findListingColIndex(tab, 803);
+        assert.ok(idx801 >= 1);
+        assert.ok(idx803 > idx801, "New listing #803 must be appended in column to the right of existing listings");
+        assert.equal(tab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT + 1)![idx801].userEnteredValue?.stringValue, "Villa Bãi Sau 5PN VIP");
 
         // 2. Soft-delete listing #801 while it has a future confirmed booking -> MUST block with 409 Conflict!
         const checkIn = hostSheetLayout.formatIsoDate(nextMonth.year, nextMonth.month, 10);
@@ -1050,7 +1089,7 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
 
         await request(app).post("/api/host/sheet-sync/sync-now").set(hostAAuth);
         assert.equal(
-            tab.rows.get(idx801)![1].userEnteredValue?.stringValue,
+            tab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT + 1)![idx801].userEnteredValue?.stringValue,
             "[ĐÃ NGỪNG] Villa Bãi Sau 5PN VIP",
         );
 
@@ -1112,9 +1151,11 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
 
         // 1. Host accidentally deletes row for listing #801 in nextMonth tab
         const tab = fakeSheets.findMonthTab(sheetIdA, nextMonth.tabKey)!;
-        const idx801 = fakeSheets.findListingRowIndex(tab, 801);
-        tab.rows.delete(idx801);
-        tab.rowDeveloperMetadata.delete(idx801);
+        const idx801 = fakeSheets.findListingColIndex(tab, 801);
+        const idRow = tab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT);
+        if (idRow) idRow[idx801] = {};
+        const titleRow = tab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT + 1);
+        if (titleRow) titleRow[idx801] = {};
 
         // Also rename the month tab to "Tháng Đổi Tên" -> DeveloperMetadata agy_month_tab still resolves it!
         tab.title = "Tháng Đổi Tên";
@@ -1132,16 +1173,20 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
                 (c) => c.conflictType === "missing_listing_row" && Number(c.listingId) === 801,
             ),
         );
-        assert.ok(fakeSheets.findListingRowIndex(tab, 801) >= 2, "Deleted row must be restored from DB");
+        assert.ok(fakeSheets.findListingColIndex(tab, 801) >= 1, "Deleted column must be restored from DB");
 
-        // 2. Host duplicates listing #802 row (two rows with Col A = "802") and paints one Red on Day 20
-        const idx802 = fakeSheets.findListingRowIndex(tab, 802);
-        const clonedRow = JSON.parse(JSON.stringify(tab.rows.get(idx802)));
-        clonedRow[2 + 19] = {
+        // 2. Host duplicates listing #802 (two cols with ID = "802") and paints one Red on Day 20
+        const idx802 = fakeSheets.findListingColIndex(tab, 802);
+        const dupCol = idx802 + 5;
+        const curIdRow = tab.rows.get(hostSheetLayout.SHEET_GUIDE_ROW_COUNT) ?? [];
+        curIdRow[dupCol] = { userEnteredValue: { stringValue: "802" } };
+        tab.rows.set(hostSheetLayout.SHEET_GUIDE_ROW_COUNT, curIdRow);
+        const day20Row = tab.rows.get(hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 19) ?? [];
+        day20Row[dupCol] = {
             userEnteredValue: { stringValue: "K" },
             userEnteredFormat: { backgroundColorStyle: { rgbColor: SHEET_COLORS.HOST_BLOCKED_RED } },
         };
-        tab.rows.set(25, clonedRow);
+        tab.rows.set(hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 19, day20Row);
 
         await request(app).post("/api/host/sheet-sync/sync-now").set(hostAAuth);
         assert.ok(
@@ -1282,16 +1327,18 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         await request(app).post("/api/host/sheet-sync/sync-now").set(hostAAuth);
 
         const tab = fakeSheets.findMonthTab(sheetIdA, nextMonth.tabKey)!;
-        const row = tab.rows.get(fakeSheets.findListingRowIndex(tab, 801))!;
+        const col801 = fakeSheets.findListingColIndex(tab, 801);
+        const rDay5 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 4;
 
         // Verify (a): Day 5 restored to Orange G #9201; Day 9 remains Admin-locked Red
-        assert.equal(row[2 + 4].userEnteredValue?.stringValue, "G #9201");
+        assert.equal(tab.rows.get(rDay5)![col801]?.userEnteredValue?.stringValue, "G #9201");
         const adminCal = calendarStore.find((c) => Number(c.listingId) === 801 && c.date === dAdmin);
         assert.equal(adminCal.isBlockedByAdmin, true);
         assert.equal(adminCal.isAvailable, false);
 
         // Verify (b): Day 7 restored to Green Đ #9202 & booking_vs_sheet_edit conflict logged
-        assert.equal(row[2 + 6].userEnteredValue?.stringValue, "Đ #9202");
+        const rDay7 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 6;
+        assert.equal(tab.rows.get(rDay7)![col801]?.userEnteredValue?.stringValue, "Đ #9202");
         assert.ok(
             conflictsStore.some(
                 (c) => c.conflictType === "booking_vs_sheet_edit" && c.conflictDate === dPaid,
@@ -1304,7 +1351,8 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         );
         assert.equal(freshAppCal.isBlockedByHost, true);
         assert.equal(freshAppCal.isAvailable, false);
-        assert.equal(row[2 + 9].userEnteredValue?.stringValue, "K");
+        const rDay10 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 9;
+        assert.equal(tab.rows.get(rDay10)![col801]?.userEnteredValue?.stringValue, "K");
 
         // Verify (d): Concurrent edit on Day 11 fails safe to BLOCKED + logs app_vs_sheet_concurrent
         const concCal = calendarStore.find(
@@ -1441,8 +1489,9 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         await request(app).post("/api/host/sheet-sync/sync-now").set(hostAAuth);
 
         const tab = fakeSheets.findMonthTab(sheetIdA, nextMonth.tabKey)!;
-        const row = tab.rows.get(fakeSheets.findListingRowIndex(tab, 801))!;
-        assert.equal(row[2 + 25].userEnteredValue?.stringValue ?? "", "");
+        const col801 = fakeSheets.findListingColIndex(tab, 801);
+        const rDay26 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 25;
+        assert.equal(tab.rows.get(rDay26)![col801]?.userEnteredValue?.stringValue ?? "", "");
         assert.equal(
             calendarStore.find((c) => Number(c.listingId) === 801 && c.date === expDate),
             undefined,
