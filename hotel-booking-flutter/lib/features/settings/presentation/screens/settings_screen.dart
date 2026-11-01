@@ -13,7 +13,6 @@ import '../../../../core/network/dio_client.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
-import '../../../../shared/widgets/currency_language_selector.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../../booking_inquiry/domain/services/contact_service.dart';
@@ -28,7 +27,6 @@ import '../view_models/account_settings_view_model.dart';
 /// - Handles async states (`loading`, `success`, `empty`, `error`, `offline`, `401/403`) with real retry.
 /// - Synchronizes profile via `GET /api/auth/me` & `GET /api/users/me` and updates via `PATCH /api/users/me`.
 /// - Uploads avatar from device via `POST /api/uploads/presign` (`folder: 'avatars'`) + R2 `PUT` + `PATCH /api/users/me/avatar`.
-/// - Displays real `user.isVerified` status (never hardcoded).
 /// - Preserves unsaved draft per `userId` on 422/500/offline, prevents double-submit, never fakes local-only success,
 ///   and isolates PII across account switches.
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -39,6 +37,21 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  static final TextStyle _menuTitleStyle = AppTypography.bodyMedium.copyWith(
+    fontSize: 14.5,
+    fontWeight: FontWeight.w400,
+    color: AppColors.textStrong,
+    letterSpacing: -0.08,
+    height: 1.35,
+  );
+
+  static final TextStyle _menuTrailingStyle = AppTypography.caption.copyWith(
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+    color: AppColors.textMuted,
+    height: 1.35,
+  );
+
   ProfileDraftData? _unsavedDraft;
   String? _activeUserId;
 
@@ -73,8 +86,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Text(
             labelText,
             style: AppTypography.caption.copyWith(
+              fontSize: 12,
               color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 2),
@@ -86,7 +100,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             textInputAction: textInputAction,
             maxLines: maxLines,
             minLines: minLines,
-            style: AppTypography.bodyLarge.copyWith(
+            style: AppTypography.bodyMedium.copyWith(
+              fontSize: 14.5,
               color: AppColors.textStrong,
               fontWeight: FontWeight.w500,
             ),
@@ -361,10 +376,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     children: [
                       Row(
                         children: [
-                          const Expanded(
+                          Expanded(
                             child: Text(
                               'Cập nhật ảnh đại diện',
-                              style: AppTypography.sectionHeading,
+                              style: AppTypography.sectionHeading.copyWith(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                           ConstrainedBox(
@@ -754,10 +772,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                         child: Row(
                           children: [
-                            const Expanded(
+                            Expanded(
                               child: Text(
                                 'Chỉnh sửa hồ sơ cá nhân',
-                                style: AppTypography.sectionHeading,
+                                style: AppTypography.sectionHeading.copyWith(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                             ConstrainedBox(
@@ -1125,7 +1146,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.s20,
+                    horizontal: AppSpacing.screenMargin,
                     vertical: AppSpacing.s12,
                   ),
                   child: Column(
@@ -1223,36 +1244,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           key: const Key('settings_language_selector'),
                           shape: const Border(),
                           collapsedShape: const Border(),
+                          visualDensity: const VisualDensity(vertical: -2),
                           tilePadding: const EdgeInsets.symmetric(
                             horizontal: AppSpacing.s4,
-                            vertical: 2,
+                            vertical: 0,
                           ),
                           childrenPadding: const EdgeInsets.only(
                             left: AppSpacing.s16,
                             bottom: AppSpacing.s4,
                           ),
-                          leading: const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: Center(
-                              child: Icon(
-                                LucideIcons.globe,
-                                size: 24,
-                                color: AppColors.iconStrong,
-                              ),
-                            ),
-                          ),
                           title: Row(
                             children: [
+                              const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: Center(
+                                  child: Icon(
+                                    LucideIcons.globe,
+                                    size: 20,
+                                    color: AppColors.iconStrong,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.s12),
                               Expanded(
                                 child: Text(
                                   'Ngôn ngữ',
-                                  style: AppTypography.bodyLarge.copyWith(
-                                    fontSize: 16.5,
-                                    fontWeight: FontWeight.w400,
-                                    color: AppColors.textStrong,
-                                    letterSpacing: -0.1,
-                                  ),
+                                  style: _menuTitleStyle,
                                 ),
                               ),
                               const SizedBox(width: AppSpacing.s8),
@@ -1262,11 +1280,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     : currentLocale == 'ko'
                                         ? '한국어'
                                         : 'Tiếng Việt',
-                                style: AppTypography.bodyMedium.copyWith(
-                                  fontSize: 14,
-                                  color: AppColors.textSecondary,
-                                  fontWeight: FontWeight.w400,
-                                ),
+                                style: _menuTrailingStyle,
                               ),
                             ],
                           ),
@@ -1505,21 +1519,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const Icon(
               AppSemanticIcons.userProfile,
               color: AppColors.iconStrong,
-              size: 28,
+              size: 24,
             ),
             const SizedBox(width: AppSpacing.s12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Chưa đăng nhập',
-                    style: AppTypography.cardTitle,
+                    style: AppTypography.cardTitle.copyWith(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.2,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.s4),
                   Text(
                     'Đăng nhập để xem kỳ nghỉ, tin nhắn và đồng bộ yêu thích',
                     style: AppTypography.caption.copyWith(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w400,
                       color: AppColors.textMuted,
                     ),
                   ),
@@ -1532,12 +1552,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         SizedBox(
           width: double.infinity,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48),
+            constraints: const BoxConstraints(minHeight: 46),
             child: FilledButton(
               key: const Key('settings_login_cta_button'),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 shape: const StadiumBorder(),
+                textStyle: AppTypography.buttonText.copyWith(fontSize: 14),
               ),
               onPressed: () => context.push('/dang-nhap'),
               child: const Text('Đăng nhập / Đăng ký'),
@@ -1548,167 +1569,208 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  Widget _buildProfileActionIconButton({
+    required Key buttonKey,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: Tooltip(
+        message: tooltip,
+        child: GestureDetector(
+          key: buttonKey,
+          behavior: HitTestBehavior.opaque,
+          onTap: onPressed,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minWidth: 42,
+              minHeight: 42,
+            ),
+            child: Center(
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceBase,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Center(
+                  child: Icon(
+                    icon,
+                    size: 17,
+                    color: AppColors.iconStrong,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSignedInProfileCard(User user) {
     final bool hasDraft =
         _unsavedDraft != null && _unsavedDraft!.userId == user.id;
 
-    final avatarBtn = ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 44),
-      child: OutlinedButton.icon(
-        key: const Key('settings_change_avatar_button'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.textStrong,
-          side: const BorderSide(color: AppColors.borderStrong),
-          shape: const StadiumBorder(),
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.s12,
-            vertical: AppSpacing.s8,
+    final avatarBtn = _buildProfileActionIconButton(
+      buttonKey: const Key('settings_change_avatar_button'),
+      icon: AppSemanticIcons.changeAvatar,
+      tooltip: 'Đổi ảnh',
+      onPressed: () => _openAvatarUpdateModal(user),
+    );
+
+    final editProfileBtn = _buildProfileActionIconButton(
+      buttonKey: const Key('settings_edit_profile_button'),
+      icon: LucideIcons.pencil,
+      tooltip: 'Sửa hồ sơ',
+      onPressed: () => _openEditProfileModal(user),
+    );
+
+    final avatarWidget = Semantics(
+      button: true,
+      label: 'Cập nhật ảnh đại diện',
+      child: InkWell(
+        key: const Key('settings_avatar_tap_target'),
+        customBorder: const CircleBorder(),
+        onTap: () => _openAvatarUpdateModal(user),
+        child: Container(
+          width: 54,
+          height: 54,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceElevated,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.borderSoft),
+          ),
+          child: ClipOval(
+            child: SizedBox(
+              width: 54,
+              height: 54,
+              child: (user.avatarUrl != null &&
+                      user.avatarUrl!.trim().isNotEmpty)
+                  ? AppImage(
+                      url: user.avatarUrl!.trim(),
+                      fit: BoxFit.cover,
+                    )
+                  : Center(
+                      child: Text(
+                        user.firstName.isNotEmpty
+                            ? user.firstName[0].toUpperCase()
+                            : 'U',
+                        style: AppTypography.displayMedium.copyWith(
+                          color: AppColors.textStrong,
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+            ),
           ),
         ),
-        onPressed: () => _openAvatarUpdateModal(user),
-        icon: const Icon(
-          AppSemanticIcons.changeAvatar,
-          size: 16,
-          color: AppColors.iconStrong,
-        ),
-        label: const Text('Đổi ảnh'),
       ),
     );
 
-    final editProfileBtn = ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 44),
-      child: OutlinedButton.icon(
-        key: const Key('settings_edit_profile_button'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.textStrong,
-          side: const BorderSide(color: AppColors.borderStrong),
-          shape: const StadiumBorder(),
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.s12,
-            vertical: AppSpacing.s8,
+    final userInfoColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          user.fullName,
+          key: const Key('settings_user_fullname'),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.cardTitle.copyWith(
+            fontSize: 15.5,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.2,
+            height: 1.28,
           ),
         ),
-        onPressed: () => _openEditProfileModal(user),
-        icon: const Icon(
-          LucideIcons.pencil,
-          size: 16,
-          color: AppColors.iconStrong,
+        const SizedBox(height: 2),
+        Text(
+          user.email,
+          key: const Key('settings_user_email'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.caption.copyWith(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w400,
+            color: AppColors.textMuted,
+            height: 1.32,
+          ),
         ),
-        label: const Text('Sửa hồ sơ'),
-      ),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 2.5,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceElevated,
+            borderRadius: AppRadii.roundedPill,
+            border: Border.all(color: AppColors.borderSoft),
+          ),
+          child: Text(
+            _roleLabelForUser(user),
+            key: const Key('settings_role_label'),
+            style: AppTypography.caption.copyWith(
+              fontSize: 11,
+              color: AppColors.primary,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.05,
+            ),
+          ),
+        ),
+      ],
     );
 
     return Column(
       key: const Key('settings_signed_in_card'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Semantics(
-              button: true,
-              label: 'Cập nhật ảnh đại diện',
-              child: InkWell(
-                key: const Key('settings_avatar_tap_target'),
-                customBorder: const CircleBorder(),
-                onTap: () => _openAvatarUpdateModal(user),
-                child: Container(
-                  width: 60,
-                  height: 60,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceElevated,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.borderSoft),
-                  ),
-                  child: ClipOval(
-                    child: SizedBox(
-                      width: 60,
-                      height: 60,
-                      child: (user.avatarUrl != null &&
-                              user.avatarUrl!.trim().isNotEmpty)
-                          ? AppImage(
-                              url: user.avatarUrl!.trim(),
-                              fit: BoxFit.cover,
-                            )
-                          : Center(
-                              child: Text(
-                                user.firstName.isNotEmpty
-                                    ? user.firstName[0].toUpperCase()
-                                    : 'U',
-                                style: AppTypography.displayMedium.copyWith(
-                                  color: AppColors.textStrong,
-                                  fontSize: 22,
-                                ),
-                              ),
-                            ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.s16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    user.fullName,
-                    key: const Key('settings_user_fullname'),
-                    style: AppTypography.cardTitle,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    user.email,
-                    key: const Key('settings_user_email'),
-                    style: AppTypography.caption.copyWith(
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.s8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.s12,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceElevated,
-                      borderRadius: AppRadii.roundedPill,
-                      border: Border.all(color: AppColors.borderSoft),
-                    ),
-                    child: Text(
-                      _roleLabelForUser(user),
-                      key: const Key('settings_role_label'),
-                      style: AppTypography.caption.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.s16),
         LayoutBuilder(
           builder: (context, constraints) {
             final textScale = MediaQuery.textScalerOf(context).scale(1.0);
-            if (constraints.maxWidth >= 280 && textScale < 1.35) {
+            final bool showInlineActions =
+                constraints.maxWidth >= 310 && textScale < 1.35;
+
+            if (showInlineActions) {
               return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Expanded(child: avatarBtn),
+                  avatarWidget,
                   const SizedBox(width: AppSpacing.s12),
-                  Expanded(child: editProfileBtn),
+                  Expanded(child: userInfoColumn),
+                  const SizedBox(width: AppSpacing.s8),
+                  avatarBtn,
+                  const SizedBox(width: 4),
+                  editProfileBtn,
                 ],
               );
             }
+
             return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                avatarBtn,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    avatarWidget,
+                    const SizedBox(width: AppSpacing.s12),
+                    Expanded(child: userInfoColumn),
+                  ],
+                ),
                 const SizedBox(height: AppSpacing.s8),
-                editProfileBtn,
+                Row(
+                  children: [
+                    avatarBtn,
+                    const SizedBox(width: AppSpacing.s8),
+                    editProfileBtn,
+                  ],
+                ),
               ],
             );
           },
@@ -1754,25 +1816,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
         ],
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: AppSpacing.s12),
-          child: Divider(height: 1, color: AppColors.borderSoft),
-        ),
-        _ProfileDetailRow(
-          rowKey: const Key('settings_verification_status'),
-          icon: user.isVerified
-              ? LucideIcons.badgeCheck
-              : LucideIcons.shieldAlert,
-          label: 'Xác minh danh tính',
-          value: user.isVerified ? 'Đã xác minh' : 'Chưa xác minh',
-        ),
       ],
     );
   }
 
   Widget _buildGroupDivider() {
     return const Padding(
-      padding: EdgeInsets.symmetric(vertical: AppSpacing.s12),
+      padding: EdgeInsets.symmetric(vertical: AppSpacing.s8),
       child: Divider(height: 1, thickness: 1, color: AppColors.borderSoft),
     );
   }
@@ -1790,35 +1840,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 54),
+        constraints: const BoxConstraints(minHeight: 48),
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.s4,
-            vertical: 14,
+            vertical: 11,
           ),
           child: Row(
             children: [
               SizedBox(
-                width: 24,
-                height: 24,
+                width: 20,
+                height: 20,
                 child: Center(
                   child: Icon(
                     icon,
-                    size: 24,
+                    size: 20,
                     color: AppColors.iconStrong,
                   ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.s16),
+              const SizedBox(width: AppSpacing.s12),
               Expanded(
                 child: Text(
                   title,
-                  style: AppTypography.bodyLarge.copyWith(
-                    fontSize: 16.5,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.textStrong,
-                    letterSpacing: -0.1,
-                  ),
+                  style: _menuTitleStyle,
                 ),
               ),
               if (trailingText != null && trailingText.isNotEmpty) ...[
@@ -1829,11 +1874,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     trailingText,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTypography.bodyMedium.copyWith(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w400,
-                    ),
+                    style: _menuTrailingStyle,
                   ),
                 ),
               ],
@@ -1841,7 +1882,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(width: AppSpacing.s8),
                 const Icon(
                   LucideIcons.chevronRight,
-                  size: 20,
+                  size: 18,
                   color: AppColors.iconMuted,
                 ),
               ],
@@ -1857,10 +1898,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final effectiveCurrency = ref.watch(effectiveCurrencyProvider);
     final formatter = ref.watch(moneyFormatterProvider);
     final l10n = formatter.l10n;
-    final rateSummary = buildReferenceRateSummary(
-      formatter: formatter,
-      currency: effectiveCurrency,
-    );
 
     final trailingBadge = preference.isAutomatic
         ? '${effectiveCurrency.code} (${effectiveCurrency.symbol})'
@@ -1876,46 +1913,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         key: const Key('settings_currency_selector'),
         shape: const Border(),
         collapsedShape: const Border(),
+        visualDensity: const VisualDensity(vertical: -2),
         tilePadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.s4,
-          vertical: 2,
+          vertical: 0,
         ),
         childrenPadding: const EdgeInsets.only(
           left: AppSpacing.s16,
           bottom: AppSpacing.s8,
         ),
-        leading: const SizedBox(
-          width: 24,
-          height: 24,
-          child: Center(
-            child: Icon(
-              LucideIcons.coins,
-              size: 24,
-              color: AppColors.iconStrong,
-            ),
-          ),
-        ),
         title: Row(
           children: [
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: Center(
+                child: Icon(
+                  LucideIcons.coins,
+                  size: 20,
+                  color: AppColors.iconStrong,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.s12),
             Expanded(
               child: Text(
                 l10n.settingsCurrency,
-                style: AppTypography.bodyLarge.copyWith(
-                  fontSize: 16.5,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.textStrong,
-                  letterSpacing: -0.1,
-                ),
+                style: _menuTitleStyle,
               ),
             ),
             const SizedBox(width: AppSpacing.s8),
             Text(
               trailingBadge,
-              style: AppTypography.bodyMedium.copyWith(
-                fontSize: 14,
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w400,
-              ),
+              style: _menuTrailingStyle,
             ),
           ],
         ),
@@ -1961,52 +1991,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 .read(currencyPreferenceProvider.notifier)
                 .setManualCurrency(AppCurrency.krw),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.s16,
-              AppSpacing.s8,
-              AppSpacing.s8,
-              AppSpacing.s4,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  formatter.isFallingBackToVnd
-                      ? l10n.fxRateUnavailableFallback
-                      : l10n.fxChargedInVndNotice,
-                  style: AppTypography.caption.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                if (rateSummary != null && formatter.snapshot != null) ...[
-                  const SizedBox(height: AppSpacing.s4),
-                  Text(
-                    '$rateSummary • ${l10n.fxRateUpdatedAt(formatSnapshotUpdatedAt(formatter.snapshot!.sourceUpdatedAt, currentLocale))}',
-                    style: AppTypography.caption.copyWith(
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ],
-                if (formatter.isUsingStaleRate &&
-                    formatter.snapshot != null) ...[
-                  const SizedBox(height: AppSpacing.s4),
-                  Text(
-                    l10n.fxRateStaleNotice(
-                      formatSnapshotUpdatedAt(
-                        formatter.snapshot!.sourceUpdatedAt,
-                        currentLocale,
-                      ),
-                    ),
-                    style: AppTypography.caption.copyWith(
-                      color: AppColors.warning,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -2023,85 +2007,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       color: Colors.transparent,
       child: ListTile(
         key: tileKey,
+        dense: true,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.s16,
-          vertical: AppSpacing.s4,
+          vertical: 2,
         ),
         title: Text(
           title,
-          style: AppTypography.bodyLarge.copyWith(
-            fontWeight: FontWeight.w600,
+          style: AppTypography.bodyMedium.copyWith(
+            fontSize: 13.5,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
             color: AppColors.textStrong,
           ),
         ),
-        subtitle: Text(subtitle, style: AppTypography.caption),
+        subtitle: Text(
+          subtitle,
+          style: AppTypography.caption.copyWith(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w400,
+            color: AppColors.textMuted,
+          ),
+        ),
         trailing: isSelected
             ? const SizedBox(
-                width: 48,
-                height: 48,
+                width: 40,
+                height: 40,
                 child: Center(
                   child: Icon(
                     LucideIcons.check,
                     color: AppColors.iconStrong,
-                    size: 20,
+                    size: 18,
                   ),
                 ),
               )
             : null,
         onTap: onTap,
-      ),
-    );
-  }
-}
-
-class _ProfileDetailRow extends StatelessWidget {
-  final Key? rowKey;
-  final IconData icon;
-  final String label;
-  final String value;
-
-  const _ProfileDetailRow({
-    this.rowKey,
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      key: rowKey,
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.s4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(icon, size: 16, color: AppColors.iconMuted),
-          ),
-          const SizedBox(width: AppSpacing.s12),
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: '$label: ',
-                    style: AppTypography.caption.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  TextSpan(
-                    text: value,
-                    style: AppTypography.caption.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textStrong,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

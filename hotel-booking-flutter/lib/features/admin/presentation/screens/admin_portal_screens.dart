@@ -11,6 +11,8 @@ import 'package:hotel_booking_flutter/features/admin/presentation/theme/admin_st
 import 'package:hotel_booking_flutter/features/admin/presentation/widgets/admin_studio_widgets.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
 import 'package:hotel_booking_flutter/features/auth/presentation/view_models/auth_notifier.dart';
+import 'package:hotel_booking_flutter/features/messages/data/conversations_repository.dart';
+import 'package:hotel_booking_flutter/features/messages/presentation/screens/messages_screen.dart';
 import 'package:hotel_booking_flutter/shared/animations/fade_slide_in.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_dialog.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
@@ -84,7 +86,16 @@ const List<AdminNavItem> kAdminNavItems = [
     route: '/admin/phi-nen-tang',
     icon: LucideIcons.badgePercent,
     title: 'Quản lý phí nền tảng',
-    subtitle: 'Áp dụng phí toàn sàn, thời gian thông báo 7 ngày và quản lý lịch sử.',
+    subtitle:
+        'Áp dụng phí toàn sàn, thời gian thông báo 7 ngày và quản lý lịch sử.',
+  ),
+  AdminNavItem(
+    id: 'tin-nhan',
+    label: 'Tin nhắn',
+    route: '/admin/tin-nhan',
+    icon: AppSemanticIcons.messageHost,
+    title: 'Tin nhắn hỗ trợ',
+    subtitle: 'Trao đổi trực tiếp với Chủ nhà và Khách hàng trên toàn hệ thống.',
   ),
 ];
 
@@ -92,6 +103,29 @@ bool _isActorAdmin(User? actor) {
   if (actor == null) return false;
   if (actor.role.toLowerCase() == 'admin') return true;
   return actor.roles.any((r) => r.toLowerCase() == 'admin');
+}
+
+String _resolveAdminUserAvatarUrl(
+  Map<String, dynamic> rawUser, {
+  User? actor,
+  String? userId,
+}) {
+  final resolvedId =
+      (userId ?? '${rawUser['userId'] ?? rawUser['id'] ?? ''}').trim();
+  final actorAvatar = actor?.avatarUrl?.trim() ?? '';
+  if (actor != null &&
+      resolvedId.isNotEmpty &&
+      actor.id.trim() == resolvedId &&
+      actorAvatar.isNotEmpty) {
+    return actorAvatar;
+  }
+  final candidate =
+      '${rawUser['avatarUrl'] ?? rawUser['avatar'] ?? rawUser['avatar_url'] ?? ''}'
+          .trim();
+  if (candidate == 'null' || candidate == '-') {
+    return '';
+  }
+  return candidate;
 }
 
 double _responsivePagePadding(BuildContext context) {
@@ -380,9 +414,11 @@ class AdminPortalScreen extends ConsumerStatefulWidget {
   const AdminPortalScreen({
     super.key,
     required this.activeTab,
+    this.initialConversationId,
   });
 
   final String activeTab;
+  final String? initialConversationId;
 
   @override
   ConsumerState<AdminPortalScreen> createState() => _AdminPortalScreenState();
@@ -673,7 +709,7 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: AdminStudioTokens.canvas,
-      extendBody: !isDesktop,
+      extendBody: !isDesktop && _currentTab != 'tin-nhan',
       drawer: Drawer(
         width: math.min(292, width * 0.88),
         backgroundColor: AdminStudioTokens.groupSurface,
@@ -801,7 +837,9 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
   }
 
   Widget _buildBottomNavBar(BuildContext context) {
-    final isMenuTabActive = _currentTab == 'phan-quyen';
+    final isMenuTabActive = _currentTab == 'phan-quyen' ||
+        _currentTab == 'phi-nen-tang' ||
+        _currentTab == 'tin-nhan';
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final showCompactCircleOnly = textScale > 1.45;
 
@@ -927,6 +965,10 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
         return const _AdminRolesTab();
       case 'phi-nen-tang':
         return const _AdminPlatformFeeTab();
+      case 'tin-nhan':
+        return _AdminMessagesTab(
+          initialConversationId: widget.initialConversationId,
+        );
       case 'tong-quan':
       default:
         return const _AdminOverviewTab();
@@ -990,45 +1032,74 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
   @override
   Widget build(BuildContext context) {
     final stats = _stats;
+    final revenueSubtitle = _loading || stats == null
+        ? null
+        : stats.pendingStayRevenue > 0
+            ? 'Tạm giữ chờ ở: ${CurrencyFormatter.formatVnd(stats.pendingStayRevenue.round(), fallback: '0 ₫')} (${stats.pendingStayBookingCount} đơn)'
+            : 'Đơn đã hoàn tất lưu trú';
+    final bookingsSubtitle = _loading || stats == null
+        ? null
+        : (stats.completedBookings > 0 || stats.paidBookings > 0)
+            ? '${stats.completedBookings} hoàn tất · ${stats.paidBookings} chờ lưu trú'
+            : stats.bookings > stats.successfulBookings
+                ? 'Đã thanh toán / ${stats.bookings} đơn tạo'
+                : 'Đơn đã thanh toán';
+    final hostsSubtitle = _loading || stats == null
+        ? null
+        : stats.verifiedHosts > 0
+            ? '${stats.verifiedHosts} đã xác minh'
+            : 'Đang hoạt động';
+    final activeListingsSubtitle = _loading || stats == null
+        ? null
+        : stats.listingsCreated > 0
+            ? '+${stats.listingsCreated} mới trong kỳ'
+            : 'Đang mở đặt phòng';
+
     final cards = [
       (
         label: 'Người dùng',
         value: _loading ? '...' : '${stats?.users ?? 0}',
+        subtitle: null as String?,
         icon: LucideIcons.users,
         route: '/admin/nguoi-dung',
       ),
       (
         label: 'Chờ duyệt',
         value: _loading ? '...' : '${stats?.pendingListings ?? 0}',
+        subtitle: null as String?,
         icon: LucideIcons.clock,
         route: '/admin/kiem-duyet',
       ),
       (
-        label: 'Doanh thu',
+        label: 'Doanh thu thực nhận',
         value: _loading
             ? '...'
             : CurrencyFormatter.formatVnd(
                 (stats?.grossRevenue ?? 0).round(),
                 fallback: '0 ₫',
               ),
+        subtitle: revenueSubtitle,
         icon: AppSemanticIcons.revenue,
         route: null,
       ),
       (
-        label: 'Đơn đặt',
-        value: _loading ? '...' : '${stats?.bookings ?? 0}',
+        label: 'Đơn đặt thành công',
+        value: _loading ? '...' : '${stats?.successfulBookings ?? 0}',
+        subtitle: bookingsSubtitle,
         icon: AppSemanticIcons.bookings,
         route: null,
       ),
       (
         label: 'Chủ nhà',
         value: _loading ? '...' : '${stats?.hosts ?? 0}',
+        subtitle: hostsSubtitle,
         icon: AppSemanticIcons.becomeHost,
         route: '/admin/ho-so-host',
       ),
       (
         label: 'Phòng hoạt động',
         value: _loading ? '...' : '${stats?.activeListings ?? 0}',
+        subtitle: activeListingsSubtitle,
         icon: AppSemanticIcons.home,
         route: '/admin/kiem-duyet',
       ),
@@ -1191,6 +1262,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                             child: AdminStudioKpiCard(
                               label: card.label,
                               value: card.value,
+                              subtitle: card.subtitle,
                               icon: card.icon,
                               onTap: card.route != null &&
                                       GoRouter.maybeOf(context) != null
@@ -1276,165 +1348,136 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                               style: AdminStudioTokens.cardSubtitle,
                             ),
                           )
-                        : series.isEmpty
-                            ? const AdminStudioInnerCard(
-                                padding: EdgeInsets.symmetric(
-                                  vertical: 26,
-                                  horizontal: 16,
-                                ),
-                                child: Text(
-                                  'Chưa có dữ liệu chuỗi doanh thu trong khoảng thời gian đã chọn.',
-                                  textAlign: TextAlign.center,
-                                  style: AdminStudioTokens.cardSubtitle,
-                                ),
-                              )
-                            : LayoutBuilder(
-                                builder: (context, chartConstraints) {
-                                  final textScale =
-                                      MediaQuery.textScalerOf(context).scale(1);
-                                  final compactChart =
-                                      chartConstraints.maxWidth < 460 ||
-                                          textScale > 1.25;
-                                  return Column(
-                                    children: series.take(14).map((point) {
-                                      final ratio = maxRevenue > 0
-                                          ? (point.grossRevenue / maxRevenue)
-                                              .clamp(0.05, 1.0)
-                                          : 0.05;
-                                      final amountLabel =
-                                          '${CurrencyFormatter.formatVnd(point.grossRevenue.round(), fallback: '0 ₫')} (${point.bookingCount} đơn)';
-                                      return AdminStudioInnerCard(
-                                        margin:
-                                            const EdgeInsets.only(bottom: 8),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 12,
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (stats != null && stats.pendingStayRevenue > 0)
+                                AdminStudioInnerCard(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 11,
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 2),
+                                        child: Icon(
+                                          LucideIcons.clock,
+                                          size: 15,
+                                          color: AdminStudioTokens.iconInk,
                                         ),
-                                        child: compactChart
-                                            ? Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Wrap(
-                                                    spacing: 8,
-                                                    runSpacing: 4,
-                                                    alignment: WrapAlignment
-                                                        .spaceBetween,
-                                                    crossAxisAlignment:
-                                                        WrapCrossAlignment
-                                                            .center,
-                                                    children: [
-                                                      Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
-                                                        children: [
-                                                          const Icon(
-                                                            LucideIcons
-                                                                .calendar,
-                                                            size: 13,
-                                                            color:
-                                                                AdminStudioTokens
-                                                                    .iconMuted,
-                                                          ),
-                                                          const SizedBox(
-                                                            width: 6,
-                                                          ),
-                                                          Text(
-                                                            point.period,
-                                                            style:
-                                                                AdminStudioTokens
-                                                                    .metaCaption,
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      Text(
-                                                        amountLabel,
-                                                        style: AdminStudioTokens
-                                                            .pillText
-                                                            .copyWith(
-                                                          fontSize: 12.5,
-                                                          color:
-                                                              AdminStudioTokens
-                                                                  .inkPrimary,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  const SizedBox(height: 8),
-                                                  ClipRRect(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                      AdminStudioTokens
-                                                          .pillRadius,
-                                                    ),
-                                                    child: Container(
-                                                      height: 7,
-                                                      color: AdminStudioTokens
-                                                          .softCircle,
-                                                      alignment:
-                                                          Alignment.centerLeft,
-                                                      child:
-                                                          FractionallySizedBox(
-                                                        widthFactor: ratio,
-                                                        child: Container(
-                                                          height: 7,
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            color:
-                                                                AdminStudioTokens
-                                                                    .obsidian,
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                              AdminStudioTokens
-                                                                  .pillRadius,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              )
-                                            : Row(
-                                                children: [
-                                                  SizedBox(
-                                                    width: 102,
-                                                    child: Row(
+                                      ),
+                                      const SizedBox(width: 9),
+                                      Expanded(
+                                        child: Text(
+                                          'Tiền chờ lưu trú (tạm giữ): ${CurrencyFormatter.formatVnd(stats.pendingStayRevenue.round(), fallback: '0 ₫')} · ${stats.pendingStayBookingCount} đơn chưa check-out (Chủ nhà dự kiến: ${CurrencyFormatter.formatVnd(stats.pendingStayHostRevenue.round(), fallback: '0 ₫')})',
+                                          style: AdminStudioTokens.metaCaption
+                                              .copyWith(
+                                            color: AdminStudioTokens.inkPrimary,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (series.isEmpty)
+                                const AdminStudioInnerCard(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: 26,
+                                    horizontal: 16,
+                                  ),
+                                  child: Text(
+                                    'Chưa có dữ liệu chuỗi doanh thu trong khoảng thời gian đã chọn.',
+                                    textAlign: TextAlign.center,
+                                    style: AdminStudioTokens.cardSubtitle,
+                                  ),
+                                )
+                              else
+                                LayoutBuilder(
+                                  builder: (context, chartConstraints) {
+                                    final textScale =
+                                        MediaQuery.textScalerOf(context)
+                                            .scale(1);
+                                    final compactChart =
+                                        chartConstraints.maxWidth < 460 ||
+                                            textScale > 1.25;
+                                    return Column(
+                                      children: series.take(14).map((point) {
+                                        final ratio = maxRevenue > 0
+                                            ? (point.grossRevenue / maxRevenue)
+                                                .clamp(0.05, 1.0)
+                                            : 0.05;
+                                        final amountLabel =
+                                            '${CurrencyFormatter.formatVnd(point.grossRevenue.round(), fallback: '0 ₫')} (${point.bookingCount} đơn)';
+                                        return AdminStudioInnerCard(
+                                          margin:
+                                              const EdgeInsets.only(bottom: 8),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 12,
+                                          ),
+                                          child: compactChart
+                                              ? Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Wrap(
+                                                      spacing: 8,
+                                                      runSpacing: 4,
+                                                      alignment: WrapAlignment
+                                                          .spaceBetween,
+                                                      crossAxisAlignment:
+                                                          WrapCrossAlignment
+                                                              .center,
                                                       children: [
-                                                        const Icon(
-                                                          LucideIcons.calendar,
-                                                          size: 13,
-                                                          color:
+                                                        Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            const Icon(
+                                                              LucideIcons
+                                                                  .calendar,
+                                                              size: 13,
+                                                              color:
+                                                                  AdminStudioTokens
+                                                                      .iconMuted,
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 6,
+                                                            ),
+                                                            Text(
+                                                              point.period,
+                                                              style: AdminStudioTokens
+                                                                  .metaCaption,
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        Text(
+                                                          amountLabel,
+                                                          style:
                                                               AdminStudioTokens
-                                                                  .iconMuted,
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 6,
-                                                        ),
-                                                        Expanded(
-                                                          child: Text(
-                                                            point.period,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                            style:
+                                                                  .pillText
+                                                                  .copyWith(
+                                                            fontSize: 12.5,
+                                                            color:
                                                                 AdminStudioTokens
-                                                                    .metaCaption,
+                                                                    .inkPrimary,
                                                           ),
                                                         ),
                                                       ],
                                                     ),
-                                                  ),
-                                                  Expanded(
-                                                    child: ClipRRect(
+                                                    const SizedBox(height: 8),
+                                                    ClipRRect(
                                                       borderRadius:
                                                           BorderRadius.circular(
                                                         AdminStudioTokens
                                                             .pillRadius,
                                                       ),
                                                       child: Container(
-                                                        height: 8,
+                                                        height: 7,
                                                         color: AdminStudioTokens
                                                             .softCircle,
                                                         alignment: Alignment
@@ -1443,7 +1486,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                                             FractionallySizedBox(
                                                           widthFactor: ratio,
                                                           child: Container(
-                                                            height: 8,
+                                                            height: 7,
                                                             decoration:
                                                                 BoxDecoration(
                                                               color:
@@ -1460,30 +1503,101 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                                         ),
                                                       ),
                                                     ),
-                                                  ),
-                                                  const SizedBox(width: 12),
-                                                  SizedBox(
-                                                    width: 156,
-                                                    child: Text(
-                                                      amountLabel,
-                                                      textAlign:
-                                                          TextAlign.right,
-                                                      style: AdminStudioTokens
-                                                          .pillText
-                                                          .copyWith(
-                                                        fontSize: 12,
-                                                        color: AdminStudioTokens
-                                                            .inkPrimary,
+                                                  ],
+                                                )
+                                              : Row(
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 102,
+                                                      child: Row(
+                                                        children: [
+                                                          const Icon(
+                                                            LucideIcons
+                                                                .calendar,
+                                                            size: 13,
+                                                            color:
+                                                                AdminStudioTokens
+                                                                    .iconMuted,
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 6,
+                                                          ),
+                                                          Expanded(
+                                                            child: Text(
+                                                              point.period,
+                                                              overflow:
+                                                                  TextOverflow
+                                                                      .ellipsis,
+                                                              style: AdminStudioTokens
+                                                                  .metaCaption,
+                                                            ),
+                                                          ),
+                                                        ],
                                                       ),
                                                     ),
-                                                  ),
-                                                ],
-                                              ),
-                                      );
-                                    }).toList(),
-                                  );
-                                },
-                              ),
+                                                    Expanded(
+                                                      child: ClipRRect(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(
+                                                          AdminStudioTokens
+                                                              .pillRadius,
+                                                        ),
+                                                        child: Container(
+                                                          height: 8,
+                                                          color:
+                                                              AdminStudioTokens
+                                                                  .softCircle,
+                                                          alignment: Alignment
+                                                              .centerLeft,
+                                                          child:
+                                                              FractionallySizedBox(
+                                                            widthFactor: ratio,
+                                                            child: Container(
+                                                              height: 8,
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color:
+                                                                    AdminStudioTokens
+                                                                        .obsidian,
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                  AdminStudioTokens
+                                                                      .pillRadius,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 12),
+                                                    SizedBox(
+                                                      width: 156,
+                                                      child: Text(
+                                                        amountLabel,
+                                                        textAlign:
+                                                            TextAlign.right,
+                                                        style: AdminStudioTokens
+                                                            .pillText
+                                                            .copyWith(
+                                                          fontSize: 12,
+                                                          color:
+                                                              AdminStudioTokens
+                                                                  .inkPrimary,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                        );
+                                      }).toList(),
+                                    );
+                                  },
+                                ),
+                            ],
+                          ),
               ),
             ],
           ),
@@ -1561,7 +1675,7 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
               );
       if (!mounted) return;
       setState(() {
-        _users = result.items;
+        _users = AdminModerationPolicy.sortAdminUsers(result.items);
         _page = result.page;
         _total = result.total;
         _totalPages = result.totalPages;
@@ -2011,13 +2125,19 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                             ),
                           )
                         : Column(
-                            children: _users.map((u) {
+                            children: AdminModerationPolicy.sortAdminUsers(
+                              _users,
+                            ).map((u) {
                               final userId = '${u['userId'] ?? u['id'] ?? ''}';
                               final name =
-                                  '${u['fullName'] ?? u['name'] ?? u['username'] ?? 'User #$userId'}';
-                              final avatarUrl =
-                                  '${u['avatarUrl'] ?? u['avatar'] ?? ''}'
-                                      .trim();
+                                  AdminModerationPolicy.resolveUserDisplayName(
+                                u,
+                              );
+                              final avatarUrl = _resolveAdminUserAvatarUrl(
+                                u,
+                                actor: actor,
+                                userId: userId,
+                              );
                               final rawEmail = '${u['email'] ?? ''}'.trim();
                               final email =
                                   rawEmail.isNotEmpty && rawEmail != '-'
@@ -2033,7 +2153,7 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                               ].join(' · ');
 
                               final role =
-                                  '${u['role'] ?? (u['roles'] is List && (u['roles'] as List).isNotEmpty ? (u['roles'] as List).first : 'guest')}';
+                                  AdminModerationPolicy.resolvePrimaryRole(u);
                               final status =
                                   '${u['status'] ?? 'active'}'.toLowerCase();
                               final locked = [
@@ -4024,7 +4144,8 @@ class _AdminHostApplicationsTabState
                             ),
                           ],
                           if (currentDetail['rejectReason'] != null &&
-                              '${currentDetail['rejectReason']}'.isNotEmpty) ...[
+                              '${currentDetail['rejectReason']}'
+                                  .isNotEmpty) ...[
                             const SizedBox(height: 10),
                             Container(
                               width: double.infinity,
@@ -4246,10 +4367,9 @@ class _AdminHostApplicationsTabState
                               children: [
                                 ElevatedButton(
                                   style: _kPillElevatedStyle,
-                                  onPressed:
-                                      !canManageHostApps || actionLoading
-                                          ? null
-                                          : handleApprove,
+                                  onPressed: !canManageHostApps || actionLoading
+                                      ? null
+                                      : handleApprove,
                                   child: Text(
                                     actionLoading
                                         ? 'Đang xử lý...'
@@ -4261,10 +4381,9 @@ class _AdminHostApplicationsTabState
                                     'admin_host_app_reject_btn',
                                   ),
                                   style: _kPillOutlinedStyle,
-                                  onPressed:
-                                      !canManageHostApps || actionLoading
-                                          ? null
-                                          : handleReject,
+                                  onPressed: !canManageHostApps || actionLoading
+                                      ? null
+                                      : handleReject,
                                   child: const Text('Từ chối'),
                                 ),
                               ],
@@ -4453,9 +4572,12 @@ class _AdminHostApplicationsTabState
                             : const <String, dynamic>{};
                         final name =
                             '${user['name'] ?? app['contactName'] ?? 'Host #$appId'}';
-                        final avatarUrl =
-                            '${user['avatarUrl'] ?? user['avatar'] ?? ''}'
-                                .trim();
+                        final avatarUrl = _resolveAdminUserAvatarUrl(
+                          user,
+                          actor: actor,
+                          userId:
+                              '${app['userId'] ?? user['id'] ?? user['userId'] ?? ''}',
+                        );
                         final rawEmail =
                             '${user['email'] ?? app['contactEmail'] ?? ''}'
                                 .trim();
@@ -4475,81 +4597,108 @@ class _AdminHostApplicationsTabState
                           onTap: _loadingDetail
                               ? null
                               : () => _openApplicationDetail(appId),
-                          child: Wrap(
-                            spacing: 12,
-                            runSpacing: 10,
-                            alignment: WrapAlignment.spaceBetween,
-                            crossAxisAlignment: WrapCrossAlignment.center,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  AdminStudioAvatar(
-                                    name: name,
-                                    imageUrl: avatarUrl,
-                                    size: 40,
-                                  ),
-                                  const SizedBox(width: 11),
-                                  Flexible(
-                                    child: ConstrainedBox(
-                                      constraints:
-                                          const BoxConstraints(maxWidth: 260),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            name,
-                                            style: AdminStudioTokens.cardTitle,
-                                          ),
-                                          if (contactLine.isNotEmpty)
-                                            Text(
-                                              contactLine,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: AdminStudioTokens
-                                                  .cardSubtitle,
-                                            ),
-                                          const SizedBox(height: 4),
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(
-                                                LucideIcons.fileText,
-                                                size: 12.5,
-                                                color:
-                                                    AdminStudioTokens.iconMuted,
-                                              ),
-                                              const SizedBox(width: 5),
-                                              Flexible(
-                                                child: Text(
-                                                  '${status == 'approved' ? 'Đã duyệt' : status == 'rejected' ? 'Đã từ chối' : 'Chờ duyệt'} · Giấy tờ: ${app['documentCount'] ?? 0}',
-                                                  style: AdminStudioTokens
-                                                      .metaCaption
-                                                      .copyWith(
-                                                    color: AdminStudioTokens
-                                                        .inkSecondary,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              AdminStudioAvatar(
+                                name: name,
+                                imageUrl: avatarUrl,
+                                size: 40,
                               ),
-                              OutlinedButton(
-                                style: _kCompactPillOutlinedStyle,
-                                onPressed: _loadingDetail
-                                    ? null
-                                    : () => _openApplicationDetail(appId),
-                                child: Text(
-                                  _loadingDetail && selected
-                                      ? 'Đang tải...'
-                                      : 'Chi tiết',
+                              const SizedBox(width: 11),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: AdminStudioTokens.cardTitle,
+                                    ),
+                                    if (contactLine.isNotEmpty)
+                                      Text(
+                                        contactLine,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: AdminStudioTokens.cardSubtitle,
+                                      ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          LucideIcons.fileText,
+                                          size: 12.5,
+                                          color: AdminStudioTokens.iconMuted,
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Flexible(
+                                          child: Text(
+                                            '${status == 'approved' ? 'Đã duyệt' : status == 'rejected' ? 'Đã từ chối' : 'Chờ duyệt'} · Giấy tờ: ${app['documentCount'] ?? 0}',
+                                            style: AdminStudioTokens.metaCaption
+                                                .copyWith(
+                                              color: AdminStudioTokens
+                                                  .inkSecondary,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Semantics(
+                                          button: true,
+                                          enabled: !_loadingDetail,
+                                          label: _loadingDetail && selected
+                                              ? 'Đang tải...'
+                                              : 'Chi tiết',
+                                          child: Tooltip(
+                                            message: _loadingDetail && selected
+                                                ? 'Đang tải...'
+                                                : 'Chi tiết',
+                                            child: InkWell(
+                                              key: ValueKey(
+                                                'admin-host-app-detail-$appId',
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                AdminStudioTokens.pillRadius,
+                                              ),
+                                              onTap: _loadingDetail
+                                                  ? null
+                                                  : () =>
+                                                      _openApplicationDetail(
+                                                        appId,
+                                                      ),
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.all(4),
+                                                child:
+                                                    _loadingDetail && selected
+                                                        ? const SizedBox(
+                                                            width: 14,
+                                                            height: 14,
+                                                            child:
+                                                                CircularProgressIndicator(
+                                                              strokeWidth: 1.6,
+                                                              color:
+                                                                  AdminStudioTokens
+                                                                      .iconInk,
+                                                            ),
+                                                          )
+                                                        : Icon(
+                                                            LucideIcons.info,
+                                                            size: 15,
+                                                            color: _loadingDetail
+                                                                ? AdminStudioTokens
+                                                                    .inkSubtle
+                                                                : AdminStudioTokens
+                                                                    .iconInk,
+                                                          ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -4677,8 +4826,16 @@ class _AdminHostApplicationsTabState
               children: _verifications.map((v) {
                 final verificationId =
                     '${v['verificationId'] ?? v['id'] ?? ''}';
+                final vUserMap = v['user'] is Map
+                    ? Map<String, dynamic>.from(v['user'] as Map)
+                    : v;
                 final hostName =
                     '${v['fullName'] ?? (v['user'] is Map ? v['user']['fullName'] : null) ?? 'Host #${v['userId'] ?? verificationId}'}';
+                final verificationAvatarUrl = _resolveAdminUserAvatarUrl(
+                  vUserMap,
+                  actor: actor,
+                  userId: '${v['hostId'] ?? v['userId'] ?? ''}',
+                );
                 final vType =
                     '${v['verificationType'] ?? v['documentType'] ?? 'identity'}';
                 final vStatus = '${v['status'] ?? 'pending'}';
@@ -4702,7 +4859,11 @@ class _AdminHostApplicationsTabState
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          AdminStudioAvatar(name: hostName, size: 38),
+                          AdminStudioAvatar(
+                            name: hostName,
+                            imageUrl: verificationAvatarUrl,
+                            size: 38,
+                          ),
                           const SizedBox(width: 10),
                           Flexible(
                             child: Column(
@@ -4929,12 +5090,11 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                 role: _roleFilter,
               );
       if (!mounted) return;
-      final list = paginated.items;
+      final list = AdminModerationPolicy.sortAdminUsers(paginated.items);
       final drafts = <String, String>{};
       for (final u in list) {
         final id = '${u['userId'] ?? u['id'] ?? ''}';
-        final role =
-            '${u['role'] ?? (u['roles'] is List && (u['roles'] as List).isNotEmpty ? (u['roles'] as List).first : 'guest')}';
+        final role = AdminModerationPolicy.resolvePrimaryRole(u);
         drafts[id] = _supportedRoles.contains(role) ? role : 'guest';
       }
       setState(() {
@@ -5157,16 +5317,22 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                             ),
                           )
                         : Column(
-                            children: _users.map((u) {
+                            children: AdminModerationPolicy.sortAdminUsers(
+                              _users,
+                            ).map((u) {
                               final userId = '${u['userId'] ?? u['id'] ?? ''}';
                               final name =
-                                  '${u['fullName'] ?? u['name'] ?? u['username'] ?? 'User #$userId'}';
-                              final avatarUrl =
-                                  '${u['avatarUrl'] ?? u['avatar'] ?? ''}'
-                                      .trim();
+                                  AdminModerationPolicy.resolveUserDisplayName(
+                                u,
+                              );
+                              final avatarUrl = _resolveAdminUserAvatarUrl(
+                                u,
+                                actor: actor,
+                                userId: userId,
+                              );
                               final email = '${u['email'] ?? '-'}';
                               final rawRole =
-                                  '${u['role'] ?? (u['roles'] is List && (u['roles'] as List).isNotEmpty ? (u['roles'] as List).first : 'guest')}';
+                                  AdminModerationPolicy.resolvePrimaryRole(u);
                               final currentRole =
                                   _supportedRoles.contains(rawRole)
                                       ? rawRole
@@ -5491,18 +5657,29 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Xác nhận điều chỉnh phí'),
+        backgroundColor: AdminStudioTokens.cardSurface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AdminStudioTokens.modalRadius),
+        ),
+        title: const Text(
+          'Xác nhận điều chỉnh phí',
+          style: AdminStudioTokens.sectionTitle,
+        ),
         content: Text(
           'Mức phí mới $rawFee% sẽ được lên lịch và chính thức có hiệu lực sau 7 ngày.\n\n'
           'Hệ thống sẽ tự động gửi thông báo (In-app, Push Notification, Email) đến toàn bộ các Host hiện tại.\n\n'
           'Bạn có chắc chắn muốn áp dụng?',
+          style: AdminStudioTokens.bodyRegular,
         ),
         actions: [
-          TextButton(
+          OutlinedButton(
+            style: _kPillOutlinedStyle,
             onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Hủy'),
           ),
-          FilledButton(
+          ElevatedButton(
+            style: _kPillElevatedStyle,
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Đồng ý & Thông báo'),
           ),
@@ -5548,17 +5725,30 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Hủy lịch điều chỉnh phí'),
+        backgroundColor: AdminStudioTokens.cardSurface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AdminStudioTokens.modalRadius),
+        ),
+        title: const Text(
+          'Hủy lịch điều chỉnh phí',
+          style: AdminStudioTokens.sectionTitle,
+        ),
         content: const Text(
           'Bạn có chắc chắn muốn hủy kế hoạch điều chỉnh phí đang chờ kích hoạt này không?',
+          style: AdminStudioTokens.bodyRegular,
         ),
         actions: [
-          TextButton(
+          OutlinedButton(
+            style: _kPillOutlinedStyle,
             onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Đóng'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          ElevatedButton(
+            style: _kPillElevatedStyle.copyWith(
+              backgroundColor:
+                  const WidgetStatePropertyAll(AdminStudioTokens.dangerInk),
+            ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Xác nhận hủy'),
           ),
@@ -5617,24 +5807,24 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
     String label;
     switch (status) {
       case 'active':
-        bg = AppColors.success.withValues(alpha: 0.15);
-        fg = AppColors.success;
+        bg = AdminStudioTokens.successTint;
+        fg = AdminStudioTokens.successInk;
         label = 'Đang áp dụng';
         break;
       case 'scheduled':
-        bg = AppColors.warning.withValues(alpha: 0.15);
-        fg = AppColors.warning;
+        bg = AdminStudioTokens.warningTint;
+        fg = AdminStudioTokens.warningInk;
         label = 'Đã lên lịch (7 ngày)';
         break;
       case 'superseded':
-        bg = AppColors.surfaceMuted;
-        fg = AppColors.textSecondary;
+        bg = AdminStudioTokens.softCircle;
+        fg = AdminStudioTokens.inkSecondary;
         label = 'Hết hiệu lực';
         break;
       case 'cancelled':
       default:
-        bg = AppColors.error.withValues(alpha: 0.15);
-        fg = AppColors.error;
+        bg = AdminStudioTokens.dangerTint;
+        fg = AdminStudioTokens.dangerInk;
         label = 'Đã hủy';
         break;
     }
@@ -5643,259 +5833,246 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AdminStudioTokens.pillRadius),
       ),
       child: Text(
         label,
-        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg),
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: fg),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final padding = _responsivePagePadding(context);
     final activeFeePct = _activeFee?['feePct'] ?? 10;
 
     return RefreshIndicator(
+      color: AdminStudioTokens.obsidian,
       onRefresh: _loadFeeStatus,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.all(padding),
+        padding: _studioScrollPadding(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (_error != null) ...[
               _AdminErrorBanner(message: _error!, onRetry: _loadFeeStatus),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
             ],
             if (_success != null) ...[
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  color: AdminStudioTokens.successTint,
+                  borderRadius:
+                      BorderRadius.circular(AdminStudioTokens.cardRadius),
                   border: Border.all(
-                      color: AppColors.success.withValues(alpha: 0.3)),
+                    color: AdminStudioTokens.successInk.withValues(alpha: 0.25),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(LucideIcons.circleCheck,
-                        size: 20, color: AppColors.success),
-                    const SizedBox(width: 8),
+                    const Icon(
+                      LucideIcons.circleCheck,
+                      size: 18,
+                      color: AdminStudioTokens.successInk,
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         _success!,
                         style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.success,
-                            fontWeight: FontWeight.w500),
+                          fontSize: 13,
+                          color: AdminStudioTokens.successInk,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
             ],
 
-            // 1. KPI Cards
-            LayoutBuilder(
-              builder: (ctx, constraints) {
-                final isNarrow = constraints.maxWidth < 600;
-                final cards = [
-                  _buildKpiCard(
-                    title: 'Phí sàn hiện tại',
-                    value: '$activeFeePct%',
-                    subtitle: 'Áp dụng chung toàn bộ ứng dụng',
-                    icon: LucideIcons.badgePercent,
-                    color: AppColors.primary,
-                  ),
-                  _buildKpiCard(
-                    title: 'Tổng phí đã thu',
-                    value: CurrencyFormatter.formatVnd(_totalPlatformRevenue),
-                    subtitle: 'Doanh thu tích lũy nền tảng',
-                    icon: LucideIcons.wallet,
-                    color: AppColors.success,
-                  ),
-                ];
+            // 1. KPI Cards (Studio Bento Grid)
+            AdminStudioGroupCard(
+              title: 'Tổng quan phí nền tảng',
+              child: LayoutBuilder(
+                builder: (ctx, constraints) {
+                  final isNarrow = constraints.maxWidth < 520;
+                  final cards = [
+                    AdminStudioKpiCard(
+                      label: 'Phí sàn hiện tại',
+                      value: '$activeFeePct%',
+                      subtitle: 'Áp dụng chung toàn bộ ứng dụng',
+                      icon: LucideIcons.badgePercent,
+                    ),
+                    AdminStudioKpiCard(
+                      label: 'Tổng phí đã thu',
+                      value: CurrencyFormatter.formatVnd(_totalPlatformRevenue),
+                      subtitle: 'Doanh thu tích lũy nền tảng',
+                      icon: LucideIcons.wallet,
+                    ),
+                  ];
 
-                if (isNarrow) {
-                  return Column(
+                  if (isNarrow) {
+                    return Column(
+                      children: [
+                        cards[0],
+                        const SizedBox(height: 10),
+                        cards[1],
+                      ],
+                    );
+                  }
+                  return Row(
                     children: [
-                      cards[0],
-                      const SizedBox(height: 12),
-                      cards[1],
+                      Expanded(child: cards[0]),
+                      const SizedBox(width: 10),
+                      Expanded(child: cards[1]),
                     ],
                   );
-                }
-                return Row(
-                  children: [
-                    Expanded(child: cards[0]),
-                    const SizedBox(width: 16),
-                    Expanded(child: cards[1]),
-                  ],
-                );
-              },
+                },
+              ),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 14),
 
             // 2. Banner Scheduled (nếu có lịch chờ)
             if (_scheduledFee != null) ...[
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF8E7),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFFFD580)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(LucideIcons.calendarClock,
-                            color: Color(0xFFD97706), size: 24),
-                        const SizedBox(width: 10),
-                        const Expanded(
-                          child: Text(
-                            'Kế hoạch điều chỉnh phí đã được lên lịch',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF92400E),
+              AdminStudioGroupCard(
+                title: 'Kế hoạch điều chỉnh phí đã được lên lịch',
+                trailing: _buildStatusBadge('scheduled'),
+                child: AdminStudioInnerCard(
+                  warningHighlight: true,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            LucideIcons.calendarClock,
+                            color: AdminStudioTokens.warningInk,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Mức phí mới: ${_scheduledFee!['feePct']}% (Thay đổi từ $activeFeePct%)',
+                              style: AdminStudioTokens.cardTitle,
                             ),
                           ),
-                        ),
-                        _buildStatusBadge('scheduled'),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Mức phí mới: ${_scheduledFee!['feePct']}% (Thay đổi từ $activeFeePct%)',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Thời điểm có hiệu lực: ${_formatIsoDate(_scheduledFee!['effectiveAt']?.toString())}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Thời gian còn lại: ${_formatCountdown((_scheduledFee!['countdownSeconds'] as num?)?.toInt() ?? 0)}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFFD97706),
-                      ),
-                    ),
-                    if (_scheduledFee!['reason'] != null &&
-                        '${_scheduledFee!['reason']}'.isNotEmpty) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       Text(
-                        'Lý do thông báo: ${_scheduledFee!['reason']}',
-                        style: const TextStyle(
-                            fontSize: 13,
-                            fontStyle: FontStyle.italic,
-                            color: AppColors.textPrimary),
+                        'Thời điểm có hiệu lực: ${_formatIsoDate(_scheduledFee!['effectiveAt']?.toString())}',
+                        style: AdminStudioTokens.cardSubtitle,
                       ),
-                    ],
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Expanded(
-                          child: Text(
+                      const SizedBox(height: 4),
+                      Text(
+                        'Thời gian còn lại: ${_formatCountdown((_scheduledFee!['countdownSeconds'] as num?)?.toInt() ?? 0)}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AdminStudioTokens.warningInk,
+                        ),
+                      ),
+                      if (_scheduledFee!['reason'] != null &&
+                          '${_scheduledFee!['reason']}'.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Lý do thông báo: ${_scheduledFee!['reason']}',
+                          style: AdminStudioTokens.bodyRegular.copyWith(
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 10,
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          const Text(
                             'Toàn bộ Host đã được gửi thông báo. Các đơn đặt phòng tạo trước thời điểm hiệu lực vẫn áp dụng mức phí cũ.',
                             style: TextStyle(
-                                fontSize: 12, color: AppColors.textSecondary),
+                              fontSize: 12,
+                              color: AdminStudioTokens.inkSecondary,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        OutlinedButton(
-                          onPressed:
-                              _submitting ? null : _handleCancelSchedule,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            side: const BorderSide(color: AppColors.error),
+                          OutlinedButton(
+                            onPressed:
+                                _submitting ? null : _handleCancelSchedule,
+                            style: _kPillOutlinedStyle.copyWith(
+                              foregroundColor: const WidgetStatePropertyAll(
+                                AdminStudioTokens.dangerInk,
+                              ),
+                              side: const WidgetStatePropertyAll(
+                                BorderSide(color: AdminStudioTokens.dangerInk),
+                              ),
+                            ),
+                            child: const Text('Hủy lịch'),
                           ),
-                          child: const Text('Hủy lịch'),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 14),
             ],
 
             // 3. Form lên lịch điều chỉnh phí mới
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Lên lịch điều chỉnh phí nền tảng mới',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+            AdminStudioGroupCard(
+              title: 'Lên lịch điều chỉnh phí nền tảng mới',
+              child: AdminStudioInnerCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Mức phí mới sẽ có hiệu lực sau đúng 7 ngày và hệ thống sẽ tự động gửi thông báo đến toàn bộ các Host.',
+                      style: AdminStudioTokens.cardSubtitle,
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Mức phí mới sẽ có hiệu lực sau đúng 7 ngày và hệ thống sẽ tự động gửi thông báo đến toàn bộ các Host.',
-                    style:
-                        TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _feeCtrl,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      labelText: 'Tỷ lệ phí mới (%)',
-                      hintText: 'Ví dụ: 12',
-                      prefixIcon: const Icon(LucideIcons.percent, size: 20),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _feeCtrl,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      style: AdminStudioTokens.bodyRegular,
+                      decoration: _multilineInputDecoration(
+                        labelText: 'Tỷ lệ phí mới (%)',
+                        hintText: 'Ví dụ: 12',
+                      ).copyWith(
+                        prefixIcon: const Icon(
+                          LucideIcons.percent,
+                          size: 16,
+                          color: AdminStudioTokens.iconMuted,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _reasonCtrl,
-                    maxLines: 2,
-                    decoration: InputDecoration(
-                      labelText: 'Lý do điều chỉnh (gửi đến Host)',
-                      hintText:
-                          'Ví dụ: Nâng cấp hạ tầng dịch vụ và mở rộng tính năng hỗ trợ khách...',
-                      prefixIcon: const Icon(LucideIcons.messageSquare, size: 20),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _reasonCtrl,
+                      maxLines: 2,
+                      style: AdminStudioTokens.bodyRegular,
+                      decoration: _multilineInputDecoration(
+                        labelText: 'Lý do điều chỉnh (gửi đến Host)',
+                        hintText:
+                            'Ví dụ: Nâng cấp hạ tầng dịch vụ và mở rộng tính năng hỗ trợ khách...',
+                      ).copyWith(
+                        prefixIcon: const Icon(
+                          LucideIcons.messageSquare,
+                          size: 16,
+                          color: AdminStudioTokens.iconMuted,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      FilledButton.icon(
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton.icon(
+                        style: _kPillElevatedStyle,
                         onPressed: (_submitting || _scheduledFee != null)
                             ? null
                             : _handleSchedule,
@@ -5904,211 +6081,503 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
                                 width: 16,
                                 height: 16,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white),
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
                               )
-                            : const Icon(LucideIcons.send, size: 18),
+                            : const Icon(LucideIcons.send, size: 16),
                         label: Text(
                           _scheduledFee != null
                               ? 'Đang có lịch chờ'
                               : 'Lên lịch áp dụng (Sau 7 ngày) & Thông báo',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 14),
 
             // 4. Lịch sử thay đổi phí (Audit Timeline)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Lịch sử thay đổi phí nền tảng',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_loading)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(20),
-                        child: CircularProgressIndicator(),
-                      ),
-                    )
-                  else if (_history.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(16),
+            AdminStudioGroupCard(
+              title: 'Lịch sử thay đổi phí nền tảng',
+              child: _loading
+                  ? const AdminStudioInnerCard(
                       child: Center(
-                        child: Text(
-                          'Chưa có lịch sử thay đổi.',
-                          style: TextStyle(
-                              fontSize: 13, color: AppColors.textSecondary),
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AdminStudioTokens.obsidian,
+                          ),
                         ),
                       ),
                     )
-                  else
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _history.length,
-                      separatorBuilder: (_, __) =>
-                          const Divider(height: 16, color: AppColors.border),
-                      itemBuilder: (ctx, idx) {
-                        final item = _history[idx];
-                        final fee = item['feePct'] ?? 0;
-                        final status = '${item['status']}';
-                        final effectiveAt =
-                            _formatIsoDate(item['effectiveAt']?.toString());
-                        final reason = item['reason'];
-
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                  : _history.isEmpty
+                      ? const AdminStudioInnerCard(
+                          child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(
+                              child: Text(
+                                'Chưa có lịch sử thay đổi.',
+                                style: AdminStudioTokens.cardSubtitle,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Column(
                           children: [
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: const BoxDecoration(
-                                color: AppColors.surfaceBase,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Center(
-                                child: Text(
-                                  '$fee%',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        'Mức phí: $fee%',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.textPrimary,
+                            for (var idx = 0; idx < _history.length; idx++) ...[
+                              if (idx > 0) const SizedBox(height: 10),
+                              Builder(
+                                builder: (ctx) {
+                                  final item = _history[idx];
+                                  final fee = item['feePct'] ?? 0;
+                                  final status = '${item['status']}';
+                                  final effectiveAt = _formatIsoDate(
+                                    item['effectiveAt']?.toString(),
+                                  );
+                                  final reason = item['reason'];
+
+                                  return AdminStudioInnerCard(
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          width: 42,
+                                          height: 42,
+                                          decoration: const BoxDecoration(
+                                            color: AdminStudioTokens.softCircle,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              '$fee%',
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color: AdminStudioTokens
+                                                    .inkPrimary,
+                                              ),
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                      const Spacer(),
-                                      _buildStatusBadge(status),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Thời điểm hiệu lực: $effectiveAt',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textSecondary,
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Wrap(
+                                                spacing: 8,
+                                                runSpacing: 6,
+                                                alignment:
+                                                    WrapAlignment.spaceBetween,
+                                                crossAxisAlignment:
+                                                    WrapCrossAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    'Mức phí: $fee%',
+                                                    style: AdminStudioTokens
+                                                        .cardTitle,
+                                                  ),
+                                                  _buildStatusBadge(status),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Thời điểm hiệu lực: $effectiveAt',
+                                                style: AdminStudioTokens
+                                                    .cardSubtitle,
+                                              ),
+                                              if (reason != null &&
+                                                  '$reason'.isNotEmpty) ...[
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  'Ghi chú: $reason',
+                                                  style: AdminStudioTokens
+                                                      .bodyRegular
+                                                      .copyWith(
+                                                    fontSize: 12,
+                                                    fontStyle: FontStyle.italic,
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                  if (reason != null &&
-                                      '$reason'.isNotEmpty) ...[
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Ghi chú: $reason',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontStyle: FontStyle.italic,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                    ),
-                                  ],
-                                ],
+                                  );
+                                },
                               ),
-                            ),
+                            ],
                           ],
-                        );
-                      },
-                    ),
-                ],
-              ),
+                        ),
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildKpiCard({
-    required String title,
-    required String value,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+// ── 7. TIN NHẮN HỖ TRỢ (/admin/tin-nhan) ──
+class _AdminMessagesTab extends ConsumerStatefulWidget {
+  const _AdminMessagesTab({this.initialConversationId});
+
+  final String? initialConversationId;
+
+  @override
+  ConsumerState<_AdminMessagesTab> createState() => _AdminMessagesTabState();
+}
+
+class _AdminMessagesTabState extends ConsumerState<_AdminMessagesTab> {
+  String? _selectedConversationId;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedConversationId = widget.initialConversationId;
+  }
+
+  @override
+  void didUpdateWidget(covariant _AdminMessagesTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialConversationId != oldWidget.initialConversationId &&
+        widget.initialConversationId != null) {
+      _selectedConversationId = widget.initialConversationId;
+    }
+  }
+
+  Future<void> _openNewSupportChatSheet() async {
+    final searchCtrl = TextEditingController();
+    List<Map<String, dynamic>> users = const [];
+    bool loading = true;
+    String? errorMsg;
+
+    Future<void> fetchUsers(
+      void Function(void Function()) setModalState,
+      String keyword,
+    ) async {
+      setModalState(() {
+        loading = true;
+        errorMsg = null;
+      });
+      try {
+        final res =
+            await ref.read(adminRepositoryProvider).getAdminUsersPaginated(
+                  page: 1,
+                  limit: 20,
+                  search: keyword.trim(),
+                );
+        final actorId = ref.read(authNotifierProvider).valueOrNull?.id ?? '';
+        final parsed = res.items
+            .where((u) => '${u['userId'] ?? u['id'] ?? ''}'.trim() != actorId)
+            .toList();
+        setModalState(() {
+          users = parsed;
+          loading = false;
+        });
+      } catch (e) {
+        setModalState(() {
+          loading = false;
+          errorMsg = AdminRepository.extractErrorMessage(
+            e,
+            'Không thể tải danh sách người dùng.',
+          );
+        });
+      }
+    }
+
+    var initialized = false;
+    final pickedUserId = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AdminStudioTokens.groupSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            if (!initialized) {
+              initialized = true;
+              unawaited(fetchUsers(setModalState, ''));
+            }
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 16,
+                  bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(ctx).height * 0.72,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Bắt đầu trò chuyện hỗ trợ',
+                              style: AdminStudioTokens.sectionTitle,
+                            ),
+                          ),
+                          AdminStudioCircleButton(
+                            icon: LucideIcons.x,
+                            tooltip: 'Đóng',
+                            onTap: () => Navigator.of(ctx).pop(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: searchCtrl,
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: (v) => fetchUsers(setModalState, v),
+                        decoration: InputDecoration(
+                          hintText: 'Tìm tên, email hoặc SĐT Chủ nhà / Khách...',
+                          prefixIcon: const Icon(LucideIcons.search, size: 18),
+                          suffixIcon: IconButton(
+                            tooltip: 'Tìm kiếm người dùng',
+                            icon: const Icon(LucideIcons.arrowRight, size: 18),
+                            onPressed: () =>
+                                fetchUsers(setModalState, searchCtrl.text),
+                          ),
+                          isDense: true,
+                          filled: true,
+                          fillColor: AdminStudioTokens.cardSurface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(999),
+                            borderSide: const BorderSide(
+                              color: AdminStudioTokens.hairline,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(999),
+                            borderSide: const BorderSide(
+                              color: AdminStudioTokens.hairline,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (loading)
+                        const Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AdminStudioTokens.obsidian,
+                            ),
+                          ),
+                        )
+                      else if (errorMsg != null)
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            errorMsg!,
+                            style: AdminStudioTokens.cardSubtitle,
+                          ),
+                        )
+                      else if (users.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text(
+                            'Không tìm thấy người dùng phù hợp.',
+                            style: AdminStudioTokens.cardSubtitle,
+                          ),
+                        )
+                      else
+                        Flexible(
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: users.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (_, idx) {
+                              final u = users[idx];
+                              final uid =
+                                  '${u['userId'] ?? u['id'] ?? ''}'.trim();
+                              final name = '${u['fullName'] ?? u['email'] ?? 'Người dùng #$uid'}'
+                                  .trim();
+                              final email = '${u['email'] ?? ''}'.trim();
+                              final role = '${u['role'] ?? 'guest'}'
+                                  .trim()
+                                  .toUpperCase();
+                              return InkWell(
+                                borderRadius: BorderRadius.circular(16),
+                                onTap: () => Navigator.of(ctx).pop(uid),
+                                child: AdminStudioInnerCard(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      AdminStudioAvatar(
+                                        name: name,
+                                        imageUrl: _resolveAdminUserAvatarUrl(u),
+                                        size: 38,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style:
+                                                  AdminStudioTokens.cardTitle,
+                                            ),
+                                            if (email.isNotEmpty)
+                                              Text(
+                                                '$email · $role',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: AdminStudioTokens
+                                                    .cardSubtitle,
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      const Icon(
+                                        AppSemanticIcons.messageHost,
+                                        size: 17,
+                                        color: AdminStudioTokens.iconInk,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    searchCtrl.dispose();
+
+    if (pickedUserId == null || pickedUserId.isEmpty || !mounted) return;
+    try {
+      final conv = await ref
+          .read(conversationsRepositoryProvider)
+          .getOrCreateDirectConversation(pickedUserId);
+      ref.invalidate(conversationsListProvider);
+      if (!mounted) return;
+      setState(() {
+        _selectedConversationId = conv.id;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      final msg = AdminRepository.extractErrorMessage(
+        e,
+        'Không thể khởi tạo cuộc trò chuyện hỗ trợ.',
+      );
+      AppToast.show(context, msg, type: AppToastType.error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final isDesktop = width >= 1024;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+
+    final chatView = MessagesScreen(
+      isAdminPortal: true,
+      initialConversationId: _selectedConversationId,
+    );
+
+    final toolbar = Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 18 : 12,
+        vertical: 8,
+      ),
+      decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
+        border: Border(
+          bottom: BorderSide(color: AdminStudioTokens.hairline),
+        ),
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(icon, color: color, size: 24),
+          const Icon(
+            AppSemanticIcons.messageHost,
+            size: 17,
+            color: AdminStudioTokens.iconInk,
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
+            child: Text(
+              'Kênh hỗ trợ Chủ nhà & Khách hàng',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AdminStudioTokens.cardTitle.copyWith(fontSize: 13.5),
             ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            key: const Key('admin_new_chat_button'),
+            style: _kPillOutlinedStyle,
+            onPressed: _openNewSupportChatSheet,
+            icon: const Icon(
+              LucideIcons.plus,
+              size: 15,
+              color: AdminStudioTokens.iconInk,
+            ),
+            label: const Text('Nhắn tin mới'),
           ),
         ],
       ),
+    );
+
+    if (isDesktop) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(AdminStudioTokens.cardRadius),
+            border: Border.all(color: AdminStudioTokens.groupBorder),
+            boxShadow: AdminStudioTokens.cardShadow,
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              toolbar,
+              Expanded(child: chatView),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        if (!keyboardOpen) toolbar,
+        Expanded(child: chatView),
+      ],
     );
   }
 }

@@ -406,7 +406,8 @@ Widget _buildRouterApp({
   return ProviderScope(
     overrides: [
       hostOnboardingApiProvider.overrideWithValue(repository),
-      hostRepositoryProvider.overrideWithValue(_FakeHostRepositoryForOnboarding()),
+      hostRepositoryProvider
+          .overrideWithValue(_FakeHostRepositoryForOnboarding()),
       if (pickerService != null)
         hostFilePickerProvider.overrideWithValue(pickerService),
       if (permissionService != null)
@@ -618,7 +619,8 @@ void main() {
       (tester) async {
         final pendingRecord =
             _sampleRecord(status: HostApplicationStatus.pending);
-        final repo = _FakeHostOnboardingRepository(currentRecord: pendingRecord);
+        final repo =
+            _FakeHostOnboardingRepository(currentRecord: pendingRecord);
 
         await tester.pumpWidget(
           _buildRouterApp(
@@ -629,7 +631,8 @@ void main() {
         await tester.pumpAndSettle();
 
         // 1. Cancel button exists for pending application
-        final cancelBtn = find.byKey(const Key('status_cancel_application_btn'));
+        final cancelBtn =
+            find.byKey(const Key('status_cancel_application_btn'));
         expect(cancelBtn, findsOneWidget);
 
         // 2. Tapping opens confirmation dialog
@@ -659,7 +662,8 @@ void main() {
         await tester.tap(cancelBtn);
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byKey(const Key('confirm_cancel_application_btn')));
+        await tester
+            .tap(find.byKey(const Key('confirm_cancel_application_btn')));
         await tester.pumpAndSettle();
 
         expect(repo.cancelCount, 1);
@@ -701,10 +705,12 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byKey(const Key('status_cancel_application_btn')));
+        await tester
+            .tap(find.byKey(const Key('status_cancel_application_btn')));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byKey(const Key('confirm_cancel_application_btn')));
+        await tester
+            .tap(find.byKey(const Key('confirm_cancel_application_btn')));
         await tester.pumpAndSettle();
 
         expect(repo.cancelCount, 1);

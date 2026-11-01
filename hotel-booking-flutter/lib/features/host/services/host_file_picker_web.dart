@@ -22,4 +22,3 @@ void ensureWebFilePickerRegistered() {
     ImagePickerPlugin.registerWith(webPluginRegistrar);
   }
 }
-

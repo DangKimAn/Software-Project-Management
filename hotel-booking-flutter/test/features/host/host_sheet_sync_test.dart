@@ -617,5 +617,182 @@ void main() {
       }
       await tester.binding.setSurfaceSize(null);
     });
+
+    testWidgets(
+        'connect modal renders single-line email copy rows, collapsible color legend & pinned CTA at 320dp..390dp and textScale 1.6 with zero overflow',
+        (tester) async {
+      final adapter = _FakeAdapter(
+        responder: (_) => _json({
+          'success': true,
+          'data': {
+            'connected': false,
+            'serviceAccountEmail':
+                'villa-sheets-bot@booking-web-496008.iam.gserviceaccount.com',
+            'defaultHostEditorEmail': 'athanhnee@gmail.com',
+            'stats': {'totalListings': 5},
+          },
+        }),
+      );
+      final holder = _TestDioHolder()..dio.httpClientAdapter = adapter;
+      final repo = HostRepository(holder, roleResolver: () => 'host');
+
+      for (final width in [320.0, 390.0]) {
+        for (final scale in [1.0, 1.6]) {
+          await tester.binding.setSurfaceSize(Size(width, 844));
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                hostRepositoryProvider.overrideWithValue(repo),
+                hostCurrentUserRoleProvider.overrideWithValue('host'),
+              ],
+              child: MediaQuery(
+                data: MediaQueryData(
+                  size: Size(width, 844),
+                  textScaler: TextScaler.linear(scale),
+                ),
+                child: const MaterialApp(
+                  home: Scaffold(
+                    body: SingleChildScrollView(
+                      padding: EdgeInsets.all(16),
+                      child: HostSheetSyncCard(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+
+          // Guide button is an icon-only 'i' button inline on the same row as Connect Google Sheets
+          final connectBtn = find.byKey(
+            const Key('sheet_sync_open_connect_btn'),
+          );
+          final guideBtn = find.byKey(const Key('sheet_sync_guide_btn'));
+          expect(connectBtn, findsOneWidget);
+          expect(guideBtn, findsOneWidget);
+          expect(find.text('Quy ước màu'), findsNothing);
+
+          final connectCenter = tester.getCenter(connectBtn);
+          final guideCenter = tester.getCenter(guideBtn);
+          expect((connectCenter.dy - guideCenter.dy).abs(), lessThan(1.0));
+          expect(guideCenter.dx, greaterThan(connectCenter.dx));
+
+          // Tapping the 'i' icon button opens the color legend modal
+          await tester.tap(guideBtn);
+          await tester.pumpAndSettle();
+          expect(find.text('Quy ước màu lịch Google Sheets'), findsOneWidget);
+          await tester.tap(find.byTooltip('Đóng hướng dẫn'));
+          await tester.pumpAndSettle();
+
+          await tester.tap(connectBtn);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+
+          // Pinned CTA button is immediately visible without scrolling
+          expect(
+            find.byKey(const Key('sheet_sync_submit_connect_btn')),
+            findsOneWidget,
+          );
+
+          // Expand & collapse color legend inline
+          final legendToggle = find.byKey(
+            const Key('sheet_sync_toggle_legend_btn'),
+          );
+          await tester.ensureVisible(legendToggle);
+          await tester.tap(legendToggle);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expect(find.text('Nền trắng (Trống)'), findsOneWidget);
+
+          await tester.tap(find.byTooltip('Đóng hộp thoại'));
+          await tester.pumpAndSettle();
+        }
+      }
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    testWidgets(
+        'connected layout aligns 3 KPI columns on one row, pairs primary actions 1:1, and groups utility menu on 360dp and 390dp phones',
+        (tester) async {
+      final adapter = _FakeAdapter(
+        responder: (_) => _json(
+          _connectedPayloadJson(
+            totalListings: 2,
+            pendingHoldsCount: 0,
+            syncErrorsCount: 0,
+          ),
+        ),
+      );
+      final holder = _TestDioHolder()..dio.httpClientAdapter = adapter;
+      final repo = HostRepository(holder, roleResolver: () => 'host');
+
+      for (final width in [360.0, 390.0, 430.0]) {
+        await tester.binding.setSurfaceSize(Size(width, 920));
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(repo),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: MediaQuery(
+              data: MediaQueryData(size: Size(width, 920)),
+              child: const MaterialApp(
+                home: Scaffold(
+                  body: SingleChildScrollView(
+                    padding: EdgeInsets.all(16),
+                    child: HostSheetSyncCard(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        // 1. All 3 KPI compartments sit side-by-side on 1 single row (no orphan 2nd-row box)
+        final totalRect = tester.getRect(
+          find.byKey(const Key('sheet_sync_kpi_total_listings')),
+        );
+        final holdsRect = tester.getRect(
+          find.byKey(const Key('sheet_sync_kpi_pending_holds')),
+        );
+        final errorsRect = tester.getRect(
+          find.byKey(const Key('sheet_sync_kpi_sync_errors')),
+        );
+        expect(
+            (totalRect.center.dy - holdsRect.center.dy).abs(), lessThan(1.0));
+        expect(
+          (holdsRect.center.dy - errorsRect.center.dy).abs(),
+          lessThan(1.0),
+        );
+        expect(holdsRect.left, greaterThanOrEqualTo(totalRect.right - 1.0));
+        expect(errorsRect.left, greaterThanOrEqualTo(holdsRect.right - 1.0));
+
+        // 2. Primary actions ("Đồng bộ ngay" & "Mở trang tính") sit side-by-side in 1:1 width
+        final syncRect = tester.getRect(
+          find.byKey(const Key('sheet_sync_now_btn')),
+        );
+        final openRect = tester.getRect(
+          find.byKey(const Key('sheet_sync_open_url_btn')),
+        );
+        expect((syncRect.center.dy - openRect.center.dy).abs(), lessThan(1.0));
+        expect((syncRect.width - openRect.width).abs(), lessThan(1.0));
+
+        // 3. Utility menu rows & bottom disconnect button render cleanly with >= 48dp touch height
+        expect(find.text('Khởi tạo lịch chuẩn'), findsOneWidget);
+        expect(find.text('Nhật ký đồng bộ'), findsOneWidget);
+        expect(find.text('Hướng dẫn màu lịch'), findsOneWidget);
+        expect(find.text('Ngắt kết nối Google Sheets'), findsOneWidget);
+
+        final guideRect = tester.getRect(
+          find.byKey(const Key('sheet_sync_guide_btn')),
+        );
+        expect(guideRect.height, greaterThanOrEqualTo(48.0));
+      }
+
+      await tester.binding.setSurfaceSize(null);
+    });
   });
 }

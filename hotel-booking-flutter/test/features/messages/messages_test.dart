@@ -9,6 +9,7 @@ import 'package:hotel_booking_flutter/app/theme/app_theme.dart';
 import 'package:hotel_booking_flutter/core/network/dio_client.dart';
 import 'package:hotel_booking_flutter/core/network/socket_service.dart';
 import 'package:hotel_booking_flutter/core/security/secure_storage_service.dart';
+import 'package:hotel_booking_flutter/features/admin/presentation/screens/admin_portal_screens.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/auth_session.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/repositories/auth_repository.dart';
@@ -1240,6 +1241,366 @@ void main() {
         // Verify monochrome icon color in header
         final backIcon = tester.widget<Icon>(find.byType(Icon).first);
         expect(backIcon.color, AppColors.iconStrong);
+
+        socketService.dispose();
+      },
+    );
+  });
+
+  group(
+      '7. Unified Messenger Layout, Reactions, Role Quick Replies & Admin Tin nhắn',
+      () {
+    testWidgets(
+      'Guest role renders Messenger composer controls, Guest quick-reply chips, receipt, and long-press reactions',
+      (tester) async {
+        final storage = _FakeSecureStorage('jwt-test');
+        final socketService = SocketService(secureStorage: storage);
+
+        final dio = _buildMockDio((options) async {
+          if (options.path == '/api/conversations') {
+            return Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {
+                'success': true,
+                'data': {
+                  'items': [
+                    _buildConvJson(id: 42, guestUserId: 10, hostUserId: 20),
+                  ],
+                },
+              },
+            );
+          }
+          if (options.path == '/api/conversations/42/messages') {
+            return Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {
+                'success': true,
+                'data': {
+                  'items': [
+                    _buildMsgJson(
+                      id: 701,
+                      conversationId: 42,
+                      senderId: 20,
+                      content: 'Xin chào bạn!',
+                      createdAt: '2026-10-20T09:00:00.000Z',
+                    ),
+                    _buildMsgJson(
+                      id: 702,
+                      conversationId: 42,
+                      senderId: 10,
+                      content: 'Mình muốn hỏi thông tin căn này ạ',
+                      createdAt: '2026-10-20T09:02:00.000Z',
+                    ),
+                  ],
+                  'pagination': {
+                    'page': 1,
+                    'limit': 50,
+                    'total': 2,
+                    'totalPages': 1,
+                  },
+                },
+              },
+            );
+          }
+          return Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: {
+              'success': true,
+              'data': {'unreadCount': 0},
+            },
+          );
+        });
+
+        final client = DioClient(dio: dio, secureStorage: storage);
+        await _setViewport(tester, const Size(412, 840));
+
+        final guestAuth = AuthNotifier(
+          _FakeAuthRepository(_guestUser),
+          socket: socketService,
+          dioClient: client,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              dioClientProvider.overrideWithValue(client),
+              socketServiceProvider.overrideWithValue(socketService),
+              authNotifierProvider.overrideWith((_) => guestAuth),
+              conversationsRepositoryProvider.overrideWithValue(
+                ConversationsRepository(client),
+              ),
+            ],
+            child: MaterialApp(
+              theme: AppTheme.lightTheme,
+              home: const MessagesScreen(initialConversationId: '42'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('chat_more_features_btn')), findsOneWidget);
+        expect(find.byKey(const Key('chat_camera_btn')), findsOneWidget);
+        expect(find.byKey(const Key('chat_gallery_btn')), findsOneWidget);
+        expect(find.byKey(const Key('chat_mic_btn')), findsOneWidget);
+        expect(find.byKey(const Key('chat_input_smile_btn')), findsOneWidget);
+        expect(find.byKey(const Key('chat_quick_replies_bar')), findsOneWidget);
+        expect(
+          find.text('Dạ căn còn trống lịch này không ạ?'),
+          findsOneWidget,
+        );
+        expect(find.text('Đã gửi'), findsOneWidget);
+        expect(find.text(' • Đã xem'), findsOneWidget);
+
+        // Tap a Guest quick-reply chip -> populates input field
+        await tester.tap(find.text('Dạ căn còn trống lịch này không ạ?'));
+        await tester.pump();
+        final inputField = tester.widget<TextField>(
+          find.byKey(const Key('chat_message_input')),
+        );
+        expect(
+          inputField.controller?.text,
+          'Dạ căn còn trống lịch này không ạ?',
+        );
+
+        // Long-press incoming bubble -> opens Messenger reaction picker
+        await tester.longPress(find.text('Xin chào bạn!'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('reaction_picker_701')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('reaction_❤️_701')));
+        await tester.pumpAndSettle();
+        expect(find.text('❤️'), findsOneWidget);
+
+        socketService.dispose();
+      },
+    );
+
+    testWidgets(
+      'Host role renders unified Messenger layout with Host quick-reply chips',
+      (tester) async {
+        final storage = _FakeSecureStorage('jwt-test');
+        final socketService = SocketService(secureStorage: storage);
+
+        final dio = _buildMockDio((options) async {
+          if (options.path == '/api/conversations') {
+            return Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {
+                'success': true,
+                'data': {
+                  'items': [
+                    _buildConvJson(id: 42, guestUserId: 10, hostUserId: 20),
+                  ],
+                },
+              },
+            );
+          }
+          if (options.path == '/api/conversations/42/messages') {
+            return Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {
+                'success': true,
+                'data': {
+                  'items': [
+                    _buildMsgJson(
+                      id: 702,
+                      conversationId: 42,
+                      senderId: 10,
+                      content: 'Mình muốn hỏi thông tin căn này ạ',
+                      createdAt: '2026-10-20T09:02:00.000Z',
+                    ),
+                  ],
+                  'pagination': {
+                    'page': 1,
+                    'limit': 50,
+                    'total': 1,
+                    'totalPages': 1,
+                  },
+                },
+              },
+            );
+          }
+          return Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: {
+              'success': true,
+              'data': {'unreadCount': 0},
+            },
+          );
+        });
+
+        final client = DioClient(dio: dio, secureStorage: storage);
+        await _setViewport(tester, const Size(412, 840));
+
+        const hostUser = User(
+          id: '20',
+          email: 'host20@example.com',
+          firstName: 'Hải',
+          lastName: 'Đăng',
+          role: 'host',
+        );
+        final hostAuth = AuthNotifier(
+          _FakeAuthRepository(hostUser),
+          socket: socketService,
+          dioClient: client,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              dioClientProvider.overrideWithValue(client),
+              socketServiceProvider.overrideWithValue(socketService),
+              authNotifierProvider.overrideWith((_) => hostAuth),
+              conversationsRepositoryProvider.overrideWithValue(
+                ConversationsRepository(client),
+              ),
+            ],
+            child: MaterialApp(
+              theme: AppTheme.lightTheme,
+              home: const MessagesScreen(
+                initialConversationId: '42',
+                isHostPortal: true,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('chat_more_features_btn')), findsOneWidget);
+        expect(find.byKey(const Key('chat_quick_replies_bar')), findsOneWidget);
+        expect(
+          find.text('Dạ vâng, bên em đã nhận thông tin ạ!'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Quý khách nhận phòng lúc mấy giờ ạ?'),
+          findsOneWidget,
+        );
+
+        socketService.dispose();
+      },
+    );
+
+    testWidgets(
+      'AdminPortalScreen Tin nhắn tab renders unified Messenger layout, Admin quick replies, and New Chat action',
+      (tester) async {
+        final storage = _FakeSecureStorage('jwt-test');
+        final socketService = SocketService(secureStorage: storage);
+
+        const adminUser = User(
+          id: '1',
+          email: 'admin@vungtaustay.com',
+          firstName: 'Admin',
+          lastName: 'System',
+          role: 'admin',
+          roles: ['admin'],
+        );
+        final adminDio = _buildMockDio((options) async {
+          if (options.path == '/api/conversations') {
+            return Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {
+                'success': true,
+                'data': {
+                  'items': [
+                    _buildConvJson(
+                      id: 88,
+                      guestUserId: 20,
+                      hostUserId: 1,
+                      listingTitle: 'Hỗ trợ Chủ nhà',
+                      otherName: 'Chủ nhà Hải Đăng',
+                    ),
+                  ],
+                },
+              },
+            );
+          }
+          if (options.path == '/api/conversations/88/messages') {
+            return Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {
+                'success': true,
+                'data': {
+                  'items': [
+                    _buildMsgJson(
+                      id: 801,
+                      conversationId: 88,
+                      senderId: 20,
+                      content: 'Nhờ Admin duyệt giúp hồ sơ ạ',
+                      createdAt: '2026-10-20T10:00:00.000Z',
+                    ),
+                  ],
+                  'pagination': {
+                    'page': 1,
+                    'limit': 50,
+                    'total': 1,
+                    'totalPages': 1,
+                  },
+                },
+              },
+            );
+          }
+          return Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: {
+              'success': true,
+              'data': {'items': <dynamic>[], 'unreadCount': 0},
+            },
+          );
+        });
+
+        final adminClient = DioClient(dio: adminDio, secureStorage: storage);
+        await _setViewport(tester, const Size(412, 840));
+
+        final adminAuth = AuthNotifier(
+          _FakeAuthRepository(adminUser),
+          socket: socketService,
+          dioClient: adminClient,
+        );
+
+        expect(
+          kAdminNavItems.any(
+            (item) => item.id == 'tin-nhan' && item.route == '/admin/tin-nhan',
+          ),
+          isTrue,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              dioClientProvider.overrideWithValue(adminClient),
+              socketServiceProvider.overrideWithValue(socketService),
+              authNotifierProvider.overrideWith((_) => adminAuth),
+              conversationsRepositoryProvider.overrideWithValue(
+                ConversationsRepository(adminClient),
+              ),
+            ],
+            child: MaterialApp(
+              theme: AppTheme.lightTheme,
+              home: const AdminPortalScreen(
+                activeTab: 'tin-nhan',
+                initialConversationId: '88',
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Tin nhắn hỗ trợ'), findsOneWidget);
+        expect(find.byKey(const Key('admin_new_chat_button')), findsOneWidget);
+        expect(find.text('Nhờ Admin duyệt giúp hồ sơ ạ'), findsOneWidget);
+        expect(
+          find.text('Chào bạn, Quản trị viên hệ thống hỗ trợ bạn vấn đề gì ạ?'),
+          findsOneWidget,
+        );
 
         socketService.dispose();
       },

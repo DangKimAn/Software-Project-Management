@@ -764,6 +764,7 @@ export const listAdminHostApplications = async (
             userName: string | null;
             userEmail: string | null;
             userPhone: string | null;
+            userAvatarUrl: string | null;
             documentCount: number;
         }>(
             `
@@ -784,6 +785,7 @@ export const listAdminHostApplications = async (
                 u.full_name AS userName,
                 u.email AS userEmail,
                 u.phone AS userPhone,
+                u.avatar_url AS userAvatarUrl,
                 COUNT(hid.id) AS documentCount
             FROM host_applications ha
             LEFT JOIN users u ON u.user_id = ha.user_id
@@ -833,6 +835,7 @@ export const listAdminHostApplications = async (
                 name: item.userName,
                 email: item.userEmail,
                 phone: item.userPhone,
+                avatarUrl: item.userAvatarUrl ?? null,
             },
         })),
         pagination: {
@@ -1008,6 +1011,7 @@ export const getAdminHostApplicationDetail = async (
                   name: user.fullName,
                   email: user.email,
                   phone: user.phone,
+                  avatarUrl: user.avatarUrl ?? null,
               }
             : null,
         documents: documentsWithSignedUrls,

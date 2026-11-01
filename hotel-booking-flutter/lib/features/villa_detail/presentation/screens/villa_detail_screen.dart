@@ -1012,7 +1012,9 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
               if (totalResult.isForeignDisplayed) ...[
                 const SizedBox(height: 6),
                 Text(
-                  '${formatter.l10n.fxTotalPayableVnd(formatter.formatExactVnd(calc.finalTotal, withCode: true))} • ${formatter.l10n.fxChargedInVndNotice}',
+                  formatter.l10n.fxTotalPayableVnd(
+                    formatter.formatExactVnd(calc.finalTotal, withCode: true),
+                  ),
                   style: AppTypography.caption.copyWith(
                     color: AppColors.textSecondary,
                   ),

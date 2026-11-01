@@ -2048,10 +2048,14 @@ HostErrorInfo classifyHostError(Object error, [String? fallback]) {
       );
     }
     if (statusCode == 409) {
+      final msg =
+          (serverMsg != null && serverMsg.trim().toLowerCase() != 'conflict')
+              ? serverMsg
+              : 'Dữ liệu hoặc mã số bị trùng lặp / xung đột trạng thái (409).';
       return HostErrorInfo(
         type: HostErrorType.conflict,
         statusCode: 409,
-        message: serverMsg ?? 'Dữ liệu bị xung đột trạng thái (409).',
+        message: msg,
       );
     }
     if (statusCode == 400 || statusCode == 422) {
@@ -2241,6 +2245,12 @@ class HostRevenueReport {
   final double grossRevenue;
   final double platformRevenue;
   final double hostRevenue;
+  final double pendingStayRevenue;
+  final double pendingStayPlatformRevenue;
+  final double pendingStayHostRevenue;
+  final int pendingStayBookingCount;
+  final double refundedAmount;
+  final int refundCount;
   final int bookingCount;
   final int paymentCount;
   final List<HostRevenueSeriesPoint> series;
@@ -2253,6 +2263,12 @@ class HostRevenueReport {
     this.grossRevenue = 0,
     this.platformRevenue = 0,
     this.hostRevenue = 0,
+    this.pendingStayRevenue = 0,
+    this.pendingStayPlatformRevenue = 0,
+    this.pendingStayHostRevenue = 0,
+    this.pendingStayBookingCount = 0,
+    this.refundedAmount = 0,
+    this.refundCount = 0,
     this.bookingCount = 0,
     this.paymentCount = 0,
     this.series = const [],
@@ -2285,6 +2301,12 @@ class HostRevenueReport {
       grossRevenue: toD(totals['grossRevenue']),
       platformRevenue: toD(totals['platformRevenue']),
       hostRevenue: toD(totals['hostRevenue']),
+      pendingStayRevenue: toD(totals['pendingStayRevenue']),
+      pendingStayPlatformRevenue: toD(totals['pendingStayPlatformRevenue']),
+      pendingStayHostRevenue: toD(totals['pendingStayHostRevenue']),
+      pendingStayBookingCount: toI(totals['pendingStayBookingCount']),
+      refundedAmount: toD(totals['refundedAmount']),
+      refundCount: toI(totals['refundCount']),
       bookingCount: toI(totals['bookingCount']),
       paymentCount: toI(totals['paymentCount']),
       series: rawSeries

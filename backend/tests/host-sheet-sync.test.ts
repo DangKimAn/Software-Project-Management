@@ -17,6 +17,7 @@ process.env.JWT_SECRET_KEY = "test-secret";
 process.env.ACCESS_TOKEN_TTL_MINUTES = "15";
 
 const { ApiError } = require("../dist/common/api-error");
+const { getTodayInVietnamDateString } = require("../dist/common/date-time");
 const sequelize = require("../dist/config/database").default || require("../dist/config/database").sequelize;
 const AvailabilityCalendar = require("../dist/models/availability-calendar").default;
 const Booking = require("../dist/models/booking").default;
@@ -932,7 +933,7 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         assert.equal(connectRes.status, 200);
 
         const rolling = hostSheetLayout.buildRollingMonthSpecs(
-            new Date().toISOString().slice(0, 10),
+            getTodayInVietnamDateString(),
             6,
         );
         const firstTab = fakeSheets.findMonthTab(sheetIdA, rolling[0].tabKey)!;
@@ -978,7 +979,7 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         assert.ok(dirTab, "DANH MỤC CĂN tab must be created");
 
         const rolling = hostSheetLayout.buildRollingMonthSpecs(
-            new Date().toISOString().slice(0, 10),
+            getTodayInVietnamDateString(),
             6,
         );
         const targetMonth = rolling[1]; // Next month (guaranteed all days in the future!)
@@ -1034,7 +1035,7 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
             .send({ spreadsheetUrlOrId: sheetUrlA });
 
         const rolling = hostSheetLayout.buildRollingMonthSpecs(
-            new Date().toISOString().slice(0, 10),
+            getTodayInVietnamDateString(),
             6,
         );
         const nextMonth = rolling[1];
@@ -1131,7 +1132,7 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
             .send({ spreadsheetUrlOrId: sheetUrlA });
 
         const rolling = hostSheetLayout.buildRollingMonthSpecs(
-            new Date().toISOString().slice(0, 10),
+            getTodayInVietnamDateString(),
             6,
         );
         const nextMonth = rolling[1];
@@ -1227,7 +1228,7 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
             .send({ spreadsheetUrlOrId: sheetUrlA });
 
         const rolling = hostSheetLayout.buildRollingMonthSpecs(
-            new Date().toISOString().slice(0, 10),
+            getTodayInVietnamDateString(),
             6,
         );
         const nextMonth = rolling[1];
@@ -1417,7 +1418,7 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
             .send({ spreadsheetUrlOrId: sheetUrlA, strictBookingPrecheck: true });
 
         const rolling = hostSheetLayout.buildRollingMonthSpecs(
-            new Date().toISOString().slice(0, 10),
+            getTodayInVietnamDateString(),
             6,
         );
         const nextMonth = rolling[1];
@@ -1519,7 +1520,7 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
             .send({ spreadsheetUrlOrId: sheetUrlA });
 
         const rolling = hostSheetLayout.buildRollingMonthSpecs(
-            new Date().toISOString().slice(0, 10),
+            getTodayInVietnamDateString(),
             6,
         );
         const nextMonth = rolling[1];
