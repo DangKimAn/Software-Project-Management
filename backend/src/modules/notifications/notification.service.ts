@@ -524,7 +524,7 @@ export const notifyUserRegistered = async (userId: number, transaction?: Transac
         return;
     }
 
-    const title = "Xin chào đến với The Palm Villa";
+    const title = "Chào mừng đến The Palm Villa";
     const body = "Chào mừng bạn đến với The Palm Villa! Tài khoản của bạn đã được tạo thành công.";
     const lines = [
         `Xin chào ${user.fullName || "bạn"},`,
