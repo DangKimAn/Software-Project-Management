@@ -44,7 +44,7 @@ const toPagination = (page?: number, limit?: number) => ({
 });
 
 const assertCanModerateListings = (user: AuthenticatedUser) => {
-    if (!user.roles.includes("admin") && !user.roles.includes("moderator")) {
+    if (!user.roles.includes("admin")) {
         throw new ApiError(403, "Forbidden");
     }
 };

@@ -14,6 +14,7 @@ import '../../features/search/presentation/widgets/source_search_bar.dart';
 import '../../features/trips/presentation/widgets/global_pending_booking_banner.dart';
 import 'app_semantic_icons.dart';
 import 'currency_language_selector.dart';
+import 'notification_glass_widgets.dart';
 
 class AppNotificationItem {
   final String id;
@@ -424,7 +425,8 @@ final notificationsProvider =
   );
 });
 
-/// NotificationBell widget matching `NotificationBell.tsx` with strict monochrome icon rules.
+/// NotificationBell widget styled with frosted glass capsule cards, pastel icon rings,
+/// and slender SF Pro typography while preserving 100% of existing notification content.
 class NotificationBell extends ConsumerWidget {
   final bool isOverlayTop;
 
@@ -443,216 +445,13 @@ class NotificationBell extends ConsumerWidget {
 
   void _openNotificationsSheet(BuildContext context, WidgetRef ref) {
     ref.read(notificationsProvider.notifier).fetchNotifications();
-    showModalBottomSheet<void>(
+    showGlassNotificationsOverlay(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.65,
-          maxChildSize: 0.9,
-          minChildSize: 0.4,
-          builder: (_, scrollController) {
-            return Consumer(
-              builder: (context, ref, _) {
-                final notifState = ref.watch(notificationsProvider);
-                return Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Thông báo (${notifState.unreadCount} chưa đọc)',
-                              style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ),
-                          if (notifState.unreadCount > 0)
-                            TextButton(
-                              onPressed: () => ref
-                                  .read(notificationsProvider.notifier)
-                                  .markAllAsRead(),
-                              child: const Text('Đánh dấu tất cả đã đọc'),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1, color: AppColors.border),
-                    Expanded(
-                      child: notifState.items.isEmpty
-                          ? const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(24),
-                                child: Text(
-                                  'Chưa có thông báo mới.',
-                                  style: TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              controller: scrollController,
-                              itemCount: notifState.items.length,
-                              separatorBuilder: (_, __) => const Divider(
-                                height: 1,
-                                color: AppColors.divider,
-                              ),
-                              itemBuilder: (context, index) {
-                                final item = notifState.items[index];
-                                final timeText =
-                                    _formatNotificationTime(item.createdAt);
-                                return InkWell(
-                                  onTap: () {
-                                    if (!item.isRead) {
-                                      ref
-                                          .read(notificationsProvider.notifier)
-                                          .markAsRead(item.id);
-                                    }
-                                    Navigator.of(ctx).pop();
-                                    _navigateForNotification(context, item);
-                                  },
-                                  child: Container(
-                                    color: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 14,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const Padding(
-                                          padding: EdgeInsets.only(top: 2),
-                                          child: Icon(
-                                            LucideIcons.bell,
-                                            size: 18,
-                                            color: AppColors.iconStrong,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  if (item.forAdmin) ...[
-                                                    Container(
-                                                      margin:
-                                                          const EdgeInsets.only(
-                                                        top: 1,
-                                                        right: 6,
-                                                      ),
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 5,
-                                                        vertical: 1.5,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: const Color(
-                                                            0xFFF3E8FF),
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(4),
-                                                        border: Border.all(
-                                                          color: const Color(
-                                                              0xFF9333EA),
-                                                          width: 0.8,
-                                                        ),
-                                                      ),
-                                                      child: const Text(
-                                                        'ADMIN',
-                                                        style: TextStyle(
-                                                          fontSize: 9.5,
-                                                          fontWeight:
-                                                              FontWeight.w800,
-                                                          color:
-                                                              Color(0xFF7E22CE),
-                                                          letterSpacing: 0.3,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                  Expanded(
-                                                    child: Text(
-                                                      item.title,
-                                                      style: TextStyle(
-                                                        fontSize: 14,
-                                                        fontWeight: item.isRead
-                                                            ? FontWeight.w600
-                                                            : FontWeight.w700,
-                                                        color: AppColors
-                                                            .textPrimary,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              if (item.body.isNotEmpty) ...[
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  item.body,
-                                                  style: const TextStyle(
-                                                    fontSize: 13,
-                                                    color:
-                                                        AppColors.textSecondary,
-                                                  ),
-                                                ),
-                                              ],
-                                              if (timeText.isNotEmpty) ...[
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  timeText,
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: AppColors.textMuted,
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                        if (!item.isRead)
-                                          Container(
-                                            margin: const EdgeInsets.only(
-                                              left: 8,
-                                              top: 4,
-                                            ),
-                                            width: 8,
-                                            height: 8,
-                                            decoration: const BoxDecoration(
-                                              color: AppColors.primary,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                );
-              },
-            );
-          },
-        );
+      formatTime: _formatNotificationTime,
+      onSelectNotification: (item) {
+        if (context.mounted) {
+          _navigateForNotification(context, item);
+        }
       },
     );
   }
@@ -671,61 +470,10 @@ class NotificationBell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notifState = ref.watch(notificationsProvider);
 
-    return Semantics(
-      button: true,
-      label: 'Thông báo',
-      child: InkWell(
-        onTap: () => _openNotificationsSheet(context, ref),
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        hoverColor: Colors.transparent,
-        child: SizedBox(
-          width: 40,
-          height: 48,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Icon(
-                LucideIcons.bell,
-                size: 20,
-                color: isOverlayTop ? Colors.white : AppColors.iconStrong,
-              ),
-              if (notifState.unreadCount > 0)
-                Positioned(
-                  top: 6,
-                  right: 2,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    constraints:
-                        const BoxConstraints(minWidth: 16, minHeight: 16),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: isOverlayTop ? Colors.transparent : Colors.white,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        notifState.unreadCount > 99
-                            ? '99+'
-                            : '${notifState.unreadCount}',
-                        style: const TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          height: 1.0,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+    return GlassNotificationBellButton(
+      unreadCount: notifState.unreadCount,
+      isOverlayTop: isOverlayTop,
+      onTap: () => _openNotificationsSheet(context, ref),
     );
   }
 }

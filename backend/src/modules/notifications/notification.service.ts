@@ -366,7 +366,7 @@ const getAdminRecipientIds = async (transaction?: Transaction) => {
             FROM users u
             INNER JOIN user_role ur ON ur.user_id = u.user_id
             INNER JOIN roles r ON r.role_id = ur.role_id
-            WHERE r.code IN ('admin', 'moderator')
+            WHERE r.code = 'admin'
               AND u.status = 'active'
             `,
             {

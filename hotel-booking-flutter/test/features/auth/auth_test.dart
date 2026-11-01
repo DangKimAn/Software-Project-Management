@@ -294,9 +294,9 @@ void main() {
       expect(AuthValidation.password('Abc12345'), isNull);
       expect(AuthValidation.password('a1' * 65), isNotNull);
     });
-    test('moderator and null roles cannot grant admin or host', () {
-      final user = User.fromJson({'id': 1, 'role': 'moderator', 'roles': null});
-      expect(user.role, 'moderator');
+    test('unknown and null roles fall back to guest and cannot grant admin or host', () {
+      final user = User.fromJson({'id': 1, 'role': 'staff', 'roles': null});
+      expect(user.role, 'guest');
       expect(user.isAdmin, isFalse);
       expect(user.isHost, isFalse);
       expect(User.fromJson({}).role, 'guest');

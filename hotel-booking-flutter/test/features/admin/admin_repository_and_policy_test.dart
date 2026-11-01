@@ -42,8 +42,12 @@ ResponseBody _jsonResponse(
 void main() {
   group('AdminModerationPolicy — Role guard & moderation business rules', () {
     test(
-      'distinguishes guest, host, moderator, and admin permissions accurately',
+      'distinguishes guest, host, and admin permissions accurately',
       () {
+        expect(
+          AdminModerationPolicy.supportedRoles,
+          equals(const ['guest', 'host', 'admin']),
+        );
         expect(
           AdminModerationPolicy.isAdminRole(
             primaryRole: 'admin',
@@ -54,19 +58,12 @@ void main() {
         expect(
           AdminModerationPolicy.isAdminRole(
             primaryRole: 'guest',
-            roles: const ['moderator'],
+            roles: const ['guest'],
           ),
           isFalse,
         );
         expect(
-          AdminModerationPolicy.isModeratorOrAdminRole(
-            primaryRole: 'guest',
-            roles: const ['moderator'],
-          ),
-          isTrue,
-        );
-        expect(
-          AdminModerationPolicy.isModeratorOrAdminRole(
+          AdminModerationPolicy.isAdminRole(
             primaryRole: 'host',
             roles: const ['host'],
           ),
@@ -151,7 +148,7 @@ void main() {
             isActorAdmin: true,
             actorId: '1',
             targetUserId: '1',
-            nextRole: 'moderator',
+            nextRole: 'host',
           ),
           'Bạn không thể tự hạ quyền Admin của chính mình.',
         );
@@ -160,9 +157,18 @@ void main() {
             isActorAdmin: true,
             actorId: '1',
             targetUserId: '55',
-            nextRole: 'moderator',
+            nextRole: 'host',
           ),
           isNull,
+        );
+        expect(
+          AdminModerationPolicy.validateRoleMutation(
+            isActorAdmin: true,
+            actorId: '1',
+            targetUserId: '55',
+            nextRole: 'moderator',
+          ),
+          'Vai trò không hợp lệ.',
         );
       },
     );

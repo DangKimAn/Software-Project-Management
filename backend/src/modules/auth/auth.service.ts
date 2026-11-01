@@ -46,7 +46,7 @@ export const verifyRefreshToken = verifyRefreshTokenValue;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phonePattern = /^(0|\+84)[0-9]{9}$/;
 const repeatedLoginFailureThreshold = 5;
-const primaryRolePriority: UserRole[] = ["admin", "moderator", "host", "guest"];
+const primaryRolePriority: UserRole[] = ["admin", "host", "guest"];
 
 export type AuthenticatedUser = {
     id: string;
@@ -325,7 +325,7 @@ export const getUserRoles = async (userId: string | number, transaction?: Transa
         FROM user_role ur
         INNER JOIN roles r ON r.role_id = ur.role_id
         WHERE ur.user_id = ?
-        ORDER BY FIELD(r.code, 'admin', 'moderator', 'host', 'guest')
+        ORDER BY FIELD(r.code, 'admin', 'host', 'guest')
         `,
         {
             replacements: [Number(userId)],

@@ -55,7 +55,7 @@ type AdminUpdateUserInput = UpdateOwnProfileInput &
         roles: UserRole[];
     }>;
 
-const primaryRolePriority: UserRole[] = ["admin", "moderator", "host", "guest"];
+const primaryRolePriority: UserRole[] = ["admin", "host", "guest"];
 
 const selfManagedForbiddenFields = ["email", "role", "roles", "status"] as const;
 

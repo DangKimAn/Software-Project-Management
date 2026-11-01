@@ -96,7 +96,7 @@ class User {
       ...roles.map((r) => r.trim().toLowerCase()).where((r) => r.isNotEmpty),
     ];
     if (allTokens.contains('admin')) return 'admin';
-    if (allTokens.contains('moderator')) return 'moderator';
+
     if (allTokens.any(_isApprovedHostToken)) {
       return 'host';
     }

@@ -118,7 +118,6 @@ const resetState = () => {
     for (const user of [
         makeUser("101", "guest@example.com", "0901234567", "Guest User", ["guest"]),
         makeUser("102", "host@example.com", "0902222222", "Host User", ["host"]),
-        makeUser("800", "moderator@example.com", "0908888888", "Moderator User", ["moderator"]),
         makeUser("900", "admin@example.com", "0909999999", "Admin User", ["admin"]),
     ]) {
         users.set(String(user._id), user);
@@ -151,7 +150,6 @@ const resetState = () => {
 const tokenToUserId: Record<string, string> = {
     "guest-token": "101",
     "host-token": "102",
-    "moderator-token": "800",
     "admin-token": "900",
 };
 
@@ -325,7 +323,7 @@ hostVerificationsService.rejectHostVerification = async (
 };
 
 adminListingsService.listPendingAdminListings = async (actor: AuthenticatedTestUser) => {
-    if (!actor.roles.includes("admin") && !actor.roles.includes("moderator")) {
+    if (!actor.roles.includes("admin")) {
         throw new ApiError(403, "Forbidden");
     }
 
@@ -343,7 +341,7 @@ adminListingsService.listPendingAdminListings = async (actor: AuthenticatedTestU
 const app = require("../dist/app").default;
 
 const guestAuth = { Authorization: "Bearer guest-token" };
-const moderatorAuth = { Authorization: "Bearer moderator-token" };
+const hostAuth = { Authorization: "Bearer host-token" };
 const adminAuth = { Authorization: "Bearer admin-token" };
 
 beforeEach(resetState);
@@ -422,8 +420,8 @@ describe("Users, verification, and RBAC contracts", () => {
         const forbiddenResponse = await request(app).get("/api/users/102").set(guestAuth);
         assert.equal(forbiddenResponse.status, 403);
 
-        const moderatorResponse = await request(app).get("/api/users/102").set(moderatorAuth);
-        assert.equal(moderatorResponse.status, 403);
+        const hostResponse = await request(app).get("/api/users/102").set(hostAuth);
+        assert.equal(hostResponse.status, 403);
 
         const adminResponse = await request(app).get("/api/users/101").set(adminAuth);
         assert.equal(adminResponse.status, 200);
@@ -462,15 +460,24 @@ describe("Users, verification, and RBAC contracts", () => {
         assert.deepEqual(roles.get("900"), ["admin"]);
     });
 
-    it("keeps moderator scoped to listing moderation, not payout, user, or verification admin", async () => {
-        const listingResponse = await request(app).get("/api/admin/listings/pending").set(moderatorAuth);
-        assert.equal(listingResponse.status, 200);
+    it("restricts listing moderation, payout, user, and verification admin endpoints to admin only and rejects removed moderator role", async () => {
+        const hostListingResponse = await request(app).get("/api/admin/listings/pending").set(hostAuth);
+        assert.equal(hostListingResponse.status, 403);
 
-        const payoutResponse = await request(app).get("/api/admin/host-payouts").set(moderatorAuth);
+        const adminListingResponse = await request(app).get("/api/admin/listings/pending").set(adminAuth);
+        assert.equal(adminListingResponse.status, 200);
+
+        const payoutResponse = await request(app).get("/api/admin/host-payouts").set(hostAuth);
         assert.equal(payoutResponse.status, 403);
 
-        const verificationResponse = await request(app).get("/api/admin/verifications").set(moderatorAuth);
+        const verificationResponse = await request(app).get("/api/admin/verifications").set(hostAuth);
         assert.equal(verificationResponse.status, 403);
+
+        const invalidModeratorRoleResponse = await request(app)
+            .patch("/api/users/101")
+            .set(adminAuth)
+            .send({ role: "moderator" });
+        assert.equal(invalidModeratorRoleResponse.status, 422);
     });
 
     it("validates verification documents, enforces owner view, and requires rejection reason", async () => {

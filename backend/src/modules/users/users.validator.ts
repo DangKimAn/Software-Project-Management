@@ -46,7 +46,7 @@ const publicProfileTextSchema = nullableString(255);
 const languagesSchema = z.array(z.string().trim().min(1).max(64)).max(20).nullable().optional();
 
 const userStatusSchema = z.enum(["active", "inactive", "blocked", "suspended", "deleted", "locked"]);
-const userRoleSchema = z.enum(["guest", "host", "moderator", "admin"]);
+const userRoleSchema = z.enum(["guest", "host", "admin"]);
 
 const userIdParamsSchema = z.object({
     userId: z.string().regex(/^\d+$/, "userId must be numeric"),
