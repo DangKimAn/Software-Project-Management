@@ -33,7 +33,7 @@ import sequelize from "../../config/database";
 import Amenity from "../../models/amenity";
 import AvailabilityCalendar from "../../models/availability-calendar";
 import Booking from "../../models/booking";
-import { getNextSequence } from "../../models/counter";
+import Counter, { getNextSequence } from "../../models/counter";
 import Listing, {
     ListingAvailabilityDayRecord,
     ListingDocument,
@@ -737,8 +737,15 @@ export const createListing = async (
     const listing = await sequelize.transaction(async (transaction) => {
         await assertHostCanRequestReview(Number(userId), nextStatus, actor, transaction);
 
+        const maxListingId = Number(await Listing.max("listingId", { transaction })) || 100;
+        let nextListingId = await getNextSequence("listing", 101);
+        if (nextListingId <= maxListingId) {
+            nextListingId = maxListingId + 1;
+            await Counter.upsert({ key: "listing", value: nextListingId }, { transaction });
+        }
+
         const createdListing = new Listing({
-            listingId: await getNextSequence("listing", 101),
+            listingId: nextListingId,
             hostId: Number(userId),
             ...sanitizedInput,
             amenityIds,

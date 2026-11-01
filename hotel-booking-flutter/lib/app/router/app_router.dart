@@ -549,11 +549,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ── Host Portal (/chu-nha/* & /host/*) — Host-only ──
       GoRoute(
         path: '/chu-nha',
-        redirect: (context, state) => '/chu-nha/cho-nghi',
+        redirect: (context, state) => '/chu-nha/tong-quan',
       ),
       GoRoute(
         path: '/chu-nha/tong-quan',
-        redirect: (context, state) => '/chu-nha/cho-nghi',
+        pageBuilder: (context, state) => _buildProtectedSlidePage(
+          state: state,
+          accessLevel: RouteAccessLevel.hostOnly,
+          child: const HostPortalScreen(section: 'tong-quan'),
+        ),
       ),
       GoRoute(
         path: '/chu-nha/cho-nghi',
@@ -604,7 +608,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/host',
-        redirect: (context, state) => '/host/tin-nhan',
+        redirect: (context, state) => '/chu-nha/khach-luu-tru',
+      ),
+      GoRoute(
+        path: '/host/khach',
+        redirect: (context, state) => '/chu-nha/khach-luu-tru',
       ),
       GoRoute(
         path: '/host/tin-nhan',
@@ -695,6 +703,28 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           accessLevel: RouteAccessLevel.adminOnly,
           child: const AdminPortalScreen(activeTab: 'phan-quyen'),
         ),
+      ),
+      GoRoute(
+        path: '/admin/phi-nen-tang',
+        pageBuilder: (context, state) => _buildProtectedSlidePage(
+          state: state,
+          accessLevel: RouteAccessLevel.adminOnly,
+          child: const AdminPortalScreen(activeTab: 'phi-nen-tang'),
+        ),
+      ),
+      GoRoute(
+        path: '/admin/tin-nhan',
+        pageBuilder: (context, state) {
+          final convId = state.uri.queryParameters['conversationId'];
+          return _buildProtectedSlidePage(
+            state: state,
+            accessLevel: RouteAccessLevel.adminOnly,
+            child: AdminPortalScreen(
+              activeTab: 'tin-nhan',
+              initialConversationId: convId,
+            ),
+          );
+        },
       ),
     ],
   );
@@ -933,18 +963,26 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
                                 : AppColors.iconMuted,
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            tab.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: isSelected
-                                  ? FontWeight.w800
-                                  : FontWeight.w700,
-                              color: isSelected
-                                  ? AppColors.textStrong
-                                  : AppColors.textSecondary,
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                            child: Text(
+                              tab.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: AppTypography.textFontFamily,
+                                fontFamilyFallback: AppTypography.fontFallbacks,
+                                fontSize: 10.5,
+                                fontWeight: isSelected
+                                    ? FontWeight.w500
+                                    : FontWeight.w400,
+                                letterSpacing: -0.02,
+                                height: 1.35,
+                                color: isSelected
+                                    ? AppColors.textStrong
+                                    : AppColors.textMuted,
+                              ),
                             ),
                           ),
                           Container(

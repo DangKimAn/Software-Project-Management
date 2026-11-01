@@ -584,7 +584,8 @@ class _TroThanhHostLandingScreenState
                     color: AppColors.textStrong,
                   ),
                 ),
-                if (status == HostApplicationStatus.approved && !isActuallyHost) ...[
+                if (status == HostApplicationStatus.approved &&
+                    !isActuallyHost) ...[
                   const SizedBox(height: AppSpacing.s4),
                   Text(
                     'Tài khoản của bạn hiện đang ở vai trò Khách (Guest). Bạn có thể đăng ký làm Host lại để quản trị viên phê duyệt.',
@@ -1304,14 +1305,16 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
           ),
         );
       } else if (frontId != null && backId != null && frontId == backId) {
-        if (_aiBackError != null && _aiBackError!.contains('không trùng khớp')) {
+        if (_aiBackError != null &&
+            _aiBackError!.contains('không trùng khớp')) {
           _aiBackError = null;
         }
         if (_slotErrors['identityBack'] != null &&
             _slotErrors['identityBack']!.contains('không trùng khớp')) {
           _slotErrors.remove('identityBack');
         }
-        if (_errorMessage != null && _errorMessage!.contains('không trùng khớp')) {
+        if (_errorMessage != null &&
+            _errorMessage!.contains('không trùng khớp')) {
           _errorMessage = null;
         }
       }
@@ -1323,7 +1326,8 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
           _slotErrors['identityBack']!.contains('không trùng khớp')) {
         _slotErrors.remove('identityBack');
       }
-      if (_errorMessage != null && _errorMessage!.contains('không trùng khớp')) {
+      if (_errorMessage != null &&
+          _errorMessage!.contains('không trùng khớp')) {
         _errorMessage = null;
       }
     }
@@ -1646,8 +1650,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
       setState(() {
         _errorMessage =
             '❌ Tệp mặt sau không phải là CCCD hợp lệ. Vui lòng tải lên ảnh chụp mặt sau CCCD gốc.';
-        _slotErrors['identityBack'] =
-            'Tệp tải lên không phải là CCCD hợp lệ.';
+        _slotErrors['identityBack'] = 'Tệp tải lên không phải là CCCD hợp lệ.';
       });
       await _persistDraftSafely();
       return;
@@ -2182,32 +2185,42 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                           const SizedBox(height: AppSpacing.s20),
                           Builder(
                             builder: (context) {
-                              final hasId = _identityFront != null || _identitySingle != null;
+                              final hasId = _identityFront != null ||
+                                  _identitySingle != null;
                               if (!hasId) return const SizedBox.shrink();
 
                               final needsScan = _aiIdentityResult == null;
                               final isInvalid = _aiIdentityResult != null &&
                                   (!_aiIdentityResult!.isDocumentValid ||
-                                      _aiIdentityResult!.documentType == 'unknown');
-                              final hasAiError = _aiFrontError != null || _aiBackError != null;
+                                      _aiIdentityResult!.documentType ==
+                                          'unknown');
+                              final hasAiError =
+                                  _aiFrontError != null || _aiBackError != null;
 
-                              if (!needsScan && !isInvalid && !hasAiError) return const SizedBox.shrink();
+                              if (!needsScan && !isInvalid && !hasAiError) {
+                                return const SizedBox.shrink();
+                              }
 
-                              final bannerMessage = (_aiBackError != null && _aiBackError!.contains('không trùng khớp'))
+                              final bannerMessage = (_aiBackError != null &&
+                                      _aiBackError!
+                                          .contains('không trùng khớp'))
                                   ? _aiBackError!
                                   : (isInvalid || hasAiError)
                                       ? '❌ Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ. Vui lòng tải lên ảnh chụp giấy tờ tùy thân gốc.'
                                       : 'Vui lòng bấm "Quét AI CCCD" để kiểm tra tính hợp lệ của giấy tờ trước khi gửi hồ sơ.';
 
                               return Padding(
-                                padding: const EdgeInsets.only(bottom: AppSpacing.s16),
+                                padding: const EdgeInsets.only(
+                                    bottom: AppSpacing.s16),
                                 child: Container(
                                   key: const Key('kyc_submit_ai_guard_banner'),
                                   padding: const EdgeInsets.all(AppSpacing.s12),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFFEF2F2),
-                                    borderRadius: BorderRadius.circular(AppRadii.card),
-                                    border: Border.all(color: const Color(0xFFFCA5A5)),
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadii.card),
+                                    border: Border.all(
+                                        color: const Color(0xFFFCA5A5)),
                                   ),
                                   child: Row(
                                     children: [
@@ -2495,14 +2508,18 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                   helperText: isEmailReadOnly
                       ? 'Cố định theo tài khoản của bạn'
                       : 'Tự động lấy từ tài khoản của bạn',
-                  prefixIcon: const Icon(LucideIcons.mail, size: 18, color: AppColors.iconMuted),
+                  prefixIcon: const Icon(LucideIcons.mail,
+                      size: 18, color: AppColors.iconMuted),
                   suffixIcon: isEmailReadOnly
                       ? const Padding(
                           padding: EdgeInsets.only(right: 12),
-                          child: Icon(LucideIcons.lock, size: 16, color: AppColors.iconMuted),
+                          child: Icon(LucideIcons.lock,
+                              size: 16, color: AppColors.iconMuted),
                         )
                       : null,
-                  fillColor: isEmailReadOnly ? const Color(0xFFF3F4F6) : AppColors.surfaceBase,
+                  fillColor: isEmailReadOnly
+                      ? const Color(0xFFF3F4F6)
+                      : AppColors.surfaceBase,
                   errorText: _fieldServerErrors['contactEmail'],
                 ),
               );
@@ -2536,14 +2553,18 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                   helperText: isPhoneReadOnly
                       ? 'Cố định theo tài khoản của bạn'
                       : 'Tự động lấy từ tài khoản của bạn',
-                  prefixIcon: const Icon(LucideIcons.phone, size: 18, color: AppColors.iconMuted),
+                  prefixIcon: const Icon(LucideIcons.phone,
+                      size: 18, color: AppColors.iconMuted),
                   suffixIcon: isPhoneReadOnly
                       ? const Padding(
                           padding: EdgeInsets.only(right: 12),
-                          child: Icon(LucideIcons.lock, size: 16, color: AppColors.iconMuted),
+                          child: Icon(LucideIcons.lock,
+                              size: 16, color: AppColors.iconMuted),
                         )
                       : null,
-                  fillColor: isPhoneReadOnly ? const Color(0xFFF3F4F6) : AppColors.surfaceBase,
+                  fillColor: isPhoneReadOnly
+                      ? const Color(0xFFF3F4F6)
+                      : AppColors.surfaceBase,
                   errorText: _fieldServerErrors['phone'],
                 ),
               );
@@ -2847,368 +2868,371 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                if (pickedFile.isImage)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Image.memory(
-                      pickedFile.bytes,
-                      height: 132,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        height: 76,
-                        alignment: Alignment.center,
-                        color: AppColors.surfaceMuted,
-                        child: Text(
-                          'Đã chọn ảnh (${pickedFile.formattedSize})',
-                          style: AppTypography.caption,
+                    if (pickedFile.isImage)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Image.memory(
+                          pickedFile.bytes,
+                          height: 132,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            height: 76,
+                            alignment: Alignment.center,
+                            color: AppColors.surfaceMuted,
+                            child: Text(
+                              'Đã chọn ảnh (${pickedFile.formattedSize})',
+                              style: AppTypography.caption,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        key: Key('kyc_pdf_preview_$slotKey'),
+                        padding: const EdgeInsets.all(AppSpacing.s12),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceMuted,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.borderSoft),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              LucideIcons.fileText,
+                              size: 18,
+                              color: AppColors.iconStrong,
+                            ),
+                            const SizedBox(width: AppSpacing.s8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    pickedFile.name,
+                                    style: AppTypography.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    softWrap: true,
+                                  ),
+                                  Text(
+                                    'PDF • ${pickedFile.formattedSize}',
+                                    style: AppTypography.caption,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                  )
-                else
-                  Container(
-                    key: Key('kyc_pdf_preview_$slotKey'),
-                    padding: const EdgeInsets.all(AppSpacing.s12),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceMuted,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.borderSoft),
-                    ),
-                    child: Row(
+                    const SizedBox(height: AppSpacing.s8),
+                    Row(
                       children: [
                         const Icon(
-                          LucideIcons.fileText,
-                          size: 18,
+                          LucideIcons.circleCheck,
+                          size: 16,
                           color: AppColors.iconStrong,
                         ),
                         const SizedBox(width: AppSpacing.s8),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                pickedFile.name,
-                                style: AppTypography.bodyMedium.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                softWrap: true,
-                              ),
-                              Text(
-                                'PDF • ${pickedFile.formattedSize}',
-                                style: AppTypography.caption,
-                              ),
-                            ],
+                          child: Text(
+                            '${pickedFile.name} (${pickedFile.formattedSize})',
+                            style: AppTypography.caption.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textStrong,
+                            ),
+                            softWrap: true,
+                          ),
+                        ),
+                        _BareLucideIconButton(
+                          key: Key('kyc_preview_btn_$slotKey'),
+                          icon: LucideIcons.eye,
+                          tooltip: 'Xem trước ${pickedFile.name}',
+                          onPressed: () => _openDocumentPreviewSheet(
+                            slotKey: slotKey,
+                            slotLabel: title,
+                            file: pickedFile,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                const SizedBox(height: AppSpacing.s8),
-                Row(
-                  children: [
-                    const Icon(
-                      LucideIcons.circleCheck,
-                      size: 16,
-                      color: AppColors.iconStrong,
-                    ),
-                    const SizedBox(width: AppSpacing.s8),
-                    Expanded(
-                      child: Text(
-                        '${pickedFile.name} (${pickedFile.formattedSize})',
-                        style: AppTypography.caption.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textStrong,
+                    if (progress != null &&
+                        (_submitting || isRetryingSlot)) ...[
+                      const SizedBox(height: AppSpacing.s8),
+                      Column(
+                        key: Key('kyc_slot_progress_$slotKey'),
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Tiến độ: ${(progress * 100).toStringAsFixed(0)}%',
+                            style: AppTypography.caption,
+                          ),
+                          const SizedBox(height: AppSpacing.s4),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(AppRadii.pill),
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 4,
+                              color: AppColors.primary,
+                              backgroundColor: AppColors.surfaceMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.s8),
+                    Wrap(
+                      spacing: AppSpacing.s8,
+                      runSpacing: AppSpacing.s8,
+                      children: [
+                        _PillCtaButton.secondary(
+                          key: Key('kyc_reselect_btn_$slotKey'),
+                          icon: LucideIcons.refreshCw,
+                          label: 'Chọn lại',
+                          onPressed: _submitting
+                              ? null
+                              : () => _pickFileForSlot(
+                                    slotKey: slotKey,
+                                    slotLabel: title,
+                                  ),
                         ),
-                        softWrap: true,
-                      ),
-                    ),
-                    _BareLucideIconButton(
-                      key: Key('kyc_preview_btn_$slotKey'),
-                      icon: LucideIcons.eye,
-                      tooltip: 'Xem trước ${pickedFile.name}',
-                      onPressed: () => _openDocumentPreviewSheet(
-                        slotKey: slotKey,
-                        slotLabel: title,
-                        file: pickedFile,
-                      ),
+                        if (pickedFile.isImage &&
+                            (slotKey == 'identityFront' ||
+                                slotKey == 'identitySingle' ||
+                                slotKey == 'identityBack'))
+                          _PillCtaButton.secondary(
+                            key: Key('kyc_ai_scan_btn_$slotKey'),
+                            icon: LucideIcons.scanSearch,
+                            label: ((slotKey == 'identityFront' ||
+                                        slotKey == 'identitySingle')
+                                    ? _analyzingFront
+                                    : _analyzingBack)
+                                ? 'AI đang phân tích...'
+                                : 'Quét AI CCCD',
+                            onPressed: _submitting || _analyzingAi
+                                ? null
+                                : () => _analyzeCccdWithAi(
+                                      pickedFile,
+                                      slotKey: slotKey,
+                                    ),
+                          ),
+                        _PillCtaButton.secondary(
+                          key: Key('kyc_remove_btn_$slotKey'),
+                          icon: LucideIcons.trash2,
+                          label: 'Xóa',
+                          onPressed: _submitting
+                              ? null
+                              : () => _removeFileFromSlot(slotKey),
+                        ),
+                        if (slotError != null)
+                          _PillCtaButton.secondary(
+                            key: Key('kyc_retry_btn_$slotKey'),
+                            icon: AppSemanticIcons.retry,
+                            label: 'Thử lại',
+                            onPressed: _submitting
+                                ? null
+                                : () => _retrySingleFileSlot(
+                                      slotKey: slotKey,
+                                      slotLabel: title,
+                                    ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
-                if (progress != null && (_submitting || isRetryingSlot)) ...[
-                  const SizedBox(height: AppSpacing.s8),
-                  Column(
-                    key: Key('kyc_slot_progress_$slotKey'),
+              if (slotError != null) ...[
+                const SizedBox(height: AppSpacing.s8),
+                Container(
+                  key: Key('kyc_slot_error_$slotKey'),
+                  padding: const EdgeInsets.all(AppSpacing.s12),
+                  decoration: BoxDecoration(
+                    color: AppColors.errorSoft,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Tiến độ: ${(progress * 100).toStringAsFixed(0)}%',
-                        style: AppTypography.caption,
+                      const Icon(
+                        AppSemanticIcons.errorAlert,
+                        size: 16,
+                        color: AppColors.iconStrong,
                       ),
-                      const SizedBox(height: AppSpacing.s4),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(AppRadii.pill),
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 4,
-                          color: AppColors.primary,
-                          backgroundColor: AppColors.surfaceMuted,
+                      const SizedBox(width: AppSpacing.s8),
+                      Expanded(
+                        child: Text(
+                          slotError,
+                          style: AppTypography.caption.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textStrong,
+                          ),
+                          softWrap: true,
+                        ),
+                      ),
+                      if (pickedFile == null)
+                        _BareLucideIconButton(
+                          key: Key('kyc_retry_btn_$slotKey'),
+                          icon: AppSemanticIcons.retry,
+                          tooltip: 'Thử chọn lại tệp',
+                          onPressed: _submitting
+                              ? null
+                              : () => _retrySingleFileSlot(
+                                    slotKey: slotKey,
+                                    slotLabel: title,
+                                  ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              if (pickedFile != null &&
+                  ((slotKey == 'identityFront' ||
+                              slotKey == 'identitySingle') &&
+                          _analyzingFront ||
+                      slotKey == 'identityBack' && _analyzingBack)) ...[
+                const SizedBox(height: AppSpacing.s8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.s12, vertical: AppSpacing.s8),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceMuted,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        LucideIcons.loader,
+                        size: 16,
+                        color: AppColors.iconStrong,
+                      ),
+                      const SizedBox(width: AppSpacing.s8),
+                      Expanded(
+                        child: Text(
+                          'AI đang tự động kiểm tra giấy tờ...',
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.textStrong,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ],
-                const SizedBox(height: AppSpacing.s8),
-                Wrap(
-                  spacing: AppSpacing.s8,
-                  runSpacing: AppSpacing.s8,
-                  children: [
-                    _PillCtaButton.secondary(
-                      key: Key('kyc_reselect_btn_$slotKey'),
-                      icon: LucideIcons.refreshCw,
-                      label: 'Chọn lại',
-                      onPressed: _submitting
-                          ? null
-                          : () => _pickFileForSlot(
-                                slotKey: slotKey,
-                                slotLabel: title,
-                              ),
-                    ),
-                    if (pickedFile.isImage &&
-                        (slotKey == 'identityFront' ||
-                            slotKey == 'identitySingle' ||
-                            slotKey == 'identityBack'))
-                      _PillCtaButton.secondary(
-                        key: Key('kyc_ai_scan_btn_$slotKey'),
-                        icon: LucideIcons.scanSearch,
-                        label: ((slotKey == 'identityFront' ||
-                                    slotKey == 'identitySingle')
-                                ? _analyzingFront
-                                : _analyzingBack)
-                            ? 'AI đang phân tích...'
-                            : 'Quét AI CCCD',
-                        onPressed: _submitting || _analyzingAi
-                            ? null
-                            : () => _analyzeCccdWithAi(
-                                  pickedFile,
-                                  slotKey: slotKey,
-                                ),
-                      ),
-                    _PillCtaButton.secondary(
-                      key: Key('kyc_remove_btn_$slotKey'),
-                      icon: LucideIcons.trash2,
-                      label: 'Xóa',
-                      onPressed: _submitting
-                          ? null
-                          : () => _removeFileFromSlot(slotKey),
-                    ),
-                    if (slotError != null)
-                      _PillCtaButton.secondary(
-                        key: Key('kyc_retry_btn_$slotKey'),
-                        icon: AppSemanticIcons.retry,
-                        label: 'Thử lại',
-                        onPressed: _submitting
-                            ? null
-                            : () => _retrySingleFileSlot(
-                                  slotKey: slotKey,
-                                  slotLabel: title,
-                                ),
-                      ),
-                  ],
                 ),
               ],
-            ),
-          if (slotError != null) ...[
-            const SizedBox(height: AppSpacing.s8),
-            Container(
-              key: Key('kyc_slot_error_$slotKey'),
-              padding: const EdgeInsets.all(AppSpacing.s12),
-              decoration: BoxDecoration(
-                color: AppColors.errorSoft,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    AppSemanticIcons.errorAlert,
-                    size: 16,
-                    color: AppColors.iconStrong,
+              if ((slotKey == 'identityFront' || slotKey == 'identitySingle') &&
+                  _aiFrontError != null) ...[
+                const SizedBox(height: AppSpacing.s8),
+                Container(
+                  key: const Key('kyc_front_ai_error_card'),
+                  padding: const EdgeInsets.all(AppSpacing.s12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
                   ),
-                  const SizedBox(width: AppSpacing.s8),
-                  Expanded(
-                    child: Text(
-                      slotError,
-                      style: AppTypography.caption.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textStrong,
-                      ),
-                      softWrap: true,
-                    ),
-                  ),
-                  if (pickedFile == null)
-                    _BareLucideIconButton(
-                      key: Key('kyc_retry_btn_$slotKey'),
-                      icon: AppSemanticIcons.retry,
-                      tooltip: 'Thử chọn lại tệp',
-                      onPressed: _submitting
-                          ? null
-                          : () => _retrySingleFileSlot(
-                                slotKey: slotKey,
-                                slotLabel: title,
-                              ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-          if (pickedFile != null &&
-              ((slotKey == 'identityFront' || slotKey == 'identitySingle') &&
-                      _analyzingFront ||
-                  slotKey == 'identityBack' && _analyzingBack)) ...[
-            const SizedBox(height: AppSpacing.s8),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.s12, vertical: AppSpacing.s8),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceMuted,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    LucideIcons.loader,
-                    size: 16,
-                    color: AppColors.iconStrong,
-                  ),
-                  const SizedBox(width: AppSpacing.s8),
-                  Expanded(
-                    child: Text(
-                      'AI đang tự động kiểm tra giấy tờ...',
-                      style: AppTypography.caption.copyWith(
-                        color: AppColors.textStrong,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if ((slotKey == 'identityFront' || slotKey == 'identitySingle') &&
-              _aiFrontError != null) ...[
-            const SizedBox(height: AppSpacing.s8),
-            Container(
-              key: const Key('kyc_front_ai_error_card'),
-              padding: const EdgeInsets.all(AppSpacing.s12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEF2F2),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFFCA5A5)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    LucideIcons.circleAlert,
-                    size: 16,
-                    color: AppColors.error,
-                  ),
-                  const SizedBox(width: AppSpacing.s8),
-                  Expanded(
-                    child: Text(
-                      _aiFrontError!,
-                      style: AppTypography.caption.copyWith(
+                  child: Row(
+                    children: [
+                      const Icon(
+                        LucideIcons.circleAlert,
+                        size: 16,
                         color: AppColors.error,
-                        fontWeight: FontWeight.w600,
                       ),
-                    ),
+                      const SizedBox(width: AppSpacing.s8),
+                      Expanded(
+                        child: Text(
+                          _aiFrontError!,
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.error,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ],
-          if (slotKey == 'identityBack' &&
-              _aiBackError != null &&
-              !_aiBackError!.contains('không trùng khớp')) ...[
-            const SizedBox(height: AppSpacing.s8),
-            Container(
-              key: const Key('kyc_back_ai_error_card'),
-              padding: const EdgeInsets.all(AppSpacing.s12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEF2F2),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFFCA5A5)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    LucideIcons.circleAlert,
-                    size: 16,
-                    color: AppColors.error,
+                ),
+              ],
+              if (slotKey == 'identityBack' &&
+                  _aiBackError != null &&
+                  !_aiBackError!.contains('không trùng khớp')) ...[
+                const SizedBox(height: AppSpacing.s8),
+                Container(
+                  key: const Key('kyc_back_ai_error_card'),
+                  padding: const EdgeInsets.all(AppSpacing.s12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
                   ),
-                  const SizedBox(width: AppSpacing.s8),
-                  Expanded(
-                    child: Text(
-                      _aiBackError!,
-                      style: AppTypography.caption.copyWith(
+                  child: Row(
+                    children: [
+                      const Icon(
+                        LucideIcons.circleAlert,
+                        size: 16,
                         color: AppColors.error,
-                        fontWeight: FontWeight.w600,
                       ),
-                    ),
+                      const SizedBox(width: AppSpacing.s8),
+                      Expanded(
+                        child: Text(
+                          _aiBackError!,
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.error,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ],
-          if (slotKey == 'identityBack' &&
-              _documentType.requiresFrontAndBack &&
-              (_identityFront == null ||
-                  _aiFrontError != null ||
-                  _aiFrontResult == null ||
-                  !_aiFrontResult!.isDocumentValid)) ...[
-            const SizedBox(height: AppSpacing.s8),
-            Container(
-              key: const Key('kyc_back_slot_step_notice'),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.s12, vertical: AppSpacing.s8),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceMuted,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderSoft),
-              ),
-              child: Row(
-                children: [
-                  const Icon(LucideIcons.lock,
-                      size: 16, color: AppColors.textSecondary),
-                  const SizedBox(width: AppSpacing.s8),
-                  Expanded(
-                    child: Text(
-                      'Bước 2: Vui lòng xác thực xong mặt trước trước khi chụp mặt sau.',
-                      style: AppTypography.caption
-                          .copyWith(color: AppColors.textSecondary),
-                    ),
+                ),
+              ],
+              if (slotKey == 'identityBack' &&
+                  _documentType.requiresFrontAndBack &&
+                  (_identityFront == null ||
+                      _aiFrontError != null ||
+                      _aiFrontResult == null ||
+                      !_aiFrontResult!.isDocumentValid)) ...[
+                const SizedBox(height: AppSpacing.s8),
+                Container(
+                  key: const Key('kyc_back_slot_step_notice'),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.s12, vertical: AppSpacing.s8),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceMuted,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderSoft),
                   ),
-                ],
-              ),
-            ),
-          ],
-          if ((slotKey == 'identityFront' || slotKey == 'identitySingle') &&
-              _aiIdentityResult != null &&
-              _aiIdentityResult!.isDocumentValid &&
-              _aiFrontError == null)
-            _buildAiExtractionCard(_aiIdentityResult!),
-          if (slotKey == 'identityBack' &&
-              _aiBackResult != null &&
-              _aiBackResult!.isDocumentValid &&
-              (_aiBackError == null || _aiBackError!.contains('không trùng khớp')))
-            _buildAiBackExtractionCard(_aiBackResult!),
-        ],
+                  child: Row(
+                    children: [
+                      const Icon(LucideIcons.lock,
+                          size: 16, color: AppColors.textSecondary),
+                      const SizedBox(width: AppSpacing.s8),
+                      Expanded(
+                        child: Text(
+                          'Bước 2: Vui lòng xác thực xong mặt trước trước khi chụp mặt sau.',
+                          style: AppTypography.caption
+                              .copyWith(color: AppColors.textSecondary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if ((slotKey == 'identityFront' || slotKey == 'identitySingle') &&
+                  _aiIdentityResult != null &&
+                  _aiIdentityResult!.isDocumentValid &&
+                  _aiFrontError == null)
+                _buildAiExtractionCard(_aiIdentityResult!),
+              if (slotKey == 'identityBack' &&
+                  _aiBackResult != null &&
+                  _aiBackResult!.isDocumentValid &&
+                  (_aiBackError == null ||
+                      _aiBackError!.contains('không trùng khớp')))
+                _buildAiBackExtractionCard(_aiBackResult!),
+            ],
+          ),
+        ),
       ),
-    ),
-  ),
-);
+    );
   }
 
   Widget _buildAiExtractionCard(HostIdentityAiResult result) {
@@ -3440,7 +3464,8 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
             backId != null
                 ? 'Chip điện tử và mã MRZ đã được AI nhận diện thành công (Số CCCD: $backId).'
                 : 'Chip điện tử và mã MRZ đã được AI nhận diện thành công.',
-            style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
+            style:
+                AppTypography.caption.copyWith(color: AppColors.textSecondary),
           ),
           if (result.issueDate != null && result.issueDate!.isNotEmpty) ...[
             const SizedBox(height: 4),
@@ -4077,7 +4102,8 @@ class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
                 _PillCtaButton.primary(
                   key: const Key('status_resubmit_btn'),
                   icon: LucideIcons.fileEdit,
-                  label: (status == HostApplicationStatus.approved && !isActuallyHost)
+                  label: (status == HostApplicationStatus.approved &&
+                          !isActuallyHost)
                       ? 'Đăng ký làm Host lại'
                       : (status == HostApplicationStatus.none
                           ? 'Đăng ký làm Host'

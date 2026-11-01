@@ -31,6 +31,7 @@ export { default as NotificationLog } from "./notification-log";
 export { default as Payment } from "./payment";
 export { default as PaymentTransaction } from "./payment-transaction";
 export { default as PayoutAccount } from "./payout-account";
+export { default as PlatformFeeSetting } from "./platform-fee-setting";
 export { default as RefreshSession } from "./refresh-session";
 export { default as Refund } from "./refund";
 export { default as Report } from "./report";

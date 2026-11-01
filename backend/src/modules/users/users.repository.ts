@@ -240,6 +240,102 @@ export type AdminListUsersFilter = {
     limit: number;
 };
 
+const adminUserRoleOrder: Record<string, number> = {
+    guest: 0,
+    host: 1,
+    admin: 2,
+};
+
+const adminVietnameseNameCollator = new Intl.Collator("vi", {
+    sensitivity: "accent",
+    numeric: true,
+});
+
+const resolveAdminItemPrimaryRole = (item: {
+    role?: string | null;
+    roles?: readonly string[] | null;
+}): string => {
+    const directRole = typeof item.role === "string" ? item.role.trim().toLowerCase() : "";
+    if (directRole) {
+        return directRole;
+    }
+
+    if (Array.isArray(item.roles) && item.roles.length > 0) {
+        const normalized = item.roles.map((r) => String(r).trim().toLowerCase()).filter(Boolean);
+        if (normalized.includes("admin")) return "admin";
+        if (normalized.includes("host")) return "host";
+        if (normalized.includes("guest")) return "guest";
+        if (normalized.length > 0) return normalized[0];
+    }
+
+    return "guest";
+};
+
+const resolveAdminItemDisplayName = (item: {
+    fullName?: string | null;
+    name?: string | null;
+    username?: string | null;
+    email?: string | null;
+    userId?: string | number | null;
+    id?: string | number | null;
+}): string => {
+    for (const candidate of [item.fullName, item.name, item.username]) {
+        const trimmed = typeof candidate === "string" ? candidate.trim() : "";
+        if (trimmed) {
+            return trimmed;
+        }
+    }
+
+    const fallbackId = String(item.userId ?? item.id ?? "").trim();
+    return fallbackId ? `User #${fallbackId}` : "";
+};
+
+export const sortAdminUserItems = <
+    T extends {
+        role?: string | null;
+        roles?: readonly string[] | null;
+        fullName?: string | null;
+        name?: string | null;
+        username?: string | null;
+        email?: string | null;
+        userId?: string | number | null;
+        id?: string | number | null;
+    },
+>(
+    items: readonly T[],
+): T[] => {
+    return [...items].sort((left, right) => {
+        const leftRoleRank = adminUserRoleOrder[resolveAdminItemPrimaryRole(left)] ?? 3;
+        const rightRoleRank = adminUserRoleOrder[resolveAdminItemPrimaryRole(right)] ?? 3;
+        if (leftRoleRank !== rightRoleRank) {
+            return leftRoleRank - rightRoleRank;
+        }
+
+        const leftName = resolveAdminItemDisplayName(left).replace(/\s+/g, " ");
+        const rightName = resolveAdminItemDisplayName(right).replace(/\s+/g, " ");
+        const nameCmp = adminVietnameseNameCollator.compare(leftName, rightName);
+        if (nameCmp !== 0) {
+            return nameCmp;
+        }
+
+        const leftEmail = String(left.email ?? "").trim().toLowerCase();
+        const rightEmail = String(right.email ?? "").trim().toLowerCase();
+        if (leftEmail !== rightEmail) {
+            return leftEmail < rightEmail ? -1 : 1;
+        }
+
+        const leftIdRaw = String(left.userId ?? left.id ?? "").trim();
+        const rightIdRaw = String(right.userId ?? right.id ?? "").trim();
+        const leftIdNum = Number(leftIdRaw);
+        const rightIdNum = Number(rightIdRaw);
+        if (Number.isFinite(leftIdNum) && Number.isFinite(rightIdNum) && leftIdRaw !== "" && rightIdRaw !== "") {
+            return leftIdNum - rightIdNum;
+        }
+
+        return leftIdRaw.localeCompare(rightIdRaw);
+    });
+};
+
 export const listUsersForAdmin = async ({ search, role, status, page, limit }: AdminListUsersFilter) => {
     const replacements: Array<string | number> = [];
     const conditions = ["u.deleted_at IS NULL"];
@@ -275,6 +371,7 @@ export const listUsersForAdmin = async ({ search, role, status, page, limit }: A
             email: string;
             phone: string | null;
             fullName: string;
+            avatarUrl: string | null;
             status: UserStatus;
             isEmailVerified: number | boolean;
             isPhoneVerified: number | boolean;
@@ -291,6 +388,7 @@ export const listUsersForAdmin = async ({ search, role, status, page, limit }: A
                 u.email,
                 u.phone,
                 u.full_name AS fullName,
+                u.avatar_url AS avatarUrl,
                 u.status,
                 u.is_email_verified AS isEmailVerified,
                 u.is_phone_verified AS isPhoneVerified,
@@ -304,7 +402,24 @@ export const listUsersForAdmin = async ({ search, role, status, page, limit }: A
             LEFT JOIN roles r ON r.role_id = ur.role_id
             WHERE ${whereSql}
             GROUP BY u.user_id
-            ORDER BY u.created_at DESC, u.user_id DESC
+            ORDER BY
+                COALESCE(
+                    MAX(
+                        CASE r.code
+                            WHEN 'admin' THEN 2
+                            WHEN 'host' THEN 1
+                            WHEN 'guest' THEN 0
+                            ELSE 0
+                        END
+                    ),
+                    0
+                ) ASC,
+                CONVERT(
+                    TRIM(COALESCE(NULLIF(TRIM(u.full_name), ''), u.username, u.email, ''))
+                    USING utf8mb4
+                ) COLLATE utf8mb4_unicode_ci ASC,
+                LOWER(u.email) ASC,
+                u.user_id ASC
             LIMIT ? OFFSET ?
             `,
             {
@@ -327,34 +442,37 @@ export const listUsersForAdmin = async ({ search, role, status, page, limit }: A
 
     const totalItems = Number(countRows[0]?.totalItems ?? 0);
 
-    return {
-        items: rows.map((row) => {
-            const parsedRoles = row.roles
-                ? row.roles
-                    .split(",")
-                    .filter((item): item is UserRole => (userRoleValues as readonly string[]).includes(item))
-                : [];
-            const roles: UserRole[] = parsedRoles.length > 0 ? parsedRoles : ["guest"];
+    const mappedItems = rows.map((row) => {
+        const parsedRoles = row.roles
+            ? row.roles
+                .split(",")
+                .filter((item): item is UserRole => (userRoleValues as readonly string[]).includes(item))
+            : [];
+        const roles: UserRole[] = parsedRoles.length > 0 ? parsedRoles : ["guest"];
 
-            return {
-                id: String(row.userId),
-                userId: String(row.userId),
-                username: row.username,
-                email: row.email,
-                phone: row.phone,
-                name: row.fullName,
-                fullName: row.fullName,
-                status: row.status,
-                roles,
-                role: roles[0] ?? "guest",
-                isEmailVerified: Boolean(row.isEmailVerified),
-                isPhoneVerified: Boolean(row.isPhoneVerified),
-                isHostVerified: Boolean(row.isHostVerified),
-                hostApplicationStatus: row.hostApplicationStatus,
-                createdAt: row.createdAt,
-                updatedAt: row.updatedAt,
-            };
-        }),
+        return {
+            id: String(row.userId),
+            userId: String(row.userId),
+            username: row.username,
+            email: row.email,
+            phone: row.phone,
+            name: row.fullName,
+            fullName: row.fullName,
+            avatarUrl: row.avatarUrl ?? null,
+            status: row.status,
+            roles,
+            role: roles[0] ?? "guest",
+            isEmailVerified: Boolean(row.isEmailVerified),
+            isPhoneVerified: Boolean(row.isPhoneVerified),
+            isHostVerified: Boolean(row.isHostVerified),
+            hostApplicationStatus: row.hostApplicationStatus,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+        };
+    });
+
+    return {
+        items: sortAdminUserItems(mappedItems),
         pagination: {
             page,
             limit,

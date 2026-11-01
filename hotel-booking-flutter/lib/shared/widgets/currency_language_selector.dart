@@ -8,46 +8,6 @@ import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_typography.dart';
 import '../../l10n/locale_formatters.dart';
 
-/// Formats a human-friendly reference rate string for a verified [ExchangeRateSnapshot].
-String? buildReferenceRateSummary({
-  required MoneyFormatter formatter,
-  required AppCurrency currency,
-}) {
-  final snapshot = formatter.snapshot;
-  if (snapshot == null || currency == AppCurrency.vnd) {
-    return null;
-  }
-  final l10n = formatter.l10n;
-  final rateVal = double.tryParse(snapshot.rateDecimalFor(currency));
-  if (rateVal == null || rateVal <= 0) {
-    return null;
-  }
-
-  if (currency == AppCurrency.krw) {
-    final vndPer100Krw = (100.0 / rateVal).round();
-    final vndGrouped = MoneyFormatter.formatExactVndStatic(vndPer100Krw);
-    return '${l10n.fxReferenceRateLabel(snapshot.source)}: 100 KRW ≈ $vndGrouped';
-  }
-
-  final vndPerUnit = (1.0 / rateVal).round();
-  final vndGrouped = MoneyFormatter.formatExactVndStatic(vndPerUnit);
-  return '${l10n.fxReferenceRateLabel(snapshot.source)}: 1 ${currency.code} ≈ $vndGrouped';
-}
-
-/// Formats `sourceUpdatedAt` in local `dd/MM/yyyy HH:mm` / `yyyy-MM-dd HH:mm` cleanly.
-String formatSnapshotUpdatedAt(DateTime utcTimestamp, String localeCode) {
-  final local = utcTimestamp.toLocal();
-  final y = local.year.toString().padLeft(4, '0');
-  final m = local.month.toString().padLeft(2, '0');
-  final d = local.day.toString().padLeft(2, '0');
-  final hh = local.hour.toString().padLeft(2, '0');
-  final mm = local.minute.toString().padLeft(2, '0');
-  if (localeCode == 'ko' || localeCode == 'en') {
-    return '$y-$m-$d $hh:$mm';
-  }
-  return '$d/$m/$y $hh:$mm';
-}
-
 /// Opens the unified Language & Currency selector sheet from Top Header or Menu.
 Future<void> showCurrencyLanguageBottomSheet(BuildContext context) {
   return showModalBottomSheet<void>(
@@ -145,11 +105,6 @@ class CurrencyLanguageSheetContent extends ConsumerWidget {
     final ratesState = ref.watch(exchangeRatesProvider);
     final formatter = ref.watch(moneyFormatterProvider);
     final l10n = formatter.l10n;
-
-    final rateSummary = buildReferenceRateSummary(
-      formatter: formatter,
-      currency: effectiveCurrency,
-    );
 
     return SafeArea(
       top: false,
@@ -330,72 +285,41 @@ class CurrencyLanguageSheetContent extends ConsumerWidget {
                             .read(currencyPreferenceProvider.notifier)
                             .setManualCurrency(AppCurrency.krw),
                       ),
-                      const SizedBox(height: AppSpacing.s12),
-                      Container(
-                        key: const Key('sheet_fx_status_box'),
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(AppSpacing.s12),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceElevated,
-                          borderRadius: BorderRadius.circular(AppRadii.card),
-                          border: Border.all(color: AppColors.borderSoft),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 2),
-                                  child: Icon(
-                                    LucideIcons.info,
-                                    size: 16,
-                                    color: AppColors.iconMuted,
-                                  ),
+                      if (formatter.isFallingBackToVnd) ...[
+                        const SizedBox(height: AppSpacing.s12),
+                        Container(
+                          key: const Key('sheet_fx_status_box'),
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(AppSpacing.s12),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceElevated,
+                            borderRadius: BorderRadius.circular(AppRadii.card),
+                            border: Border.all(color: AppColors.borderSoft),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Padding(
+                                padding: EdgeInsets.only(top: 2),
+                                child: Icon(
+                                  LucideIcons.info,
+                                  size: 16,
+                                  color: AppColors.iconMuted,
                                 ),
-                                const SizedBox(width: AppSpacing.s8),
-                                Expanded(
-                                  child: Text(
-                                    formatter.isFallingBackToVnd
-                                        ? l10n.fxRateUnavailableFallback
-                                        : l10n.fxChargedInVndNotice,
-                                    style: AppTypography.caption.copyWith(
-                                      color: AppColors.textSecondary,
-                                    ),
+                              ),
+                              const SizedBox(width: AppSpacing.s8),
+                              Expanded(
+                                child: Text(
+                                  l10n.fxRateUnavailableFallback,
+                                  style: AppTypography.caption.copyWith(
+                                    color: AppColors.textSecondary,
                                   ),
-                                ),
-                              ],
-                            ),
-                            if (rateSummary != null &&
-                                formatter.snapshot != null) ...[
-                              const SizedBox(height: 6),
-                              Text(
-                                '$rateSummary • ${l10n.fxRateUpdatedAt(formatSnapshotUpdatedAt(formatter.snapshot!.sourceUpdatedAt, currentLocale))}',
-                                style: AppTypography.caption.copyWith(
-                                  color: AppColors.textMuted,
                                 ),
                               ),
                             ],
-                            if (formatter.isUsingStaleRate &&
-                                formatter.snapshot != null) ...[
-                              const SizedBox(height: AppSpacing.s4),
-                              Text(
-                                l10n.fxRateStaleNotice(
-                                  formatSnapshotUpdatedAt(
-                                    formatter.snapshot!.sourceUpdatedAt,
-                                    currentLocale,
-                                  ),
-                                ),
-                                style: AppTypography.caption.copyWith(
-                                  color: AppColors.warning,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ],
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ],
                 ),

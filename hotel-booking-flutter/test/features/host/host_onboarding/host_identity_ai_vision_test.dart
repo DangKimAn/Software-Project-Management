@@ -80,13 +80,13 @@ class _FakeFilePickerService implements HostFilePickerService {
       nextFile;
 
   @override
-  Future<HostPickedFile> readFromFilePath(String filePath) async =>
-      nextFile!;
+  Future<HostPickedFile> readFromFilePath(String filePath) async => nextFile!;
 }
 
 class _FakePermissionService implements HostOnboardingPermissionService {
   @override
-  Future<HostKycPermissionResult> requestPermission(HostKycFileSource source) async =>
+  Future<HostKycPermissionResult> requestPermission(
+          HostKycFileSource source) async =>
       const HostKycPermissionResult(status: HostKycPermissionStatus.granted);
 }
 
@@ -147,7 +147,8 @@ void main() {
       expect(result.warnings, contains('Ảnh chụp tốt'));
     });
 
-    test('parses 9-digit CMND JSON payload with null nationality and gender', () {
+    test('parses 9-digit CMND JSON payload with null nationality and gender',
+        () {
       final json = <String, dynamic>{
         'documentType': 'cmnd',
         'side': 'front',
@@ -177,7 +178,8 @@ void main() {
       expect(result.fullName, 'NGUYỄN VĂN A');
       expect(result.dateOfBirth, '15/05/1999');
       expect(result.placeOfOrigin, 'Thọ Xuân, Thanh Hóa');
-      expect(result.placeOfResidence, 'Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh');
+      expect(
+          result.placeOfResidence, 'Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh');
       expect(result.confidence, 0.98);
       expect(result.isClear, isTrue);
     });
@@ -235,7 +237,8 @@ void main() {
         'isDocumentValid': true,
         'confidence': 0.98,
         'warnings': <String>[],
-        'summaryVi': 'Giấy phép lái xe mặt trước - NGUYỄN VĂN A - Số: 241234567890',
+        'summaryVi':
+            'Giấy phép lái xe mặt trước - NGUYỄN VĂN A - Số: 241234567890',
       };
 
       final result = HostIdentityAiResult.fromJson(json);
@@ -248,7 +251,8 @@ void main() {
       expect(result.confidence, 0.98);
     });
 
-    test('parses invalid non-identity document (utility bill) JSON correctly', () {
+    test('parses invalid non-identity document (utility bill) JSON correctly',
+        () {
       final json = <String, dynamic>{
         'documentType': 'unknown',
         'side': 'unknown',
@@ -338,7 +342,8 @@ void main() {
         'gender': 'Nam',
         'nationality': 'Việt Nam',
         'placeOfOrigin': 'Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
-        'placeOfResidence': '123 Đường Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+        'placeOfResidence':
+            '123 Đường Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
         'expiryDate': '15/05/2039',
         'isClear': false,
         'isDocumentValid': true,
@@ -376,7 +381,8 @@ void main() {
 
       for (final fixture in fixtures) {
         final file = File(fixture);
-        expect(file.existsSync(), isTrue, reason: '$fixture must exist for CI/CD');
+        expect(file.existsSync(), isTrue,
+            reason: '$fixture must exist for CI/CD');
       }
     });
 
@@ -398,12 +404,18 @@ void main() {
     });
 
     test('normalizes Vietnamese names ignoring accents and letter case', () {
-      expect(HostOnboardingValidator.normalizeVietnameseName('NGUYỄN VĂN A'), 'nguyen van a');
-      expect(HostOnboardingValidator.normalizeVietnameseName('Đào Duy Phong'), 'dao duy phong');
-      expect(HostOnboardingValidator.normalizeVietnameseName('  vũ   thị   bình  '), 'vu thi binh');
+      expect(HostOnboardingValidator.normalizeVietnameseName('NGUYỄN VĂN A'),
+          'nguyen van a');
+      expect(HostOnboardingValidator.normalizeVietnameseName('Đào Duy Phong'),
+          'dao duy phong');
+      expect(
+          HostOnboardingValidator.normalizeVietnameseName(
+              '  vũ   thị   bình  '),
+          'vu thi binh');
     });
 
-    test('isNameMatching returns true for exact or diacritic/case variations', () {
+    test('isNameMatching returns true for exact or diacritic/case variations',
+        () {
       expect(
         HostOnboardingValidator.isNameMatching(
           enteredName: 'nguyen van a',
@@ -444,15 +456,73 @@ void main() {
     final sampleImageBytes = mockFixtureFile.existsSync()
         ? mockFixtureFile.readAsBytesSync()
         : Uint8List.fromList(<int>[
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
-            0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,
-            0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-            0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
-            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
-            0x42, 0x60, 0x82,
+            0x89,
+            0x50,
+            0x4E,
+            0x47,
+            0x0D,
+            0x0A,
+            0x1A,
+            0x0A,
+            0x00,
+            0x00,
+            0x00,
+            0x0D,
+            0x49,
+            0x48,
+            0x44,
+            0x52,
+            0x00,
+            0x00,
+            0x00,
+            0x01,
+            0x00,
+            0x00,
+            0x00,
+            0x01,
+            0x08,
+            0x06,
+            0x00,
+            0x00,
+            0x00,
+            0x1F,
+            0x15,
+            0xC4,
+            0x89,
+            0x00,
+            0x00,
+            0x00,
+            0x0A,
+            0x49,
+            0x44,
+            0x41,
+            0x54,
+            0x78,
+            0x9C,
+            0x63,
+            0x00,
+            0x01,
+            0x00,
+            0x00,
+            0x05,
+            0x00,
+            0x01,
+            0x0D,
+            0x0A,
+            0x2D,
+            0xB4,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x49,
+            0x45,
+            0x4E,
+            0x44,
+            0xAE,
+            0x42,
+            0x60,
+            0x82,
           ]);
 
     Widget buildTestHarness({
@@ -463,8 +533,10 @@ void main() {
         overrides: [
           hostRepositoryProvider.overrideWithValue(fakeRepository),
           hostFilePickerProvider.overrideWithValue(fakePicker),
-          hostOnboardingPermissionProvider.overrideWithValue(_FakePermissionService()),
-          hostOnboardingApiProvider.overrideWithValue(_FakeOnboardingApiService()),
+          hostOnboardingPermissionProvider
+              .overrideWithValue(_FakePermissionService()),
+          hostOnboardingApiProvider
+              .overrideWithValue(_FakeOnboardingApiService()),
         ],
         child: MaterialApp(
           theme: AppTheme.lightTheme,
@@ -475,7 +547,8 @@ void main() {
       );
     }
 
-    testWidgets('shows AI scan button after picking CCCD front image', (tester) async {
+    testWidgets('shows AI scan button after picking CCCD front image',
+        (tester) async {
       final fakeRepo = _FakeHostRepository(Dio());
       final fakePicker = _FakeFilePickerService()
         ..nextFile = HostPickedFile(
@@ -506,7 +579,9 @@ void main() {
       expect(find.text('Quét AI CCCD'), findsOneWidget);
     });
 
-    testWidgets('triggers AI scan, displays result card and autofills name and address', (tester) async {
+    testWidgets(
+        'triggers AI scan, displays result card and autofills name and address',
+        (tester) async {
       final fakeRepo = _FakeHostRepository(Dio())
         ..resultToReturn = const HostIdentityAiResult(
           documentType: 'cccd',
@@ -577,10 +652,12 @@ void main() {
       expect(addressField.controller?.text, '');
     });
 
-    testWidgets('handles AI scan error gracefully and shows error banner', (tester) async {
+    testWidgets('handles AI scan error gracefully and shows error banner',
+        (tester) async {
       final fakeRepo = _FakeHostRepository(Dio())
         ..errorToThrow = DioException(
-          requestOptions: RequestOptions(path: '/api/ai/id-card-vision/extract'),
+          requestOptions:
+              RequestOptions(path: '/api/ai/id-card-vision/extract'),
           message: 'Network connection failed',
         );
 
@@ -616,14 +693,17 @@ void main() {
 
       // 3. Verify error message appears
       expect(
-        find.text('Không thể phân tích AI từ ảnh này. Vui lòng thử lại với ảnh rõ nét hơn.'),
+        find.text(
+            'Không thể phân tích AI từ ảnh này. Vui lòng thử lại với ảnh rõ nét hơn.'),
         findsOneWidget,
       );
       // AI result card should NOT be shown
       expect(find.byKey(const Key('kyc_ai_result_card')), findsNothing);
     });
 
-    testWidgets('shows name mismatch warning when entered name differs from CCCD and fixes it on tap', (tester) async {
+    testWidgets(
+        'shows name mismatch warning when entered name differs from CCCD and fixes it on tap',
+        (tester) async {
       final fakeRepo = _FakeHostRepository(Dio())
         ..resultToReturn = const HostIdentityAiResult(
           documentType: 'cccd',
@@ -632,7 +712,8 @@ void main() {
           fullName: 'NGUYỄN VĂN A',
           dateOfBirth: '15/05/1999',
           gender: 'Nam',
-          placeOfResidence: '123 Đường Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+          placeOfResidence:
+              '123 Đường Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
           confidence: 0.98,
           isClear: true,
           isDocumentValid: true,
@@ -676,7 +757,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // 3. Verify mismatch warning banner appears
-      expect(find.byKey(const Key('kyc_name_mismatch_warning')), findsOneWidget);
+      expect(
+          find.byKey(const Key('kyc_name_mismatch_warning')), findsOneWidget);
       expect(find.text('Họ tên không khớp giấy tờ tùy thân'), findsOneWidget);
 
       // 4. Tap the quick-fix button "Dùng tên CCCD"
@@ -692,7 +774,9 @@ void main() {
       expect(find.byKey(const Key('kyc_name_mismatch_warning')), findsNothing);
     });
 
-    testWidgets('shows AI guard banner and blocks submission when document is invalid or not scanned', (tester) async {
+    testWidgets(
+        'shows AI guard banner and blocks submission when document is invalid or not scanned',
+        (tester) async {
       final fakeRepo = _FakeHostRepository(Dio())
         ..resultToReturn = const HostIdentityAiResult(
           documentType: 'unknown',
@@ -730,7 +814,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // 2. Banner warns that AI scan is needed before submission
-      expect(find.byKey(const Key('kyc_submit_ai_guard_banner')), findsOneWidget);
+      expect(
+          find.byKey(const Key('kyc_submit_ai_guard_banner')), findsOneWidget);
 
       // 3. Tap AI scan button (which returns invalid doc)
       final aiScanBtn = find.byKey(const Key('kyc_ai_scan_btn_identityFront'));
@@ -740,7 +825,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // 4. Verify rejection message appears
-      expect(find.textContaining('Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ'), findsWidgets);
+      expect(
+          find.textContaining('Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ'),
+          findsWidgets);
 
       // 5. Try to tap submit button and verify it still blocks
       final submitBtn = find.byKey(const Key('kyc_submit_btn'));
@@ -749,10 +836,13 @@ void main() {
       await tester.tap(submitBtn, warnIfMissed: false);
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ'), findsWidgets);
+      expect(
+          find.textContaining('Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ'),
+          findsWidgets);
     });
 
-    test('effectiveIdNumber extracts idNumber from field or MRZ line correctly', () {
+    test('effectiveIdNumber extracts idNumber from field or MRZ line correctly',
+        () {
       const front = HostIdentityAiResult(
         documentType: 'cccd',
         side: 'front',
@@ -776,7 +866,9 @@ void main() {
       expect(backWithBoth.effectiveIdNumber, '012345678901');
     });
 
-    testWidgets('shows mismatch error and blocks submission when front and back CCCD numbers differ', (tester) async {
+    testWidgets(
+        'shows mismatch error and blocks submission when front and back CCCD numbers differ',
+        (tester) async {
       final fakeRepo = _FakeHostRepository(Dio());
       final fakePicker = _FakeFilePickerService()
         ..nextFile = HostPickedFile(
@@ -812,7 +904,8 @@ void main() {
       await tester.tap(pickFrontBtn);
       await tester.pumpAndSettle();
 
-      final aiScanFrontBtn = find.byKey(const Key('kyc_ai_scan_btn_identityFront'));
+      final aiScanFrontBtn =
+          find.byKey(const Key('kyc_ai_scan_btn_identityFront'));
       await tester.ensureVisible(aiScanFrontBtn);
       await tester.pumpAndSettle();
       await tester.tap(aiScanFrontBtn);
@@ -835,14 +928,16 @@ void main() {
       await tester.tap(pickBackBtn);
       await tester.pumpAndSettle();
 
-      final aiScanBackBtn = find.byKey(const Key('kyc_ai_scan_btn_identityBack'));
+      final aiScanBackBtn =
+          find.byKey(const Key('kyc_ai_scan_btn_identityBack'));
       await tester.ensureVisible(aiScanBackBtn);
       await tester.pumpAndSettle();
       await tester.tap(aiScanBackBtn);
       await tester.pumpAndSettle();
 
       // Verify mismatch warning card appears
-      expect(find.textContaining('Không trùng khớp số CCCD với mặt trước'), findsOneWidget);
+      expect(find.textContaining('Không trùng khớp số CCCD với mặt trước'),
+          findsOneWidget);
       expect(find.textContaining('012345678901'), findsWidgets);
       expect(find.textContaining('044205000083'), findsWidgets);
 

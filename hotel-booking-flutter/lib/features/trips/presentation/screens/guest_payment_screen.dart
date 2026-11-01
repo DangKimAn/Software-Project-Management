@@ -12,7 +12,6 @@ import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_loading.dart';
-import '../../../../shared/widgets/currency_language_selector.dart';
 import '../../domain/entities/booking.dart';
 import '../view_models/trips_view_model.dart';
 
@@ -799,73 +798,20 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                                   includeApproximatePrefix:
                                                       false,
                                                 );
-                                                final rateSummary =
-                                                    buildReferenceRateSummary(
-                                                  formatter: checkoutFormatter,
-                                                  currency: checkoutFormatter
-                                                      .effectiveCurrency,
-                                                );
 
-                                                return Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      l10n.fxEstimatedPrice(
-                                                        refTotal.formatted,
-                                                      ),
-                                                      key: const Key(
-                                                        'checkout_fx_estimated_amount',
-                                                      ),
-                                                      style: const TextStyle(
-                                                        fontSize: 15,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        color: AppColors
-                                                            .textPrimary,
-                                                      ),
-                                                    ),
-                                                    if (rateSummary != null &&
-                                                        checkoutFormatter
-                                                                .snapshot !=
-                                                            null) ...[
-                                                      const SizedBox(height: 4),
-                                                      Text(
-                                                        '$rateSummary • ${l10n.fxRateUpdatedAt(formatSnapshotUpdatedAt(checkoutFormatter.snapshot!.sourceUpdatedAt, checkoutFormatter.localeCode))}',
-                                                        style: const TextStyle(
-                                                          fontSize: 12,
-                                                          height: 1.35,
-                                                          color: AppColors
-                                                              .textSecondary,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                    if (refTotal
-                                                            .isUsingStaleRate &&
-                                                        checkoutFormatter
-                                                                .snapshot !=
-                                                            null) ...[
-                                                      const SizedBox(height: 4),
-                                                      Text(
-                                                        l10n.fxRateStaleNotice(
-                                                          formatSnapshotUpdatedAt(
-                                                            checkoutFormatter
-                                                                .snapshot!
-                                                                .sourceUpdatedAt,
-                                                            checkoutFormatter
-                                                                .localeCode,
-                                                          ),
-                                                        ),
-                                                        style: const TextStyle(
-                                                          fontSize: 12,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          color:
-                                                              AppColors.warning,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ],
+                                                return Text(
+                                                  l10n.fxEstimatedPrice(
+                                                    refTotal.formatted,
+                                                  ),
+                                                  key: const Key(
+                                                    'checkout_fx_estimated_amount',
+                                                  ),
+                                                  style: const TextStyle(
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.w700,
+                                                    color:
+                                                        AppColors.textPrimary,
+                                                  ),
                                                 );
                                               },
                                             ),
@@ -932,35 +878,6 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                                   ),
                                                 ],
                                               ),
-                                              const SizedBox(height: 6),
-                                              Text(
-                                                l10n.fxChargedInVndNotice,
-                                                key: const Key(
-                                                  'checkout_charged_in_vnd_notice',
-                                                ),
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  height: 1.35,
-                                                  fontWeight: FontWeight.w600,
-                                                  color:
-                                                      AppColors.textSecondary,
-                                                ),
-                                              ),
-                                              if (showForeignSection &&
-                                                  checkoutFormatter
-                                                          .localeCode ==
-                                                      'vi') ...[
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  l10n.fxBankConversionFeeNotice,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    height: 1.35,
-                                                    color:
-                                                        AppColors.textSecondary,
-                                                  ),
-                                                ),
-                                              ],
                                             ],
                                           ),
                                         ),

@@ -7,6 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../../data/services/google_auth_service.dart';
 import '../../domain/entities/user.dart';
@@ -418,7 +419,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 } else {
                                   final redirect = widget.redirectTo?.trim();
                                   if (redirect != null &&
-                                      AuthNotifier.isSafeRedirectPath(redirect)) {
+                                      AuthNotifier.isSafeRedirectPath(
+                                          redirect)) {
                                     context.go(
                                       Uri(
                                         path: '/dang-nhap',
@@ -468,11 +470,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       const SizedBox(height: AppSpacing.s16),
                       AppButton.secondary(
                         text: 'Đăng nhập với Google',
-                        icon: const Icon(
-                          LucideIcons.logIn,
-                          size: 18,
-                          color: AppColors.iconStrong,
-                        ),
+                        icon: const AppBrandIcon.googleLogo(size: 20),
                         onPressed: _isLoading ? null : _handleGoogleLogin,
                       ),
                     ],

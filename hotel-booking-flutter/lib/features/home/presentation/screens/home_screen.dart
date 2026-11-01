@@ -385,7 +385,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   /// Popular Destinations section with visible top section header,
-  /// "Xem tất cả >" toggle on the right, and compact cards.
+  /// arrow toggle on the right, and compact cards.
   Widget _buildPopularDestinationsSection(
     BuildContext context,
     AsyncValue<List<Villa>> villasAsync,
@@ -455,46 +455,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Section Header: Eyebrow + Title + Subtitle on left, "Xem tất cả >" on right
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                  // Section Header: Eyebrow + Title on left, arrow toggle on right
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      const Text(
-                        'ĐIỂM ĐẾN NỔI BẬT',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.8,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Điểm đến được yêu thích',
-                        style: TextStyle(
-                          fontSize: isDesktop ? 26 : 20,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.4,
-                          color: const Color(0xFF0F172A),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Khám phá các căn biệt thự và chỗ nghỉ được yêu thích nhất tại Vũng Tàu',
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'ĐIỂM ĐẾN NỔI BẬT',
                               style: TextStyle(
-                                fontSize: isDesktop ? 14 : 13,
-                                fontWeight: FontWeight.w400,
-                                color: const Color(0xFF64748B),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.8,
+                                color: AppColors.primary,
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          InkWell(
+                            const SizedBox(height: 6),
+                            Text(
+                              'Điểm đến được yêu thích',
+                              style: TextStyle(
+                                fontSize: isDesktop ? 26 : 20,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.4,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Semantics(
+                        button: true,
+                        label:
+                            _isDestinationGridMode ? 'Thu gọn' : 'Xem tất cả',
+                        child: Tooltip(
+                          message:
+                              _isDestinationGridMode ? 'Thu gọn' : 'Xem tất cả',
+                          child: InkWell(
                             onTap: () {
                               setState(() {
                                 _isDestinationGridMode =
@@ -502,38 +502,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 _destinationGridPage = 0;
                               });
                             },
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 6,
+                            borderRadius: BorderRadius.circular(999),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minWidth: 44,
+                                minHeight: 44,
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    _isDestinationGridMode
-                                        ? 'Thu gọn'
-                                        : 'Xem tất cả',
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Icon(
-                                    _isDestinationGridMode
-                                        ? LucideIcons.chevronUp
-                                        : LucideIcons.chevronRight,
-                                    size: 16,
-                                    color: AppColors.iconStrong,
-                                  ),
-                                ],
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  18,
+                                  4,
+                                  6,
+                                ),
+                                child: Icon(
+                                  _isDestinationGridMode
+                                      ? LucideIcons.chevronUp
+                                      : LucideIcons.arrowRight,
+                                  size: 20,
+                                  color: AppColors.iconStrong,
+                                ),
                               ),
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ],
                   ),

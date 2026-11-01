@@ -9,6 +9,7 @@ import adminUsersRoutes from "./admin-users.routes";
 import adminVerificationsRoutes from "../verifications/admin-verifications.routes";
 import { adminCouponsRoutes } from "../coupons/coupons.routes";
 import { adminReportsRouter } from "../reports/reports.routes";
+import adminFeesRoutes from "./admin-fees.routes";
 
 const router = express.Router();
 
@@ -21,5 +22,6 @@ router.use("/users", adminUsersRoutes);
 router.use("/host-payouts", adminHostPayoutsRoutes);
 router.use("/coupons", adminCouponsRoutes);
 router.use("/reports", adminReportsRouter);
+router.use("/fees", adminFeesRoutes);
 
 export default router;

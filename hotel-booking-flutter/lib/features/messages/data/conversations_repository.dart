@@ -482,15 +482,20 @@ class ConversationItem {
         (json['lastMessageAt'] ?? json['updatedAt'] ?? json['createdAt'])
             ?.toString();
 
+    final rawListingId =
+        (json['listingId'] ?? listing?['listingId'] ?? listing?['id'] ?? '')
+            .toString()
+            .trim();
+
     return ConversationItem(
       id: (json['conversationId'] ?? json['id'] ?? '').toString(),
-      listingId:
-          (json['listingId'] ?? listing?['listingId'] ?? listing?['id'] ?? '')
-              .toString(),
+      listingId: rawListingId,
       listingTitle: (json['listingTitle'] ??
               listing?['title'] ??
               listing?['name'] ??
-              'Trao đổi về chỗ nghỉ')
+              (rawListingId.isNotEmpty
+                  ? 'Trao đổi về chỗ nghỉ'
+                  : 'Trò chuyện hỗ trợ trực tiếp'))
           .toString(),
       listingImage: (json['listingImage'] ??
               listing?['coverImageUrl'] ??
@@ -669,6 +674,42 @@ class ConversationsRepository {
         return ConversationItem.fromJson(convJson);
       }
       throw const ServerFailure('Không thể khởi tạo hội thoại với chủ nhà.');
+    } catch (e) {
+      throw DioClient.handleError(e);
+    }
+  }
+
+  /// Creates or retrieves a direct 1-on-1 conversation with [participantId]
+  /// (e.g. Admin <-> Host, Admin <-> Guest, or Host <-> Admin support).
+  Future<ConversationItem> getOrCreateDirectConversation(
+    String participantId, {
+    String? firstMessage,
+  }) async {
+    final trimmedParticipantId = participantId.trim();
+    if (trimmedParticipantId.isEmpty) {
+      throw const ValidationFailure('Mã người nhận không hợp lệ.');
+    }
+    try {
+      final body = <String, dynamic>{
+        'participantId':
+            int.tryParse(trimmedParticipantId) ?? trimmedParticipantId,
+      };
+      if (firstMessage != null && firstMessage.trim().isNotEmpty) {
+        body['firstMessage'] = firstMessage.trim();
+      }
+
+      final response = await _client.dio.post<Map<String, dynamic>>(
+        '/api/conversations',
+        data: body,
+      );
+      final data = DioClient.unwrapEnvelope(response.data);
+      if (data is Map<String, dynamic>) {
+        final convJson = data['conversation'] is Map<String, dynamic>
+            ? data['conversation'] as Map<String, dynamic>
+            : data;
+        return ConversationItem.fromJson(convJson);
+      }
+      throw const ServerFailure('Không thể khởi tạo cuộc trò chuyện.');
     } catch (e) {
       throw DioClient.handleError(e);
     }
