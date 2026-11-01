@@ -3,6 +3,14 @@ import type { RequestHandler } from "express";
 import { ApiError } from "../../common/api-error";
 import { asyncHandler } from "../../common/async-handler";
 import { sendSuccess } from "../../common/http";
+import { authenticate } from "../../middlewares/authenticate.middleware";
+import { requireActiveUser } from "../../middlewares/require-active-user.middleware";
+import { requireRole } from "../../middlewares/require-role.middleware";
+import User from "../../models/user";
+import {
+    assertUserCanAuthenticate,
+    toAuthenticatedUser,
+} from "../auth/auth.service";
 import {
     approveHostApplication,
     cancelHostApplication,
@@ -12,8 +20,8 @@ import {
     listAdminHostApplications,
     rejectHostApplication,
     submitHostApplication,
+    verifyHostDocStreamToken,
 } from "./host-application.service";
-import { extractAuthToken } from "../auth/auth.service";
 
 const adminStatusValues = new Set(["pending", "approved", "rejected", "all"]);
 
@@ -49,6 +57,47 @@ const parseOptionalPositiveIntQuery = (value: unknown, path: string) => {
     }
 
     return parsePositiveIntParam(value, path);
+};
+
+export const authenticateAdminHostDocumentStream: RequestHandler = (req, res, next) => {
+    const rawStreamToken = typeof req.query.streamToken === "string" ? req.query.streamToken.trim() : "";
+
+    if (rawStreamToken) {
+        void (async () => {
+            const applicationId = parsePositiveIntParam(req.params.applicationId, "applicationId");
+            const documentId = parsePositiveIntParam(req.params.documentId, "documentId");
+            const verified = verifyHostDocStreamToken(rawStreamToken, {
+                applicationId,
+                documentId,
+            });
+            const user = await User.findById(verified.adminUserId);
+            if (!user) {
+                throw new ApiError(401, "Unauthorized");
+            }
+            assertUserCanAuthenticate(user);
+            const authUser = await toAuthenticatedUser(user);
+            if (authUser.status !== "active" || !authUser.roles.includes("admin")) {
+                throw new ApiError(403, "Forbidden");
+            }
+            req.user = authUser;
+            next();
+        })().catch(next);
+        return;
+    }
+
+    authenticate(req, res, (authErr?: unknown) => {
+        if (authErr) {
+            next(authErr);
+            return;
+        }
+        requireActiveUser(req, res, (activeErr?: unknown) => {
+            if (activeErr) {
+                next(activeErr);
+                return;
+            }
+            requireRole("admin")(req, res, next);
+        });
+    });
 };
 
 export const submitHostApplicationController: RequestHandler = asyncHandler(async (req, res) => {
@@ -126,8 +175,7 @@ export const listAdminHostApplicationsController: RequestHandler = asyncHandler(
 
 export const getAdminHostApplicationDetailController: RequestHandler = asyncHandler(async (req, res) => {
     const applicationId = parsePositiveIntParam(req.params.applicationId, "applicationId");
-    const token = extractAuthToken(req);
-    const result = await getAdminHostApplicationDetail(req.user!, applicationId, token);
+    const result = await getAdminHostApplicationDetail(req.user!, applicationId);
 
     return sendSuccess(res, {
         data: result,
@@ -148,9 +196,14 @@ export const streamAdminHostDocumentController: RequestHandler = asyncHandler(as
     if (document.fileSize) {
         res.setHeader("Content-Length", String(document.fileSize));
     }
-    res.setHeader("Cache-Control", "private, max-age=3600");
-    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader(
+        "Content-Security-Policy",
+        "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+    );
 
     const readable = stream as import("stream").Readable;
     readable.pipe(res);

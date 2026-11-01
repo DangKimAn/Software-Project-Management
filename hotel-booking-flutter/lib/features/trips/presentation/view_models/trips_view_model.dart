@@ -12,6 +12,14 @@ final bookingRepositoryProvider = Provider<BookingRepository>((ref) {
 
 final myBookingsProvider =
     FutureProvider.autoDispose<List<Booking>>((ref) async {
+  final authScope = ref.watch(
+    authNotifierProvider.select(
+      (s) => (s.valueOrNull?.id, s.valueOrNull?.isAdmin ?? false),
+    ),
+  );
+  if (authScope.$2) {
+    return const <Booking>[];
+  }
   final repository = ref.watch(bookingRepositoryProvider);
   return repository.getMyBookings();
 });
@@ -21,7 +29,7 @@ final myBookingsProvider =
 final activePendingBookingProvider = Provider<Booking?>((ref) {
   final authState = ref.watch(authNotifierProvider);
   final user = authState.valueOrNull;
-  if (user == null) {
+  if (user == null || user.isAdmin) {
     return null;
   }
 
@@ -51,6 +59,7 @@ final activePendingBookingProvider = Provider<Booking?>((ref) {
 
 final bookingDetailProvider =
     FutureProvider.autoDispose.family<Booking?, String>((ref, bookingId) async {
+  ref.watch(authNotifierProvider.select((s) => s.valueOrNull?.id));
   final repository = ref.watch(bookingRepositoryProvider);
   return repository.getBookingById(bookingId);
 });
@@ -63,6 +72,7 @@ final paymentMethodsProvider =
 
 final paymentDetailProvider = FutureProvider.autoDispose
     .family<PaymentSessionResult?, String>((ref, paymentId) async {
+  ref.watch(authNotifierProvider.select((s) => s.valueOrNull?.id));
   final repository = ref.watch(bookingRepositoryProvider);
   return repository.getPaymentById(paymentId);
 });

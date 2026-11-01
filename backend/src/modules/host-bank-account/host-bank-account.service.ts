@@ -102,6 +102,14 @@ const findHostDefaultBankAccount = async (userId: number, transaction?: Transact
     });
 };
 
+const maskBankAccountNumber = (rawAccountNumber: string) => {
+    const trimmed = String(rawAccountNumber ?? "").trim();
+    if (trimmed.length <= 4) {
+        return "*".repeat(trimmed.length);
+    }
+    return `${"*".repeat(trimmed.length - 4)}${trimmed.slice(-4)}`;
+};
+
 export const serializeHostBankAccount = (account: PayoutAccountDocument) => ({
     id: account.payoutAccountId,
     payoutAccountId: account.payoutAccountId,
@@ -110,6 +118,7 @@ export const serializeHostBankAccount = (account: PayoutAccountDocument) => ({
     bankShortName: account.bankShortName,
     bankBin: account.bankBin,
     accountNumber: account.accountNumber,
+    accountNumberMasked: maskBankAccountNumber(account.accountNumber),
     accountHolderName: account.accountName,
     branchName: account.branchName,
     isDefault: account.isDefault,

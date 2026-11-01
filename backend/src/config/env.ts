@@ -84,6 +84,23 @@ export type AppEnv = {
     allowDatabaseRootUser: boolean;
     firebaseServiceAccountPath?: string;
     firebaseServiceAccountJson?: string;
+    googleSheetsSyncEnabled: boolean;
+    googleServiceAccountEmail?: string;
+    googleServiceAccountPrivateKey?: string;
+    googleSheetsServiceAccountPath?: string;
+    googleSheetsServiceAccountJson?: string;
+    googleSheetsDefaultHostEditorEmail: string;
+    googleSheetsSyncIntervalSeconds: number;
+    googleSheetsRateLimitPerMinute: number;
+    googleSheetsBulkChangeWarnThreshold: number;
+    googleSheetsRequestTimeoutMs: number;
+    exchangeRateEnabled: boolean;
+    exchangeRateProvider: string;
+    exchangeRateCacheTtlMs: number;
+    exchangeRateFreshMaxAgeMs: number;
+    exchangeRateMaxStaleAgeMs: number;
+    exchangeRateTimeoutMs: number;
+    exchangeRateSnapshotPath: string;
 };
 
 const parseNumber = (name: string, value: string | undefined, fallback: number) => {
@@ -367,6 +384,18 @@ export const getEnv = (): AppEnv => {
                 throw new Error(`Missing required production environment variable: ${name}`);
             }
         }
+
+        if (rawAccessSecret === rawRefreshSecret) {
+            throw new Error(
+                "Invalid production security configuration: JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be distinct",
+            );
+        }
+
+        if (rawTokenHashSecret === rawOtpHashSecret) {
+            throw new Error(
+                "Invalid production security configuration: TOKEN_HASH_SECRET and OTP_HASH_SECRET must be distinct",
+            );
+        }
     }
 
     const cookieSecret = assertProductionValue(
@@ -572,5 +601,80 @@ export const getEnv = (): AppEnv => {
             "FIREBASE_SERVICE_ACCOUNT_JSON",
             process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
         ),
+        googleSheetsSyncEnabled: parseBoolean(
+            "GOOGLE_SHEETS_SYNC_ENABLED",
+            process.env.GOOGLE_SHEETS_SYNC_ENABLED ?? process.env.HOST_SHEET_SYNC_ENABLED,
+            true,
+        ),
+        googleServiceAccountEmail: assertResolvedEnv(
+            "GOOGLE_SERVICE_ACCOUNT_EMAIL",
+            process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+        ),
+        googleServiceAccountPrivateKey: assertResolvedEnv(
+            "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY",
+            process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY,
+        ),
+        googleSheetsServiceAccountPath: assertResolvedEnv(
+            "GOOGLE_SHEETS_SERVICE_ACCOUNT_PATH",
+            process.env.GOOGLE_SHEETS_SERVICE_ACCOUNT_PATH,
+        ),
+        googleSheetsServiceAccountJson: assertResolvedEnv(
+            "GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON",
+            process.env.GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON,
+        ),
+        googleSheetsDefaultHostEditorEmail:
+            (assertResolvedEnv(
+                "GOOGLE_SHEETS_DEFAULT_HOST_EDITOR_EMAIL",
+                process.env.GOOGLE_SHEETS_DEFAULT_HOST_EDITOR_EMAIL,
+            ) ?? "athanhnee@gmail.com").trim(),
+        googleSheetsSyncIntervalSeconds: parsePositiveInteger(
+            "GOOGLE_SHEETS_SYNC_INTERVAL_SECONDS",
+            process.env.GOOGLE_SHEETS_SYNC_INTERVAL_SECONDS,
+            120,
+        ),
+        googleSheetsRateLimitPerMinute: parsePositiveInteger(
+            "GOOGLE_SHEETS_RATE_LIMIT_PER_MINUTE",
+            process.env.GOOGLE_SHEETS_RATE_LIMIT_PER_MINUTE,
+            45,
+        ),
+        googleSheetsBulkChangeWarnThreshold: parsePositiveInteger(
+            "GOOGLE_SHEETS_BULK_CHANGE_WARN_THRESHOLD",
+            process.env.GOOGLE_SHEETS_BULK_CHANGE_WARN_THRESHOLD,
+            14,
+        ),
+        googleSheetsRequestTimeoutMs: parsePositiveInteger(
+            "GOOGLE_SHEETS_REQUEST_TIMEOUT_MS",
+            process.env.GOOGLE_SHEETS_REQUEST_TIMEOUT_MS,
+            15000,
+        ),
+        exchangeRateEnabled: parseBoolean(
+            "EXCHANGE_RATE_ENABLED",
+            process.env.EXCHANGE_RATE_ENABLED,
+            true,
+        ),
+        exchangeRateProvider: (process.env.EXCHANGE_RATE_PROVIDER ?? "frankfurter").trim() || "frankfurter",
+        exchangeRateCacheTtlMs: parsePositiveInteger(
+            "EXCHANGE_RATE_CACHE_TTL_MS",
+            process.env.EXCHANGE_RATE_CACHE_TTL_MS,
+            3 * 60 * 60 * 1000,
+        ),
+        exchangeRateFreshMaxAgeMs: parsePositiveInteger(
+            "EXCHANGE_RATE_FRESH_MAX_AGE_MS",
+            process.env.EXCHANGE_RATE_FRESH_MAX_AGE_MS,
+            48 * 60 * 60 * 1000,
+        ),
+        exchangeRateMaxStaleAgeMs: parsePositiveInteger(
+            "EXCHANGE_RATE_MAX_STALE_AGE_MS",
+            process.env.EXCHANGE_RATE_MAX_STALE_AGE_MS,
+            7 * 24 * 60 * 60 * 1000,
+        ),
+        exchangeRateTimeoutMs: parsePositiveInteger(
+            "EXCHANGE_RATE_TIMEOUT_MS",
+            process.env.EXCHANGE_RATE_TIMEOUT_MS,
+            5000,
+        ),
+        exchangeRateSnapshotPath:
+            (process.env.EXCHANGE_RATE_SNAPSHOT_PATH ?? "data/cache/exchange-rates.snapshot.json").trim() ||
+            "data/cache/exchange-rates.snapshot.json",
     };
 };

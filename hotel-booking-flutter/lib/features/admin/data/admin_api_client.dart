@@ -104,7 +104,6 @@ class AdminModerationPolicy {
   static const List<String> supportedRoles = <String>[
     'guest',
     'host',
-    'moderator',
     'admin',
   ];
 
@@ -116,20 +115,6 @@ class AdminModerationPolicy {
       return true;
     }
     return roles.any((r) => r.trim().toLowerCase() == 'admin');
-  }
-
-  static bool isModeratorOrAdminRole({
-    String? primaryRole,
-    Iterable<String> roles = const <String>[],
-  }) {
-    if (isAdminRole(primaryRole: primaryRole, roles: roles)) {
-      return true;
-    }
-    if (primaryRole != null &&
-        primaryRole.trim().toLowerCase() == 'moderator') {
-      return true;
-    }
-    return roles.any((r) => r.trim().toLowerCase() == 'moderator');
   }
 
   static String? validateListingApprove({

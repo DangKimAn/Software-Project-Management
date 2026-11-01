@@ -5,7 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/date/booking_date.dart';
-import '../../../../core/utils/currency_formatter.dart';
+
 import '../../../../shared/animations/source_animations.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/vung_tau_map_picker.dart';
@@ -1871,15 +1871,15 @@ class _StayFilterModalSheetState extends ConsumerState<_StayFilterModalSheet> {
                         spacing: 8,
                         runSpacing: 4,
                         children: [
-                          const Text(
-                            'Khoảng giá mỗi đêm',
-                            style: TextStyle(
+                          Text(
+                            ref.watch(moneyFormatterProvider).l10n.fxPriceRangePerNight,
+                            style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                           Text(
-                            '${CurrencyFormatter.formatVnd(_priceRange.start.round())} - ${CurrencyFormatter.formatVnd(_priceRange.end.round())}',
+                            '${ref.watch(moneyFormatterProvider).format(_priceRange.start.round(), context: MoneyDisplayContext.villaCard).formatted} - ${ref.watch(moneyFormatterProvider).format(_priceRange.end.round(), context: MoneyDisplayContext.villaCard).formatted}',
                             style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,

@@ -299,5 +299,59 @@
   "adminTabRoles": "Role management",
   "adminUserStatusActive": "Active",
   "adminUserStatusSuspended": "Suspended",
-  "adminUserStatusInactive": "Inactive"
+  "adminUserStatusInactive": "Inactive",
+  "settingsCurrency": "Display currency",
+  "currencyFollowLanguage": "Follow language",
+  "currencyFollowLanguageDesc": "Automatically switch currency with interface language",
+  "currencyNameVnd": "Vietnamese Dong (VND - ₫)",
+  "currencyNameUsd": "US Dollar (USD - $)",
+  "currencyNameKrw": "South Korean Won (KRW - ₩)",
+  "fxEstimatedPrice": "Estimated price: ≈ {amount}",
+  "@fxEstimatedPrice": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "fxTotalPayableVnd": "Total payable: {amountVnd}",
+  "@fxTotalPayableVnd": {
+    "placeholders": {
+      "amountVnd": { "type": "String" }
+    }
+  },
+  "fxChargedInVndNotice": "You will be charged in VND. Your bank may apply exchange rates and fees.",
+  "fxReferenceRateLabel": "Reference rate ({source})",
+  "@fxReferenceRateLabel": {
+    "placeholders": {
+      "source": { "type": "String" }
+    }
+  },
+  "fxRateUpdatedAt": "Exchange rate as of {time}",
+  "@fxRateUpdatedAt": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "fxRateUnavailableFallback": "Exchange rates unavailable. Displaying official prices in VND.",
+  "fxRateStaleNotice": "Using last verified exchange rate ({time}).",
+  "@fxRateStaleNotice": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "fxBankConversionFeeNotice": "Conversion fees and bank exchange rates may apply.",
+  "fxPaymentMethodUnsupported": "This payment method is not currently supported.",
+  "fxRefundInVndNotice": "Actual refunds are processed in VND. Your card statement amount may differ based on bank exchange rates at refund time.",
+  "fxHistoricalReferenceNote": "Converted foreign amount is for reference only, not the actual statement charge.",
+  "fxPayButtonVnd": "Pay {amountVnd} via {method}",
+  "@fxPayButtonVnd": {
+    "placeholders": {
+      "amountVnd": { "type": "String" },
+      "method": { "type": "String" }
+    }
+  },
+  "fxPriceRangePerNight": "Nightly price range",
+  "vnpayGatewayTitle": "VNPay (QR Pay / Domestic Bank Card)",
+  "vnpayGatewaySubtitle": "Secure VND settlement via VNPay payment gateway",
+  "momoGatewayTitle": "MoMo E-Wallet",
+  "momoGatewaySubtitle": "Pay in VND via MoMo app or MoMo QR code"
 }

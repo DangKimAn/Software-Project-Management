@@ -44,6 +44,11 @@ import User from "../../models/user";
 import type { AuthenticatedUser } from "../auth/auth.service";
 import { writeAuditLog } from "../../services/audit-log-service";
 import {
+    enqueueHostSheetSyncJobSafe,
+    isHostSheetSyncRuntimeActive,
+    verifySheetAvailabilityBeforeBooking,
+} from "../host-sheet-sync/host-sheet-sync.service";
+import {
     assertBookingStatusTransition,
     type BookingStateActor,
     transitionBookingStatus,
@@ -141,12 +146,15 @@ const getTodayInVietnam = () => new Date(Date.now() + 7 * 60 * 60 * 1000).toISOS
 const getNightCount = (checkInDate: string, checkOutDate: string) =>
     Math.round((toDateAtUtcMidnight(checkOutDate).getTime() - toDateAtUtcMidnight(checkInDate).getTime()) / millisecondsPerDay);
 
+const MAX_BOOKING_STAY_NIGHTS = 365;
+const MAX_ACTIVE_PENDING_BOOKINGS_PER_GUEST = 10;
+
 const listReservedDates = (checkInDate: string, checkOutDate: string) => {
     const dates: string[] = [];
     const cursor = toDateAtUtcMidnight(checkInDate);
     const end = toDateAtUtcMidnight(checkOutDate);
 
-    while (cursor < end) {
+    while (cursor < end && dates.length <= MAX_BOOKING_STAY_NIGHTS) {
         dates.push(cursor.toISOString().slice(0, 10));
         cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
@@ -201,6 +209,15 @@ const assertBookingDateRange = (input: Pick<CreateBookingInput, "checkInDate" | 
             {
                 path: "checkInDate",
                 msg: "checkInDate cannot be in the past",
+            },
+        ]);
+    }
+
+    if (getNightCount(input.checkInDate, input.checkOutDate) > MAX_BOOKING_STAY_NIGHTS) {
+        throw new ApiError(422, "Validation error", [
+            {
+                path: "checkOutDate",
+                msg: `Booking duration cannot exceed ${MAX_BOOKING_STAY_NIGHTS} nights`,
             },
         ]);
     }
@@ -1225,6 +1242,30 @@ const prepareBookingCreate = async (
 ): Promise<PreparedBookingCreate> => {
     assertBookingDateRange(input);
 
+    const canQueryBookingCount =
+        Boolean((transaction as { commit?: unknown })?.commit) ||
+        Object.prototype.hasOwnProperty.call(Booking, "count");
+
+    if (canQueryBookingCount) {
+        const activePendingCount = await Booking.count({
+            where: {
+                guestUserId: Number(user.id),
+                status: "pending_payment",
+                lockedUntil: {
+                    [Op.gt]: new Date(),
+                },
+            },
+            transaction,
+        });
+
+        if (activePendingCount + index >= MAX_ACTIVE_PENDING_BOOKINGS_PER_GUEST) {
+            throw new ApiError(
+                429,
+                "Bạn đang có quá nhiều đơn đặt phòng chờ thanh toán. Vui lòng hoàn tất hoặc hủy đơn cũ trước.",
+            );
+        }
+    }
+
     const listing = await getPublicListingForBooking(input.listingId, transaction);
 
     if (String(listing.hostId) === user.id) {
@@ -1422,13 +1463,46 @@ const compensateBulkBookingCreation = async (createdBookings: BookingDocument[])
     }
 };
 
+const runPreBookingSheetVerifyIfActive = async (input: CreateBookingInput) => {
+    if (!isHostSheetSyncRuntimeActive()) {
+        return;
+    }
+
+    const listing = await Listing.findOne({
+        where: {
+            listingId: input.listingId,
+            deletedAt: null,
+        },
+        attributes: ["listingId", "hostId", "status"],
+    });
+
+    if (!listing || listing.status !== "active") {
+        return;
+    }
+
+    await verifySheetAvailabilityBeforeBooking({
+        listingId: listing.listingId,
+        hostUserId: Number(listing.hostId),
+        checkInDate: input.checkInDate,
+        checkOutDate: input.checkOutDate,
+    });
+};
+
 export const createBooking = async (user: AuthenticatedUser, input: CreateBookingInput) => {
     assertBookingDateRange(input);
+    await runPreBookingSheetVerifyIfActive(input);
 
     const booking = await sequelize.transaction(async (transaction) => {
         const prepared = await prepareBookingCreate(user, input, 0, transaction);
 
         return createPreparedBooking(user, prepared, transaction);
+    });
+
+    enqueueHostSheetSyncJobSafe({
+        hostUserId: Number(booking.hostUserId),
+        jobType: "booking_changed",
+        listingId: booking.listingId,
+        bookingId: booking.bookingId,
     });
 
     return serializeBooking(booking, true);
@@ -1443,6 +1517,10 @@ export const createBulkBookings = async (user: AuthenticatedUser, input: CreateB
         }
     });
     assertNoOverlappingBulkItems(input.items);
+
+    for (const [index, item] of input.items.entries()) {
+        await withBulkItemError(index, () => runPreBookingSheetVerifyIfActive(item));
+    }
 
     const createdForCompensation: BookingDocument[] = [];
     let committedBookings: BookingDocument[];
@@ -1481,6 +1559,15 @@ export const createBulkBookings = async (user: AuthenticatedUser, input: CreateB
     // Serialize OUTSIDE the compensation try/catch.
     // At this point the transaction has committed — bookings are valid.
     // If serialization fails we must NOT delete committed bookings.
+    for (const committed of committedBookings) {
+        enqueueHostSheetSyncJobSafe({
+            hostUserId: Number(committed.hostUserId),
+            jobType: "booking_changed",
+            listingId: committed.listingId,
+            bookingId: committed.bookingId,
+        });
+    }
+
     return {
         items: await Promise.all(committedBookings.map((booking) => serializeBooking(booking, true))),
     };

@@ -752,4 +752,89 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get adminUserStatusInactive => '비활성';
+
+  @override
+  String get settingsCurrency => '표시 통화';
+
+  @override
+  String get currencyFollowLanguage => '언어에 따라 자동 설정';
+
+  @override
+  String get currencyFollowLanguageDesc => '인터페이스 언어에 맞춰 통화를 자동으로 전환합니다';
+
+  @override
+  String get currencyNameVnd => '베트남 동 (VND - ₫)';
+
+  @override
+  String get currencyNameUsd => '미국 달러 (USD - \$)';
+
+  @override
+  String get currencyNameKrw => '대한민국 원 (KRW - ₩)';
+
+  @override
+  String fxEstimatedPrice(String amount) {
+    return '예상 금액: 약 $amount';
+  }
+
+  @override
+  String fxTotalPayableVnd(String amountVnd) {
+    return '실제 결제 총액: $amountVnd';
+  }
+
+  @override
+  String get fxChargedInVndNotice =>
+      '실제 결제는 베트남 동(VND)으로 처리됩니다. 카드 발급 은행의 환율 및 수수료가 적용될 수 있습니다.';
+
+  @override
+  String fxReferenceRateLabel(String source) {
+    return '참고 환율 ($source)';
+  }
+
+  @override
+  String fxRateUpdatedAt(String time) {
+    return '환율 기준 시각: $time';
+  }
+
+  @override
+  String get fxRateUnavailableFallback =>
+      '환율 정보를 불러올 수 없어 공식 베트남 동(VND) 가격으로 표시합니다.';
+
+  @override
+  String fxRateStaleNotice(String time) {
+    return '최근 확인된 환율($time)을 기준으로 표시 중입니다.';
+  }
+
+  @override
+  String get fxBankConversionFeeNotice =>
+      '은행 및 카드사에 따라 별도의 환전 수수료가 발생할 수 있습니다.';
+
+  @override
+  String get fxPaymentMethodUnsupported => '현재 지원되지 않는 결제 수단입니다.';
+
+  @override
+  String get fxRefundInVndNotice =>
+      '실제 환불은 베트남 동(VND)으로 처리되며, 환불 시점의 은행 환율에 따라 명세서 금액이 달라질 수 있습니다.';
+
+  @override
+  String get fxHistoricalReferenceNote => '외화 금액은 참고용이며 실제 카드 명세서 청구 금액이 아닙니다.';
+
+  @override
+  String fxPayButtonVnd(String amountVnd, String method) {
+    return '$method로 $amountVnd 결제';
+  }
+
+  @override
+  String get fxPriceRangePerNight => '1박 요금 범위';
+
+  @override
+  String get vnpayGatewayTitle => 'VNPay (QR 결제 / 베트남 국내 카드)';
+
+  @override
+  String get vnpayGatewaySubtitle => 'VNPay 보안 결제창을 통한 베트남 동(VND) 결제';
+
+  @override
+  String get momoGatewayTitle => 'MoMo 전자지갑';
+
+  @override
+  String get momoGatewaySubtitle => 'MoMo 앱 또는 QR 코드를 통한 베트남 동(VND) 결제';
 }

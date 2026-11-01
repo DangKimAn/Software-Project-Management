@@ -4,12 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../core/security/url_security_validator.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_loading.dart';
+import '../../../../shared/widgets/currency_language_selector.dart';
 import '../../domain/entities/booking.dart';
 import '../view_models/trips_view_model.dart';
 
@@ -38,6 +41,7 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
   bool _isVerifyingResume = false;
   String? _errorMessage;
   PaymentSessionResult? _activePaymentSession;
+  ExchangeRateSnapshot? _frozenCheckoutSnapshot;
 
   // Coupon validation state (if guest validates a coupon code before payment)
   final TextEditingController _couponController = TextEditingController();
@@ -315,9 +319,8 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
 
       final rawUrl = paymentSession.paymentUrl?.trim() ?? '';
       final uri = Uri.tryParse(rawUrl);
-      final isValidGatewayUrl = uri != null &&
-          (uri.scheme == 'http' || uri.scheme == 'https') &&
-          uri.host.isNotEmpty;
+      final isValidGatewayUrl =
+          uri != null && UrlSecurityValidator.isValidPaymentGatewayUrl(rawUrl);
 
       if (!isValidGatewayUrl) {
         setState(() {
@@ -374,6 +377,16 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
   Widget build(BuildContext context) {
     final bookingAsync = ref.watch(bookingDetailProvider(widget.bookingId));
     final methodsAsync = ref.watch(paymentMethodsProvider);
+    final liveFormatter = ref.watch(moneyFormatterProvider);
+    if (_frozenCheckoutSnapshot == null && liveFormatter.snapshot != null) {
+      _frozenCheckoutSnapshot = liveFormatter.snapshot;
+    }
+    final checkoutFormatter = liveFormatter.withFrozenSnapshot(
+      _frozenCheckoutSnapshot,
+    );
+    final l10n = checkoutFormatter.l10n;
+    final showForeignSection = checkoutFormatter.featureEnabled &&
+        checkoutFormatter.effectiveCurrency.isForeign;
     final methods =
         methodsAsync.valueOrNull != null && methodsAsync.valueOrNull!.isNotEmpty
             ? methodsAsync.valueOrNull!
@@ -718,34 +731,238 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                             ),
                                           ),
                                         ],
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.center,
-                                          children: [
-                                            const Flexible(
-                                              child: Text(
-                                                'Tổng cộng thanh toán',
-                                                style: TextStyle(
-                                                  fontSize: 15,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: AppColors.textPrimary,
+                                        // Section B — Estimated Foreign Currency Reference (Display-only, frozen during checkout session FX-24)
+                                        if (showForeignSection) ...[
+                                          Container(
+                                            key: const Key(
+                                              'checkout_fx_reference_box',
+                                            ),
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(12),
+                                            margin: const EdgeInsets.only(
+                                              bottom: 12,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.surfaceBase,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: AppColors.borderSoft,
+                                              ),
+                                            ),
+                                            child: Builder(
+                                              builder: (context) {
+                                                if (checkoutFormatter
+                                                    .isFallingBackToVnd) {
+                                                  return Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      const Padding(
+                                                        padding:
+                                                            EdgeInsets.only(
+                                                          top: 2,
+                                                        ),
+                                                        child: Icon(
+                                                          LucideIcons.info,
+                                                          size: 16,
+                                                          color: AppColors
+                                                              .iconMuted,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        child: Text(
+                                                          l10n.fxRateUnavailableFallback,
+                                                          key: const Key(
+                                                            'checkout_fx_fallback_notice',
+                                                          ),
+                                                          style:
+                                                              const TextStyle(
+                                                            fontSize: 13,
+                                                            height: 1.35,
+                                                            color: AppColors
+                                                                .textSecondary,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  );
+                                                }
+
+                                                final refTotal =
+                                                    checkoutFormatter.format(
+                                                  booking.totalAmount,
+                                                  context: MoneyDisplayContext
+                                                      .checkoutReference,
+                                                  includeApproximatePrefix:
+                                                      false,
+                                                );
+                                                final rateSummary =
+                                                    buildReferenceRateSummary(
+                                                  formatter: checkoutFormatter,
+                                                  currency: checkoutFormatter
+                                                      .effectiveCurrency,
+                                                );
+
+                                                return Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      l10n.fxEstimatedPrice(
+                                                        refTotal.formatted,
+                                                      ),
+                                                      key: const Key(
+                                                        'checkout_fx_estimated_amount',
+                                                      ),
+                                                      style: const TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: AppColors
+                                                            .textPrimary,
+                                                      ),
+                                                    ),
+                                                    if (rateSummary != null &&
+                                                        checkoutFormatter
+                                                                .snapshot !=
+                                                            null) ...[
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        '$rateSummary • ${l10n.fxRateUpdatedAt(formatSnapshotUpdatedAt(checkoutFormatter.snapshot!.sourceUpdatedAt, checkoutFormatter.localeCode))}',
+                                                        style: const TextStyle(
+                                                          fontSize: 12,
+                                                          height: 1.35,
+                                                          color: AppColors
+                                                              .textSecondary,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                    if (refTotal
+                                                            .isUsingStaleRate &&
+                                                        checkoutFormatter
+                                                                .snapshot !=
+                                                            null) ...[
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        l10n.fxRateStaleNotice(
+                                                          formatSnapshotUpdatedAt(
+                                                            checkoutFormatter
+                                                                .snapshot!
+                                                                .sourceUpdatedAt,
+                                                            checkoutFormatter
+                                                                .localeCode,
+                                                          ),
+                                                        ),
+                                                        style: const TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color:
+                                                              AppColors.warning,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ],
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ],
+
+                                        // Section C — Official Payable Total in VND (Authoritative gateway charge)
+                                        Container(
+                                          key: const Key(
+                                            'checkout_payable_vnd_box',
+                                          ),
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.surfaceBase,
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: AppColors.primary
+                                                  .withValues(alpha: 0.28),
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Wrap(
+                                                spacing: 8,
+                                                runSpacing: 4,
+                                                alignment:
+                                                    WrapAlignment.spaceBetween,
+                                                crossAxisAlignment:
+                                                    WrapCrossAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    l10n.fxTotalPayableVnd(
+                                                      MoneyFormatter
+                                                          .formatExactVndStatic(
+                                                        booking.totalAmount,
+                                                        withCode: true,
+                                                      ),
+                                                    ),
+                                                    key: const Key(
+                                                      'checkout_payable_vnd_label',
+                                                    ),
+                                                    style: const TextStyle(
+                                                      fontSize: 15,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      color:
+                                                          AppColors.textPrimary,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    CurrencyFormatter.formatVnd(
+                                                      booking.totalAmount,
+                                                    ),
+                                                    style: const TextStyle(
+                                                      fontSize: 19,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      color: AppColors.primary,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                l10n.fxChargedInVndNotice,
+                                                key: const Key(
+                                                  'checkout_charged_in_vnd_notice',
+                                                ),
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  height: 1.35,
+                                                  fontWeight: FontWeight.w600,
+                                                  color:
+                                                      AppColors.textSecondary,
                                                 ),
                                               ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              CurrencyFormatter.formatVnd(
-                                                booking.totalAmount,
-                                              ),
-                                              style: const TextStyle(
-                                                fontSize: 19,
-                                                fontWeight: FontWeight.w800,
-                                                color: AppColors.primary,
-                                              ),
-                                            ),
-                                          ],
+                                              if (showForeignSection &&
+                                                  checkoutFormatter
+                                                          .localeCode ==
+                                                      'vi') ...[
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  l10n.fxBankConversionFeeNotice,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    height: 1.35,
+                                                    color:
+                                                        AppColors.textSecondary,
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -776,79 +993,85 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                             ),
                                           ),
                                           const SizedBox(height: 10),
-                                          Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.center,
-                                            children: [
-                                              Expanded(
-                                                child: SizedBox(
-                                                  height: 46,
-                                                  child: TextField(
-                                                    controller:
-                                                        _couponController,
-                                                    textCapitalization:
-                                                        TextCapitalization
-                                                            .characters,
-                                                    style: const TextStyle(
-                                                      fontSize: 14,
+                                          LayoutBuilder(
+                                            builder: (context, constraints) {
+                                              final textScale =
+                                                  MediaQuery.textScalerOf(
+                                                          context)
+                                                      .scale(1.0);
+                                              final stackVertically =
+                                                  constraints.maxWidth < 290 ||
+                                                      textScale >= 1.5;
+
+                                              final inputField = ConstrainedBox(
+                                                constraints:
+                                                    const BoxConstraints(
+                                                  minHeight: 48,
+                                                ),
+                                                child: TextField(
+                                                  controller: _couponController,
+                                                  textCapitalization:
+                                                      TextCapitalization
+                                                          .characters,
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                  decoration: InputDecoration(
+                                                    hintText:
+                                                        'Nhập mã coupon...',
+                                                    hintStyle: const TextStyle(
+                                                      fontSize: 13,
                                                       fontWeight:
-                                                          FontWeight.w600,
+                                                          FontWeight.w400,
+                                                      color:
+                                                          AppColors.textMuted,
                                                     ),
-                                                    decoration: InputDecoration(
-                                                      hintText:
-                                                          'Nhập mã coupon...',
-                                                      hintStyle:
-                                                          const TextStyle(
-                                                        fontSize: 13,
-                                                        fontWeight:
-                                                            FontWeight.w400,
-                                                        color:
-                                                            AppColors.textMuted,
+                                                    filled: true,
+                                                    fillColor:
+                                                        AppColors.surfaceBase,
+                                                    contentPadding:
+                                                        const EdgeInsets
+                                                            .symmetric(
+                                                      horizontal: 14,
+                                                      vertical: 12,
+                                                    ),
+                                                    enabledBorder:
+                                                        OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              12),
+                                                      borderSide:
+                                                          const BorderSide(
+                                                        color: AppColors.border,
                                                       ),
-                                                      filled: true,
-                                                      fillColor:
-                                                          AppColors.surfaceBase,
-                                                      contentPadding:
-                                                          const EdgeInsets
-                                                              .symmetric(
-                                                        horizontal: 14,
-                                                        vertical: 12,
-                                                      ),
-                                                      enabledBorder:
-                                                          OutlineInputBorder(
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(12),
-                                                        borderSide:
-                                                            const BorderSide(
-                                                          color:
-                                                              AppColors.border,
-                                                        ),
-                                                      ),
-                                                      focusedBorder:
-                                                          OutlineInputBorder(
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(12),
-                                                        borderSide:
-                                                            const BorderSide(
-                                                          color: AppColors
-                                                              .textPrimary,
-                                                          width: 1.4,
-                                                        ),
+                                                    ),
+                                                    focusedBorder:
+                                                        OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              12),
+                                                      borderSide:
+                                                          const BorderSide(
+                                                        color: AppColors
+                                                            .textPrimary,
+                                                        width: 1.4,
                                                       ),
                                                     ),
                                                   ),
                                                 ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              SizedBox(
-                                                height: 46,
+                                              );
+
+                                              final applyBtn = ConstrainedBox(
+                                                constraints:
+                                                    const BoxConstraints(
+                                                  minHeight: 48,
+                                                ),
                                                 child: OutlinedButton(
                                                   style:
                                                       OutlinedButton.styleFrom(
                                                     minimumSize:
-                                                        const Size(96, 46),
+                                                        const Size(96, 48),
                                                     foregroundColor:
                                                         AppColors.textPrimary,
                                                     side: const BorderSide(
@@ -879,8 +1102,30 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                                         : 'Áp dụng',
                                                   ),
                                                 ),
-                                              ),
-                                            ],
+                                              );
+
+                                              if (stackVertically) {
+                                                return Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment
+                                                          .stretch,
+                                                  children: [
+                                                    inputField,
+                                                    const SizedBox(height: 8),
+                                                    applyBtn,
+                                                  ],
+                                                );
+                                              }
+                                              return Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.center,
+                                                children: [
+                                                  Expanded(child: inputField),
+                                                  const SizedBox(width: 10),
+                                                  applyBtn,
+                                                ],
+                                              );
+                                            },
                                           ),
                                           if (_couponError != null) ...[
                                             const SizedBox(height: 8),
@@ -923,18 +1168,21 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                   const SizedBox(height: 10),
                                   for (final methodMeta in methods) ...[
                                     _GatewayOptionTile(
+                                      key: Key(
+                                        'gateway_option_${methodMeta.method}',
+                                      ),
                                       value: methodMeta.method,
                                       groupValue: _selectedMethod,
                                       available: methodMeta.available,
                                       title: methodMeta.method == 'vnpay'
-                                          ? 'VNPay (QR Pay / Thẻ ATM nội địa / Visa / Master)'
-                                          : 'Ví điện tử MoMo',
+                                          ? l10n.vnpayGatewayTitle
+                                          : l10n.momoGatewayTitle,
                                       subtitle: methodMeta.available
                                           ? (methodMeta.method == 'vnpay'
-                                              ? 'Xác nhận qua cổng thanh toán VNPay chuẩn bảo mật ngân hàng'
-                                              : 'Thanh toán qua ứng dụng MoMo hoặc quét mã QR MoMo')
+                                              ? l10n.vnpayGatewaySubtitle
+                                              : l10n.momoGatewaySubtitle)
                                           : (methodMeta.unavailableReason ??
-                                              '${methodMeta.label} chưa được cấu hình trên máy chủ.'),
+                                              l10n.fxPaymentMethodUnsupported),
                                       onSelected: methodMeta.available
                                           ? (v) => setState(
                                                 () => _selectedMethod = v,
@@ -1026,8 +1274,7 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                         ),
                                         style: ElevatedButton.styleFrom(
                                           elevation: 0,
-                                          backgroundColor:
-                                              AppColors.primary,
+                                          backgroundColor: AppColors.primary,
                                           foregroundColor: Colors.white,
                                           minimumSize:
                                               const Size.fromHeight(52),
@@ -1045,6 +1292,9 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                     SizedBox(
                                       width: double.infinity,
                                       child: ElevatedButton.icon(
+                                        key: const Key(
+                                          'checkout_pay_cta_button',
+                                        ),
                                         onPressed: canSubmit
                                             ? () => _submitPayment(
                                                   booking,
@@ -1061,7 +1311,15 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                               ? 'Đang kết nối cổng thanh toán...'
                                               : (isHoldExpired
                                                   ? 'Đã hết thời gian giữ chỗ'
-                                                  : 'Thanh toán ${CurrencyFormatter.formatVnd(booking.totalAmount)} qua ${_selectedMethod.toUpperCase()}'),
+                                                  : l10n.fxPayButtonVnd(
+                                                      CurrencyFormatter
+                                                          .formatVnd(
+                                                        booking.totalAmount,
+                                                      ),
+                                                      _selectedMethod
+                                                          .toUpperCase(),
+                                                    )),
+                                          textAlign: TextAlign.center,
                                           style: const TextStyle(
                                             fontSize: 15,
                                             fontWeight: FontWeight.w700,
@@ -1110,31 +1368,58 @@ class _PaymentDetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Flexible(
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppColors.textSecondary,
-              ),
+      child: textScale >= 1.6
+          ? Wrap(
+              spacing: 8,
+              runSpacing: 2,
+              alignment: WrapAlignment.spaceBetween,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    value,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1148,6 +1433,7 @@ class _GatewayOptionTile extends StatelessWidget {
   final ValueChanged<String>? onSelected;
 
   const _GatewayOptionTile({
+    super.key,
     required this.value,
     required this.groupValue,
     this.available = true,

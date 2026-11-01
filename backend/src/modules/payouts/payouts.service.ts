@@ -735,6 +735,17 @@ export async function approveHostPayout(params: {
         payout.approvedAt = new Date();
 
         await payout.save({ transaction });
+        await writeAuditLog({
+            actorId: params.actorUserId,
+            action: "admin_payout.approve",
+            targetType: "host_payout_batch",
+            targetId: payout.payoutId,
+            metadata: {
+                hostId: payout.hostId,
+                status: payout.status,
+            },
+            transaction,
+        });
 
         return payout;
     });
@@ -771,6 +782,17 @@ export async function rejectHostPayout(params: {
         payout.rejectionReason = rejectionReason;
 
         await payout.save({ transaction });
+        await writeAuditLog({
+            actorId: params.actorUserId,
+            action: "admin_payout.reject",
+            targetType: "host_payout_batch",
+            targetId: payout.payoutId,
+            metadata: {
+                hostId: payout.hostId,
+                reason: rejectionReason,
+            },
+            transaction,
+        });
 
         return payout;
     });
@@ -807,6 +829,17 @@ export async function markHostPayoutPaid(params: {
         payout.transferReference = assertTransferReference(params.transferReference);
 
         await payout.save({ transaction });
+        await writeAuditLog({
+            actorId: params.actorUserId,
+            action: "admin_payout.mark_paid",
+            targetType: "host_payout_batch",
+            targetId: payout.payoutId,
+            metadata: {
+                hostId: payout.hostId,
+                transferReference: payout.transferReference,
+            },
+            transaction,
+        });
 
         return payout;
     });

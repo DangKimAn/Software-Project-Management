@@ -69,7 +69,6 @@ flutter:
     - assets/images/
     - assets/icons/
     - assets/fonts/
-    - config/
 
   fonts:
     - family: SF Pro Display

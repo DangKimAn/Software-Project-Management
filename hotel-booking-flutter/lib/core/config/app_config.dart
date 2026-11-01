@@ -47,6 +47,12 @@ final class AppConfig {
   static const enableLogging =
       bool.fromEnvironment('ENABLE_LOGGING', defaultValue: true);
 
+  /// Feature flag allowing instant rollback of foreign currency display back to pure VND.
+  static const enableMultiCurrencyDisplay = bool.fromEnvironment(
+    'ENABLE_MULTI_CURRENCY_DISPLAY',
+    defaultValue: true,
+  );
+
   /// Public Google OAuth 2.0 Client IDs (never client secrets).
   static const googleClientId = String.fromEnvironment(
     'GOOGLE_CLIENT_ID',

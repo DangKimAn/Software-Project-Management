@@ -320,6 +320,9 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                           controller: _otpController,
                           readOnly: _isLoading,
                           keyboardType: TextInputType.number,
+                          enableSuggestions: false,
+                          autocorrect: false,
+                          enableIMEPersonalizedLearning: false,
                           autofillHints: const [AutofillHints.oneTimeCode],
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,

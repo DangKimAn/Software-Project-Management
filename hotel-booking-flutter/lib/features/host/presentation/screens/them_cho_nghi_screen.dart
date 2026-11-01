@@ -1305,10 +1305,10 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                       _buildStatusBanner(
                         key: const Key('listing_form_error_banner'),
                         text: _errorMessage!,
-                        bg: const Color(0xFFFFF1F2),
-                        border: const Color(0xFFFECDD3),
-                        fg: const Color(0xFFBE123C),
-                        icon: LucideIcons.circleAlert,
+                        bg: AppColors.errorSoft,
+                        border: AppColors.border,
+                        fg: AppColors.error,
+                        icon: AppSemanticIcons.errorAlert,
                       ),
                     ],
                     if (_successMessage != null) ...[
@@ -1316,9 +1316,9 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                       _buildStatusBanner(
                         key: const Key('listing_form_success_banner'),
                         text: _successMessage!,
-                        bg: const Color(0xFFECFDF5),
-                        border: const Color(0xFFA7F3D0),
-                        fg: const Color(0xFF047857),
+                        bg: AppColors.successSoft,
+                        border: AppColors.border,
+                        fg: AppColors.success,
                         icon: LucideIcons.circleCheck,
                       ),
                     ],
@@ -1609,7 +1609,7 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
   Widget _buildBasicInfoCard() {
     return _SectionCard(
       title: 'Thông tin cơ bản',
-      icon: LucideIcons.home,
+      icon: AppSemanticIcons.home,
       children: [
         LayoutBuilder(
           builder: (context, constraints) {
@@ -1886,8 +1886,9 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
             ),
           ),
           IconButton(
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             padding: EdgeInsets.zero,
+            tooltip: 'Giảm $label',
             icon: const Icon(LucideIcons.minus, size: 18),
             color: currentVal > min
                 ? AppColors.iconStrong
@@ -1928,8 +1929,9 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
             ),
           ),
           IconButton(
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             padding: EdgeInsets.zero,
+            tooltip: 'Tăng $label',
             icon: const Icon(LucideIcons.plus, size: 18),
             color: currentVal < max
                 ? AppColors.iconStrong

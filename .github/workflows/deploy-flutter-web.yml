@@ -47,9 +47,10 @@ jobs:
         run: flutter pub get
 
       - name: Build Web Production
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
           # Use repository name as base-href for GitHub Pages compatibility
-          REPO_NAME="${{ github.event.repository.name }}"
           flutter build web --release \
             --base-href "/$REPO_NAME/" \
             --dart-define-from-file=config/prod.json

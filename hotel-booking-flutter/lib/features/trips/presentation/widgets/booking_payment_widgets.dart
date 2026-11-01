@@ -1,7 +1,9 @@
 import 'payment_result_card.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/storage/preferences_service.dart';
 import '../../../../core/utils/currency_formatter.dart';
@@ -353,27 +355,50 @@ class _PaymentVerificationCardState extends State<PaymentVerificationCard>
     final canReverify =
         _effectiveStatus == 'pending' || _effectiveStatus == 'unverified';
 
-    return PaymentResultCard(
-      icon: meta.icon,
-      title: meta.title,
-      subtitle: meta.subtitle,
-      isVerifying: _isVerifying,
-      details: {
-        if (effectiveBookingId.isNotEmpty)
-          'Mã đặt phòng': '#$effectiveBookingId',
-        if (effectivePaymentId.isNotEmpty) 'Mã giao dịch': effectivePaymentId,
-        if (effectiveMethod.isNotEmpty)
-          'Phương thức': effectiveMethod.toUpperCase(),
-        if (_bookingRecord != null)
-          'Đơn đặt phòng': _bookingRecord!.statusDisplay,
-        if (effectiveAmount > 0)
-          'Số tiền': CurrencyFormatter.formatVnd(effectiveAmount),
-      },
-      onRecheck:
-          canReverify ? () => _verifyTransaction(resetPollCount: true) : null,
-      onRetry: canRetryPayment ? widget.onRetryPayment : null,
-      onViewTrips: widget.onViewTrips,
-      onGoHome: widget.onGoHome,
+    final hasProviderScope =
+        context.findAncestorWidgetOfExactType<UncontrolledProviderScope>() !=
+            null;
+
+    Widget buildCard(MoneyFormatter? formatter) {
+      final isForeign =
+          formatter != null && formatter.effectiveCurrency.isForeign;
+      final isRefundStatus = _effectiveStatus == 'refund_pending' ||
+          _effectiveStatus == 'refunded';
+
+      return PaymentResultCard(
+        icon: meta.icon,
+        title: meta.title,
+        subtitle: meta.subtitle,
+        isVerifying: _isVerifying,
+        details: {
+          if (effectiveBookingId.isNotEmpty)
+            'Mã đặt phòng': '#$effectiveBookingId',
+          if (effectivePaymentId.isNotEmpty) 'Mã giao dịch': effectivePaymentId,
+          if (effectiveMethod.isNotEmpty)
+            'Phương thức': effectiveMethod.toUpperCase(),
+          if (_bookingRecord != null)
+            'Đơn đặt phòng': _bookingRecord!.statusDisplay,
+          if (effectiveAmount > 0)
+            'Số tiền': CurrencyFormatter.formatVnd(effectiveAmount),
+          if (isForeign && (effectiveAmount > 0 || isRefundStatus))
+            'Lưu ý tiền tệ': isRefundStatus
+                ? formatter.l10n.fxRefundInVndNotice
+                : formatter.l10n.fxChargedInVndNotice,
+        },
+        onRecheck:
+            canReverify ? () => _verifyTransaction(resetPollCount: true) : null,
+        onRetry: canRetryPayment ? widget.onRetryPayment : null,
+        onViewTrips: widget.onViewTrips,
+        onGoHome: widget.onGoHome,
+      );
+    }
+
+    if (!hasProviderScope) {
+      return buildCard(null);
+    }
+    return Consumer(
+      builder: (context, ref, _) =>
+          buildCard(ref.watch(moneyFormatterProvider)),
     );
   }
 }

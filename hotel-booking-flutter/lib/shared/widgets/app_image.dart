@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../app/theme/app_colors.dart';
 import '../../core/config/app_config.dart';
+import '../../core/security/url_security_validator.dart';
 
 /// Unified image loader supporting:
 /// - Full HTTP/HTTPS URLs
@@ -112,6 +113,10 @@ class AppImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final raw = (imageUrl ?? url)?.trim() ?? '';
     Widget content;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final int? targetCacheWidth = (width != null && width!.isFinite && width! > 0)
+        ? (width! * dpr).round().clamp(1, 2048)
+        : null;
 
     if (raw.isEmpty) {
       content = _buildPlaceholder();
@@ -122,28 +127,34 @@ class AppImage extends StatelessWidget {
           assetPath,
           width: width,
           height: height,
+          cacheWidth: targetCacheWidth,
           fit: fit,
           alignment: alignment,
           errorBuilder: (_, __, ___) => _buildPlaceholder(),
         );
       } else {
         final resolvedUrl = resolveNetworkUrl(raw);
-        content = Image.network(
-          resolvedUrl,
-          width: width,
-          height: height,
-          fit: fit,
-          alignment: alignment,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Container(
-              width: width,
-              height: height,
-              color: AppColors.surfaceMuted,
-            );
-          },
-          errorBuilder: (_, __, ___) => _buildPlaceholder(),
-        );
+        if (!UrlSecurityValidator.isSafeUploadOrMediaUrl(resolvedUrl)) {
+          content = _buildPlaceholder();
+        } else {
+          content = Image.network(
+            resolvedUrl,
+            width: width,
+            height: height,
+            cacheWidth: targetCacheWidth,
+            fit: fit,
+            alignment: alignment,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                width: width,
+                height: height,
+                color: AppColors.surfaceMuted,
+              );
+            },
+            errorBuilder: (_, __, ___) => _buildPlaceholder(),
+          );
+        }
       }
     }
 

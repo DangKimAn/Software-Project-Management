@@ -452,6 +452,22 @@ const redeemBookingCouponIfNeeded = async (booking: BookingDocument, transaction
         return;
     }
 
+    const now = new Date();
+    if (
+        coupon.isActive === false ||
+        (coupon.endDate && new Date(coupon.endDate) < now) ||
+        (coupon.totalLimit !== null &&
+            coupon.totalLimit !== undefined &&
+            Number(coupon.usedCount ?? 0) >= Number(coupon.totalLimit))
+    ) {
+        logger.warn("Coupon redeemed during payment settlement after expiry or limit threshold", {
+            couponId: coupon.couponId,
+            bookingId: booking.bookingId,
+            usedCount: coupon.usedCount,
+            totalLimit: coupon.totalLimit,
+        });
+    }
+
     try {
         await CouponRedemption.create(
             {

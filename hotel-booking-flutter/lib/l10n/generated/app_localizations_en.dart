@@ -778,4 +778,93 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminUserStatusInactive => 'Inactive';
+
+  @override
+  String get settingsCurrency => 'Display currency';
+
+  @override
+  String get currencyFollowLanguage => 'Follow language';
+
+  @override
+  String get currencyFollowLanguageDesc =>
+      'Automatically switch currency with interface language';
+
+  @override
+  String get currencyNameVnd => 'Vietnamese Dong (VND - ₫)';
+
+  @override
+  String get currencyNameUsd => 'US Dollar (USD - \$)';
+
+  @override
+  String get currencyNameKrw => 'South Korean Won (KRW - ₩)';
+
+  @override
+  String fxEstimatedPrice(String amount) {
+    return 'Estimated price: ≈ $amount';
+  }
+
+  @override
+  String fxTotalPayableVnd(String amountVnd) {
+    return 'Total payable: $amountVnd';
+  }
+
+  @override
+  String get fxChargedInVndNotice =>
+      'You will be charged in VND. Your bank may apply exchange rates and fees.';
+
+  @override
+  String fxReferenceRateLabel(String source) {
+    return 'Reference rate ($source)';
+  }
+
+  @override
+  String fxRateUpdatedAt(String time) {
+    return 'Exchange rate as of $time';
+  }
+
+  @override
+  String get fxRateUnavailableFallback =>
+      'Exchange rates unavailable. Displaying official prices in VND.';
+
+  @override
+  String fxRateStaleNotice(String time) {
+    return 'Using last verified exchange rate ($time).';
+  }
+
+  @override
+  String get fxBankConversionFeeNotice =>
+      'Conversion fees and bank exchange rates may apply.';
+
+  @override
+  String get fxPaymentMethodUnsupported =>
+      'This payment method is not currently supported.';
+
+  @override
+  String get fxRefundInVndNotice =>
+      'Actual refunds are processed in VND. Your card statement amount may differ based on bank exchange rates at refund time.';
+
+  @override
+  String get fxHistoricalReferenceNote =>
+      'Converted foreign amount is for reference only, not the actual statement charge.';
+
+  @override
+  String fxPayButtonVnd(String amountVnd, String method) {
+    return 'Pay $amountVnd via $method';
+  }
+
+  @override
+  String get fxPriceRangePerNight => 'Nightly price range';
+
+  @override
+  String get vnpayGatewayTitle => 'VNPay (QR Pay / Domestic Bank Card)';
+
+  @override
+  String get vnpayGatewaySubtitle =>
+      'Secure VND settlement via VNPay payment gateway';
+
+  @override
+  String get momoGatewayTitle => 'MoMo E-Wallet';
+
+  @override
+  String get momoGatewaySubtitle => 'Pay in VND via MoMo app or MoMo QR code';
 }

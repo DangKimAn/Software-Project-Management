@@ -16,8 +16,13 @@ const { getCorsOptions } = require("../dist/config/cors");
 const sequelize = require("../dist/config/database").default;
 const { getEnv } = require("../dist/config/env");
 const { logger } = require("../dist/config/logger");
-const { sanitizePayload } = require("../dist/middlewares/sanitizeInput");
+const { sanitizeInput, sanitizePayload } = require("../dist/middlewares/sanitizeInput");
 const authService = require("../dist/modules/auth/auth.service");
+const {
+    createHostDocStreamToken,
+    verifyHostDocStreamToken,
+} = require("../dist/modules/host-applications/host-application.service");
+const { isSafeExternalHttpUrl } = require("../dist/common/url-security");
 const { vnpayCallbackPayloadSchema } = require("../dist/modules/payments/payments.validator");
 const { shutdownServer } = require("../dist/server");
 
@@ -344,6 +349,125 @@ describe("Security middleware", () => {
         assert.equal(serverClosed, true);
         assert.equal(databaseClosed, true);
         assert.equal(exitCode, 0);
+    });
+
+    it("strips prototype-pollution keys, enforces payload depth limit, and skips signed payment webhooks", () => {
+        const raw = JSON.parse('{"title":"<b>Villa</b>","__proto__":{"polluted":true},"constructor":{"bad":1}}');
+        const cleaned = sanitizePayload(raw) as Record<string, unknown>;
+        assert.equal(cleaned.title, "&lt;b&gt;Villa&lt;/b&gt;");
+        assert.equal(Object.prototype.hasOwnProperty.call(cleaned, "__proto__"), false);
+        assert.equal(Object.prototype.hasOwnProperty.call(cleaned, "constructor"), false);
+
+        let deep: Record<string, unknown> = { message: "bottom" };
+        for (let i = 0; i < 20; i += 1) {
+            deep = { child: deep };
+        }
+        assert.throws(() => sanitizePayload(deep), /nesting is too deep/i);
+
+        const webhookReq: any = {
+            originalUrl: "/api/payments/webhooks/momo",
+            path: "/api/payments/webhooks/momo",
+            body: { message: "Keep & Preserve Raw HMAC <value>" },
+            query: {},
+            params: {},
+        };
+        let nextError: unknown = null;
+        sanitizeInput(webhookReq, {} as any, (err?: unknown) => {
+            nextError = err ?? null;
+        });
+        assert.equal(nextError, null);
+        assert.equal(webhookReq.body.message, "Keep & Preserve Raw HMAC <value>");
+    });
+
+    it("rejects unsafe X-Request-Id characters to prevent log/header injection", async () => {
+        const safeRes = await request(app)
+            .get("/api/test")
+            .set("X-Request-Id", "req_2026-10-31.abc123");
+        assert.equal(safeRes.headers["x-request-id"], "req_2026-10-31.abc123");
+
+        const unsafeRes = await request(app)
+            .get("/api/test")
+            .set("X-Request-Id", "bad id with spaces & <tags>");
+        assert.notEqual(unsafeRes.headers["x-request-id"], "bad id with spaces & <tags>");
+        assert.match(unsafeRes.headers["x-request-id"], /^[0-9a-f-]{36}$/i);
+    });
+
+    it("ignores raw JWT query tokens and enforces scoped HMAC stream tokens for KYC documents", () => {
+        const queryOnlyToken = authService.extractAuthToken({
+            query: { token: "leaked-jwt-in-url" },
+            header() {
+                return undefined;
+            },
+            cookies: {},
+            signedCookies: {},
+        });
+        assert.equal(queryOnlyToken, undefined);
+
+        const streamToken = createHostDocStreamToken({
+            applicationId: 12,
+            documentId: 34,
+            adminUserId: "900",
+            ttlSeconds: 60,
+        });
+        const verified = verifyHostDocStreamToken(streamToken, {
+            applicationId: 12,
+            documentId: 34,
+        });
+        assert.equal(verified.adminUserId, "900");
+
+        assert.throws(
+            () =>
+                verifyHostDocStreamToken(streamToken, {
+                    applicationId: 12,
+                    documentId: 99,
+                }),
+            /Invalid or expired document stream token/,
+        );
+
+        const expiredToken = createHostDocStreamToken({
+            applicationId: 12,
+            documentId: 34,
+            adminUserId: "900",
+            ttlSeconds: -5,
+        });
+        assert.throws(
+            () =>
+                verifyHostDocStreamToken(expiredToken, {
+                    applicationId: 12,
+                    documentId: 34,
+                }),
+            /Invalid or expired document stream token/,
+        );
+    });
+
+    it("requires distinct access/refresh and token/otp secrets in production and blocks SSRF URLs", async () => {
+        await withEnv(
+            {
+                ...productionEnv,
+                JWT_REFRESH_SECRET: productionEnv.JWT_ACCESS_SECRET,
+            },
+            () => {
+                assert.throws(() => getEnv(), /JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be distinct/);
+            },
+        );
+
+        await withEnv(
+            {
+                ...productionEnv,
+                OTP_HASH_SECRET: productionEnv.TOKEN_HASH_SECRET,
+            },
+            () => {
+                assert.throws(() => getEnv(), /TOKEN_HASH_SECRET and OTP_HASH_SECRET must be distinct/);
+            },
+        );
+
+        assert.equal(isSafeExternalHttpUrl("https://cdn.example.com/photo.jpg", { requireHttps: true }), true);
+        assert.equal(isSafeExternalHttpUrl("http://cdn.example.com/photo.jpg", { requireHttps: true }), false);
+        assert.equal(isSafeExternalHttpUrl("https://127.0.0.1/admin", { requireHttps: true }), false);
+        assert.equal(isSafeExternalHttpUrl("https://169.254.169.254/latest/meta-data", { requireHttps: true }), false);
+        assert.equal(isSafeExternalHttpUrl("https://10.0.0.5/internal.jpg", { requireHttps: true }), false);
+        assert.equal(isSafeExternalHttpUrl("https://user:pass@cdn.example.com/photo.jpg", { requireHttps: true }), false);
+        assert.equal(isSafeExternalHttpUrl("file:///etc/passwd", { requireHttps: false }), false);
     });
 });
 

@@ -131,6 +131,23 @@ void main() {
       expect(AppSemanticIcons.resolveSortIcon('price_desc'),
           LucideIcons.trendingDown);
       expect(AppSemanticIcons.resolveSortIcon('rating_desc'), LucideIcons.star);
+      expect(AppSemanticIcons.logout, LucideIcons.doorOpen);
+      expect(AppSemanticIcons.dashboard, LucideIcons.layoutDashboard);
+      expect(AppSemanticIcons.home, LucideIcons.house);
+      expect(AppSemanticIcons.becomeHost, LucideIcons.housePlus);
+      expect(AppSemanticIcons.adminPortal, LucideIcons.shieldCheck);
+      expect(AppSemanticIcons.bookings, LucideIcons.calendarCheck);
+      expect(AppSemanticIcons.revenue, LucideIcons.chartColumn);
+      expect(AppSemanticIcons.hostApplications, LucideIcons.fileCheck);
+      expect(AppSemanticIcons.userProfile, LucideIcons.userRound);
+      expect(AppSemanticIcons.changeAvatar, LucideIcons.camera);
+      expect(AppSemanticIcons.messageHost, LucideIcons.messageSquare);
+      expect(AppSemanticIcons.zaloSupport, LucideIcons.messageCircle);
+      expect(AppSemanticIcons.supportCenter, LucideIcons.lifeBuoy);
+      expect(AppSemanticIcons.errorAlert, LucideIcons.circleAlert);
+      expect(AppSemanticIcons.retry, LucideIcons.refreshCw);
+      expect(AppSemanticIcons.checkIn, LucideIcons.keyRound);
+      expect(AppSemanticIcons.checkOut, LucideIcons.clock);
     });
 
     testWidgets(

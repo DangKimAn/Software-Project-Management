@@ -255,6 +255,13 @@ const seed = async () => {
             },
         });
 
+        if (user.fullName !== u.fullName || (user.bio && user.bio.includes("MinhThanh"))) {
+            await user.update({
+                fullName: u.fullName,
+                bio: `Tài khoản ${u.fullName} tại hệ thống The Palm Villa`,
+            });
+        }
+
         userMap.set(u.email, user);
 
         // Link Role
@@ -476,7 +483,7 @@ const seed = async () => {
             },
         });
         if (!created) {
-            await listingRecord.update({ images: imagesWithMeta });
+            await listingRecord.update({ title: l.title, images: imagesWithMeta });
         }
 
         // Seed Listing Images table
@@ -694,6 +701,11 @@ const seed = async () => {
 
     console.info("🎉 Seeding Database hoàn tất thành công 100%!");
 };
+
+if (process.env.NODE_ENV === "production" && process.env.ALLOW_PRODUCTION_SEED !== "true") {
+    console.error("Refusing to run seed script in production without ALLOW_PRODUCTION_SEED=true");
+    process.exit(1);
+}
 
 seed()
     .then(async () => {

@@ -6,6 +6,7 @@ import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../data/repositories/review_repository_impl.dart';
 import '../../domain/entities/review_item.dart';
 import '../../domain/repositories/review_repository.dart';
@@ -176,7 +177,7 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             const Icon(
-                              LucideIcons.circleUser,
+                              AppSemanticIcons.userProfile,
                               size: 28,
                               color: AppColors.iconStrong,
                             ),

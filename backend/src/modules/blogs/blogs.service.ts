@@ -148,7 +148,8 @@ const buildSearchWhere = (query: ListBlogsQuery): WhereOptions => {
     }
 
     if (query.q?.trim()) {
-        const keyword = `%${sanitizeSingleLineText(query.q)}%`;
+        const escapedQuery = sanitizeSingleLineText(query.q).replace(/[\\%_]/g, "\\$&");
+        const keyword = `%${escapedQuery}%`;
         filters[Op.or] = [
             { title: { [Op.like]: keyword } },
             { excerpt: { [Op.like]: keyword } },

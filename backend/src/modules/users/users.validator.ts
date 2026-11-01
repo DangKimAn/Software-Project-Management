@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isSafeExternalHttpUrl } from "../../common/url-security";
+
 const phoneSchema = z
     .string()
     .trim()
@@ -21,9 +23,18 @@ const dateSchema = z.preprocess(
         .optional(),
 );
 
+const safeAvatarUrlStringSchema = z
+    .string()
+    .trim()
+    .url("avatarUrl must be a valid URL")
+    .max(1024)
+    .refine((value) => isSafeExternalHttpUrl(value, { allowLocalhostInDev: true }), {
+        message: "avatarUrl must use http(s) and point to a public host",
+    });
+
 const avatarUrlSchema = z.preprocess(
     (value) => (value === "" ? null : value),
-    z.string().trim().url("avatarUrl must be a valid URL").max(1024).nullable().optional(),
+    safeAvatarUrlStringSchema.nullable().optional(),
 );
 
 const avatarKeySchema = z.preprocess(
@@ -35,7 +46,7 @@ const publicProfileTextSchema = nullableString(255);
 const languagesSchema = z.array(z.string().trim().min(1).max(64)).max(20).nullable().optional();
 
 const userStatusSchema = z.enum(["active", "inactive", "blocked", "suspended", "deleted", "locked"]);
-const userRoleSchema = z.enum(["guest", "host", "moderator", "admin"]);
+const userRoleSchema = z.enum(["guest", "host", "admin"]);
 
 const userIdParamsSchema = z.object({
     userId: z.string().regex(/^\d+$/, "userId must be numeric"),
@@ -62,7 +73,14 @@ export const updateMeBodySchema = baseProfileBodySchema.strict();
 
 export const updateAvatarBodySchema = z
     .object({
-        url: z.string().trim().url("url must be a valid URL").max(1024),
+        url: z
+            .string()
+            .trim()
+            .url("url must be a valid URL")
+            .max(1024)
+            .refine((value) => isSafeExternalHttpUrl(value, { allowLocalhostInDev: true }), {
+                message: "url must use http(s) and point to a public host",
+            }),
         key: avatarKeySchema,
     })
     .strict();

@@ -5,7 +5,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/date/booking_date.dart';
-import '../../../../core/utils/currency_formatter.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
@@ -865,15 +864,29 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Flexible(
-                        child: Text(
-                          '${CurrencyFormatter.formatVnd(villa.basePriceVnd ?? 0)} / đêm',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
-                          ),
+                        child: Builder(
+                          builder: (context) {
+                            final formatter = ref.watch(moneyFormatterProvider);
+                            final priceText = formatter.formatPriceOrContact(
+                              villa.basePriceVnd,
+                              context: MoneyDisplayContext.villaCard,
+                            );
+                            final label =
+                                (villa.basePriceVnd != null &&
+                                        villa.basePriceVnd! > 0)
+                                    ? '$priceText ${formatter.l10n.pricePerNightUnit}'
+                                    : priceText;
+                            return Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primary,
+                              ),
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(width: 8),

@@ -17,6 +17,14 @@ import {
 
 const router = express.Router();
 
+const MAX_STAY_NIGHTS = 365;
+const isDateSpanWithinMaxNights = (checkIn: string, checkOut: string) => {
+    const startMs = Date.parse(`${checkIn}T00:00:00.000Z`);
+    const endMs = Date.parse(`${checkOut}T00:00:00.000Z`);
+    const diffDays = Math.round((endMs - startMs) / 86_400_000);
+    return Number.isFinite(diffDays) && diffDays >= 1 && diffDays <= MAX_STAY_NIGHTS;
+};
+
 const listingIdParamValidator = param("listingId")
     .isInt({ min: 1 })
     .withMessage("listingId must be a positive integer")
@@ -56,7 +64,14 @@ router.get(
             .custom((value) => isValidIsoDate(String(value)))
             .withMessage("checkOut must use YYYY-MM-DD format")
             .custom((value, { req }) => !req.query?.checkIn || String(req.query.checkIn) < String(value))
-            .withMessage("checkOut must be after checkIn"),
+            .withMessage("checkOut must be after checkIn")
+            .custom(
+                (value, { req }) =>
+                    !req.query?.checkIn ||
+                    !isValidIsoDate(String(req.query.checkIn)) ||
+                    isDateSpanWithinMaxNights(String(req.query.checkIn), String(value)),
+            )
+            .withMessage(`Date range cannot exceed ${MAX_STAY_NIGHTS} nights`),
         query("guests").optional().isInt({ min: 1 }).withMessage("guests must be at least 1").toInt(),
         query("propertyType")
             .optional()

@@ -330,10 +330,14 @@ class PushNotificationService {
     // app is in the foreground; show a heads-up banner via local notifications.
     if (defaultTargetPlatform == TargetPlatform.android ||
         _localBannerOverride != null) {
-      final title = message.notification?.title ??
-          data['title']?.toString() ??
-          'Thông báo mới';
-      final body = message.notification?.body ?? data['body']?.toString() ?? '';
+      final title = AppNotificationItem.normalizeBrandText(
+        message.notification?.title ??
+            data['title']?.toString() ??
+            'Thông báo mới',
+      );
+      final body = AppNotificationItem.normalizeBrandText(
+        message.notification?.body ?? data['body']?.toString() ?? '',
+      );
       final route = resolveRouteFromPushData(data);
       final encodedPayload = jsonEncode(<String, dynamic>{
         if (route != null && route.isNotEmpty) 'route': route,
@@ -502,18 +506,37 @@ class PushNotificationService {
     }
   }
 
-  /// Deactivates the current device's FCM token on Backend BEFORE logout clears the JWT.
+  /// Deactivates the current device's FCM token on Backend BEFORE logout clears the JWT,
+  /// and purges local notification banners + native FCM token state.
   Future<void> unregisterCurrentDevice() async {
     final token = _currentFcmToken ?? _lastSyncedToken;
     _activeUserId = null;
     _lastSyncedUserId = null;
     _lastSyncedToken = null;
+    _currentFcmToken = null;
+    _recentDedupeKeys.clear();
 
-    if (token == null || token.trim().isEmpty) return;
-    try {
-      await _deviceTokenRepository.unregisterToken(token: token.trim());
-    } catch (_) {
-      // Never block user logout if network is offline
+    if (token != null && token.trim().isNotEmpty) {
+      try {
+        await _deviceTokenRepository.unregisterToken(token: token.trim());
+      } catch (_) {
+        // Never block user logout if network is offline
+      }
+    }
+
+    await _purgeDeviceNotificationState();
+  }
+
+  Future<void> _purgeDeviceNotificationState() async {
+    if (_localNotificationsReady) {
+      try {
+        await _localNotifications.cancelAll();
+      } catch (_) {}
+    }
+    if (_fcmAvailable) {
+      try {
+        await FirebaseMessaging.instance.unregister();
+      } catch (_) {}
     }
   }
 
@@ -564,13 +587,15 @@ class PushNotificationService {
     required String body,
     required Map<String, dynamic> data,
   }) async {
+    final normalizedTitle = AppNotificationItem.normalizeBrandText(title);
+    final normalizedBody = AppNotificationItem.normalizeBrandText(body);
     final notifId = (data['notificationLogId'] ?? data['id'] ?? '').toString();
     final msgId = (data['messageId'] ?? '').toString();
     final dedupeKey = notifId.isNotEmpty
         ? 'notif:$notifId'
         : msgId.isNotEmpty
             ? 'msg:$msgId'
-            : 'fcm:$title:$body';
+            : 'fcm:$normalizedTitle:$normalizedBody';
     if (_markIfDuplicate(dedupeKey)) return;
 
     final route = resolveRouteFromPushData(data);
@@ -581,8 +606,8 @@ class PushNotificationService {
 
     await _showLocalBanner(
       id: _stableNotificationId(dedupeKey),
-      title: title,
-      body: body,
+      title: normalizedTitle,
+      body: normalizedBody,
       payload: encodedPayload,
     );
   }

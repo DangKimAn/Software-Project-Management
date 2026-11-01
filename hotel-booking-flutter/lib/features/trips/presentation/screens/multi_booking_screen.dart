@@ -285,8 +285,13 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
   @override
   Widget build(BuildContext context) {
     final queue = ref.watch(bookingQueueProvider);
+    final formatter = ref.watch(moneyFormatterProvider);
     final grandTotal =
         queue.fold<int>(0, (sum, item) => sum + _calcItemTotal(item));
+    final grandTotalDisplay = formatter.format(
+      grandTotal,
+      context: MoneyDisplayContext.breakdown,
+    );
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return Scaffold(
@@ -297,7 +302,7 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
             const AppTopHeader(currentPath: '/gio-cho-dat'),
             Expanded(
               child: _createdBookings.isNotEmpty
-                  ? _buildCreatedBookingsResultView()
+                  ? _buildCreatedBookingsResultView(formatter)
                   : queue.isEmpty
                       ? AppEmptyView(
                           icon: LucideIcons.shoppingCart,
@@ -414,7 +419,11 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                                         for (var i = 0;
                                             i < queue.length;
                                             i++) ...[
-                                          _buildQueueItemCard(i, queue[i]),
+                                          _buildQueueItemCard(
+                                            i,
+                                            queue[i],
+                                            formatter,
+                                          ),
                                         ],
                                         const SizedBox(height: 8),
                                         TextField(
@@ -459,8 +468,10 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                                                   ),
                                                   const SizedBox(height: 4),
                                                   Text(
-                                                    CurrencyFormatter.formatVnd(
-                                                        grandTotal),
+                                                    grandTotalDisplay.formatted,
+                                                    key: const Key(
+                                                      'multi_booking_grand_total_display',
+                                                    ),
                                                     style: const TextStyle(
                                                       fontSize: 22,
                                                       fontWeight:
@@ -468,6 +479,35 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                                                       color: AppColors.primary,
                                                     ),
                                                   ),
+                                                  if (grandTotalDisplay
+                                                      .isForeignDisplayed) ...[
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      '${formatter.l10n.fxTotalPayableVnd(formatter.formatExactVnd(grandTotal, withCode: true))} • ${formatter.l10n.fxChargedInVndNotice}',
+                                                      key: const Key(
+                                                        'multi_booking_grand_total_vnd_note',
+                                                      ),
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: AppColors
+                                                            .textSecondary,
+                                                      ),
+                                                    ),
+                                                  ] else if (formatter
+                                                      .isFallingBackToVnd) ...[
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      formatter.l10n
+                                                          .fxRateUnavailableFallback,
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                        color: AppColors
+                                                            .textSecondary,
+                                                      ),
+                                                    ),
+                                                  ],
                                                   const SizedBox(height: 2),
                                                   const Text(
                                                     'Số tiền chính thức sẽ được máy chủ chốt khi tạo đơn.',
@@ -533,9 +573,19 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
     );
   }
 
-  Widget _buildQueueItemCard(int index, BookingQueueItem item) {
+  Widget _buildQueueItemCard(
+    int index,
+    BookingQueueItem item,
+    MoneyFormatter formatter,
+  ) {
     final estimate = item.calculatePriceEstimate();
     final itemError = _itemErrorsByIndex[index];
+    final itemEstimatedDisplay = formatter
+        .format(
+          estimate.estimatedTotal,
+          context: MoneyDisplayContext.breakdown,
+        )
+        .formatted;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
@@ -587,7 +637,7 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Tạm tính (${estimate.nights} đêm): ${CurrencyFormatter.formatVnd(estimate.estimatedTotal)}',
+                        'Tạm tính (${estimate.nights} đêm): $itemEstimatedDisplay',
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w800,
@@ -720,7 +770,7 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                 runSpacing: 4,
                 children: [
                   Text(
-                    'Tiền phòng: ${CurrencyFormatter.formatVnd(estimate.baseNightsAmount)}',
+                    'Tiền phòng: ${formatter.format(estimate.baseNightsAmount, context: MoneyDisplayContext.breakdown).formatted}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,
@@ -728,7 +778,7 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                   ),
                   if (estimate.extraGuestFeeAmount > 0)
                     Text(
-                      'Phụ thu khách (${estimate.extraGuests} khách): ${CurrencyFormatter.formatVnd(estimate.extraGuestFeeAmount)}',
+                      'Phụ thu khách (${estimate.extraGuests} khách): ${formatter.format(estimate.extraGuestFeeAmount, context: MoneyDisplayContext.breakdown).formatted}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
@@ -736,7 +786,7 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                     ),
                   if (estimate.surchargeAmount > 0)
                     Text(
-                      'Phụ thu cố định: ${CurrencyFormatter.formatVnd(estimate.surchargeAmount)}',
+                      'Phụ thu cố định: ${formatter.format(estimate.surchargeAmount, context: MoneyDisplayContext.breakdown).formatted}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
@@ -744,7 +794,7 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                     ),
                   if (estimate.cleaningFee + estimate.serviceFee > 0)
                     Text(
-                      'Phí dịch vụ & vệ sinh: ${CurrencyFormatter.formatVnd(estimate.cleaningFee + estimate.serviceFee)}',
+                      'Phí dịch vụ & vệ sinh: ${formatter.format(estimate.cleaningFee + estimate.serviceFee, context: MoneyDisplayContext.breakdown).formatted}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
@@ -782,10 +832,15 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
     );
   }
 
-  Widget _buildCreatedBookingsResultView() {
+  Widget _buildCreatedBookingsResultView(MoneyFormatter formatter) {
     final totalConfirmedAmount = _createdBookings.fold<int>(
       0,
       (sum, b) => sum + b.totalAmount,
+    );
+    final confirmedRef = formatter.format(
+      totalConfirmedAmount,
+      context: MoneyDisplayContext.checkoutReference,
+      includeApproximatePrefix: false,
     );
     final unpaidCount = _createdBookings.where((b) => b.canPayNow).length;
 
@@ -890,6 +945,16 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                                   color: AppColors.primary,
                                 ),
                               ),
+                              if (confirmedRef.isForeignDisplayed) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${formatter.l10n.fxEstimatedPrice(confirmedRef.formatted)} • ${formatter.l10n.fxChargedInVndNotice}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                           Wrap(
@@ -1110,6 +1175,32 @@ class BookingResultCard extends StatelessWidget {
                         color: AppColors.primary,
                       ),
                     ),
+                    if (context.findAncestorWidgetOfExactType<
+                            UncontrolledProviderScope>() !=
+                        null)
+                      Consumer(
+                        builder: (context, ref, _) {
+                          final fmt = ref.watch(moneyFormatterProvider);
+                          final refRes = fmt.format(
+                            booking.totalAmount,
+                            context: MoneyDisplayContext.checkoutReference,
+                            includeApproximatePrefix: false,
+                          );
+                          if (!refRes.isForeignDisplayed) {
+                            return const SizedBox.shrink();
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              fmt.l10n.fxEstimatedPrice(refRes.formatted),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                   ],
                 ),
                 if (canPay)

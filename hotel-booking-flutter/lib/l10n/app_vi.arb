@@ -299,5 +299,59 @@
   "adminTabRoles": "Phân quyền hệ thống",
   "adminUserStatusActive": "Hoạt động",
   "adminUserStatusSuspended": "Đang khóa",
-  "adminUserStatusInactive": "Ngừng hoạt động"
+  "adminUserStatusInactive": "Ngừng hoạt động",
+  "settingsCurrency": "Tiền tệ hiển thị",
+  "currencyFollowLanguage": "Theo ngôn ngữ",
+  "currencyFollowLanguageDesc": "Tự động chuyển đổi theo ngôn ngữ giao diện",
+  "currencyNameVnd": "Đồng Việt Nam (VND - ₫)",
+  "currencyNameUsd": "Đô la Mỹ (USD - $)",
+  "currencyNameKrw": "Won Hàn Quốc (KRW - ₩)",
+  "fxEstimatedPrice": "Giá tham khảo: ≈ {amount}",
+  "@fxEstimatedPrice": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "fxTotalPayableVnd": "Tổng thanh toán thực tế: {amountVnd}",
+  "@fxTotalPayableVnd": {
+    "placeholders": {
+      "amountVnd": { "type": "String" }
+    }
+  },
+  "fxChargedInVndNotice": "Thanh toán thực tế bằng VND.",
+  "fxReferenceRateLabel": "Tỷ giá tham khảo ({source})",
+  "@fxReferenceRateLabel": {
+    "placeholders": {
+      "source": { "type": "String" }
+    }
+  },
+  "fxRateUpdatedAt": "Tỷ giá cập nhật: {time}",
+  "@fxRateUpdatedAt": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "fxRateUnavailableFallback": "Chưa tải được tỷ giá ngoại tệ. Đang hiển thị giá chính thức bằng VND.",
+  "fxRateStaleNotice": "Đang sử dụng tỷ giá cập nhật gần nhất ({time}).",
+  "@fxRateStaleNotice": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "fxBankConversionFeeNotice": "Ngân hàng phát hành thẻ có thể áp dụng tỷ giá và phí chuyển đổi riêng.",
+  "fxPaymentMethodUnsupported": "Phương thức thanh toán này hiện chưa được hỗ trợ.",
+  "fxRefundInVndNotice": "Hoàn tiền thực tế bằng VND. Số tiền ngoại tệ trên sao kê có thể khác do tỷ giá ngân hàng tại thời điểm hoàn.",
+  "fxHistoricalReferenceNote": "Giá quy đổi chỉ để tham khảo, không phải số tiền thực tế trên sao kê thanh toán.",
+  "fxPayButtonVnd": "Thanh toán {amountVnd} qua {method}",
+  "@fxPayButtonVnd": {
+    "placeholders": {
+      "amountVnd": { "type": "String" },
+      "method": { "type": "String" }
+    }
+  },
+  "fxPriceRangePerNight": "Khoảng giá mỗi đêm",
+  "vnpayGatewayTitle": "VNPay (QR Pay / Thẻ ATM nội địa)",
+  "vnpayGatewaySubtitle": "Xác nhận thanh toán VND qua cổng bảo mật VNPay",
+  "momoGatewayTitle": "Ví điện tử MoMo",
+  "momoGatewaySubtitle": "Thanh toán VND qua ứng dụng MoMo hoặc quét mã QR MoMo"
 }

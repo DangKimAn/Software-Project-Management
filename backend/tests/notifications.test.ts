@@ -595,4 +595,45 @@ describe("Module notifications (NT-01 to NT-12)", () => {
             fcmPushService.resetFcmServiceCacheForTesting();
         }
     });
+
+    it("NT-15: Thông báo chào mừng dùng thương hiệu The Palm Villa và chuẩn hóa các bản ghi Minh Thành Villa cũ", async () => {
+        let createdInApp: any = null;
+        patch(User, "findByPk", async () => ({
+            userId: 201,
+            email: "usera@example.com",
+            fullName: "User A",
+            status: "active",
+        }));
+        patch(NotificationLog, "create", async (data: any) => {
+            if (data.provider === "in_app") {
+                createdInApp = data;
+            }
+            return buildMockCreatedLog(data, 999);
+        });
+
+        await notificationService.notifyUserRegistered(201);
+        assert.ok(createdInApp);
+        assert.equal(createdInApp.title, "Chào mừng đến The Palm Villa");
+
+        patch(NotificationLog, "findAll", async () => [
+            buildNotification({
+                notificationLogId: 180001,
+                eventType: "USER_REGISTERED",
+                title: "Chào mừng đến Minh Thành Villa",
+                body: "Chủ biệt thự Nguyễn Minh Thành đã xác nhận kỳ nghỉ tại MinhThanh Luxury Sea View Villa Bãi Dâu.",
+            }),
+        ]);
+        patch(NotificationLog, "count", async () => 1);
+
+        const res = await request(app)
+            .get("/api/notifications")
+            .set(userAAuth);
+
+        assert.equal(res.status, 200);
+        assert.equal(res.body.data.items[0].title, "Chào mừng đến The Palm Villa");
+        assert.equal(
+            res.body.data.items[0].body,
+            "Chủ biệt thự Nguyễn Minh Thành đã xác nhận kỳ nghỉ tại The Palm Luxury Sea View Villa Bãi Dâu.",
+        );
+    });
 });

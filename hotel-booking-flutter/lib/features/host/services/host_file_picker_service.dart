@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../core/security/url_security_validator.dart';
 import '../domain/host_models.dart';
 import 'host_file_picker_web_stub.dart'
     if (dart.library.js_interop) 'host_file_picker_web.dart';
@@ -566,18 +567,12 @@ class HostR2UploadResult {
         ? (data['expiresIn'] as num).toInt()
         : (int.tryParse('${data['expiresIn'] ?? 300}') ?? 300);
 
-    final uploadUri = Uri.tryParse(uploadUrl);
-    final publicUri = Uri.tryParse(publicUrl);
-    if (uploadUri == null ||
-        !uploadUri.hasScheme ||
-        (uploadUri.scheme != 'http' && uploadUri.scheme != 'https')) {
+    if (!UrlSecurityValidator.isSafeUploadOrMediaUrl(uploadUrl)) {
       throw const FormatException(
         'Backend không trả về uploadUrl R2 hợp lệ.',
       );
     }
-    if (publicUri == null ||
-        !publicUri.hasScheme ||
-        (publicUri.scheme != 'http' && publicUri.scheme != 'https')) {
+    if (!UrlSecurityValidator.isSafeUploadOrMediaUrl(publicUrl)) {
       throw const FormatException(
         'Backend không trả về publicUrl R2 hợp lệ.',
       );

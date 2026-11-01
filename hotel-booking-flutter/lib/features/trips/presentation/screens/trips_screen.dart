@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -300,8 +301,8 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                         const SizedBox(height: AppSpacing.s8),
                         Text(
                           'Khi đăng nhập, bạn có thể theo dõi tình trạng đặt phòng, thanh toán và quản lý kỳ nghỉ của mình.',
-                          style:
-                              AppTypography.body.copyWith(color: AppColors.textMuted),
+                          style: AppTypography.body
+                              .copyWith(color: AppColors.textMuted),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: AppSpacing.s24),
@@ -360,39 +361,42 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                   ),
                 ),
                 data: (bookings) {
-                  final activeBookings =
-                      bookings.where((b) => b.isActive).toList()
-                        ..sort((a, b) {
-                          final dateA = DateTime.tryParse(a.checkInDate) ??
-                              DateTime(2099);
-                          final dateB = DateTime.tryParse(b.checkInDate) ??
-                              DateTime(2099);
-                          final cmp = dateA.compareTo(dateB);
-                          if (cmp != 0) return cmp;
-                          return a.id.compareTo(b.id);
-                        });
-                  final completedBookings =
-                      bookings.where((b) => b.isCompleted).toList()
-                        ..sort((a, b) {
-                          final dateA = DateTime.tryParse(a.checkInDate) ??
-                              DateTime(1970);
-                          final dateB = DateTime.tryParse(b.checkInDate) ??
-                              DateTime(1970);
-                          final cmp = dateB.compareTo(dateA);
-                          if (cmp != 0) return cmp;
-                          return b.id.compareTo(a.id);
-                        });
-                  final cancelledBookings =
-                      bookings.where((b) => b.isCancelled).toList()
-                        ..sort((a, b) {
-                          final dateA = DateTime.tryParse(a.checkInDate) ??
-                              DateTime(1970);
-                          final dateB = DateTime.tryParse(b.checkInDate) ??
-                              DateTime(1970);
-                          final cmp = dateB.compareTo(dateA);
-                          if (cmp != 0) return cmp;
-                          return b.id.compareTo(a.id);
-                        });
+                  final activeBookings = bookings
+                      .where((b) => b.isActive)
+                      .toList()
+                    ..sort((a, b) {
+                      final dateA =
+                          DateTime.tryParse(a.checkInDate) ?? DateTime(2099);
+                      final dateB =
+                          DateTime.tryParse(b.checkInDate) ?? DateTime(2099);
+                      final cmp = dateA.compareTo(dateB);
+                      if (cmp != 0) return cmp;
+                      return a.id.compareTo(b.id);
+                    });
+                  final completedBookings = bookings
+                      .where((b) => b.isCompleted)
+                      .toList()
+                    ..sort((a, b) {
+                      final dateA =
+                          DateTime.tryParse(a.checkInDate) ?? DateTime(1970);
+                      final dateB =
+                          DateTime.tryParse(b.checkInDate) ?? DateTime(1970);
+                      final cmp = dateB.compareTo(dateA);
+                      if (cmp != 0) return cmp;
+                      return b.id.compareTo(a.id);
+                    });
+                  final cancelledBookings = bookings
+                      .where((b) => b.isCancelled)
+                      .toList()
+                    ..sort((a, b) {
+                      final dateA =
+                          DateTime.tryParse(a.checkInDate) ?? DateTime(1970);
+                      final dateB =
+                          DateTime.tryParse(b.checkInDate) ?? DateTime(1970);
+                      final cmp = dateB.compareTo(dateA);
+                      if (cmp != 0) return cmp;
+                      return b.id.compareTo(a.id);
+                    });
 
                   return TabBarView(
                     controller: _tabController,
@@ -455,6 +459,14 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
   }
 
   Widget _buildBookingCard(Booking booking) {
+    final formatter = ref.watch(moneyFormatterProvider);
+    final refResult = formatter.format(
+      booking.totalAmount,
+      context: MoneyDisplayContext.checkoutReference,
+      includeApproximatePrefix: false,
+    );
+    final isRefundStatus = booking.effectiveStatus == 'refund_pending' ||
+        booking.effectiveStatus == 'refunded';
     Color badgeText = const Color(0xFFB45309);
     if (booking.status == 'paid' ||
         booking.status == 'confirmed' ||
@@ -702,6 +714,25 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                     Text(CurrencyFormatter.formatVnd(booking.totalAmount),
                         style: AppTypography.cardTitle
                             .copyWith(color: AppColors.primary)),
+                    if (refResult.isForeignDisplayed) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '${formatter.l10n.fxEstimatedPrice(refResult.formatted)} • ${formatter.l10n.fxHistoricalReferenceNote}',
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                    if (formatter.effectiveCurrency.isForeign &&
+                        isRefundStatus) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        formatter.l10n.fxRefundInVndNotice,
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     if (booking.canPayNow) ...[
                       ConstrainedBox(

@@ -3,6 +3,7 @@ import multer from "multer";
 
 import { ApiError } from "../../common/api-error";
 import { authenticate } from "../../middlewares/authenticate.middleware";
+import { getAiVisionRateLimiter } from "../../middlewares/rate-limit.middleware";
 import { requireActiveUser } from "../../middlewares/require-active-user.middleware";
 import { analyzeIdentityDocumentController } from "./identity-vision.controller";
 
@@ -69,7 +70,7 @@ const uploadSingleImage: express.RequestHandler = (req, res, next) => {
     });
 };
 
-router.use(authenticate, requireActiveUser);
+router.use(authenticate, requireActiveUser, getAiVisionRateLimiter());
 
 router.post("/extract", uploadSingleImage, analyzeIdentityDocumentController);
 router.post("/verify", uploadSingleImage, analyzeIdentityDocumentController);

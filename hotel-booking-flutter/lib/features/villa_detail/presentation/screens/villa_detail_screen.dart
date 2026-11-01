@@ -7,7 +7,7 @@ import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/date/booking_date.dart';
-import '../../../../core/utils/currency_formatter.dart';
+import '../../../../core/network/dio_client.dart';
 import '../../../../shared/animations/animated_heart_button.dart';
 import '../../../../shared/animations/fade_slide_in.dart';
 import '../../../../shared/widgets/app_error_view.dart';
@@ -116,8 +116,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
         if (res.valid && res.discountAmount > 0) {
           _couponDiscountVnd = res.discountAmount;
           _appliedCouponCode = res.code;
-          _couponMessage =
-              'Đã áp dụng mã ${res.code} (-${CurrencyFormatter.formatVnd(res.discountAmount)})';
+          _couponMessage = res.message;
         } else {
           _couponDiscountVnd = 0;
           _appliedCouponCode = null;
@@ -130,7 +129,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
         _isValidatingCoupon = false;
         _couponDiscountVnd = 0;
         _appliedCouponCode = null;
-        _couponMessage = e.toString();
+        _couponMessage = DioClient.handleError(e).message;
       });
     }
   }
@@ -217,7 +216,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
       if (!mounted) return;
       setState(() => _isSubmittingBooking = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        SnackBar(content: Text(DioClient.handleError(e).message)),
       );
     }
   }
@@ -671,7 +670,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
       error: (err, stack) => Scaffold(
         appBar: AppBar(),
         body: AppErrorView(
-          message: err.toString(),
+          message: DioClient.handleError(err).message,
           onRetry: () => ref.invalidate(villaDetailProvider(widget.villaId)),
         ),
       ),
@@ -750,6 +749,11 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     }) calc,
   ) {
     final maxGuests = villa.specs.maxGuests > 0 ? villa.specs.maxGuests : 30;
+    final formatter = ref.watch(moneyFormatterProvider);
+    final totalResult = formatter.format(
+      calc.finalTotal,
+      context: MoneyDisplayContext.breakdown,
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -888,16 +892,24 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
               ),
             ],
           ),
-          if (_couponMessage != null) ...[
+          if (_appliedCouponCode != null && _couponDiscountVnd > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Đã áp dụng mã $_appliedCouponCode (${formatter.formatDiscount(_couponDiscountVnd)})',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.success,
+              ),
+            ),
+          ] else if (_couponMessage != null) ...[
             const SizedBox(height: 6),
             Text(
               _couponMessage!,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: _appliedCouponCode != null
-                    ? AppColors.success
-                    : AppColors.error,
+                color: AppColors.error,
               ),
             ),
           ],
@@ -915,33 +927,57 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
           ),
           const SizedBox(height: 18),
 
-          // Price Breakdown Summary (Flat Minimal - coherent single-column typography)
+          // Price Breakdown Summary (Flat Minimal - coherent single-column typography; FX-16 converts VND sum once)
           Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _PriceLine(
                 label:
                     'Tiền phòng (${calc.nights} đêm${calc.weekendNights > 0 ? ', ${calc.weekendNights} đêm cuối tuần' : ''})',
-                value: CurrencyFormatter.formatVnd(calc.roomSubtotal),
+                value: formatter
+                    .format(
+                      calc.roomSubtotal,
+                      context: MoneyDisplayContext.breakdown,
+                    )
+                    .formatted,
               ),
               if (calc.extraGuestTotal > 0)
                 _PriceLine(
                   label: 'Phụ thu vượt khách tiêu chuẩn',
-                  value: CurrencyFormatter.formatVnd(calc.extraGuestTotal),
+                  value: formatter
+                      .format(
+                        calc.extraGuestTotal,
+                        context: MoneyDisplayContext.breakdown,
+                      )
+                      .formatted,
                 ),
               if (calc.cleaningFee > 0)
                 _PriceLine(
                   label: 'Phí vệ sinh',
-                  value: CurrencyFormatter.formatVnd(calc.cleaningFee),
+                  value: formatter
+                      .format(
+                        calc.cleaningFee,
+                        context: MoneyDisplayContext.breakdown,
+                      )
+                      .formatted,
                 ),
               if (calc.serviceFee > 0)
                 _PriceLine(
                   label: 'Phí dịch vụ',
-                  value: CurrencyFormatter.formatVnd(calc.serviceFee),
+                  value: formatter
+                      .format(
+                        calc.serviceFee,
+                        context: MoneyDisplayContext.breakdown,
+                      )
+                      .formatted,
                 ),
               if (calc.discount > 0)
                 _PriceLine(
                   label: 'Giảm giá ($_appliedCouponCode)',
-                  value: '-${CurrencyFormatter.formatVnd(calc.discount)}',
+                  value: formatter.formatDiscount(
+                    calc.discount,
+                    context: MoneyDisplayContext.breakdown,
+                  ),
                 ),
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 10),
@@ -950,18 +986,21 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Tổng cộng thanh toán',
-                      style: TextStyle(
+                      formatter.localeCode == 'vi'
+                          ? 'Tổng thanh toán tạm tính'
+                          : formatter.l10n.totalNightsWithFee(calc.nights),
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textStrong,
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Text(
-                    CurrencyFormatter.formatVnd(calc.finalTotal),
+                    totalResult.formatted,
                     style: const TextStyle(
                       fontSize: 16.5,
                       fontWeight: FontWeight.w700,
@@ -970,6 +1009,23 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                   ),
                 ],
               ),
+              if (totalResult.isForeignDisplayed) ...[
+                const SizedBox(height: 6),
+                Text(
+                  '${formatter.l10n.fxTotalPayableVnd(formatter.formatExactVnd(calc.finalTotal, withCode: true))} • ${formatter.l10n.fxChargedInVndNotice}',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ] else if (formatter.isFallingBackToVnd) ...[
+                const SizedBox(height: 6),
+                Text(
+                  formatter.l10n.fxRateUnavailableFallback,
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
             ],
           ),
         ],
@@ -1059,11 +1115,11 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     final rules = villa.rules ?? const VillaRules();
     final policyItems = <Widget>[
       _PolicyItem(
-        icon: LucideIcons.clock,
+        icon: AppSemanticIcons.checkIn,
         label: 'Nhận phòng: ${rules.checkInFrom} – ${rules.checkInUntil}',
       ),
       _PolicyItem(
-        icon: LucideIcons.logOut,
+        icon: AppSemanticIcons.checkOut,
         label: 'Trả phòng: Trước ${rules.checkOutBefore}',
       ),
       if (rules.quietHours != null)

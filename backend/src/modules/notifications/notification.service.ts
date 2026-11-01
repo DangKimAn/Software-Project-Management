@@ -90,6 +90,16 @@ const escapeHtml = (value: unknown) =>
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
 
+export const normalizeNotificationBrandText = (value: string | null | undefined): string | null => {
+    if (value === null || value === undefined) {
+        return null;
+    }
+
+    return String(value)
+        .replace(/Minh\s*Th(?:ành|anh)\s+Villa/gi, "The Palm Villa")
+        .replace(/MinhThanh\s+Luxury/gi, "The Palm Luxury");
+};
+
 const buildEmailHtml = (title: string, lines: Array<string | null | undefined>) => `
     <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:600px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px;background-color:#ffffff;">
       <div style="text-align:center;margin-bottom:20px;">
@@ -133,8 +143,8 @@ const serializeNotification = (notification: NotificationLog) => ({
     eventType: notification.eventType,
     targetType: notification.targetType,
     targetId: notification.targetId,
-    title: notification.title ?? null,
-    body: notification.body ?? null,
+    title: normalizeNotificationBrandText(notification.title),
+    body: normalizeNotificationBrandText(notification.body),
     actionUrl: notification.actionUrl ?? null,
     payload: notification.payload ?? null,
     isRead: Boolean(notification.readAt),
@@ -186,8 +196,8 @@ const emitCreatedNotification = (userId: number, notification: NotificationLog) 
         eventType: notification.eventType,
         targetType: notification.targetType,
         targetId: notification.targetId,
-        title: notification.title ?? null,
-        body: notification.body ?? null,
+        title: normalizeNotificationBrandText(notification.title),
+        body: normalizeNotificationBrandText(notification.body),
         actionUrl: notification.actionUrl ?? null,
         payload: notification.payload ?? null,
         readAt: notification.readAt ?? null,
@@ -234,8 +244,8 @@ const createInAppNotificationOnce = async (
                 targetId: String(input.targetId),
                 recipient: `user:${recipient.userId}`,
                 recipientUserId: recipient.userId,
-                title: recipient.title,
-                body: recipient.body,
+                title: normalizeNotificationBrandText(recipient.title) ?? recipient.title,
+                body: normalizeNotificationBrandText(recipient.body) ?? recipient.body,
                 actionUrl: recipient.actionUrl ?? null,
                 payload: recipient.payload ?? null,
                 status: "sent",
@@ -251,8 +261,8 @@ const createInAppNotificationOnce = async (
         runAfterCommit(input.transaction, async () => {
             emitCreatedNotification(recipient.userId, notification);
             await sendPushToUser(recipient.userId, {
-                title: notification.title ?? "The Palm Villa",
-                body: notification.body ?? "",
+                title: normalizeNotificationBrandText(notification.title) ?? "The Palm Villa",
+                body: normalizeNotificationBrandText(notification.body) ?? "",
                 actionUrl: notification.actionUrl ?? null,
                 eventType: notification.eventType,
                 targetType: notification.targetType,
@@ -365,7 +375,7 @@ const getAdminRecipientIds = async (transaction?: Transaction) => {
             FROM users u
             INNER JOIN user_role ur ON ur.user_id = u.user_id
             INNER JOIN roles r ON r.role_id = ur.role_id
-            WHERE r.code IN ('admin', 'moderator')
+            WHERE r.code = 'admin'
               AND u.status = 'active'
             `,
             {
