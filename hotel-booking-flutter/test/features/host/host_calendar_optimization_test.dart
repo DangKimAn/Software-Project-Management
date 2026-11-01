@@ -317,5 +317,68 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('calendar_unlock_save_btn')), findsNothing);
     });
+
+    testWidgets(
+        'Calendar day cells are circular, omit "đ" after "Tr", and do not overflow on blocked days',
+        (tester) async {
+      expect(formatCompactHostVnd(1300000), '1,3 Tr');
+      expect(formatCompactHostVnd(1800000), '1,8 Tr');
+      expect(formatCompactHostVnd(2000000), '2 Tr');
+      expect(formatCompactHostVnd(850000), '850 k');
+
+      for (final width in const <double>[320, 360, 390]) {
+        await tester.binding.setSurfaceSize(Size(width, 844));
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(testRepo),
+              hostFilePickerProvider.overrideWithValue(fakePicker),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: const MaterialApp(
+              home: HostPortalScreen(
+                initialSection: HostPortalSection.calendar,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('The Song 5 sao tại Vũng Tàu'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('The Song 5 sao tại Vũng Tàu'));
+        await tester.pumpAndSettle();
+
+        // Compact millions omit trailing 'đ'
+        expect(find.text('1,5 Tr'), findsWidgets);
+        expect(find.text('1,8 Tr'), findsOneWidget);
+        expect(find.textContaining('Tr đ'), findsNothing);
+        expect(find.text('Khóa'), findsOneWidget);
+
+        // Day cell uses BoxShape.circle and CircleBorder ripple
+        final dayFinder = find.byKey(const Key('calendar_day_2026-10-02'));
+        expect(dayFinder, findsOneWidget);
+        final inkWell = tester.widget<InkWell>(dayFinder);
+        expect(inkWell.customBorder, isA<CircleBorder>());
+
+        final cellContainer = tester.widget<Container>(
+          find
+              .descendant(
+                of: dayFinder,
+                matching: find.byType(Container),
+              )
+              .first,
+        );
+        final decoration = cellContainer.decoration as BoxDecoration;
+        expect(decoration.shape, BoxShape.circle);
+
+        // Zero overflow exceptions across narrow viewports
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+    });
   });
 }

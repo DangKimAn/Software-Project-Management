@@ -4111,31 +4111,48 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
     final isLastStep = _currentStep == _steps.length - 1;
 
     return Padding(
-      padding: const EdgeInsets.only(top: 24, bottom: 32),
+      padding: EdgeInsets.only(top: 20, bottom: widget.embedded ? 40 : 28),
       child: Row(
         children: [
           Expanded(
-            flex: 2,
-            child: OutlinedButton.icon(
+            child: OutlinedButton(
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(0, 50),
+                backgroundColor: AppColors.surfaceBase,
                 foregroundColor: AppColors.textPrimary,
                 side: const BorderSide(color: AppColors.border),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
+                shape: const StadiumBorder(),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
               ),
               onPressed: _saving ? null : _goToPrevStep,
-              icon: const Icon(LucideIcons.arrowLeft, size: 16),
-              label: Text(
-                _currentStep == 0 ? 'Quay lại' : 'Quay lại',
-                style: const TextStyle(fontWeight: FontWeight.w600),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    LucideIcons.arrowLeft,
+                    size: 16,
+                    color: AppColors.iconStrong,
+                  ),
+                  SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'Quay lại',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            flex: 3,
             child: isLastStep
                 ? ElevatedButton.icon(
                     key: const Key('listing_save_btn'),
@@ -4143,10 +4160,9 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(0, 50),
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                      elevation: 0,
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                     ),
                     onPressed: _saving ? null : () => _submitForm(),
                     icon: _saving
@@ -4158,35 +4174,56 @@ class _ThemChoNghiScreenState extends ConsumerState<ThemChoNghiScreen> {
                               color: Colors.white,
                             ),
                           )
-                        : const Icon(LucideIcons.check, size: 18),
+                        : const Icon(
+                            LucideIcons.check,
+                            size: 17,
+                            color: Colors.white,
+                          ),
                     label: Text(
                       _saving
                           ? 'Đang lưu...'
                           : (_isEditMode ? 'Cập nhật ngay' : 'Lưu chỗ nghỉ'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 15,
                       ),
                     ),
                   )
-                : ElevatedButton.icon(
+                : ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(0, 50),
-                      elevation: 1,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                      elevation: 0,
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                     ),
                     onPressed: _goToNextStep,
-                    icon: const Icon(LucideIcons.arrowRight, size: 16),
-                    label: const Text(
-                      'Tiếp tục',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Tiếp tục',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Icon(
+                          LucideIcons.arrowRight,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                      ],
                     ),
                   ),
           ),
@@ -4330,6 +4367,7 @@ class _SectionCard extends StatelessWidget {
       color: AppColors.surfaceBase,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: AppColors.borderSoft),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),

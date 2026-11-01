@@ -379,67 +379,42 @@ class HostSheetSyncCard extends ConsumerWidget {
                 ),
               ],
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              Row(
                 children: [
-                  FilledButton.icon(
-                    key: const Key('sheet_sync_open_connect_btn'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: AppColors.textInverse,
-                      minimumSize: const Size(180, 48),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 12,
+                  Flexible(
+                    child: FilledButton.icon(
+                      key: const Key('sheet_sync_open_connect_btn'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: AppColors.textInverse,
+                        minimumSize: const Size(0, 48),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 12,
+                        ),
+                        shape: const StadiumBorder(),
                       ),
-                      shape: const StadiumBorder(),
-                    ),
-                    onPressed: viewState.isBusy
-                        ? null
-                        : () => _showConnectSheet(context, payload),
-                    icon: const Icon(
-                      LucideIcons.link,
-                      size: 18,
-                      color: AppColors.iconOnBrand,
-                    ),
-                    label: const Text(
-                      'Kết nối Google Sheets',
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                      onPressed: viewState.isBusy
+                          ? null
+                          : () => _showConnectSheet(context, payload),
+                      icon: const Icon(
+                        LucideIcons.link,
+                        size: 18,
+                        color: AppColors.iconOnBrand,
                       ),
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    key: const Key('sheet_sync_guide_btn'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.textPrimary,
-                      side: const BorderSide(color: AppColors.border),
-                      minimumSize: const Size(136, 48),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      shape: const StadiumBorder(),
-                    ),
-                    onPressed: () => _showGuideDialog(context),
-                    icon: const Icon(
-                      LucideIcons.info,
-                      size: 18,
-                      color: AppColors.iconStrong,
-                    ),
-                    label: const Text(
-                      'Quy ước màu',
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                      label: const Text(
+                        'Kết nối Google Sheets',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
+                  const SizedBox(width: 10),
+                  _buildGuideIconButton(context),
                 ],
               ),
             ] else ...[
@@ -1216,27 +1191,7 @@ class HostSheetSyncCard extends ConsumerWidget {
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           ),
         ),
-        OutlinedButton.icon(
-          key: const Key('sheet_sync_guide_btn'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.textPrimary,
-            side: const BorderSide(color: AppColors.border),
-            minimumSize: const Size(116, 48),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            shape: const StadiumBorder(),
-          ),
-          onPressed: () => _showGuideDialog(context),
-          icon: const Icon(
-            LucideIcons.info,
-            size: 17,
-            color: AppColors.iconStrong,
-          ),
-          label: const Text(
-            'Quy ước màu',
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-          ),
-        ),
+        _buildGuideIconButton(context),
         TextButton.icon(
           key: const Key('sheet_sync_disconnect_btn'),
           style: TextButton.styleFrom(
@@ -1259,6 +1214,28 @@ class HostSheetSyncCard extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildGuideIconButton(BuildContext context) {
+    return IconButton(
+      key: const Key('sheet_sync_guide_btn'),
+      tooltip: 'Quy ước màu',
+      style: IconButton.styleFrom(
+        foregroundColor: AppColors.textPrimary,
+        backgroundColor: AppColors.surfaceBase,
+        side: const BorderSide(color: AppColors.border),
+        minimumSize: const Size(48, 48),
+        fixedSize: const Size(48, 48),
+        padding: EdgeInsets.zero,
+        shape: const CircleBorder(),
+      ),
+      onPressed: () => _showGuideDialog(context),
+      icon: const Icon(
+        LucideIcons.info,
+        size: 19,
+        color: AppColors.iconStrong,
+      ),
     );
   }
 

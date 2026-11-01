@@ -662,10 +662,30 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
 
-          await tester.tap(
-            find.byKey(const Key('sheet_sync_open_connect_btn')),
+          // Guide button is an icon-only 'i' button inline on the same row as Connect Google Sheets
+          final connectBtn = find.byKey(
+            const Key('sheet_sync_open_connect_btn'),
           );
+          final guideBtn = find.byKey(const Key('sheet_sync_guide_btn'));
+          expect(connectBtn, findsOneWidget);
+          expect(guideBtn, findsOneWidget);
+          expect(find.text('Quy ước màu'), findsNothing);
+
+          final connectCenter = tester.getCenter(connectBtn);
+          final guideCenter = tester.getCenter(guideBtn);
+          expect((connectCenter.dy - guideCenter.dy).abs(), lessThan(1.0));
+          expect(guideCenter.dx, greaterThan(connectCenter.dx));
+
+          // Tapping the 'i' icon button opens the color legend modal
+          await tester.tap(guideBtn);
+          await tester.pumpAndSettle();
+          expect(find.text('Quy ước màu lịch Google Sheets'), findsOneWidget);
+          await tester.tap(find.byTooltip('Đóng hướng dẫn'));
+          await tester.pumpAndSettle();
+
+          await tester.tap(connectBtn);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
 
