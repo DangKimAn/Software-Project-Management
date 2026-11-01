@@ -130,6 +130,9 @@ export type RawSheetTab = {
         rowMetadata?: Array<{
             developerMetadata?: RawDeveloperMetadata[];
         }>;
+        columnMetadata?: Array<{
+            developerMetadata?: RawDeveloperMetadata[];
+        }>;
     }>;
 };
 
