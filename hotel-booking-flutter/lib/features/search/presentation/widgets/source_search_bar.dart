@@ -34,10 +34,11 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
   void _openSearchModal(BuildContext context, {int initialTab = 0}) {
     showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.surfaceBase,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (ctx) => _SearchPopoverSheet(
         initialTab: initialTab,
@@ -45,7 +46,7 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
           Navigator.of(ctx).pop();
           if (widget.onSearchSubmitted != null) {
             widget.onSearchSubmitted!();
-          } else {
+          } else if (context.mounted) {
             context.push('/tim-kiem');
           }
         },
@@ -484,10 +485,30 @@ class _SearchPopoverSheet extends ConsumerStatefulWidget {
       _SearchPopoverSheetState();
 }
 
+String _normalizeViSearch(String input) {
+  var s = input.toLowerCase().trim();
+  const diacritics = <String, String>{
+    'a': 'àáạảãâầấậẩẫăằắặẳẵ',
+    'e': 'èéẹẻẽêềếệểễ',
+    'i': 'ìíịỉĩ',
+    'o': 'òóọỏõôồốộổỗơờớợởỡ',
+    'u': 'ùúụủũưừứựửữ',
+    'y': 'ỳýỵỷỹ',
+    'd': 'đ',
+  };
+  diacritics.forEach((ascii, chars) {
+    for (final rune in chars.runes) {
+      s = s.replaceAll(String.fromCharCode(rune), ascii);
+    }
+  });
+  return s;
+}
+
 class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
   late int _activeTab;
   late TextEditingController _queryCtrl;
   bool _showMapPicker = false;
+  bool _selectingCheckOut = false;
   late int _calendarMonth;
   late int _calendarYear;
 
@@ -517,11 +538,165 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     });
   }
 
+  void _submitSearch() {
+    final q = _queryCtrl.text.trim();
+    if (q.isNotEmpty) {
+      ref.read(searchHistoryProvider.notifier).addTerm(q);
+    }
+    ref.read(villaFilterProvider.notifier).update(
+          (s) => s.copyWith(
+            searchQuery: q,
+            page: 1,
+          ),
+        );
+    widget.onSubmitted();
+  }
+
+  String? _activeLocationBadge(VillaFilterState filter) {
+    if (filter.locationGroup != null && filter.locationGroup!.isNotEmpty) {
+      final match = VungTauMapConstants.findLocationGroup(filter.locationGroup);
+      if (match != null) return match.label;
+    }
+    if (filter.searchQuery.trim().isNotEmpty) {
+      return filter.searchQuery.trim();
+    }
+    if (filter.lat != null && filter.lng != null) {
+      return 'Gần tôi (${filter.radius ?? 800}m)';
+    }
+    return null;
+  }
+
+  String? _activeDateBadge(VillaFilterState filter) {
+    if (filter.dateMode == 'months' && filter.selectedMonths.isNotEmpty) {
+      final sorted = [...filter.selectedMonths]..sort();
+      return 'Tháng ${sorted.join(', ')}';
+    }
+    if (filter.checkIn != null && filter.checkOut != null) {
+      return '${filter.checkIn!.toDisplayVi()} → ${filter.checkOut!.toDisplayVi()}';
+    }
+    return null;
+  }
+
+  String? _activeGuestBadge(VillaFilterState filter) {
+    final total = filter.effectiveGuests;
+    if (total <= 0 && filter.infants <= 0 && filter.pets <= 0) {
+      return null;
+    }
+    final parts = <String>[];
+    if (total > 0) parts.add('$total khách');
+    if (filter.infants > 0) parts.add('${filter.infants} bé');
+    if (filter.pets > 0) parts.add('${filter.pets} thú cưng');
+    return parts.join(', ');
+  }
+
+  String _shortAreaSubtitle(VungTauLocationGroup group, {String query = ''}) {
+    final parts = group.subtitle
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return 'Vũng Tàu';
+
+    final normalizedQuery = _normalizeViSearch(query);
+    if (normalizedQuery.isNotEmpty) {
+      for (final street in parts) {
+        if (_normalizeViSearch(street).contains(normalizedQuery) &&
+            street != parts.first) {
+          return '$street · ${parts.first}';
+        }
+      }
+    }
+
+    if (parts.length == 1) {
+      return parts.first == group.label
+          ? 'Trục biển ${group.label}'
+          : parts.first;
+    }
+    return '${parts[0]} · ${parts[1]}';
+  }
+
+  bool _groupMatchesQuery(VungTauLocationGroup group, String rawQuery) {
+    final q = _normalizeViSearch(rawQuery);
+    if (q.isEmpty) return true;
+    if (_normalizeViSearch(group.label).contains(q)) return true;
+    if (_normalizeViSearch(group.subtitle).contains(q)) return true;
+    return false;
+  }
+
+  IconData _areaSemanticIcon(VungTauLocationGroup group) {
+    switch (group.key) {
+      case 'trung_tam':
+      case 'chi_linh':
+        return LucideIcons.building2;
+      default:
+        return LucideIcons.waves;
+    }
+  }
+
+  void _clearLocationOnly() {
+    setState(() {
+      _queryCtrl.clear();
+      _showMapPicker = false;
+    });
+    ref.read(villaFilterProvider.notifier).update(
+          (s) => s.copyWith(
+            searchQuery: '',
+            clearLocationGroup: true,
+            clearGeo: true,
+            page: 1,
+          ),
+        );
+  }
+
+  void _clearDatesOnly() {
+    setState(() => _selectingCheckOut = false);
+    ref.read(villaFilterProvider.notifier).update(
+          (s) => s.copyWith(
+            clearDates: true,
+            dateMode: 'dates',
+            selectedMonths: const [],
+            exactnessDays: 0,
+            page: 1,
+          ),
+        );
+  }
+
+  void _clearGuestsOnly() {
+    ref.read(villaFilterProvider.notifier).update(
+          (s) => s.copyWith(
+            adults: 0,
+            children: 0,
+            infants: 0,
+            pets: 0,
+            page: 1,
+          ),
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filter = ref.watch(villaFilterProvider);
     final history = ref.watch(searchHistoryProvider);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final horizontalPad = screenWidth < 360 ? 14.0 : 18.0;
+
+    final locBadge = _activeLocationBadge(filter);
+    final dateBadge = _activeDateBadge(filter);
+    final guestBadge = _activeGuestBadge(filter);
+    final hasAnySelection =
+        locBadge != null || dateBadge != null || guestBadge != null;
+
+    final tabs = [
+      (label: 'Địa điểm', icon: LucideIcons.mapPin, hasValue: locBadge != null),
+      (
+        label: 'Thời gian',
+        icon: LucideIcons.calendar,
+        hasValue: dateBadge != null,
+      ),
+      (label: 'Khách', icon: LucideIcons.users, hasValue: guestBadge != null),
+    ];
 
     return SafeArea(
       top: false,
@@ -529,54 +704,111 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
         padding: EdgeInsets.only(bottom: bottomInset),
         child: DraggableScrollableSheet(
           expand: false,
-          initialChildSize: 0.86,
+          initialChildSize: 0.88,
           maxChildSize: 0.95,
-          minChildSize: 0.55,
+          minChildSize: 0.58,
           builder: (context, scrollController) {
             return Column(
               children: [
-                // Top tab switcher (responsive on 320px, 48x48 close button)
+                const SizedBox(height: 10),
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPad,
+                    10,
+                    horizontalPad - 6,
+                    hasAnySelection ? 8 : 10,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              _TabPill(
-                                label: 'Địa điểm',
-                                selected: _activeTab == 0,
-                                onTap: () => setState(() => _activeTab = 0),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final useEqualSegments =
+                                constraints.maxWidth >= 232 &&
+                                    textScale <= 1.18;
+                            final isCompactTrack = constraints.maxWidth < 275;
+                            final showStepIcon = constraints.maxWidth >= 305 &&
+                                textScale <= 1.12;
+                            return Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceMuted,
+                                borderRadius: BorderRadius.circular(999),
                               ),
-                              const SizedBox(width: 8),
-                              _TabPill(
-                                label: 'Thời gian',
-                                selected: _activeTab == 1,
-                                onTap: () => setState(() => _activeTab = 1),
-                              ),
-                              const SizedBox(width: 8),
-                              _TabPill(
-                                label: 'Khách',
-                                selected: _activeTab == 2,
-                                onTap: () => setState(() => _activeTab = 2),
-                              ),
-                            ],
-                          ),
+                              child: useEqualSegments
+                                  ? Row(
+                                      children: List.generate(
+                                        tabs.length,
+                                        (idx) => Expanded(
+                                          child: _TabPill(
+                                            label: tabs[idx].label,
+                                            icon: showStepIcon
+                                                ? tabs[idx].icon
+                                                : null,
+                                            selected: _activeTab == idx,
+                                            hasActiveValue: tabs[idx].hasValue,
+                                            compact: isCompactTrack,
+                                            onTap: () => setState(
+                                              () => _activeTab = idx,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  : SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                        children: List.generate(
+                                          tabs.length,
+                                          (idx) => Padding(
+                                            padding: EdgeInsets.only(
+                                              right:
+                                                  idx < tabs.length - 1 ? 4 : 0,
+                                            ),
+                                            child: _TabPill(
+                                              label: tabs[idx].label,
+                                              selected: _activeTab == idx,
+                                              hasActiveValue:
+                                                  tabs[idx].hasValue,
+                                              onTap: () => setState(
+                                                () => _activeTab = idx,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                            );
+                          },
                         ),
                       ),
-                      InkWell(
-                        onTap: () => Navigator.of(context).pop(),
-                        borderRadius: BorderRadius.circular(12),
-                        child: const SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: Center(
-                            child: Icon(
-                              LucideIcons.x,
-                              size: 20,
-                              color: AppColors.iconStrong,
+                      const SizedBox(width: 6),
+                      Semantics(
+                        button: true,
+                        label: 'Đóng tìm kiếm',
+                        child: Tooltip(
+                          message: 'Đóng',
+                          child: InkWell(
+                            onTap: () => Navigator.of(context).pop(),
+                            customBorder: const CircleBorder(),
+                            child: const SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: Center(
+                                child: Icon(
+                                  LucideIcons.x,
+                                  size: 20,
+                                  color: AppColors.iconStrong,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -584,11 +816,57 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                     ],
                   ),
                 ),
-                const Divider(height: 1, color: AppColors.border),
+                if (hasAnySelection) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: EdgeInsets.symmetric(horizontal: horizontalPad),
+                      child: Row(
+                        children: [
+                          if (locBadge != null)
+                            _buildSummaryPill(
+                              icon: LucideIcons.mapPin,
+                              text: locBadge,
+                              isFocusedTab: _activeTab == 0,
+                              onTap: () => setState(() => _activeTab = 0),
+                              onClear: _clearLocationOnly,
+                              clearTooltip: 'Bỏ chọn địa điểm',
+                            ),
+                          if (dateBadge != null)
+                            _buildSummaryPill(
+                              icon: LucideIcons.calendar,
+                              text: dateBadge,
+                              isFocusedTab: _activeTab == 1,
+                              onTap: () => setState(() => _activeTab = 1),
+                              onClear: _clearDatesOnly,
+                              clearTooltip: 'Bỏ chọn ngày',
+                            ),
+                          if (guestBadge != null)
+                            _buildSummaryPill(
+                              icon: LucideIcons.users,
+                              text: guestBadge,
+                              isFocusedTab: _activeTab == 2,
+                              onTap: () => setState(() => _activeTab = 2),
+                              onClear: _clearGuestsOnly,
+                              clearTooltip: 'Bỏ chọn khách',
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                const Divider(height: 1, color: AppColors.borderSoft),
                 Expanded(
                   child: ListView(
                     controller: scrollController,
-                    padding: const EdgeInsets.all(20),
+                    padding: EdgeInsets.fromLTRB(
+                      horizontalPad,
+                      16,
+                      horizontalPad,
+                      24,
+                    ),
                     children: [
                       if (_activeTab == 0)
                         SearchPopIn(
@@ -607,64 +885,98 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                 ),
                 // Bottom Action Bar
                 Container(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    border: Border(top: BorderSide(color: AppColors.border)),
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPad,
+                    10,
+                    horizontalPad,
+                    12,
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          _queryCtrl.clear();
-                          ref.read(villaFilterProvider.notifier).state =
-                              const VillaFilterState();
-                        },
-                        child: const Text(
-                          'Xóa tất cả',
-                          style: TextStyle(
-                            decoration: TextDecoration.underline,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      Flexible(
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            final q = _queryCtrl.text.trim();
-                            if (q.isNotEmpty) {
-                              ref
-                                  .read(searchHistoryProvider.notifier)
-                                  .addTerm(q);
-                            }
-                            ref.read(villaFilterProvider.notifier).update(
-                                  (s) => s.copyWith(searchQuery: q, page: 1),
-                                );
-                            widget.onSubmitted();
-                          },
-                          icon: const Icon(
-                            LucideIcons.search,
-                            size: 16,
-                            color: Colors.white,
-                          ),
-                          label: const Text(
-                            'Áp dụng & Tìm kiếm',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
+                  decoration: const BoxDecoration(
+                    color: AppColors.surfaceBase,
+                    border: Border(
+                      top: BorderSide(color: AppColors.borderSoft),
+                    ),
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, footerConstraints) {
+                      final tightFooter =
+                          footerConstraints.maxWidth < 320 || textScale > 1.25;
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            flex: tightFooter ? 4 : 0,
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                minimumSize: const Size(48, 48),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: tightFooter ? 6 : 10,
+                                ),
+                                foregroundColor: hasAnySelection
+                                    ? AppColors.textPrimary
+                                    : AppColors.textMuted,
+                                shape: const StadiumBorder(),
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _queryCtrl.clear();
+                                  _showMapPicker = false;
+                                  _selectingCheckOut = false;
+                                });
+                                ref.read(villaFilterProvider.notifier).state =
+                                    const VillaFilterState();
+                              },
+                              child: Text(
+                                'Xóa tất cả',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  decoration: hasAnySelection
+                                      ? TextDecoration.underline
+                                      : TextDecoration.none,
+                                  fontWeight: hasAnySelection
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                  color: hasAnySelection
+                                      ? AppColors.textPrimary
+                                      : AppColors.textMuted,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    ],
+                          const SizedBox(width: 8),
+                          Flexible(
+                            flex: tightFooter ? 7 : 1,
+                            child: ElevatedButton.icon(
+                              key: const Key('search_sheet_submit_btn'),
+                              onPressed: _submitSearch,
+                              icon: const Icon(
+                                LucideIcons.search,
+                                size: 16,
+                                color: AppColors.iconOnBrand,
+                              ),
+                              label: const Text(
+                                'Áp dụng & Tìm kiếm',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: AppColors.textInverse,
+                                minimumSize: const Size(48, 48),
+                                elevation: 0,
+                                shape: const StadiumBorder(),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: tightFooter ? 14 : 20,
+                                  vertical: 13,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ],
@@ -675,15 +987,173 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     );
   }
 
+  Widget _buildSummaryPill({
+    required IconData icon,
+    required String text,
+    required bool isFocusedTab,
+    required VoidCallback onTap,
+    required VoidCallback onClear,
+    required String clearTooltip,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isFocusedTab ? AppColors.brandSoft : AppColors.surfaceMuted,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isFocusedTab
+                ? AppColors.primary.withValues(alpha: 0.35)
+                : AppColors.borderSoft,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InkWell(
+              onTap: onTap,
+              borderRadius: const BorderRadius.horizontal(
+                left: Radius.circular(999),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(11, 6, 6, 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 13, color: AppColors.iconStrong),
+                    const SizedBox(width: 5),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 165),
+                      child: Text(
+                        text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Semantics(
+              button: true,
+              label: clearTooltip,
+              child: Tooltip(
+                message: clearTooltip,
+                child: InkWell(
+                  onTap: onClear,
+                  borderRadius: BorderRadius.circular(999),
+                  child: const Padding(
+                    padding: EdgeInsets.fromLTRB(4, 6, 9, 6),
+                    child: Icon(
+                      LucideIcons.circleX,
+                      size: 14,
+                      color: AppColors.iconMuted,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionPill({
+    required IconData icon,
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            decoration: BoxDecoration(
+              color: active ? AppColors.brandSoft : AppColors.surfaceBase,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: active ? AppColors.primary : AppColors.border,
+                width: active ? 1.4 : 1.0,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 15,
+                  color: AppColors.iconStrong,
+                ),
+                const SizedBox(width: 7),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildLocationTab(VillaFilterState filter, List<String> history) {
     final isGeoActive = filter.lat != null && filter.lng != null;
-    const groups = VungTauMapConstants.locationGroups;
+    const allGroups = VungTauMapConstants.locationGroups;
+    final trimmedQuery = _queryCtrl.text.trim();
+    final filteredGroups = trimmedQuery.isEmpty
+        ? allGroups
+        : allGroups
+            .where((g) => _groupMatchesQuery(g, trimmedQuery))
+            .toList();
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const Text(
+          'Bạn muốn nghỉ dưỡng ở đâu?',
+          style: TextStyle(
+            fontSize: 16.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 3),
+        const Text(
+          'Chọn khu vực tại Vũng Tàu hoặc nhập tên villa, tên đường',
+          style: TextStyle(
+            fontSize: 12.5,
+            color: AppColors.textMuted,
+          ),
+        ),
+        const SizedBox(height: 12),
         TextField(
           controller: _queryCtrl,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (_) => _submitSearch(),
           style: const TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -697,34 +1167,39 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
               fontWeight: FontWeight.w400,
             ),
             filled: true,
-            fillColor: Colors.white,
+            fillColor: AppColors.surfaceBase,
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 14,
-              vertical: 12,
+              vertical: 14,
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              borderSide: const BorderSide(color: AppColors.border),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              borderSide: const BorderSide(color: AppColors.border),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: const BorderSide(
-                color: AppColors.textPrimary,
-                width: 1.3,
+                color: AppColors.borderFocus,
+                width: 1.4,
               ),
             ),
             prefixIcon: const Icon(
               LucideIcons.search,
               size: 18,
-              color: AppColors.iconMuted,
+              color: AppColors.iconStrong,
             ),
             suffixIcon: _queryCtrl.text.isNotEmpty
                 ? IconButton(
+                    tooltip: 'Xóa từ khóa',
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
                     onPressed: () {
                       setState(() => _queryCtrl.clear());
                       ref.read(villaFilterProvider.notifier).update(
@@ -732,7 +1207,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                           );
                     },
                     icon: const Icon(
-                      LucideIcons.x,
+                      LucideIcons.circleX,
                       size: 16,
                       color: AppColors.iconMuted,
                     ),
@@ -741,19 +1216,83 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
           ),
           onChanged: (val) {
             setState(() {});
-            ref
-                .read(villaFilterProvider.notifier)
-                .update((s) => s.copyWith(searchQuery: val));
+            ref.read(villaFilterProvider.notifier).update(
+                  (s) => s.copyWith(
+                    searchQuery: val,
+                    clearLocationGroup: val.trim().isNotEmpty,
+                    page: 1,
+                  ),
+                );
           },
         ),
-        const SizedBox(height: 12),
+        if (trimmedQuery.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                ref.read(searchHistoryProvider.notifier).addTerm(trimmedQuery);
+                setState(() => _activeTab = 1);
+              },
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 13,
+                  vertical: 11,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceMuted,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.borderSoft),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      LucideIcons.search,
+                      size: 15,
+                      color: AppColors.iconStrong,
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        'Tìm chỗ nghỉ với từ khóa "$trimmedQuery"',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(
+                      LucideIcons.arrowRight,
+                      size: 15,
+                      color: AppColors.iconMuted,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 10),
 
-        // Quick Actions: Gần tôi & Chọn trên bản đồ (compact 1-line pills)
-        Row(
-          children: [
-            Expanded(
-              child: InkWell(
-                onTap: () {
+        // Quick Actions: Gần tôi & Chọn trên bản đồ
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final nearPill = _buildQuickActionPill(
+              icon: LucideIcons.navigation,
+              label: 'Gần tôi (800m)',
+              active: isGeoActive,
+              onTap: () {
+                if (isGeoActive) {
+                  ref.read(villaFilterProvider.notifier).update(
+                        (s) => s.copyWith(clearGeo: true, page: 1),
+                      );
+                  setState(() => _showMapPicker = false);
+                } else {
                   ref.read(villaFilterProvider.notifier).update(
                         (s) => s.copyWith(
                           lat: VungTauMapConstants.defaultLat,
@@ -764,108 +1303,44 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                         ),
                       );
                   setState(() => _showMapPicker = true);
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isGeoActive
-                          ? AppColors.primary
-                          : const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        LucideIcons.navigation,
-                        size: 15,
-                        color: AppColors.iconStrong,
-                      ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          'Gần tôi (800m)',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: isGeoActive
-                                ? AppColors.primary
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: InkWell(
-                onTap: () => setState(() => _showMapPicker = !_showMapPicker),
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: _showMapPicker
-                          ? AppColors.primary
-                          : const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        LucideIcons.map,
-                        size: 15,
-                        color: AppColors.iconStrong,
-                      ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          _showMapPicker ? 'Ẩn bản đồ' : 'Chọn trên bản đồ',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: _showMapPicker
-                                ? AppColors.primary
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
+                }
+              },
+            );
+            final mapPill = _buildQuickActionPill(
+              icon: LucideIcons.map,
+              label: _showMapPicker ? 'Ẩn bản đồ' : 'Chọn trên bản đồ',
+              active: _showMapPicker,
+              onTap: () => setState(() => _showMapPicker = !_showMapPicker),
+            );
+
+            if (constraints.maxWidth >= 312 && textScale <= 1.22) {
+              return Row(
+                children: [
+                  Expanded(flex: 10, child: nearPill),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 12, child: mapPill),
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                nearPill,
+                const SizedBox(height: 8),
+                mapPill,
+              ],
+            );
+          },
         ),
 
         if (_showMapPicker) ...[
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           VungTauMapPicker(
             initialLat: filter.lat ?? VungTauMapConstants.defaultLat,
             initialLng: filter.lng ?? VungTauMapConstants.defaultLng,
             radiusMeters:
                 filter.radius ?? VungTauMapConstants.defaultRadiusMeters,
-            height: 260,
+            height: 250,
             onLocationChanged: (lat, lng, label) {
               ref.read(villaFilterProvider.notifier).update(
                     (s) => s.copyWith(
@@ -882,29 +1357,36 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
 
         // Search History (`searchHistoryStorage.ts`)
         if (history.isNotEmpty) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Tìm kiếm gần đây',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary,
+              const Expanded(
+                child: Text(
+                  'Tìm kiếm gần đây',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
               TextButton(
                 onPressed: () =>
                     ref.read(searchHistoryProvider.notifier).clear(),
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: const Size(0, 32),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  minimumSize: const Size(48, 40),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 child: const Text(
                   'Xóa',
-                  style: TextStyle(fontSize: 12),
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
             ],
@@ -916,11 +1398,11 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
             children: history.map((term) {
               return Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppColors.surfaceMuted,
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  border: Border.all(color: AppColors.borderSoft),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -929,7 +1411,11 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                       onTap: () {
                         setState(() => _queryCtrl.text = term);
                         ref.read(villaFilterProvider.notifier).update(
-                              (s) => s.copyWith(searchQuery: term, page: 1),
+                              (s) => s.copyWith(
+                                searchQuery: term,
+                                clearLocationGroup: true,
+                                page: 1,
+                              ),
                             );
                       },
                       child: Row(
@@ -941,11 +1427,17 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                             color: AppColors.iconMuted,
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            term,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 190),
+                            child: Text(
+                              term,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textPrimary,
+                              ),
                             ),
                           ),
                         ],
@@ -958,10 +1450,10 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                           .removeTerm(term),
                       borderRadius: BorderRadius.circular(999),
                       child: const Padding(
-                        padding: EdgeInsets.all(2),
+                        padding: EdgeInsets.all(4),
                         child: Icon(
-                          LucideIcons.x,
-                          size: 13,
+                          LucideIcons.circleX,
+                          size: 13.5,
                           color: AppColors.iconMuted,
                         ),
                       ),
@@ -973,106 +1465,252 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
           ),
         ],
 
-        // 8 VUNG_TAU_LOCATION_GROUPS in a clean 2-column grid
+        // Curated Vũng Tàu destination cards (equal-height, 2-line street hints, calm selection)
         const SizedBox(height: 18),
-        const Text(
-          'Khu vực nổi bật',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textSecondary,
-          ),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Khu vực nổi bật',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                trimmedQuery.isEmpty
+                    ? 'Vũng Tàu'
+                    : '${filteredGroups.length} khu vực',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textMuted,
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
-        for (int i = 0; i < groups.length; i += 2) ...[
-          if (i > 0) const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _buildAreaChipCard(groups[i], filter),
+        if (filteredGroups.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceMuted,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.borderSoft),
+            ),
+            child: const Text(
+              'Không có khu vực trùng tên — nhấn "Áp dụng & Tìm kiếm" để tìm trực tiếp theo tên villa hoặc địa chỉ.',
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.4,
+                color: AppColors.textSecondary,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: i + 1 < groups.length
-                    ? _buildAreaChipCard(groups[i + 1], filter)
-                    : const SizedBox.shrink(),
-              ),
-            ],
+            ),
+          )
+        else
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final useTwoColumns =
+                  constraints.maxWidth >= 300 && textScale <= 1.35;
+              const spacing = 10.0;
+              if (!useTwoColumns) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < filteredGroups.length; i++) ...[
+                      if (i > 0) const SizedBox(height: spacing),
+                      _buildAreaChipCard(
+                        filteredGroups[i],
+                        filter,
+                        query: trimmedQuery,
+                      ),
+                    ],
+                  ],
+                );
+              }
+
+              final rows = <Widget>[];
+              for (var i = 0; i < filteredGroups.length; i += 2) {
+                if (i > 0) rows.add(const SizedBox(height: spacing));
+                final leftGroup = filteredGroups[i];
+                final rightGroup =
+                    i + 1 < filteredGroups.length ? filteredGroups[i + 1] : null;
+                rows.add(
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: _buildAreaChipCard(
+                            leftGroup,
+                            filter,
+                            query: trimmedQuery,
+                          ),
+                        ),
+                        const SizedBox(width: spacing),
+                        Expanded(
+                          child: rightGroup != null
+                              ? _buildAreaChipCard(
+                                  rightGroup,
+                                  filter,
+                                  query: trimmedQuery,
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              return Column(children: rows);
+            },
           ),
-        ],
       ],
     );
   }
 
   Widget _buildAreaChipCard(
     VungTauLocationGroup group,
-    VillaFilterState filter,
-  ) {
+    VillaFilterState filter, {
+    String query = '',
+  }) {
     final isSelected = filter.locationGroup == group.key ||
         filter.locationGroup == group.id ||
         filter.locationGroup == group.label;
+    final streetHint = _shortAreaSubtitle(group, query: query);
 
-    return InkWell(
-      onTap: () {
-        ref.read(villaFilterProvider.notifier).update(
-              (s) => s.copyWith(
-                locationGroup: group.key,
-                searchQuery: '',
-                clearGeo: true,
-                page: 1,
-              ),
-            );
-        setState(() {
-          _queryCtrl.clear();
-          _activeTab = 1; // Advance to Date tab
-        });
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : const Color(0xFFE2E8F0),
-            width: isSelected ? 1.4 : 1.0,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              LucideIcons.mapPin,
-              size: 16,
-              color: isSelected ? Colors.white : AppColors.iconMuted,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                group.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                  color: isSelected ? Colors.white : AppColors.textPrimary,
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            if (isSelected) {
+              ref.read(villaFilterProvider.notifier).update(
+                    (s) => s.copyWith(clearLocationGroup: true, page: 1),
+                  );
+              return;
+            }
+            ref.read(villaFilterProvider.notifier).update(
+                  (s) => s.copyWith(
+                    locationGroup: group.key,
+                    searchQuery: '',
+                    clearGeo: true,
+                    page: 1,
+                  ),
+                );
+            setState(() {
+              _queryCtrl.clear();
+              _activeTab = 1; // Advance to Date tab
+            });
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 68),
+            child: AnimatedContainer(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 160),
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+              decoration: BoxDecoration(
+                color: isSelected ? AppColors.brandSoft : AppColors.surfaceBase,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isSelected ? AppColors.primary : AppColors.borderSoft,
+                  width: isSelected ? 1.6 : 1.0,
                 ),
               ),
-            ),
-            if (isSelected) ...[
-              const SizedBox(width: 4),
-              const Icon(
-                LucideIcons.check,
-                size: 14,
-                color: Colors.white,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        _areaSemanticIcon(group),
+                        size: 15,
+                        color: isSelected
+                            ? AppColors.iconStrong
+                            : AppColors.iconMuted,
+                      ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          group.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight:
+                                isSelected ? FontWeight.w700 : FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      if (isSelected) ...[
+                        const SizedBox(width: 4),
+                        const Icon(
+                          LucideIcons.check,
+                          size: 15,
+                          color: AppColors.iconStrong,
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    streetHint,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      height: 1.32,
+                      fontWeight:
+                          isSelected ? FontWeight.w500 : FontWeight.w400,
+                      color: isSelected
+                          ? AppColors.textSecondary
+                          : AppColors.textMuted,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ],
+            ),
+          ),
         ),
       ),
     );
   }
 
+  void _applyQuickStay(BookingDate checkIn, BookingDate checkOut) {
+    ref.read(villaFilterProvider.notifier).update(
+          (s) => s.copyWith(
+            dateMode: 'dates',
+            selectedMonths: const [],
+            checkIn: checkIn,
+            checkOut: checkOut,
+            page: 1,
+          ),
+        );
+    setState(() {
+      _selectingCheckOut = false;
+      _calendarMonth = checkIn.month;
+      _calendarYear = checkIn.year;
+    });
+  }
+
   void _switchDateMode(String nextMode, VillaFilterState current) {
+    setState(() => _selectingCheckOut = false);
     if (nextMode == 'months') {
       final computed =
           SearchDateModeHelper.computeForMonths(current.selectedMonths);
@@ -1124,17 +1762,35 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     final availableMonths = [
       for (int m = currentMonth; m <= 12; m++) m,
     ];
+    final today = BookingDate.todayVn();
+    final wd = today.toDateTime().weekday;
+    final daysUntilSat = (DateTime.saturday - wd + 7) % 7;
+    final upcomingSat = today.addDays(daysUntilSat);
+    final upcomingFri = daysUntilSat == 0 ? today : upcomingSat.addDays(-1);
+    final nights = (filter.checkIn != null && filter.checkOut != null)
+        ? filter.checkIn!.differenceInNights(filter.checkOut!)
+        : 0;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 2-mode Switcher (`Ngày` | `Tháng` — no `Linh hoạt`, no gray background)
+        const Text(
+          'Thời gian lưu trú',
+          style: TextStyle(
+            fontSize: 16.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 10),
+        // 2-mode Switcher (`Ngày` | `Tháng`)
         Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppColors.surfaceMuted,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
           child: Row(
             children: [
@@ -1146,28 +1802,31 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                   child: InkWell(
                     onTap: () => _switchDateMode(entry.$1, filter),
                     borderRadius: BorderRadius.circular(999),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: mode == entry.$1
-                            ? AppColors.primary
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(999),
-                        border: mode == entry.$1
-                            ? Border.all(color: AppColors.primary, width: 1.4)
-                            : null,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        entry.$2,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: mode == entry.$1
-                              ? FontWeight.w700
-                              : FontWeight.w500,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 40),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
                           color: mode == entry.$1
-                              ? Colors.white
-                              : AppColors.textSecondary,
+                              ? AppColors.surfaceBase
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(999),
+                          border: mode == entry.$1
+                              ? Border.all(color: AppColors.borderSoft)
+                              : null,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          entry.$2,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: mode == entry.$1
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: mode == entry.$1
+                                ? AppColors.textPrimary
+                                : AppColors.textSecondary,
+                          ),
                         ),
                       ),
                     ),
@@ -1176,90 +1835,272 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
             ],
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
 
         if (mode == 'dates') ...[
-          // Month Header with MonthInSwitcher (48x48 touch targets)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // Quick 1-tap stay presets
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              InkWell(
-                onTap: () => _stepCalendarMonth(-1),
-                borderRadius: BorderRadius.circular(12),
-                child: const SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: Center(
-                    child: Icon(
-                      LucideIcons.chevronLeft,
-                      size: 18,
-                      color: AppColors.iconStrong,
-                    ),
-                  ),
-                ),
+              _buildPresetChip(
+                label: 'Đêm mai',
+                selected: filter.checkIn == today.addDays(1) &&
+                    filter.checkOut == today.addDays(2),
+                onTap: () =>
+                    _applyQuickStay(today.addDays(1), today.addDays(2)),
               ),
-              Flexible(
-                child: Text(
-                  'Tháng $_calendarMonth / $_calendarYear',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+              _buildPresetChip(
+                label: 'Cuối tuần này',
+                selected: filter.checkIn == upcomingSat &&
+                    filter.checkOut == upcomingSat.addDays(1),
+                onTap: () =>
+                    _applyQuickStay(upcomingSat, upcomingSat.addDays(1)),
               ),
-              InkWell(
-                onTap: () => _stepCalendarMonth(1),
-                borderRadius: BorderRadius.circular(12),
-                child: const SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: Center(
-                    child: Icon(
-                      LucideIcons.chevronRight,
-                      size: 18,
-                      color: AppColors.iconStrong,
-                    ),
-                  ),
+              if (!upcomingFri.isBefore(today))
+                _buildPresetChip(
+                  label: 'Thứ 6 – CN (2 đêm)',
+                  selected: filter.checkIn == upcomingFri &&
+                      filter.checkOut == upcomingSat.addDays(1),
+                  onTap: () =>
+                      _applyQuickStay(upcomingFri, upcomingSat.addDays(1)),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 12),
-          MonthInSwitcher(
-            monthKey: '$_calendarYear-$_calendarMonth',
-            child: _SimpleMonthGrid(
-              year: _calendarYear,
-              month: _calendarMonth,
-              checkIn: filter.checkIn,
-              checkOut: filter.checkOut,
-              onDayTapped: (date) {
-                final currentIn = filter.checkIn;
-                final currentOut = filter.checkOut;
-                if (currentIn == null ||
-                    currentOut != null ||
-                    date.isBefore(currentIn)) {
-                  ref.read(villaFilterProvider.notifier).update(
-                        (s) => s.copyWith(
-                          checkIn: date,
-                          checkOut: date.addDays(1),
+
+          // Live Check-in / Check-out overview card
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceMuted,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.borderSoft),
+            ),
+            child: LayoutBuilder(
+              builder: (context, boxConstraints) {
+                final stackDates =
+                    boxConstraints.maxWidth < 285 || textScale > 1.35;
+                final checkInSlot = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Nhận phòng',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      filter.checkIn != null
+                          ? filter.checkIn!.toDisplayVi()
+                          : 'Chưa chọn',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: filter.checkIn != null
+                            ? AppColors.textPrimary
+                            : AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                );
+                final checkOutSlot = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _selectingCheckOut ? 'Chọn ngày trả phòng' : 'Trả phòng',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: _selectingCheckOut
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: _selectingCheckOut
+                            ? AppColors.primary
+                            : AppColors.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      filter.checkOut != null
+                          ? filter.checkOut!.toDisplayVi()
+                          : 'Chưa chọn',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: filter.checkOut != null
+                            ? AppColors.textPrimary
+                            : AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                );
+                final nightPill = nights > 0
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
                         ),
-                      );
-                } else if (date.isAfter(currentIn)) {
-                  ref.read(villaFilterProvider.notifier).update(
-                        (s) => s.copyWith(checkOut: date),
-                      );
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceBase,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: AppColors.borderSoft),
+                        ),
+                        child: Text(
+                          '$nights đêm',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      )
+                    : null;
+
+                if (stackDates) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      checkInSlot,
+                      const SizedBox(height: 8),
+                      checkOutSlot,
+                      if (nightPill != null) ...[
+                        const SizedBox(height: 8),
+                        nightPill,
+                      ],
+                    ],
+                  );
                 }
+                return Row(
+                  children: [
+                    Expanded(child: checkInSlot),
+                    Container(
+                      width: 1,
+                      height: 30,
+                      margin: const EdgeInsets.symmetric(horizontal: 12),
+                      color: AppColors.border,
+                    ),
+                    Expanded(child: checkOutSlot),
+                    if (nightPill != null) ...[
+                      const SizedBox(width: 8),
+                      nightPill,
+                    ],
+                  ],
+                );
               },
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 14),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceBase,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.borderSoft),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Semantics(
+                      button: true,
+                      label: 'Tháng trước',
+                      child: InkWell(
+                        onTap: () => _stepCalendarMonth(-1),
+                        borderRadius: BorderRadius.circular(999),
+                        child: const SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: Center(
+                            child: Icon(
+                              LucideIcons.chevronLeft,
+                              size: 18,
+                              color: AppColors.iconStrong,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Flexible(
+                      child: Text(
+                        'Tháng $_calendarMonth / $_calendarYear',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    Semantics(
+                      button: true,
+                      label: 'Tháng sau',
+                      child: InkWell(
+                        onTap: () => _stepCalendarMonth(1),
+                        borderRadius: BorderRadius.circular(999),
+                        child: const SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: Center(
+                            child: Icon(
+                              LucideIcons.chevronRight,
+                              size: 18,
+                              color: AppColors.iconStrong,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                MonthInSwitcher(
+                  monthKey: '$_calendarYear-$_calendarMonth',
+                  child: _SimpleMonthGrid(
+                    year: _calendarYear,
+                    month: _calendarMonth,
+                    checkIn: filter.checkIn,
+                    checkOut: filter.checkOut,
+                    onDayTapped: (date) {
+                      final currentIn = filter.checkIn;
+                      if (!_selectingCheckOut ||
+                          currentIn == null ||
+                          !date.isAfter(currentIn)) {
+                        ref.read(villaFilterProvider.notifier).update(
+                              (s) => s.copyWith(
+                                checkIn: date,
+                                checkOut: date.addDays(1),
+                                page: 1,
+                              ),
+                            );
+                        setState(() => _selectingCheckOut = true);
+                      } else {
+                        ref.read(villaFilterProvider.notifier).update(
+                              (s) => s.copyWith(
+                                checkOut: date,
+                                page: 1,
+                              ),
+                            );
+                        setState(() => _selectingCheckOut = false);
+                      }
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ] else ...[
           const Text(
             'Chọn các tháng dự kiến đi Vũng Tàu',
             style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
+              fontSize: 14.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 12),
@@ -1267,8 +2108,8 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: availableMonths.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: textScale > 1.35 ? 2 : 3,
               mainAxisSpacing: 10,
               crossAxisSpacing: 10,
               childAspectRatio: 1.5,
@@ -1297,11 +2138,14 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: selected ? AppColors.primary : Colors.white,
+                    color: selected
+                        ? AppColors.brandSoft
+                        : AppColors.surfaceBase,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: selected ? AppColors.primary : AppColors.border,
-                      width: selected ? 1.5 : 1.0,
+                      color:
+                          selected ? AppColors.primary : AppColors.borderSoft,
+                      width: selected ? 1.6 : 1.0,
                     ),
                   ),
                   alignment: Alignment.center,
@@ -1311,7 +2155,9 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                       Icon(
                         LucideIcons.calendar,
                         size: 16,
-                        color: selected ? Colors.white : AppColors.iconStrong,
+                        color: selected
+                            ? AppColors.iconStrong
+                            : AppColors.iconMuted,
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -1320,9 +2166,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                           fontSize: 13,
                           fontWeight:
                               selected ? FontWeight.w700 : FontWeight.w500,
-                          color: selected
-                              ? Colors.white
-                              : AppColors.textPrimary,
+                          color: AppColors.textPrimary,
                         ),
                       ),
                     ],
@@ -1333,6 +2177,36 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildPresetChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.brandSoft : AppColors.surfaceBase,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.border,
+            width: selected ? 1.4 : 1.0,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ),
     );
   }
 
@@ -1364,43 +2238,96 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
           );
     }
 
+    const groupPresets = <(int, String)>[
+      (2, '2 khách'),
+      (6, '6 khách'),
+      (10, '10 khách'),
+      (15, '15 khách'),
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           'Số lượng khách lưu trú',
           style: TextStyle(
-            fontSize: 16,
+            fontSize: 16.5,
             fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 3),
+        const Text(
+          'Chọn nhanh quy mô đoàn hoặc tùy chỉnh từng nhóm khách',
+          style: TextStyle(
+            fontSize: 12.5,
+            color: AppColors.textMuted,
           ),
         ),
         const SizedBox(height: 12),
-        _GuestCounterRow(
-          title: 'Người lớn',
-          subtitle: 'Từ 13 tuổi trở lên',
-          value: filter.adults,
-          onChanged: (v) => updateGuestCounts(adults: v),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final preset in groupPresets)
+              _buildPresetChip(
+                label: preset.$2,
+                selected: filter.adults == preset.$1 && filter.children == 0,
+                onTap: () => updateGuestCounts(
+                  adults: preset.$1,
+                  children: 0,
+                ),
+              ),
+          ],
         ),
-        const Divider(height: 24, color: AppColors.divider),
-        _GuestCounterRow(
-          title: 'Trẻ em',
-          subtitle: 'Độ tuổi 2 – 12',
-          value: filter.children,
-          onChanged: (v) => updateGuestCounts(children: v),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceBase,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.borderSoft),
+          ),
+          child: Column(
+            children: [
+              _GuestCounterRow(
+                title: 'Người lớn',
+                subtitle: 'Từ 13 tuổi trở lên',
+                value: filter.adults,
+                onChanged: (v) => updateGuestCounts(adults: v),
+              ),
+              const Divider(height: 16, color: AppColors.divider),
+              _GuestCounterRow(
+                title: 'Trẻ em',
+                subtitle: 'Độ tuổi 2 – 12',
+                value: filter.children,
+                onChanged: (v) => updateGuestCounts(children: v),
+              ),
+              const Divider(height: 16, color: AppColors.divider),
+              _GuestCounterRow(
+                title: 'Em bé',
+                subtitle: 'Dưới 2 tuổi',
+                value: filter.infants,
+                onChanged: (v) => updateGuestCounts(infants: v),
+              ),
+              const Divider(height: 16, color: AppColors.divider),
+              _GuestCounterRow(
+                title: 'Thú cưng',
+                subtitle: 'Mang theo thú cưng đi cùng',
+                value: filter.pets,
+                onChanged: (v) => updateGuestCounts(pets: v),
+              ),
+            ],
+          ),
         ),
-        const Divider(height: 24, color: AppColors.divider),
-        _GuestCounterRow(
-          title: 'Em bé',
-          subtitle: 'Dưới 2 tuổi',
-          value: filter.infants,
-          onChanged: (v) => updateGuestCounts(infants: v),
-        ),
-        const Divider(height: 24, color: AppColors.divider),
-        _GuestCounterRow(
-          title: 'Thú cưng',
-          subtitle: 'Mang theo thú cưng đi cùng',
-          value: filter.pets,
-          onChanged: (v) => updateGuestCounts(pets: v),
+        const SizedBox(height: 12),
+        const Text(
+          'Em bé dưới 2 tuổi không tính vào sức chứa tiêu chuẩn của villa.',
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.textMuted,
+          ),
         ),
       ],
     );
@@ -1409,46 +2336,91 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
 
 class _TabPill extends StatelessWidget {
   final String label;
+  final IconData? icon;
   final bool selected;
+  final bool hasActiveValue;
+  final bool compact;
   final VoidCallback onTap;
 
   const _TabPill({
     required this.label,
     required this.selected,
     required this.onTap,
+    this.icon,
+    this.hasActiveValue = false,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected
-                    ? AppColors.textPrimary
-                    : AppColors.textSecondary,
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 40),
+            child: AnimatedContainer(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 180),
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? 8 : 11,
+                vertical: 8,
               ),
-            ),
-            const SizedBox(height: 6),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              height: 2.5,
-              width: selected ? 28 : 0,
               decoration: BoxDecoration(
-                color: selected ? AppColors.primary : Colors.transparent,
+                color: selected ? AppColors.surfaceBase : Colors.transparent,
                 borderRadius: BorderRadius.circular(999),
+                border:
+                    selected ? Border.all(color: AppColors.borderSoft) : null,
+              ),
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (icon != null) ...[
+                    Icon(
+                      icon,
+                      size: 13.5,
+                      color:
+                          selected ? AppColors.iconStrong : AppColors.iconMuted,
+                    ),
+                    const SizedBox(width: 5),
+                  ],
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: compact ? 12.5 : 13.5,
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w500,
+                        color: selected
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  if (hasActiveValue && !selected) ...[
+                    const SizedBox(width: 5),
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -1470,6 +2442,8 @@ class _GuestCounterRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canDecrement = value > 0;
+    final canIncrement = value < 40;
     return Row(
       children: [
         Expanded(
@@ -1488,53 +2462,102 @@ class _GuestCounterRow extends StatelessWidget {
               Text(
                 subtitle,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   color: AppColors.textSecondary,
                 ),
               ),
             ],
           ),
         ),
+        const SizedBox(width: 8),
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            InkWell(
-              onTap: value > 0 ? () => onChanged(value - 1) : null,
-              borderRadius: BorderRadius.circular(999),
-              child: SizedBox(
-                width: 48,
-                height: 48,
-                child: Center(
-                  child: Icon(
-                    LucideIcons.minus,
-                    size: 18,
-                    color:
-                        value > 0 ? AppColors.iconStrong : AppColors.textMuted,
+            Semantics(
+              button: true,
+              enabled: canDecrement,
+              label: 'Giảm $title',
+              child: InkWell(
+                onTap: canDecrement ? () => onChanged(value - 1) : null,
+                customBorder: const CircleBorder(),
+                child: SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Center(
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceBase,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: canDecrement
+                              ? AppColors.border
+                              : AppColors.borderSoft,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        LucideIcons.minus,
+                        size: 16,
+                        color: canDecrement
+                            ? AppColors.iconStrong
+                            : AppColors.iconMuted,
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-            SizedBox(
-              width: 32,
-              child: Text(
-                '$value',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
+            ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 30),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Text(
+                  '$value',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w700,
+                    color: value > 0
+                        ? AppColors.textPrimary
+                        : AppColors.textMuted,
+                  ),
                 ),
               ),
             ),
-            InkWell(
-              onTap: value < 40 ? () => onChanged(value + 1) : null,
-              borderRadius: BorderRadius.circular(999),
-              child: const SizedBox(
-                width: 48,
-                height: 48,
-                child: Center(
-                  child: Icon(
-                    LucideIcons.plus,
-                    size: 18,
-                    color: AppColors.iconStrong,
+            Semantics(
+              button: true,
+              enabled: canIncrement,
+              label: 'Tăng $title',
+              child: InkWell(
+                onTap: canIncrement ? () => onChanged(value + 1) : null,
+                customBorder: const CircleBorder(),
+                child: SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Center(
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceBase,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: canIncrement
+                              ? AppColors.border
+                              : AppColors.borderSoft,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        LucideIcons.plus,
+                        size: 16,
+                        color: canIncrement
+                            ? AppColors.iconStrong
+                            : AppColors.iconMuted,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1567,6 +2590,8 @@ class _SimpleMonthGrid extends StatelessWidget {
     final daysInMonth = DateTime(year, month + 1, 0).day;
     final startOffset = (firstDay.weekday - 1) % 7;
     final today = BookingDate.today();
+    final hasRange =
+        checkIn != null && checkOut != null && checkOut!.isAfter(checkIn!);
 
     return Column(
       children: [
@@ -1575,12 +2600,15 @@ class _SimpleMonthGrid extends StatelessWidget {
             for (final w in ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'])
               Expanded(
                 child: Center(
-                  child: Text(
-                    w,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textMuted,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      w,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textMuted,
+                      ),
                     ),
                   ),
                 ),
@@ -1595,55 +2623,87 @@ class _SimpleMonthGrid extends StatelessWidget {
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 7,
             mainAxisSpacing: 4,
-            crossAxisSpacing: 4,
+            crossAxisSpacing: 0,
           ),
           itemBuilder: (context, index) {
             if (index < startOffset) return const SizedBox.shrink();
             final day = index - startOffset + 1;
             final date = BookingDate(year: year, month: month, day: day);
             final isPast = date.isBefore(today);
+            final isToday = date == today;
             final isStart = checkIn == date;
             final isEnd = checkOut == date;
-            final isInRange = checkIn != null &&
-                checkOut != null &&
+            final isInRange = hasRange &&
                 date.isAfter(checkIn!) &&
                 date.isBefore(checkOut!);
 
             return InkWell(
               onTap: isPast ? null : () => onDayTapped(date),
               customBorder: const CircleBorder(),
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: Container(
-                    margin: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: (isStart || isEnd)
-                          ? AppColors.primary
-                          : isInRange
-                              ? AppColors.rangeBackground
-                              : Colors.transparent,
-                      shape: BoxShape.circle,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (hasRange && (isInRange || isStart || isEnd))
+                    Positioned.fill(
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          top: 3,
+                          bottom: 3,
+                          left: isStart ? 6 : 0,
+                          right: isEnd ? 6 : 0,
+                        ),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: AppColors.rangeBackground,
+                            borderRadius: BorderRadius.horizontal(
+                              left: isStart
+                                  ? const Radius.circular(999)
+                                  : Radius.zero,
+                              right: isEnd
+                                  ? const Radius.circular(999)
+                                  : Radius.zero,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '$day',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: (isStart || isEnd || isInRange)
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                        color: isPast
-                            ? AppColors.textMuted
-                            : (isStart || isEnd)
-                                ? Colors.white
-                                : isInRange
-                                    ? AppColors.primary
+                  AspectRatio(
+                    aspectRatio: 1,
+                    child: Container(
+                      margin: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: (isStart || isEnd)
+                            ? AppColors.primary
+                            : Colors.transparent,
+                        shape: BoxShape.circle,
+                        border: isToday && !(isStart || isEnd)
+                            ? Border.all(color: AppColors.borderStrong)
+                            : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '$day',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: (isStart ||
+                                    isEnd ||
+                                    isInRange ||
+                                    isToday)
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: isPast
+                                ? AppColors.textTertiary
+                                : (isStart || isEnd)
+                                    ? Colors.white
                                     : AppColors.textPrimary,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
             );
           },
@@ -1657,10 +2717,11 @@ class _SimpleMonthGrid extends StatelessWidget {
 Future<void> showStayFilterModal(BuildContext context, WidgetRef ref) async {
   await showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
-    backgroundColor: Colors.white,
+    backgroundColor: AppColors.surfaceBase,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
     builder: (ctx) => const _StayFilterModalSheet(),
   );
@@ -1872,7 +2933,10 @@ class _StayFilterModalSheetState extends ConsumerState<_StayFilterModalSheet> {
                         runSpacing: 4,
                         children: [
                           Text(
-                            ref.watch(moneyFormatterProvider).l10n.fxPriceRangePerNight,
+                            ref
+                                .watch(moneyFormatterProvider)
+                                .l10n
+                                .fxPriceRangePerNight,
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
@@ -2089,9 +3153,8 @@ class _RoomCountPills extends StatelessWidget {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: value == count
-                            ? AppColors.primary
-                            : Colors.white,
+                        color:
+                            value == count ? AppColors.primary : Colors.white,
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
@@ -2125,10 +3188,11 @@ Future<void> showAiSearchQuickModal(
 
   await showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
-    backgroundColor: Colors.white,
+    backgroundColor: AppColors.surfaceBase,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
     builder: (ctx) {
       return SafeArea(
