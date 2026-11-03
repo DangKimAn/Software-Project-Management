@@ -10,6 +10,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
@@ -1177,7 +1178,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       _buildSettingsMenuTile(
                         tileKey: const Key('menu_trips_history'),
                         icon: LucideIcons.calendarCheck,
-                        title: 'Chuyến đi của tôi',
+                        title: currentLocale == 'vi'
+                            ? 'Chuyến đi của tôi'
+                            : lookupAppLocalizations(Locale(currentLocale)).navTrips,
                         onTap: () => _navigateProtectedRoute(
                           context,
                           '/account/trips',
@@ -1187,13 +1190,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       _buildSettingsMenuTile(
                         tileKey: const Key('menu_favorites'),
                         icon: LucideIcons.heart,
-                        title: 'Danh sách yêu thích',
+                        title: currentLocale == 'vi'
+                            ? 'Danh sách yêu thích'
+                            : lookupAppLocalizations(Locale(currentLocale)).navFavorites,
                         onTap: () => context.push('/yeu-thich'),
                       ),
                       _buildSettingsMenuTile(
                         tileKey: const Key('menu_messages'),
                         icon: AppSemanticIcons.messageHost,
-                        title: 'Tin nhắn với Chủ nhà',
+                        title: currentLocale == 'vi'
+                            ? 'Tin nhắn với Chủ nhà'
+                            : lookupAppLocalizations(Locale(currentLocale)).navMessages,
                         onTap: () => _navigateProtectedRoute(
                           context,
                           '/messages',
@@ -1208,21 +1215,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         _buildSettingsMenuTile(
                           tileKey: const Key('menu_admin_portal'),
                           icon: AppSemanticIcons.adminPortal,
-                          title: 'Quản trị hệ thống',
+                          title: lookupAppLocalizations(Locale(currentLocale)).navAdminPortal,
                           onTap: () => context.push('/admin'),
                         )
                       else if (effectiveUser != null && effectiveUser.isHost)
                         _buildSettingsMenuTile(
                           tileKey: const Key('menu_host_portal'),
                           icon: AppSemanticIcons.home,
-                          title: 'Quản lý chỗ nghỉ',
+                          title: currentLocale == 'vi'
+                              ? 'Quản lý chỗ nghỉ'
+                              : lookupAppLocalizations(Locale(currentLocale)).navHostPortal,
                           onTap: () => context.push('/chu-nha/cho-nghi'),
                         )
                       else if (effectiveUser != null && effectiveUser.isNewHost)
                         _buildSettingsMenuTile(
                           tileKey: const Key('menu_host_status'),
                           icon: AppSemanticIcons.hostApplications,
-                          title: 'Trạng thái hồ sơ Chủ nhà',
+                          title: currentLocale == 'vi'
+                              ? 'Trạng thái hồ sơ Chủ nhà'
+                              : lookupAppLocalizations(Locale(currentLocale)).hostKycStatusTitle,
                           onTap: () =>
                               context.push('/tro-thanh-host/trang-thai'),
                         )
@@ -1230,7 +1241,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         _buildSettingsMenuTile(
                           tileKey: const Key('menu_become_host'),
                           icon: AppSemanticIcons.becomeHost,
-                          title: 'Trở thành chủ nhà',
+                          title: lookupAppLocalizations(Locale(currentLocale)).navBecomeHost,
                           onTap: () => context.push('/tro-thanh-host'),
                         ),
 
@@ -1269,7 +1280,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               const SizedBox(width: AppSpacing.s12),
                               Expanded(
                                 child: Text(
-                                  'Ngôn ngữ',
+                                  lookupAppLocalizations(Locale(currentLocale)).settingsLanguage,
                                   style: _menuTitleStyle,
                                 ),
                               ),
@@ -1327,20 +1338,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       _buildSettingsMenuTile(
                         tileKey: const Key('menu_contact_page'),
                         icon: AppSemanticIcons.supportCenter,
-                        title: 'Trung tâm Liên hệ & Hỗ trợ',
+                        title: currentLocale == 'vi'
+                            ? 'Trung tâm Liên hệ & Hỗ trợ'
+                            : lookupAppLocalizations(Locale(currentLocale)).navContact,
                         onTap: () => context.push('/lien-he'),
                       ),
                       _buildSettingsMenuTile(
                         tileKey: const Key('menu_call_hotline'),
                         icon: LucideIcons.phone,
-                        title: 'Gọi tổng đài tư vấn',
+                        title: currentLocale == 'vi'
+                            ? 'Gọi tổng đài tư vấn'
+                            : lookupAppLocalizations(Locale(currentLocale)).navHotline,
                         trailingText: AppConfig.hotlineNumber,
                         onTap: () => ContactService.callHotline(),
                       ),
                       _buildSettingsMenuTile(
                         tileKey: const Key('menu_zalo_support'),
                         icon: AppSemanticIcons.zaloSupport,
-                        title: 'Nhắn tin qua Zalo OA',
+                        title: currentLocale == 'vi'
+                            ? 'Nhắn tin qua Zalo OA'
+                            : lookupAppLocalizations(Locale(currentLocale)).navZalo,
                         onTap: () {
                           ContactService.openZaloInquiry(
                             messageText:
@@ -1353,7 +1370,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         _buildSettingsMenuTile(
                           tileKey: const Key('settings_bottom_logout_button'),
                           icon: AppSemanticIcons.logout,
-                          title: 'Đăng xuất',
+                          title: lookupAppLocalizations(Locale(currentLocale)).authLogout,
                           showChevron: false,
                           onTap: () => _confirmAndLogout(effectiveUser),
                         ),

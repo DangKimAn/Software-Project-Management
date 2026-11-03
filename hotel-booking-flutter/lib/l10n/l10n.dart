@@ -15,14 +15,21 @@ extension AppLocalizationsX on BuildContext {
       return fromTree;
     }
     final activeLocale = Localizations.maybeLocaleOf(this);
-    final code = LocaleFormatters.normalizeLanguageCode(
-      activeLocale?.languageCode,
-    );
-    return lookupAppLocalizations(Locale(code));
+    if (activeLocale?.languageCode == 'ko') {
+      return lookupAppLocalizations(const Locale('ko'));
+    }
+    return lookupAppLocalizations(const Locale('vi'));
   }
 
   String get activeLanguageCode {
+    final fromTree = Localizations.of<AppLocalizations>(this, AppLocalizations);
+    if (fromTree != null) {
+      return fromTree.localeName;
+    }
     final activeLocale = Localizations.maybeLocaleOf(this);
-    return LocaleFormatters.normalizeLanguageCode(activeLocale?.languageCode);
+    if (activeLocale?.languageCode == 'ko') {
+      return 'ko';
+    }
+    return 'vi';
   }
 }

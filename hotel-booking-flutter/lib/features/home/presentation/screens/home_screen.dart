@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/storage/preferences_service.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
@@ -101,6 +102,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return 'Tối';
   }
 
+  String _greeting(String currentLocale) {
+    if (currentLocale == 'vi') {
+      return 'Chào buổi ${_greetingByHour()}!';
+    }
+    final l10n = lookupAppLocalizations(Locale(currentLocale));
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) return l10n.greetingMorning;
+    if (hour >= 12 && hour < 18) return l10n.greetingAfternoon;
+    return l10n.greetingEvening;
+  }
+
   @override
   Widget build(BuildContext context) {
     final popularVillasAsync = ref.watch(popularDestinationsProvider);
@@ -177,6 +189,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   /// Matches `Hero.tsx` + `SearchBar.tsx` (`variant="home"`).
   Widget _buildHeroAndSearchCard(BuildContext context) {
+    final currentLocale = ref.watch(localeProvider);
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isDesktop = screenWidth >= 768;
     final heroHeight = isDesktop ? 390.0 : 215.0;
@@ -248,7 +261,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'Chào buổi ${_greetingByHour()}!',
+                            _greeting(currentLocale),
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: isDesktop ? 34 : 24,
@@ -259,7 +272,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Trân trọng được chào đón bạn tại thành phố biển Vũng Tàu',
+                            currentLocale == 'vi'
+                                ? 'Trân trọng được chào đón bạn tại thành phố biển Vũng Tàu'
+                                : lookupAppLocalizations(Locale(currentLocale)).homeWelcomeSubtitle,
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: isDesktop ? 16 : 13.5,
@@ -308,22 +323,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 alignment: WrapAlignment.spaceBetween,
                 crossAxisAlignment: WrapCrossAlignment.end,
                 children: [
-                  const Column(
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'LỊCH SỬ XEM',
-                        style: TextStyle(
+                        ref.watch(localeProvider) == 'vi'
+                            ? 'LỊCH SỬ XEM'
+                            : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeRecentlyViewedTitle.toUpperCase(),
+                        style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 2.0,
                           color: AppColors.primary,
                         ),
                       ),
-                      SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       Text(
-                        'Đã xem gần đây',
-                        style: TextStyle(
+                        ref.watch(localeProvider) == 'vi'
+                            ? 'Đã xem gần đây'
+                            : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeRecentlyViewedTitle,
+                        style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w700,
                           letterSpacing: -0.5,
@@ -335,9 +354,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   TextButton(
                     onPressed: () =>
                         ref.read(recentlyViewedProvider.notifier).clear(),
-                    child: const Text(
-                      'Xóa lịch sử xem',
-                      style: TextStyle(
+                    child: Text(
+                      ref.watch(localeProvider) == 'vi'
+                          ? 'Xóa lịch sử xem'
+                          : (ref.watch(localeProvider) == 'ko' ? '기록 지우기' : 'Clear history'),
+                      style: const TextStyle(
                         fontSize: 13,
                         color: Color(0xFF71717A),
                       ),
@@ -464,9 +485,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text(
-                              'ĐIỂM ĐẾN NỔI BẬT',
-                              style: TextStyle(
+                            Text(
+                              ref.watch(localeProvider) == 'vi'
+                                  ? 'ĐIỂM ĐẾN NỔI BẬT'
+                                  : (ref.watch(localeProvider) == 'ko'
+                                      ? '주요 목적지'
+                                      : 'FEATURED DESTINATIONS'),
+                              style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 1.8,
@@ -475,7 +500,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'Điểm đến được yêu thích',
+                              ref.watch(localeProvider) == 'vi'
+                                  ? 'Điểm đến được yêu thích'
+                                  : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homePopularDestinationsTitle,
                               style: TextStyle(
                                 fontSize: isDesktop ? 26 : 20,
                                 fontWeight: FontWeight.w800,
@@ -489,11 +516,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       const SizedBox(width: 12),
                       Semantics(
                         button: true,
-                        label:
-                            _isDestinationGridMode ? 'Thu gọn' : 'Xem tất cả',
+                        label: _isDestinationGridMode
+                            ? (ref.watch(localeProvider) == 'vi'
+                                ? 'Thu gọn'
+                                : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeShowLess)
+                            : (ref.watch(localeProvider) == 'vi'
+                                ? 'Xem tất cả'
+                                : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeSeeMoreVillas),
                         child: Tooltip(
-                          message:
-                              _isDestinationGridMode ? 'Thu gọn' : 'Xem tất cả',
+                          message: _isDestinationGridMode
+                              ? (ref.watch(localeProvider) == 'vi'
+                                  ? 'Thu gọn'
+                                  : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeShowLess)
+                              : (ref.watch(localeProvider) == 'vi'
+                                  ? 'Xem tất cả'
+                                  : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeSeeMoreVillas),
                           child: InkWell(
                             onTap: () {
                               setState(() {
