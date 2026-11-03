@@ -8411,8 +8411,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             Positioned(
               top: 10,
               right: 10,
-              child: CircleAvatar(
-                backgroundColor: Colors.black54,
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
                 child: IconButton(
                   icon: const Icon(LucideIcons.x, color: Colors.white, size: 20),
                   onPressed: () => Navigator.pop(ctx),
