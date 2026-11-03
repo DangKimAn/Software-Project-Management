@@ -124,20 +124,8 @@ services:
       - key: R2_PRIVATE_REGION
         value: auto
 
-      # ── OpenAI ───────────────────────────────────────────────────────────
+      # ── OpenAI Vision (KYC & Listing Image Tagging) ──────────────────────
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_VISION_MODEL
         value: gpt-4.1-mini
-      - key: EMBEDDING_MODEL
-        value: text-embedding-3-small
-      - key: EMBEDDING_DIMENSIONS
-        value: 1536
-
-      # ── Qdrant (Semantic Search) ─────────────────────────────────────────
-      - key: QDRANT_URL
-        sync: false
-      - key: QDRANT_API_KEY
-        sync: false
-      - key: QDRANT_COLLECTION_LISTINGS
-        value: booking_listings

@@ -873,9 +873,6 @@ class AppTopHeader extends ConsumerWidget {
                                 unawaited(context.push('/messages'));
                               }
                               break;
-                            case 'ai-search':
-                              unawaited(context.push('/tim-kiem-ai'));
-                              break;
                             case 'stays':
                               unawaited(context.push('/tim-kiem'));
                               break;

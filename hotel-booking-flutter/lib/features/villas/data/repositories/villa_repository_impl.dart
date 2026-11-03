@@ -7,7 +7,7 @@ import '../../domain/entities/villa.dart';
 import '../../domain/entities/villa_specs.dart';
 import '../../domain/repositories/villa_repository.dart';
 
-/// Production VillaRepository communicating with live Express Backend REST endpoints (/api/listings, /api/search/semantic, /api/amenities).
+/// Production VillaRepository communicating with live Express Backend REST endpoints (/api/listings, /api/amenities).
 class VillaRepositoryImpl implements VillaRepository {
   final DioClient _client;
 
@@ -71,29 +71,10 @@ class VillaRepositoryImpl implements VillaRepository {
     'thang máy': 'elevator',
   };
 
-  static final List<RegExp> _internalReasonPatterns = [
-    RegExp(r'^Khớp từ khóa\b', caseSensitive: false),
-    RegExp(r'^Semantic similarity\b', caseSensitive: false),
-    RegExp(r'^Keyword match\b', caseSensitive: false),
-    RegExp(r'^Fallback\b', caseSensitive: false),
-  ];
-
   static String normalizeAmenityCode(String raw) {
     final trimmed = raw.trim();
     final lower = trimmed.toLowerCase();
     return _amenityCodeAliases[lower] ?? trimmed;
-  }
-
-  static List<String> filterCustomerReasons(Iterable<dynamic>? reasons) {
-    if (reasons == null) return const [];
-    final out = <String>[];
-    for (final item in reasons) {
-      final r = item?.toString().trim() ?? '';
-      if (r.isEmpty) continue;
-      if (_internalReasonPatterns.any((p) => p.hasMatch(r))) continue;
-      out.add(r);
-    }
-    return out;
   }
 
   Map<String, dynamic> _buildSearchQueryParams({
@@ -468,71 +449,6 @@ class VillaRepositoryImpl implements VillaRepository {
   }
 
   @override
-  Future<SemanticSearchResponse> semanticSearch({
-    required String query,
-    int topK = 12,
-  }) async {
-    try {
-      final response = await _client.dio.post<Map<String, dynamic>>(
-        '/api/search/semantic',
-        data: {
-          'query': query.trim(),
-          'limit': topK,
-          'topK': topK,
-        },
-      );
-      final data = DioClient.unwrapEnvelope(response.data);
-      if (data is Map<String, dynamic>) {
-        final rawResults =
-            (data['results'] ?? data['items']) as List<dynamic>? ?? [];
-        final villas = rawResults
-            .whereType<Map<String, dynamic>>()
-            .map(_mapJsonToVilla)
-            .toList();
-
-        SemanticDateIntent? dateIntent;
-        final rawSearchMeta = data['searchMeta'];
-        if (rawSearchMeta is Map<String, dynamic>) {
-          final parsedFilters = rawSearchMeta['parsedFilters'];
-          if (parsedFilters is Map<String, dynamic> &&
-              parsedFilters['dateIntent'] is Map<String, dynamic>) {
-            dateIntent = SemanticDateIntent.fromJson(
-              parsedFilters['dateIntent'] as Map<String, dynamic>,
-            );
-          }
-        }
-        if (dateIntent == null && data['dateIntent'] is Map<String, dynamic>) {
-          dateIntent = SemanticDateIntent.fromJson(
-            data['dateIntent'] as Map<String, dynamic>,
-          );
-        }
-
-        return SemanticSearchResponse(
-          query: (data['query'] ?? query).toString(),
-          mode: (data['mode'] ?? 'semantic').toString(),
-          reason: data['reason']?.toString(),
-          message: data['message']?.toString(),
-          availabilityNotice: data['availabilityNotice']?.toString(),
-          dateIntent: dateIntent,
-          detectedRoomType: data['detectedRoomType']?.toString(),
-          items: villas,
-        );
-      } else if (data is List) {
-        return SemanticSearchResponse(
-          query: query,
-          items: data
-              .whereType<Map<String, dynamic>>()
-              .map(_mapJsonToVilla)
-              .toList(),
-        );
-      }
-      return SemanticSearchResponse(query: query, items: const []);
-    } catch (e) {
-      throw DioClient.handleError(e);
-    }
-  }
-
-  @override
   Future<List<Map<String, dynamic>>> getAmenitiesCatalog() async {
     try {
       final response =
@@ -775,20 +691,6 @@ class VillaRepositoryImpl implements VillaRepository {
       rules = VillaRules.fromJson(json['rules'] as Map<String, dynamic>);
     }
 
-    // Semantic search metadata
-    final similarityScore =
-        ((json['similarityScore'] ?? json['score']) as num?)?.toDouble();
-    final matchedRoomType =
-        (json['matchedRoomType'] ?? json['roomType'])?.toString();
-    final rawMatchedImage =
-        (json['matchedImageUrl'] ?? json['matchedImage'])?.toString();
-    final matchedImageUrl = AppMediaHelper.isStockPlaceholderUrl(rawMatchedImage)
-        ? fallbackGallery.first
-        : rawMatchedImage;
-    final matchedReasons = filterCustomerReasons(
-      json['matchedReasons'] as Iterable<dynamic>?,
-    );
-
     // Badges
     final badges = <VillaBadgeType>[];
     if (specs.beachDistanceMeters != null &&
@@ -842,10 +744,6 @@ class VillaRepositoryImpl implements VillaRepository {
       badges: badges,
       amenities: amenitiesList,
       bookedDatesIso: const {},
-      similarityScore: similarityScore,
-      matchedRoomType: matchedRoomType,
-      matchedImageUrl: matchedImageUrl,
-      matchedReasons: matchedReasons,
     );
   }
 

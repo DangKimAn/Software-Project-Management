@@ -426,10 +426,6 @@ class DioClient {
     final method = options.method.toUpperCase();
     final path = options.path.toLowerCase();
 
-    if (method == 'POST' && path.startsWith('/api/search/semantic')) {
-      return true;
-    }
-
     if (!_isIdempotentReadMethod(method)) {
       return false;
     }

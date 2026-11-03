@@ -18,7 +18,6 @@ import '../../features/host/presentation/screens/host_onboarding_screens.dart';
 import '../../features/host/presentation/screens/host_portal_screens.dart';
 import '../../features/host/presentation/screens/them_cho_nghi_screen.dart';
 import '../../features/messages/presentation/screens/messages_screen.dart';
-import '../../features/search/presentation/screens/ai_search_screen.dart';
 import '../../features/search/presentation/screens/search_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/trips/presentation/screens/guest_payment_screen.dart';
@@ -279,7 +278,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ],
       ),
 
-      // ── Discovery, Search, AI Search, Blog & Contact ──
+      // ── Discovery, Search, Blog & Contact ──
       GoRoute(
         path: '/villas',
         pageBuilder: (context, state) => _buildSlideTransitionPage(
@@ -307,26 +306,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           state: state,
           child: const SearchScreen(),
         ),
-      ),
-      GoRoute(
-        path: '/ai-search',
-        pageBuilder: (context, state) {
-          final query = state.uri.queryParameters['q'];
-          return _buildSlideTransitionPage(
-            state: state,
-            child: AiSearchScreen(initialQuery: query),
-          );
-        },
-      ),
-      GoRoute(
-        path: '/tim-kiem-ai',
-        pageBuilder: (context, state) {
-          final query = state.uri.queryParameters['q'];
-          return _buildSlideTransitionPage(
-            state: state,
-            child: AiSearchScreen(initialQuery: query),
-          );
-        },
       ),
       GoRoute(
         path: '/blog',

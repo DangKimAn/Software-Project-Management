@@ -340,24 +340,6 @@ abstract class AppLocalizations {
   /// **'Đánh giá cao nhất'**
   String get searchSortRatingDesc;
 
-  /// No description provided for @aiSearchTitle.
-  ///
-  /// In vi, this message translates to:
-  /// **'Tìm kiếm thông minh bằng AI'**
-  String get aiSearchTitle;
-
-  /// No description provided for @aiSearchPlaceholder.
-  ///
-  /// In vi, this message translates to:
-  /// **'Mô tả kỳ nghỉ mong muốn (VD: Villa sát biển Bãi Sau cho 15 người có hồ bơi nước mặn, BBQ)...'**
-  String get aiSearchPlaceholder;
-
-  /// No description provided for @aiSearchAction.
-  ///
-  /// In vi, this message translates to:
-  /// **'Tìm bằng AI'**
-  String get aiSearchAction;
-
   /// No description provided for @navDiscover.
   ///
   /// In vi, this message translates to:

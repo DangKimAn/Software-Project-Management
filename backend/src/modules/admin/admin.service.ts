@@ -19,7 +19,6 @@ import {
     notifyListingApproved,
     notifyListingRejected,
 } from "../notifications/notification.service";
-import { scheduleSemanticReindex } from "../semantic-search/semantic-search.indexer";
 import { enqueueHostSheetSyncJobSafe } from "../host-sheet-sync/host-sheet-sync.service";
 
 export type AdminListingQuery = {
@@ -169,7 +168,6 @@ export const approveAdminListing = async (
         return serializeAdminListing(listing);
     });
 
-    scheduleSemanticReindex(listingId, "listing_approved");
     enqueueHostSheetSyncJobSafe({
         hostUserId: Number(result.hostId),
         jobType: "listing_updated",
@@ -296,7 +294,6 @@ export const transferAdminListingHost = async (
         });
     }
 
-    scheduleSemanticReindex(listingId, "listing_transfer_host");
     return result;
 };
 

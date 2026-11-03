@@ -246,7 +246,6 @@ void main() {
                             SourceSearchBar(
                               isCompact: true,
                               onSearchSubmitted: () {},
-                              onOpenAiSearch: () {},
                             ),
                             const SizedBox(height: 16),
                             PropertyCard(

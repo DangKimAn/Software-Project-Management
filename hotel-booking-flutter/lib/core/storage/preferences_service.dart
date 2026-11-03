@@ -423,7 +423,6 @@ class PreferencesService {
   static const String _keyRecentlyViewed = 'recently_viewed_listings';
   static const String _keySearchHistory = 'booking_search_history';
   static const String _keyBookingQueue = 'booking_queue_items';
-  static const String _keyLastAiQuery = 'lastAiSearchQuery';
   static const String _keyPendingBookingIntent = 'pending_booking_intent';
   static const String _keyAccountProfile = 'account_profile_extra';
   static const String _keyGuestFavorites = 'guest_favorite_villa_ids';
@@ -861,15 +860,6 @@ class PreferencesService {
     }
   }
 
-  // --- AI Search Last Query ---
-  String getLastAiSearchQuery() {
-    return _getString(_keyLastAiQuery) ?? '';
-  }
-
-  Future<void> setLastAiSearchQuery(String query) async {
-    await _setString(_keyLastAiQuery, query.trim());
-  }
-
   // --- Pending Booking Intent (when unauthenticated user clicks "Đặt ngay") ---
   Map<String, dynamic>? getPendingBookingIntent() {
     final raw = _getString(_keyPendingBookingIntent);
@@ -905,7 +895,6 @@ class PreferencesService {
     await _remove(_keyBookingQueue);
     await _remove(_keyRecentlyViewed);
     await _remove(_keySearchHistory);
-    await _remove(_keyLastAiQuery);
     await _remove(_keyPendingBookingIntent);
     await _remove(_keyAccountProfile);
     await _remove('host_onboarding_kyc_draft_v2');

@@ -17,7 +17,6 @@ import {
     deleteListingImage,
     type HostActor,
 } from "../host-listings/host-listings.service";
-import { scheduleSemanticReindex } from "../semantic-search/semantic-search.indexer";
 
 const roomTypeValues = [
     "bedroom",
@@ -905,7 +904,6 @@ export const summarizeListingImageTags = async (listingId: number) => {
     listing.aiImageTags = aiImageTags;
     listing.aiImageSummary = summary;
     await listing.save();
-    scheduleSemanticReindex(listing.listingId, "listing_image_tags_update");
 
     return {
         aiImageTags,

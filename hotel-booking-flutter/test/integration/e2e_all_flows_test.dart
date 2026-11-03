@@ -22,7 +22,7 @@ import 'package:hotel_booking_flutter/features/favorites/presentation/screens/fa
 import 'package:hotel_booking_flutter/features/home/presentation/screens/home_screen.dart';
 import 'package:hotel_booking_flutter/features/messages/data/conversations_repository.dart';
 import 'package:hotel_booking_flutter/features/messages/presentation/screens/messages_screen.dart';
-import 'package:hotel_booking_flutter/features/search/presentation/screens/ai_search_screen.dart';
+import 'package:hotel_booking_flutter/features/search/presentation/screens/search_screen.dart';
 import 'package:hotel_booking_flutter/features/search/presentation/widgets/booking_date_range_picker.dart';
 import 'package:hotel_booking_flutter/features/trips/data/repositories/booking_repository_impl.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/screens/payment_result_screen.dart';
@@ -223,7 +223,7 @@ void main() {
   });
 
   group(
-    'FLOW 1: Cold Start -> Home -> Search (Regular & AI Semantic) -> List -> Detail',
+    'FLOW 1: Cold Start -> Home -> Search -> List -> Detail',
     () {
       testWidgets(
         '1.1 Cold start renders HomeScreen, loads featured villas & blog posts, and records recently viewed on detail visit',
@@ -418,9 +418,8 @@ void main() {
       );
 
       testWidgets(
-        '1.2 Regular search filter & AI Semantic search (/tim-kiem-ai) return normalized results and handle rejected queries',
+        '1.2 Regular search filter (/tim-kiem) returns normalized results for location groups, amenities, and dates',
         (tester) async {
-          Map<String, dynamic>? capturedSemanticBody;
           Map<String, dynamic>? capturedListQuery;
 
           final storage = _InMemorySecureStorage();
@@ -428,45 +427,6 @@ void main() {
             secureStorage: storage,
             httpClientAdapter:
                 _FakeBackendHttpClientAdapter((options, body) async {
-              if (options.path.contains('/api/search/semantic')) {
-                capturedSemanticBody = body;
-                final queryText = (body['query'] ?? '').toString();
-                if (queryText.contains('vé máy bay')) {
-                  return _jsonResponse({
-                    'success': true,
-                    'data': {
-                      'query': queryText,
-                      'mode': 'rejected',
-                      'reason': 'out_of_domain',
-                      'message':
-                          'Hệ thống chỉ hỗ trợ tìm kiếm biệt thự và chỗ nghỉ tại Vũng Tàu.',
-                      'items': <dynamic>[],
-                    },
-                  });
-                }
-                return _jsonResponse({
-                  'success': true,
-                  'data': {
-                    'query': queryText,
-                    'mode': 'semantic',
-                    'detectedRoomType': 'pool',
-                    'dateIntent': {
-                      'label': 'Cuối tuần này',
-                      'checkIn': '2026-12-18',
-                      'checkOut': '2026-12-20',
-                      'isAutoFilled': true,
-                    },
-                    'items': [
-                      {
-                        ..._sampleListingJson(id: '101'),
-                        'similarityScore': 0.94,
-                        'matchedRoomType': 'pool',
-                        'matchedReasons': ['Có hồ bơi riêng', 'Gần Bãi Sau'],
-                      },
-                    ],
-                  },
-                });
-              }
               if (options.path.contains('/api/listings')) {
                 capturedListQuery = options.queryParameters;
                 return _jsonResponse({
@@ -492,7 +452,6 @@ void main() {
           final repo = VillaRepositoryImpl(client);
 
           await tester.runAsync(() async {
-            // 1. Regular search with Vietnamese amenity labels & locationGroup
             final listResult = await repo.getVillasPaginated(
               searchQuery: 'Bãi Sau',
               locationGroup: 'Bãi Sau',
@@ -506,26 +465,9 @@ void main() {
             expect(capturedListQuery?['amenities'], 'pool,bbq');
             expect(capturedListQuery?['checkIn'], '2026-12-18');
             expect(capturedListQuery?['checkOut'], '2026-12-20');
-
-            // 2. AI Semantic Search screen UI & repository verification
-            final semanticResp = await repo.semanticSearch(
-              query: 'villa gần biển Bãi Sau có hồ bơi riêng cho 10 người',
-            );
-            expect(
-              capturedSemanticBody?['query'],
-              'villa gần biển Bãi Sau có hồ bơi riêng cho 10 người',
-            );
-            expect(semanticResp.isRejected, isFalse);
-            expect(semanticResp.items.first.id, '101');
-            expect(semanticResp.dateIntent?.checkIn, '2026-12-18');
-
-            // 3. Rejected out-of-domain AI query
-            final rejectedResp =
-                await repo.semanticSearch(query: 'đặt vé máy bay đi Hà Nội');
-            expect(rejectedResp.isRejected, isTrue);
           });
 
-          // Render AiSearchScreen widget
+          // Render SearchScreen widget
           final prefs = PreferencesService.inMemory();
           await tester.pumpWidget(
             ProviderScope(
@@ -537,10 +479,7 @@ void main() {
               ],
               child: MaterialApp(
                 theme: AppTheme.lightTheme,
-                home: const AiSearchScreen(
-                  initialQuery:
-                      'villa gần biển Bãi Sau có hồ bơi riêng cho 10 người',
-                ),
+                home: const SearchScreen(),
               ),
             ),
           );

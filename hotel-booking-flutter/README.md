@@ -1,6 +1,6 @@
 # The Palm Villa — Ứng dụng Đa nền tảng Flutter (Android, iOS & Web)
 
-> Ứng dụng khách đa nền tảng phục vụ khám phá biệt thự bằng AI, đặt phòng trực tuyến, vận hành cổng Chủ nhà (*Host Studio*) và quản trị toàn sàn (*Admin Console*) cho hệ sinh thái **The Palm Villa**.
+> Ứng dụng khách đa nền tảng phục vụ khám phá biệt thự nghỉ dưỡng, đặt phòng trực tuyến, vận hành cổng Chủ nhà (*Host Studio*) và quản trị toàn sàn (*Admin Console*) cho hệ sinh thái **The Palm Villa**.
 
 [![Flutter CI](https://github.com/DangKimAn/Software-Project-Management/actions/workflows/flutter_ci.yml/badge.svg)](https://github.com/DangKimAn/Software-Project-Management/actions/workflows/flutter_ci.yml)
 [![Flutter](https://img.shields.io/badge/Flutter-%3E%3D3.19.0-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
@@ -25,7 +25,7 @@
 
 ---
 
-## 2. Cấu trúc Thư mục Chuẩn (`146` tệp Dart / `15` Phân hệ)
+## 2. Cấu trúc Thư mục Chuẩn (`145` tệp Dart / `15` Phân hệ)
 
 ```text
 hotel-booking-flutter/
@@ -62,11 +62,11 @@ hotel-booking-flutter/
 │   │   ├── booking_inquiry/         # Luồng đặt phòng, áp mã giảm giá, thanh toán VNPay/MoMo/VietQR & Tư vấn
 │   │   ├── contact/                 # Gửi yêu cầu liên hệ và kết nối Hotline / Zalo OA
 │   │   ├── favorites/               # Quản lý danh sách biệt thự yêu thích (Wishlist đồng bộ tài khoản)
-│   │   ├── home/                    # Trang chủ khám phá, danh mục nhanh và lối tắt tìm kiếm AI
+│   │   ├── home/                    # Trang chủ khám phá, danh mục biệt thự nổi bật và chọn khu vực nhanh
 │   │   ├── host/                    # Cổng Chủ nhà Studio: Tổng quan, Biệt thự, Lịch 30 ngày, Đơn đặt, Google Sheets, KYC
 │   │   ├── messages/                # Nhắn tin thời gian thực Socket.IO kiểu Messenger (cảm xúc, ảnh, trả lời nhanh)
 │   │   ├── reviews/                 # Đánh giá xếp hạng sau lưu trú và phản hồi của Chủ nhà
-│   │   ├── search/                  # Tìm kiếm ngữ nghĩa văn bản AI, tìm bằng hình ảnh & bộ lọc nâng cao
+│   │   ├── search/                  # Tìm kiếm biệt thự theo khu vực, bản đồ bán kính, lịch trống & bộ lọc nâng cao
 │   │   ├── settings/                # Hồ sơ cá nhân, chuyển đổi ngôn ngữ (vi/en/ko), tiền tệ & thông báo
 │   │   ├── trips/                   # Quản lý lịch trình chuyến đi của Khách theo trạng thái Booking FSM
 │   │   ├── villas/                  # Danh sách biệt thự, thẻ hiển thị thông số và bộ lọc thông minh

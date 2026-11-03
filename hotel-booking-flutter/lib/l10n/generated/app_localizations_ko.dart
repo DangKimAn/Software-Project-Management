@@ -132,16 +132,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get searchSortRatingDesc => '평점 높은순';
 
   @override
-  String get aiSearchTitle => 'AI 스마트 검색';
-
-  @override
-  String get aiSearchPlaceholder =>
-      '원하는 숙소를 설명해 주세요 (예: 바이사우 해변 근처 15인용 해수풀 및 바비큐 빌라)...';
-
-  @override
-  String get aiSearchAction => 'AI 검색';
-
-  @override
   String get navDiscover => '탐색';
 
   @override

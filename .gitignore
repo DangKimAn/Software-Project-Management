@@ -8,7 +8,8 @@ ehthumbs.db
 Thumbs.db
 Desktop.ini
 $RECYCLE.BIN/
-
+Báo cáo
+BAO_CAO_CUOI_KY_HOAN_THIEN
 # IDE and Editor files
 .idea/
 **/.idea/
@@ -41,6 +42,8 @@ docs/ai-fix/
 **/*.md
 *.txt
 **/*.txt
+*.pdf 
+*.docx
 
 # Node.js (Source goc/backend, Source goc/frontend)
 **/node_modules/

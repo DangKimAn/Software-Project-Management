@@ -249,18 +249,63 @@ const ensureForeignKey = async (
     );
 };
 
-const ensureEnumContains = async (connection, tableName, columnName, values, nullSql, defaultSql) => {
+const parseEnumValues = (columnType) =>
+    Array.from(String(columnType).matchAll(/'((?:''|[^'])*)'/g)).map((match) => match[1].replace(/''/g, "'"));
+
+const getTableCollation = async (connection, tableName) => {
+    const [rows] = await connection.execute(
+        `
+        SELECT table_collation AS tableCollation
+        FROM information_schema.tables
+        WHERE table_schema = DATABASE()
+          AND table_name = ?
+        LIMIT 1
+        `,
+        [tableName],
+    );
+
+    return rows[0]?.tableCollation || null;
+};
+
+const ensureUtf8mb4Table = async (connection, tableName) => {
+    if (!(await tableExists(connection, tableName))) {
+        console.info(`Skipped charset conversion for ${tableName}: table missing`);
+        return;
+    }
+
+    const currentCollation = String(await getTableCollation(connection, tableName)).toLowerCase();
+    if (currentCollation.startsWith("utf8mb4_")) {
+        return;
+    }
+
+    await run(
+        connection,
+        `Converted ${tableName} to utf8mb4_unicode_ci`,
+        `ALTER TABLE ${quoteId(tableName)} CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+    );
+};
+
+const ensureEnumContains = async (connection, tableName, columnName, values, nullSql, defaultSql = "") => {
     const columnType = await getColumnType(connection, tableName, columnName);
 
     if (!columnType) {
         return;
     }
 
-    if (values.every((value) => columnType.includes(`'${value}'`))) {
+    const currentValues = parseEnumValues(columnType);
+
+    if (values.every((value) => currentValues.includes(value))) {
         return;
     }
 
-    const enumSql = values.map((value) => `'${value.replace(/'/g, "''")}'`).join(",");
+    const nextValues = [...currentValues];
+    for (const value of values) {
+        if (!nextValues.includes(value)) {
+            nextValues.push(value);
+        }
+    }
+
+    const enumSql = nextValues.map((value) => `'${value.replace(/'/g, "''")}'`).join(",");
     await run(
         connection,
         `Extended enum ${tableName}.${columnName}`,
@@ -599,6 +644,7 @@ const addColumns = async (connection) => {
     await ensureColumn(connection, "listings", "rejection_reason", "`rejection_reason` TEXT NULL AFTER `status`");
     await ensureColumn(connection, "listings", "approved_by", "`approved_by` BIGINT UNSIGNED NULL AFTER `rejection_reason`");
     await ensureColumn(connection, "listings", "approved_at", "`approved_at` DATETIME NULL AFTER `approved_by`");
+    await ensureColumn(connection, "listings", "search_text", "`search_text` LONGTEXT NULL");
     await ensureColumn(connection, "listing_images", "object_key", "`object_key` VARCHAR(1024) NULL AFTER `url`");
 
     await ensureColumn(connection, "bookings", "nights", "`nights` INT UNSIGNED NULL AFTER `guest_count`");
@@ -805,6 +851,15 @@ const addForeignKeys = async (connection) => {
 };
 
 const extendEnums = async (connection) => {
+    await ensureUtf8mb4Table(connection, "listings");
+    await ensureEnumContains(
+        connection,
+        "listings",
+        "status",
+        ["draft", "pending_approval", "active", "approved", "published", "inactive", "rejected", "suspended"],
+        "NOT NULL",
+        "DEFAULT 'draft'",
+    );
     await ensureEnumContains(
         connection,
         "users",

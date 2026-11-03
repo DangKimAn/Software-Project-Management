@@ -134,16 +134,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchSortRatingDesc => 'Highest rated';
 
   @override
-  String get aiSearchTitle => 'AI Semantic Search';
-
-  @override
-  String get aiSearchPlaceholder =>
-      'Describe your ideal stay (e.g. Beachfront villa in Back Beach for 15 guests with saltwater pool and BBQ)...';
-
-  @override
-  String get aiSearchAction => 'Search with AI';
-
-  @override
   String get navDiscover => 'Discover';
 
   @override

@@ -133,16 +133,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get searchSortRatingDesc => 'Đánh giá cao nhất';
 
   @override
-  String get aiSearchTitle => 'Tìm kiếm thông minh bằng AI';
-
-  @override
-  String get aiSearchPlaceholder =>
-      'Mô tả kỳ nghỉ mong muốn (VD: Villa sát biển Bãi Sau cho 15 người có hồ bơi nước mặn, BBQ)...';
-
-  @override
-  String get aiSearchAction => 'Tìm bằng AI';
-
-  @override
   String get navDiscover => 'Khám phá';
 
   @override

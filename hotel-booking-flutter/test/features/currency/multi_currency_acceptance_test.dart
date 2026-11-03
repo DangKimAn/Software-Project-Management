@@ -313,13 +313,6 @@ class _FakeVillaRepository implements VillaRepository {
       true;
 
   @override
-  Future<SemanticSearchResponse> semanticSearch({
-    required String query,
-    int topK = 12,
-  }) async =>
-      SemanticSearchResponse(query: query, items: villas);
-
-  @override
   Future<List<Map<String, dynamic>>> getAmenitiesCatalog() async =>
       const <Map<String, dynamic>>[];
 }

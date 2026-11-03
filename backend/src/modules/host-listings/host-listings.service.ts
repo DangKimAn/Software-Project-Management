@@ -47,7 +47,6 @@ import type { AuthenticatedUser } from "../auth/auth.service";
 import { writeAuditLog } from "../../services/audit-log-service";
 import { isHostVerifiedForPublishing } from "../../services/host-verification-status-service";
 import { notifyListingSubmitted } from "../notifications/notification.service";
-import { scheduleSemanticReindex } from "../semantic-search/semantic-search.indexer";
 import { enqueueHostSheetSyncJobSafe } from "../host-sheet-sync/host-sheet-sync.service";
 
 export type CreateListingInput = {
@@ -787,7 +786,6 @@ export const createListing = async (
         return createdListing;
     });
 
-    scheduleSemanticReindex(listing.listingId, "listing_create");
     enqueueHostSheetSyncJobSafe({
         hostUserId: Number(listing.hostId),
         jobType: "listing_created",
@@ -932,7 +930,6 @@ export const updateListing = async (listingId: number, actor: HostActor, input: 
         return listing;
     });
 
-    scheduleSemanticReindex(updated.listingId, "listing_update");
     enqueueHostSheetSyncJobSafe({
         hostUserId: Number(updated.hostId),
         jobType: "listing_updated",
@@ -986,8 +983,6 @@ export const deleteListing = async (listingId: number, actor: HostActor) => {
             setImmediate(enqueueArchive);
         }
     });
-
-    scheduleSemanticReindex(listingId, "listing_delete");
 };
 
 export const restoreListing = async (listingId: number, actor: HostActor) => {
@@ -1023,7 +1018,6 @@ export const restoreListing = async (listingId: number, actor: HostActor) => {
         return listing;
     });
 
-    scheduleSemanticReindex(restored.listingId, "listing_restore");
     enqueueHostSheetSyncJobSafe({
         hostUserId: Number(restored.hostId),
         jobType: "listing_restored",
@@ -1301,8 +1295,6 @@ export const replaceListingAmenities = async (listingId: number, actor: HostActo
         return existingListing;
     });
 
-    scheduleSemanticReindex(listing.listingId, "listing_amenities_replace");
-
     return {
         listingId: listing.listingId,
         amenityCount: amenityIds.length,
@@ -1341,8 +1333,6 @@ export const updateListingRules = async (listingId: number, actor: HostActor, in
 
         return existingListing;
     });
-
-    scheduleSemanticReindex(listing.listingId, "listing_rules_update");
 
     return {
         listingId: listing.listingId,

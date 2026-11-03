@@ -153,57 +153,6 @@ class VillaRules {
   }
 }
 
-class SemanticDateIntent {
-  final String? label;
-  final String? friendlyName;
-  final String? checkIn;
-  final String? checkOut;
-  final bool isAutoFilled;
-
-  const SemanticDateIntent({
-    this.label,
-    this.friendlyName,
-    this.checkIn,
-    this.checkOut,
-    this.isAutoFilled = false,
-  });
-
-  factory SemanticDateIntent.fromJson(Map<String, dynamic> json) {
-    return SemanticDateIntent(
-      label: json['label']?.toString(),
-      friendlyName: json['friendlyName']?.toString(),
-      checkIn: json['checkIn']?.toString(),
-      checkOut: json['checkOut']?.toString(),
-      isAutoFilled: json['isAutoFilled'] == true,
-    );
-  }
-}
-
-class SemanticSearchResponse {
-  final String query;
-  final String mode; // 'semantic' | 'keyword_fallback'
-  final String? reason;
-  final String? message;
-  final String? availabilityNotice;
-  final SemanticDateIntent? dateIntent;
-  final String? detectedRoomType;
-  final List<Villa> items;
-
-  const SemanticSearchResponse({
-    required this.query,
-    this.mode = 'semantic',
-    this.reason,
-    this.message,
-    this.availabilityNotice,
-    this.dateIntent,
-    this.detectedRoomType,
-    required this.items,
-  });
-
-  bool get isRejected =>
-      mode == 'rejected' || (reason != null && reason!.trim().isNotEmpty);
-}
-
 class Villa {
   final String id;
   final String code;
@@ -240,10 +189,6 @@ class Villa {
   final List<VillaBadgeType> badges;
   final List<String> amenities;
   final Set<String> bookedDatesIso; // 'YYYY-MM-DD' dates that are unavailable
-  final double? similarityScore;
-  final String? matchedRoomType;
-  final String? matchedImageUrl;
-  final List<String> matchedReasons;
 
   const Villa({
     required this.id,
@@ -281,10 +226,6 @@ class Villa {
     this.badges = const [],
     this.amenities = const [],
     this.bookedDatesIso = const {},
-    this.similarityScore,
-    this.matchedRoomType,
-    this.matchedImageUrl,
-    this.matchedReasons = const [],
   });
 
   /// Returns AT MOST ONE primary badge based on strict business priority:
@@ -348,95 +289,7 @@ class Villa {
       badges: badges,
       amenities: amenities,
       bookedDatesIso: bookedDatesIso ?? this.bookedDatesIso,
-      similarityScore: similarityScore,
-      matchedRoomType: matchedRoomType,
-      matchedImageUrl: matchedImageUrl,
-      matchedReasons: matchedReasons,
     );
-  }
-}
-
-/// Rejection copy helper matching `getRejectionCopy` in `Source goc/frontend/src/views/pages/AiSearch/AiSearchPage.tsx`.
-class AiSearchRejectionCopy {
-  final String title;
-  final String description;
-  final List<String> tips;
-
-  const AiSearchRejectionCopy({
-    required this.title,
-    required this.description,
-    required this.tips,
-  });
-
-  static AiSearchRejectionCopy resolve(String? reason, [String? message]) {
-    switch (reason) {
-      case 'QUERY_TOO_SHORT':
-        return AiSearchRejectionCopy(
-          title: 'Mô tả của bạn còn hơi ngắn để AI hiểu đúng nhu cầu',
-          description: message ??
-              'Hãy viết tối thiểu một cụm rõ ý như khu vực, số khách, tiện nghi hoặc bầu không khí mong muốn.',
-          tips: const [
-            'Thêm số khách dự kiến, ví dụ cho 4 người hoặc nhóm 8 người',
-            'Nêu 1-2 tiện nghi quan trọng như hồ bơi, BBQ, bếp hoặc gần biển',
-            'Nếu có ngày dự kiến, bạn có thể viết trực tiếp như từ 18/4 đến 20/4',
-          ],
-        );
-      case 'LOW_INFORMATION_QUERY':
-        return AiSearchRejectionCopy(
-          title: 'Nội dung tìm kiếm chưa có nghĩa rõ ràng',
-          description: message ??
-              'AI chưa nhận diện được từ khóa lưu trú hợp lệ từ chuỗi ký tự vừa nhập.',
-          tips: const [
-            'Viết bằng tiếng Việt tự nhiên hoặc từ khóa địa điểm, tiện nghi thực tế',
-            'Tránh nhập ký tự lặp, chuỗi ngẫu nhiên hoặc một từ rời rạc không rõ ngữ cảnh',
-            'Ví dụ tốt: "villa sát biển Bãi Sau có hồ bơi cho 6 người"',
-          ],
-        );
-      case 'UNSUPPORTED_DOMAIN':
-        return AiSearchRejectionCopy(
-          title: 'Truy vấn này không thuộc phạm vi tìm chỗ nghỉ',
-          description: message ??
-              'AI Search tại đây chỉ hỗ trợ tìm villa, homestay, căn hộ và khách sạn tại Vũng Tàu.',
-          tips: const [
-            'Mô tả loại hình lưu trú bạn cần như villa, homestay, căn hộ hoặc khách sạn',
-            'Thêm khu vực tại Vũng Tàu như Bãi Sau, Bãi Trước, Long Cung hoặc Chí Linh',
-            'Nêu tiện nghi mong muốn như hồ bơi, gần biển, chỗ đậu xe, bếp hoặc BBQ',
-          ],
-        );
-      case 'UNSUPPORTED_LOCATION':
-      case 'OFF_DOMAIN_DESTINATIONS':
-        return AiSearchRejectionCopy(
-          title: 'Hiện hệ thống chỉ hỗ trợ tìm chỗ nghỉ tại Vũng Tàu',
-          description: message ??
-              'Địa điểm trong mô tả của bạn nằm ngoài khu vực Vũng Tàu nên AI từ chối trả kết quả để tránh gợi ý sai.',
-          tips: const [
-            'Thử các khu vực tại Vũng Tàu như Bãi Sau, Bãi Trước, Thùy Vân, Trần Phú hoặc Long Cung',
-            'Kết hợp thêm nhu cầu như số khách, ngân sách, hồ bơi hoặc khoảng cách ra biển',
-            'Ví dụ: "villa Bãi Sau gần biển có hồ bơi riêng cho 8 người"',
-          ],
-        );
-      case 'NO_APPROVED_LISTINGS':
-        return AiSearchRejectionCopy(
-          title: 'Hiện chưa có chỗ nghỉ sẵn sàng để tìm kiếm',
-          description: message ??
-              'Dữ liệu chỗ nghỉ đang được cập nhật, vui lòng thử lại sau.',
-          tips: const [
-            'Thử lại sau ít phút hoặc chuyển sang trang tìm kiếm thường để kiểm tra danh sách hiện có',
-          ],
-        );
-      case 'NO_VIABLE_MATCH':
-      default:
-        return AiSearchRejectionCopy(
-          title: 'Chưa có chỗ nghỉ đủ sát với mô tả của bạn',
-          description: message ??
-              'AI đã đối chiếu ngữ nghĩa, tiện nghi, sức chứa, ngân sách và lịch trống nhưng chưa tìm thấy lựa chọn đủ tin cậy.',
-          tips: const [
-            'Nới nhẹ một tiêu chí như ngân sách, số khách hoặc bỏ bớt 1 tiện nghi phụ',
-            'Thử đổi khu vực sang Bãi Sau, Bãi Trước hoặc toàn bộ Vũng Tàu',
-            'Nếu có ngày cụ thể, hãy thử lùi hoặc dịch chuyển 1-2 ngày để mở rộng phòng còn trống',
-          ],
-        );
-    }
   }
 }
 
@@ -514,7 +367,7 @@ class VillaDetailPricingCalculator {
 }
 
 /// Pure query & payload normalizer matching `listings.validator.ts`, `filterOptions.ts`,
-/// `SearchPage.tsx`, and `AiSearchPage.tsx`.
+/// and `SearchPage.tsx`.
 class VillaSearchQueryNormalizer {
   VillaSearchQueryNormalizer._();
 
@@ -606,21 +459,5 @@ class VillaSearchQueryNormalizer {
     if (raw == null) return null;
     final clean = raw.trim().toLowerCase();
     return validPropertyTypes.contains(clean) ? clean : null;
-  }
-
-  static List<String> filterMatchedReasons(Iterable<String> rawReasons) {
-    final debugPatterns = [
-      RegExp(r'^semantic\s*\(', caseSensitive: false),
-      RegExp(r'^keyword\s*\(', caseSensitive: false),
-      RegExp(r'^visual\s*\(', caseSensitive: false),
-      RegExp(r'^clip[_\s:]', caseSensitive: false),
-      RegExp(r'^score\s*[:=]', caseSensitive: false),
-    ];
-    return rawReasons
-        .map((e) => e.trim())
-        .where(
-          (r) => r.isNotEmpty && !debugPatterns.any((rx) => rx.hasMatch(r)),
-        )
-        .toList();
   }
 }

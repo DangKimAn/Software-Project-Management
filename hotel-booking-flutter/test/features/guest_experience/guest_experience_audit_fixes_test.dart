@@ -357,57 +357,6 @@ void main() {
     });
   });
 
-  group('8. AI Search Rejection & Parity (Section 11)', () {
-    test('maps all 6+ rejection codes to distinct title, description, and tips',
-        () {
-      const reasons = [
-        'QUERY_TOO_SHORT',
-        'LOW_INFORMATION_QUERY',
-        'UNSUPPORTED_DOMAIN',
-        'UNSUPPORTED_LOCATION',
-        'OFF_DOMAIN_DESTINATIONS',
-        'NO_APPROVED_LISTINGS',
-        'NO_VIABLE_MATCH',
-      ];
-
-      for (final reason in reasons) {
-        final copy = AiSearchRejectionCopy.resolve(reason);
-        expect(copy.title, isNotEmpty);
-        expect(copy.description, isNotEmpty);
-        expect(copy.tips, isNotEmpty);
-      }
-      expect(
-        AiSearchRejectionCopy.resolve('QUERY_TOO_SHORT').title,
-        contains('ngắn'),
-      );
-      expect(
-        AiSearchRejectionCopy.resolve('UNSUPPORTED_LOCATION').title,
-        contains('Vũng Tàu'),
-      );
-    });
-
-    test(
-        'SemanticSearchResponse identifies rejected mode and filters debug reasons',
-        () {
-      const response = SemanticSearchResponse(
-        query: 'abc',
-        mode: 'rejected',
-        reason: 'LOW_INFORMATION_QUERY',
-        message: 'Truy vấn chưa rõ',
-        items: [],
-      );
-      expect(response.isRejected, isTrue);
-
-      final filteredReasons = VillaSearchQueryNormalizer.filterMatchedReasons([
-        'Có hồ bơi riêng',
-        'semantic(0.84)',
-        'clip_score: 0.71',
-        'Sức chứa 10 khách',
-      ]);
-      expect(filteredReasons, ['Có hồ bơi riêng', 'Sức chứa 10 khách']);
-    });
-  });
-
   group('9. Popular Destinations & Recently Viewed (BUG-37, BUG-41)', () {
     test(
         'Popular destination location groups resolve independently per area without mutating shared state',

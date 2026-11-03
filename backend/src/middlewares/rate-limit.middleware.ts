@@ -143,14 +143,6 @@ export const getAiVisionRateLimiter = () =>
         { userAware: true },
     );
 
-export const getSemanticSearchRateLimiter = () =>
-    buildLimiter(
-        10,
-        resolveRouteMax(45),
-        "Too many search requests. Please try again later.",
-        { userAware: true },
-    );
-
 export const getPaymentCreateRateLimiter = () =>
     buildLimiter(
         10,

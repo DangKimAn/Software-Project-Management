@@ -22,7 +22,6 @@ const usersRepository = require("../dist/modules/users/users.repository");
 const reportsService = require("../dist/modules/reports/reports.service");
 const auditLogService = require("../dist/services/audit-log-service");
 const hostVerificationStatusService = require("../dist/services/host-verification-status-service");
-const semanticSearchIndexer = require("../dist/modules/semantic-search/semantic-search.indexer");
 const notificationService = require("../dist/modules/notifications/notification.service");
 
 const originals: PatchEntry[] = [];
@@ -174,7 +173,6 @@ describe("Module admin (AD-01 to AD-14)", () => {
         patch(sequelize, "query", async () => []);
 
         patch(hostVerificationStatusService, "isHostVerifiedForPublishing", async () => true);
-        patch(semanticSearchIndexer, "scheduleSemanticReindex", () => {});
         patch(notificationService, "notifyListingApproved", async () => {});
         patch(notificationService, "notifyListingRejected", async () => {});
         patch(auditLogService, "writeAuditLog", async () => ({}));
@@ -249,16 +247,9 @@ describe("Module admin (AD-01 to AD-14)", () => {
         assert.equal(resUsers.status, 403);
     });
 
-    it("AD-03: Admin duyệt listing thành công - chuyển status sang active và index vào Qdrant (HTTP 200)", async () => {
+    it("AD-03: Admin duyệt listing thành công - chuyển status sang active và gửi thông báo cho host (HTTP 200)", async () => {
         const mockListing = buildListing({ listingId: 801, status: "pending_approval" });
         patch(Listing, "findOne", async () => mockListing);
-
-        let reindexedListingId: number | null = null;
-        let reindexReason = "";
-        patch(semanticSearchIndexer, "scheduleSemanticReindex", (listingId: number, reason: string) => {
-            reindexedListingId = listingId;
-            reindexReason = reason;
-        });
 
         let approvedNotified = false;
         patch(notificationService, "notifyListingApproved", async () => {
@@ -277,8 +268,6 @@ describe("Module admin (AD-01 to AD-14)", () => {
         assert.equal(res.status, 200);
         assert.equal(res.body.success, true);
         assert.equal(mockListing.status, "active");
-        assert.equal(reindexedListingId, 801);
-        assert.equal(reindexReason, "listing_approved");
         assert.equal(approvedNotified, true);
         assert.equal(auditAction, "listing.approve");
     });

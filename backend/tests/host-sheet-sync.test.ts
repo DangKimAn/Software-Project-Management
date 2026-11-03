@@ -31,7 +31,6 @@ const User = require("../dist/models/user").default;
 
 const authService = require("../dist/modules/auth/auth.service");
 const auditLogService = require("../dist/services/audit-log-service");
-const semanticSearchIndexer = require("../dist/modules/semantic-search/semantic-search.indexer");
 const hostVerificationStatusService = require("../dist/services/host-verification-status-service");
 const notificationService = require("../dist/modules/notifications/notification.service");
 const bookingDateLockService = require("../dist/services/booking-date-lock.service");
@@ -923,7 +922,6 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         patch(sequelize, "query", async () => []);
         patch(auditLogService, "writeAuditLog", async () => ({}));
         patch(auditLogService, "createAuditLog", async () => ({}));
-        patch(semanticSearchIndexer, "scheduleSemanticReindex", () => {});
         patch(hostVerificationStatusService, "isHostVerifiedForPublishing", async () => true);
         patch(notificationService, "notifyListingApproved", async () => {});
         patch(notificationService, "notifyListingRejected", async () => {});

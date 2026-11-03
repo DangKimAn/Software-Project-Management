@@ -39,7 +39,6 @@ import wishlistRoutes from "./modules/wishlist/wishlist.routes";
 import hostVerificationsRoutes from "./modules/verifications/host-verifications.routes";
 import hostOnboardingRoutes from "./modules/host-onboarding/host-onboarding.routes";
 import { sendSuccess } from "./common/http";
-import semanticSearchRoutes, { aiListingSearchRouter } from "./modules/semantic-search/semantic-search.routes";
 import uploadsRoutes from "./modules/uploads/uploads.routes";
 import identityVisionRoutes from "./modules/ai/identity-vision.routes";
 import listingImageVisionRoutes, {
@@ -47,7 +46,6 @@ import listingImageVisionRoutes, {
     hostImageVisionRoutes,
     hostListingImageVisionRoutes,
 } from "./modules/ai/listing-image-vision.routes";
-import { checkQdrantHealth, getQdrantCollectionName } from "./modules/semantic-search/qdrant-vector.service";
 
 export const createApp = () => {
     const env = getEnv();
@@ -80,10 +78,6 @@ export const createApp = () => {
         });
     });
 
-    let cachedHealthSnapshot: {
-        expiresAt: number;
-        qdrantStatus: Awaited<ReturnType<typeof checkQdrantHealth>>;
-    } | null = null;
     let cachedDbOkUntil = 0;
     const HEALTH_CACHE_TTL_MS = 5_000;
 
@@ -91,18 +85,10 @@ export const createApp = () => {
         try {
             const now = Date.now();
             const isTestEnv = env.nodeEnv === "test";
-            let qdrantStatus: Awaited<ReturnType<typeof checkQdrantHealth>>;
 
-            if (!isTestEnv && cachedHealthSnapshot && cachedHealthSnapshot.expiresAt > now) {
-                qdrantStatus = cachedHealthSnapshot.qdrantStatus;
-            } else {
+            if (isTestEnv || cachedDbOkUntil <= now) {
                 await sequelize.authenticate();
-                qdrantStatus = await checkQdrantHealth();
                 if (!isTestEnv) {
-                    cachedHealthSnapshot = {
-                        expiresAt: now + HEALTH_CACHE_TTL_MS,
-                        qdrantStatus,
-                    };
                     cachedDbOkUntil = now + HEALTH_CACHE_TTL_MS;
                 }
             }
@@ -118,17 +104,9 @@ export const createApp = () => {
                         dialect: "mysql",
                         status: "up",
                     },
-                    qdrant:
-                        env.nodeEnv === "production"
-                            ? { status: qdrantStatus }
-                            : {
-                                  status: qdrantStatus,
-                                  collection: getQdrantCollectionName(),
-                              },
                 },
             });
         } catch (error) {
-            cachedHealthSnapshot = null;
             cachedDbOkUntil = 0;
             logger.error("Health check failed", error, { requestId: req.requestId });
             return next(error);
@@ -175,7 +153,6 @@ export const createApp = () => {
     app.use("/api/host", hostBankAccountRoutes);
     app.use("/api/host", hostOnboardingRoutes);
     app.use("/api/host", hostPayoutsRoutes);
-    app.use("/api/ai/listings/search", aiListingSearchRouter);
     app.use("/api/ai/listings", listingImageVisionRoutes);
     app.use("/api/ai/id-card-vision", identityVisionRoutes);
     app.use("/api/ai/identity", identityVisionRoutes);
@@ -186,7 +163,6 @@ export const createApp = () => {
     app.use("/api/reviews", reviewsRoutes);
     app.use("/api/uploads", uploadsRoutes);
     app.use("/api/listings", publicListingsRoutes);
-    app.use("/api/search", semanticSearchRoutes);
     app.use("/api/reports", reportsRoutes);
     app.use("/api/host/reports", hostReportsRouter);
     app.use("/api/amenities", amenitiesRoutes);

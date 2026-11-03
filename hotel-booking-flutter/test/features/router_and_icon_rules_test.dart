@@ -186,7 +186,7 @@ void main() {
               '/thanh-toan/ket-qua?bookingId=12&status=pending'),
           isTrue);
       expect(
-          AuthNotifier.isSafeRedirectPath('/ai-search?q=villa+bien'), isTrue);
+          AuthNotifier.isSafeRedirectPath('/tim-kiem?q=villa+bien'), isTrue);
 
       // Untrusted / unsafe URLs must be rejected
       expect(

@@ -69,10 +69,5 @@ abstract class VillaRepository {
     required BookingDate checkOut,
   });
 
-  Future<SemanticSearchResponse> semanticSearch({
-    required String query,
-    int topK = 12,
-  });
-
   Future<List<Map<String, dynamic>>> getAmenitiesCatalog();
 }

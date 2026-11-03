@@ -131,8 +131,6 @@ export type ListingRecord = {
     quietHours: string | null;
     availabilityCalendar: ListingAvailabilityDayRecord[];
     searchText: string | null;
-    searchEmbeddingJson: number[] | null;
-    searchEmbeddingUpdatedAt: Date | null;
     deletedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
@@ -190,8 +188,6 @@ class ListingModel extends Model<InferAttributes<ListingModel>, InferCreationAtt
     declare searchText: string | null;
     declare aiImageTags: string[] | null;
     declare aiImageSummary: string | null;
-    declare searchEmbeddingJson: number[] | null;
-    declare searchEmbeddingUpdatedAt: Date | null;
     declare deletedAt: Date | null;
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
@@ -456,16 +452,6 @@ ListingModel.init(
             type: DataTypes.TEXT,
             allowNull: true,
             field: "ai_image_summary",
-        },
-        searchEmbeddingJson: {
-            type: DataTypes.JSON,
-            allowNull: true,
-            field: "search_embedding_json",
-        },
-        searchEmbeddingUpdatedAt: {
-            type: DataTypes.DATE,
-            allowNull: true,
-            field: "search_embedding_updated_at",
         },
         deletedAt: {
             type: DataTypes.DATE,

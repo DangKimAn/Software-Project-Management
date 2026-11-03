@@ -16,14 +16,12 @@ class SourceSearchBar extends ConsumerStatefulWidget {
   final bool isCompact;
   final bool isInHeader;
   final VoidCallback? onSearchSubmitted;
-  final VoidCallback? onOpenAiSearch;
 
   const SourceSearchBar({
     super.key,
     this.isCompact = false,
     this.isInHeader = false,
     this.onSearchSubmitted,
-    this.onOpenAiSearch,
   });
 
   @override
@@ -3176,141 +3174,4 @@ class _RoomCountPills extends StatelessWidget {
       ],
     );
   }
-}
-
-/// Opens the AI Search Quick Overlay Modal (`SearchBar.tsx` AI overlay).
-Future<void> showAiSearchQuickModal(
-  BuildContext context,
-  WidgetRef ref,
-) async {
-  final prefs = ref.read(preferencesServiceProvider);
-  final ctrl = TextEditingController(text: prefs.getLastAiSearchQuery());
-
-  await showModalBottomSheet<void>(
-    context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    backgroundColor: AppColors.surfaceBase,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-    ),
-    builder: (ctx) {
-      return SafeArea(
-        top: false,
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 16,
-            bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    LucideIcons.search,
-                    size: 20,
-                    color: AppColors.iconStrong,
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Tìm kiếm chỗ nghỉ bằng AI (CLIP Semantic Search)',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () => Navigator.of(ctx).pop(),
-                    borderRadius: BorderRadius.circular(12),
-                    child: const SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: Center(
-                        child: Icon(
-                          LucideIcons.x,
-                          size: 20,
-                          color: AppColors.iconStrong,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Mô tả không gian phòng ngủ, hồ bơi, tầm nhìn biển hoặc phong cách thiết kế bạn mong muốn.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: ctrl,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  hintText:
-                      'VD: Villa gần biển có hồ bơi cho 8 người cuối tuần này...',
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final suggestion in const [
-                    'Villa gần biển có hồ bơi cho 8 người cuối tuần này',
-                    'Chỗ nghỉ yên tĩnh gần Bãi Trước cho cặp đôi dưới 1tr5',
-                    'Homestay có bếp và chỗ đậu xe cho gia đình 6 người',
-                  ])
-                    ActionChip(
-                      label: Text(
-                        suggestion,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      onPressed: () {
-                        ctrl.text = suggestion;
-                      },
-                    ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    final q = ctrl.text.trim();
-                    if (q.isNotEmpty) {
-                      prefs.setLastAiSearchQuery(q);
-                    }
-                    Navigator.of(ctx).pop();
-                    context.push(
-                      '/tim-kiem-ai${q.isNotEmpty ? '?q=${Uri.encodeComponent(q)}' : ''}',
-                    );
-                  },
-                  icon: const Icon(
-                    LucideIcons.search,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                  label: const Text('Khám phá bằng AI'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
 }
