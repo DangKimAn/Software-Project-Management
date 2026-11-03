@@ -1,6 +1,5 @@
 import 'package:flutter/widgets.dart';
 import 'generated/app_localizations.dart';
-import 'locale_formatters.dart';
 
 export 'generated/app_localizations.dart';
 export 'locale_formatters.dart';
