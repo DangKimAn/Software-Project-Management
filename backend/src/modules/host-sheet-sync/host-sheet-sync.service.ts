@@ -22,6 +22,7 @@ import HostSheetSyncJob, { HostSheetSyncJobType } from "../../models/host-sheet-
 import Listing, { ListingDocument } from "../../models/listing";
 import { writeAuditLog } from "../../services/audit-log-service";
 import { buildReservedDates } from "../../services/booking-date-lock.service";
+import { getDefaultDailyPrice } from "../../common/listing-mappers";
 import {
     buildCalendarCellWriteData,
     classifySheetCalendarCell,
@@ -29,12 +30,14 @@ import {
     getConfiguredServiceAccountEmail,
     getGoogleSheetsTransport,
     GoogleSheetsClientError,
+    isPriceOrNumericText,
     parseAndValidateSpreadsheetInput,
     RawSheetCell,
     RawSheetTab,
     rgbToHex,
     sanitizeSheetTextValue,
     SHEET_COLORS,
+    SHEET_FONT_FAMILY,
     SheetRgbColor,
     verifySpreadsheetEditorAccess,
 } from "../../services/google-sheets-client.service";
@@ -356,19 +359,32 @@ const isCellDisplayEqual = (
     existingCell: RawSheetCell | undefined,
     desiredText: string,
     desiredColor: SheetRgbColor,
+    desiredNumberValue?: number,
 ): boolean => {
-    const currentText = extractCellRawText(existingCell);
-    if (currentText !== desiredText) {
-        return false;
-    }
-
     const desiredHex = rgbToHex(desiredColor);
     const currentStyleRgb =
         existingCell?.userEnteredFormat?.backgroundColorStyle?.rgbColor ??
         existingCell?.userEnteredFormat?.backgroundColor;
     const currentHex = currentStyleRgb ? rgbToHex(currentStyleRgb) : "#FFFFFF";
 
-    return currentHex === desiredHex;
+    if (currentHex !== desiredHex) {
+        return false;
+    }
+
+    if (desiredNumberValue !== undefined) {
+        const num = existingCell?.userEnteredValue?.numberValue;
+        if (num !== undefined && Math.round(Number(num)) === Math.round(desiredNumberValue)) {
+            return true;
+        }
+        const raw = extractCellRawText(existingCell).replace(/[^\d]/g, "");
+        if (raw !== "" && Number(raw) === Math.round(desiredNumberValue)) {
+            return true;
+        }
+        return false;
+    }
+
+    const currentText = extractCellRawText(existingCell);
+    return currentText === desiredText;
 };
 
 const mapSheetsErrorToIntegrationStatus = (
@@ -1060,17 +1076,12 @@ export const runHostSheetSyncCycle = async (
             const sheetId = tab.properties.sheetId;
             const structure = monthStructures.get(monthSpec.tabKey) ?? extractMonthSheetStructure(tab);
 
-            if (
-                options.mode === "initialize" ||
-                !structure.isVerticalLayout ||
-                (tab.data?.[0]?.rowData?.length ?? 0) < SHEET_HEADER_ROW_COUNT
-            ) {
-                batchRequests.push(
-                    ...buildMonthTabHeaderRequests(tab, monthSpec, {
-                        listingCount: hostListings.length,
-                    }),
-                );
-            }
+            // Always ensure tab headers and clean guide block are formatted cleanly on Google Sheets
+            batchRequests.push(
+                ...buildMonthTabHeaderRequests(tab, monthSpec, {
+                    listingCount: hostListings.length,
+                }),
+            );
 
             const archivedPresentEntries: Array<{
                 listing: ListingDocument;
@@ -1269,13 +1280,18 @@ export const runHostSheetSyncCycle = async (
                     userEnteredFormat: {
                         backgroundColorStyle: { rgbColor: SHEET_COLORS.WHITE },
                         horizontalAlignment: "LEFT",
-                        textFormat: { bold: true },
+                        textFormat: { bold: true, fontFamily: SHEET_FONT_FAMILY },
                     },
                 };
 
-                // Ensure Col Header 1 (Listing ID at Row 9: ô B9, C9...) & Col Header 2 (Title at Row 10: ô B10, C10...)
+                const layoutShifted =
+                    structure.guideRowCount !== undefined &&
+                    structure.guideRowCount !== SHEET_GUIDE_ROW_COUNT;
+
+                // Ensure Col Header 1 (Listing ID at Row 10: ô B10, C10...) & Col Header 2 (Title at Row 11: ô B11, C11...)
                 if (
                     isNewCol ||
+                    layoutShifted ||
                     targetRow.colAText !== String(listing.listingId) ||
                     targetRow.colBTitle !== safeTitle ||
                     targetRow.colMismatch
@@ -1284,22 +1300,22 @@ export const runHostSheetSyncCycle = async (
                         updateCells: {
                             range: {
                                 sheetId,
-                                startRowIndex: SHEET_GUIDE_ROW_COUNT, // 0-based Row 8 (Sheet Row 9)
-                                endRowIndex: SHEET_HEADER_ROW_COUNT, // exclusive 0-based Row 10 (Sheet Rows 9..10)
+                                startRowIndex: SHEET_GUIDE_ROW_COUNT,
+                                endRowIndex: SHEET_HEADER_ROW_COUNT,
                                 startColumnIndex: colIndex,
                                 endColumnIndex: colIndex + 1,
                             },
                             rows: [{ values: [colIdCell] }, { values: [colTitleCell] }],
-                            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,numberFormat)",
+                            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,textFormat.fontFamily,numberFormat)",
                         },
                     });
                 }
 
                 syncColumnDeveloperMetadata(colIndex, listing.listingId);
 
-                // Build day cells 1..daysInMonth down rows 11..(10+daysInMonth)
+                // Build day cells 1..daysInMonth down rows 12..(11+daysInMonth)
                 const fullColCells: RawSheetCell[] = [];
-                let anyDayChangedInCol = isNewCol;
+                let anyDayChangedInCol = isNewCol || layoutShifted;
 
                 for (let day = 1; day <= monthSpec.daysInMonth; day += 1) {
                     const existingCell = targetRow?.cellsByDay.get(day);
@@ -1314,6 +1330,7 @@ export const runHostSheetSyncCycle = async (
                     const cal = calendarMap.get(cellKey);
 
                     let desiredText = "";
+                    let desiredNumberValue: number | undefined;
                     let desiredColor: SheetRgbColor = SHEET_COLORS.WHITE;
                     let desiredBold = false;
                     let desiredNote = "";
@@ -1324,16 +1341,16 @@ export const runHostSheetSyncCycle = async (
                     if (authBooking) {
                         activeBookingId = authBooking.booking.bookingId;
                         if (authBooking.category === "pending_hold") {
-                            desiredText = `G #${activeBookingId}`;
+                            desiredText = "";
                             desiredColor = SHEET_COLORS.PENDING_HOLD_ORANGE;
-                            desiredBold = true;
+                            desiredBold = false;
                             desiredNote = `Giữ chỗ chờ thanh toán #${activeBookingId} (${authBooking.booking.checkInDate} → ${authBooking.booking.checkOutDate})`;
                             snapState = "pending_hold";
                             snapLockSource = "booking_hold";
                         } else {
-                            desiredText = `Đ #${activeBookingId}`;
+                            desiredText = "";
                             desiredColor = SHEET_COLORS.BOOKED_GREEN;
-                            desiredBold = true;
+                            desiredBold = false;
                             desiredNote = `Đã đặt #${activeBookingId} (${authBooking.booking.checkInDate} → ${authBooking.booking.checkOutDate})`;
                             snapState = "booked";
                             snapLockSource = "booking_paid";
@@ -1349,7 +1366,7 @@ export const runHostSheetSyncCycle = async (
                         const existingClassified = classifySheetCalendarCell(existingCell);
                         const preservedCustomText =
                             customHostTextMap.get(cellKey) ||
-                            (existingClassified.state === "host_blocked" && existingClassified.rawValue
+                            (existingClassified.state === "host_blocked" && existingClassified.rawValue && !isPriceOrNumericText(existingClassified.rawValue)
                                 ? sanitizeSheetTextValue(existingClassified.rawValue, 24)
                                 : "K");
                         desiredText = preservedCustomText || "K";
@@ -1362,18 +1379,27 @@ export const runHostSheetSyncCycle = async (
                     } else {
                         snapState = "empty";
                         snapLockSource = "none";
+                        const dailyPrice = cal?.priceOverride ?? getDefaultDailyPrice(listing, isoDate);
+                        if (dailyPrice !== null && dailyPrice !== undefined && Number(dailyPrice) > 0) {
+                            desiredNumberValue = Math.round(Number(dailyPrice));
+                            desiredText = String(desiredNumberValue);
+                        } else {
+                            desiredText = "";
+                        }
                     }
 
                     const dayCell = buildCalendarCellWriteData({
                         text: desiredText,
+                        numberValue: desiredNumberValue,
                         bgColor: desiredColor,
                         bold: desiredBold,
                         note: desiredNote,
+                        fontFamily: SHEET_FONT_FAMILY,
                     }).cell;
 
                     fullColCells.push(dayCell);
 
-                    if (!isCellDisplayEqual(existingCell, desiredText, desiredColor)) {
+                    if (!isCellDisplayEqual(existingCell, desiredText, desiredColor, desiredNumberValue)) {
                         anyDayChangedInCol = true;
                         exportedCellsCount += 1;
                     }
@@ -1404,7 +1430,7 @@ export const runHostSheetSyncCycle = async (
                                 endColumnIndex: colIndex + 1,
                             },
                             rows: fullColCells.map((c) => ({ values: [c] })),
-                            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold),note",
+                            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,textFormat.fontFamily,numberFormat),note",
                         },
                     });
                 }
@@ -1419,8 +1445,13 @@ export const runHostSheetSyncCycle = async (
                 const movedArchivedCol =
                     !structure.isVerticalLayout || archivedColIndex !== sourceCol.colIndex;
 
+                const layoutShiftedArch =
+                    structure.guideRowCount !== undefined &&
+                    structure.guideRowCount !== SHEET_GUIDE_ROW_COUNT;
+
                 if (
                     movedArchivedCol ||
+                    layoutShiftedArch ||
                     sourceCol.colAText !== String(archivedListing.listingId) ||
                     sourceCol.colBTitle !== archivedTitle ||
                     sourceCol.colMismatch
@@ -1437,7 +1468,7 @@ export const runHostSheetSyncCycle = async (
                         userEnteredFormat: {
                             backgroundColorStyle: { rgbColor: SHEET_COLORS.ARCHIVED_BG },
                             horizontalAlignment: "LEFT",
-                            textFormat: { bold: false },
+                            textFormat: { bold: false, fontFamily: SHEET_FONT_FAMILY },
                         },
                     };
 
@@ -1451,14 +1482,14 @@ export const runHostSheetSyncCycle = async (
                                 endColumnIndex: archivedColIndex + 1,
                             },
                             rows: [{ values: [archIdCell] }, { values: [archTitleCell] }],
-                            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,numberFormat)",
+                            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,textFormat.fontFamily,numberFormat)",
                         },
                     });
                 }
 
                 syncColumnDeveloperMetadata(archivedColIndex, archivedListing.listingId);
 
-                if (movedArchivedCol) {
+                if (movedArchivedCol || layoutShiftedArch) {
                     const preservedArchCells: RawSheetCell[] = [];
                     for (let day = 1; day <= monthSpec.daysInMonth; day += 1) {
                         const existingArchCell = sourceCol.cellsByDay.get(day);
@@ -1468,6 +1499,7 @@ export const runHostSheetSyncCycle = async (
                                     text: "",
                                     bgColor: SHEET_COLORS.WHITE,
                                     bold: false,
+                                    fontFamily: SHEET_FONT_FAMILY,
                                 }).cell,
                         );
                     }
@@ -1481,7 +1513,7 @@ export const runHostSheetSyncCycle = async (
                                 endColumnIndex: archivedColIndex + 1,
                             },
                             rows: preservedArchCells.map((c) => ({ values: [c] })),
-                            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold),note",
+                            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,textFormat.fontFamily,numberFormat),note",
                         },
                     });
                 }
@@ -2232,6 +2264,7 @@ export const resolveHostSheetConflict = async (
 
         const prevStates = Array.isArray(details.previousStates) ? details.previousStates : [];
         const datesToCheck = prevStates.map((s) => s.date);
+        const listing = await Listing.findOne({ where: { listingId: conflict.listingId } });
 
         const activeBookings =
             datesToCheck.length === 0
@@ -2279,11 +2312,17 @@ export const resolveHostSheetConflict = async (
                 }
             }
 
-            // Update snapshot so next sync knows Sheet should be reset to empty White!
+            const dailyPrice = cal?.priceOverride ?? (listing ? getDefaultDailyPrice(listing, state.date) : null);
+            const priceText =
+                dailyPrice !== null && dailyPrice !== undefined && Number(dailyPrice) > 0
+                    ? String(Math.round(Number(dailyPrice)))
+                    : null;
+
+            // Update snapshot so next sync knows Sheet should be reset to empty White with price!
             await HostSheetCellSnapshot.update(
                 {
                     lastSheetState: "empty",
-                    lastSheetRawValue: null,
+                    lastSheetRawValue: priceText,
                     lastSheetBgHex: "#FFFFFF",
                     lastAppBlockedByHost: false,
                     lockSource: "none",
@@ -2438,16 +2477,34 @@ const updateSheetCellsAfterBulkUndo = async (
 
         const colIndex = rows[0].colIndex;
         const requests: Array<Record<string, unknown>> = [];
-        const whiteCell = buildCalendarCellWriteData({
-            text: "",
-            bgColor: SHEET_COLORS.WHITE,
-            bold: false,
-            note: "",
-        });
+        const listing = await Listing.findOne({ where: { listingId } });
 
         for (const isoDate of revertedDates) {
             const day = Number(isoDate.slice(8, 10));
             const rowIndex = SHEET_CALENDAR_START_ROW_INDEX + (day - 1);
+            let dayNumberValue: number | undefined;
+            let dayText = "";
+            const cal = await AvailabilityCalendar.findOne({
+                where: {
+                    listingId,
+                    date: isoDate,
+                },
+            });
+            const price =
+                cal?.priceOverride ?? (listing ? getDefaultDailyPrice(listing, isoDate) : null);
+            if (price !== null && price !== undefined && Number(price) > 0) {
+                dayNumberValue = Math.round(Number(price));
+                dayText = String(dayNumberValue);
+            }
+            const restoredCell = buildCalendarCellWriteData({
+                text: dayText,
+                numberValue: dayNumberValue,
+                bgColor: SHEET_COLORS.WHITE,
+                bold: false,
+                note: "",
+                fontFamily: SHEET_FONT_FAMILY,
+            });
+
             requests.push({
                 updateCells: {
                     range: {
@@ -2457,8 +2514,8 @@ const updateSheetCellsAfterBulkUndo = async (
                         startColumnIndex: colIndex,
                         endColumnIndex: colIndex + 1,
                     },
-                    rows: [{ values: [whiteCell.cell] }],
-                    fields: whiteCell.fields,
+                    rows: [{ values: [restoredCell.cell] }],
+                    fields: restoredCell.fields,
                 },
             });
         }

@@ -550,44 +550,105 @@ const seed = async () => {
         }
 
         // Seed Reviews
-        await Review.findOrCreate({
-            where: {
-                listingId: l.listingId,
-                reviewerName: "Lê Hoàng Long",
-            },
-            defaults: {
-                reviewId: l.listingId * 10 + 1,
-                bookingId: null,
-                listingId: l.listingId,
-                reviewerUserId: guestUser.userId,
-                reviewerName: "Lê Hoàng Long",
-                rating: 5,
-                comment:
-                    "Villa quá đẹp, hồ bơi sạch và view biển ngắm hoàng hôn đỉnh cao! Chủ nhà nhiệt tình hỗ trợ đoàn mình tiệc BBQ rất chu đáo. Chắc chắn sẽ quay lại!",
-                hostReply: "Cảm ơn bạn Long và đoàn đã ghé thăm, rất hân hạnh được đón tiếp bạn lần sau nhé!",
-                isVisible: true,
-                deletedAt: null,
-            },
-        });
+        if (l.listingId === 105) {
+            await Review.destroy({
+                where: {
+                    listingId: 105,
+                    reviewerName: ["Lê Hoàng Long", "Nguyễn Hải Đăng"],
+                },
+            });
 
-        await Review.findOrCreate({
-            where: {
-                listingId: l.listingId,
-                reviewerName: "Nguyễn Hải Đăng",
-            },
-            defaults: {
-                reviewId: l.listingId * 10 + 2,
-                bookingId: null,
-                listingId: l.listingId,
-                reviewerUserId: null,
-                reviewerName: "Nguyễn Hải Đăng",
-                rating: 5,
-                comment: "Không gian rộng rãi, tiện nghi cao cấp, phòng ốc thơm tho sạch sẽ. 10/10 điểm!",
-                hostReply: null,
-                isVisible: true,
-                deletedAt: null,
-            },
-        });
+            const reviews105 = [
+                {
+                    reviewId: 1051,
+                    reviewerUserId: guestUser.userId,
+                    reviewerName: "Trần Minh Quân",
+                    rating: 4,
+                    comment:
+                        "Villa 105 có khuôn viên sân vườn rất xanh mát và thoáng đãng! Cả nhà mình ai cũng mê hồ cá Koi, các bé nhỏ thích cho cá ăn và chơi ngoài sân cả buổi. Phòng khách sang trọng, bàn bi-a giải trí buổi tối rất vui, vị trí ngay Bãi Trước nên đi bộ ra biển hay ghé các quán ăn nổi tiếng đều cực kỳ tiện. Trừ 1 sao nhẹ vì cuối tuần đường Quang Trung hơi nhộn nhịp vào giờ cao điểm, còn lại mọi thứ từ phòng ốc đến tiện nghi đều rất tuyệt vời, rất đáng tiền!",
+                    hostReply:
+                        "Dạ em cảm ơn anh Quân và gia đình đã dành thời gian nghỉ dưỡng tại The Palm Villa 105 ạ! Do villa nằm ở vị trí trung tâm Bãi Trước nên dịp cuối tuần sẽ sôi động hơn ngày thường một chút. Rất hân hạnh được đón tiếp gia đình mình trong những chuyến đi tiếp theo!",
+                },
+                {
+                    reviewId: 1052,
+                    reviewerUserId: null,
+                    reviewerName: "Hoàng Thu Trang",
+                    rating: 4,
+                    comment:
+                        "Biệt thự thực tế đẹp và sạch sẽ y hệt như hình mô tả. Nhóm tụi mình 12 người nướng BBQ ngoài sân vườn cực kỳ thoải mái và mát mẻ, khu bếp trang bị đầy đủ dụng cụ nấu nướng. Anh host hỗ trợ siêu nhiệt tình từ lúc nhận phòng đến khi trả phòng. Chỉ góp ý nho nhỏ là nếu phòng tắm tầng trên có thêm 1 máy sấy tóc công suất lớn nữa thì trọn vẹn 5 sao hoàn hảo luôn. Nhất định sẽ giới thiệu bạn bè ghé lại!",
+                    hostReply:
+                        "The Palm Villa cảm ơn Trang và nhóm bạn rất nhiều vì lời khen cũng như góp ý thiết thực ạ! Villa đã trang bị thêm máy sấy tóc công suất lớn cho các phòng theo gợi ý của bạn rồi nhé. Chúc bạn luôn có những chuyến đi thật vui vẻ!",
+                },
+            ];
+
+            for (const r of reviews105) {
+                const [revRecord, revCreated] = await Review.findOrCreate({
+                    where: {
+                        listingId: 105,
+                        reviewerName: r.reviewerName,
+                    },
+                    defaults: {
+                        reviewId: r.reviewId,
+                        bookingId: null,
+                        listingId: 105,
+                        reviewerUserId: r.reviewerUserId,
+                        reviewerName: r.reviewerName,
+                        rating: r.rating,
+                        comment: r.comment,
+                        hostReply: r.hostReply,
+                        isVisible: true,
+                        deletedAt: null,
+                    },
+                });
+
+                if (!revCreated) {
+                    await revRecord.update({
+                        rating: r.rating,
+                        comment: r.comment,
+                        hostReply: r.hostReply,
+                    });
+                }
+            }
+        } else {
+            await Review.findOrCreate({
+                where: {
+                    listingId: l.listingId,
+                    reviewerName: "Lê Hoàng Long",
+                },
+                defaults: {
+                    reviewId: l.listingId * 10 + 1,
+                    bookingId: null,
+                    listingId: l.listingId,
+                    reviewerUserId: guestUser.userId,
+                    reviewerName: "Lê Hoàng Long",
+                    rating: 5,
+                    comment:
+                        "Villa quá đẹp, hồ bơi sạch và view biển ngắm hoàng hôn đỉnh cao! Chủ nhà nhiệt tình hỗ trợ đoàn mình tiệc BBQ rất chu đáo. Chắc chắn sẽ quay lại!",
+                    hostReply: "Cảm ơn bạn Long và đoàn đã ghé thăm, rất hân hạnh được đón tiếp bạn lần sau nhé!",
+                    isVisible: true,
+                    deletedAt: null,
+                },
+            });
+
+            await Review.findOrCreate({
+                where: {
+                    listingId: l.listingId,
+                    reviewerName: "Nguyễn Hải Đăng",
+                },
+                defaults: {
+                    reviewId: l.listingId * 10 + 2,
+                    bookingId: null,
+                    listingId: l.listingId,
+                    reviewerUserId: null,
+                    reviewerName: "Nguyễn Hải Đăng",
+                    rating: 5,
+                    comment: "Không gian rộng rãi, tiện nghi cao cấp, phòng ốc thơm tho sạch sẽ. 10/10 điểm!",
+                    hostReply: null,
+                    isVisible: true,
+                    deletedAt: null,
+                },
+            });
+        }
     }
 
     // 4. Seed Coupons

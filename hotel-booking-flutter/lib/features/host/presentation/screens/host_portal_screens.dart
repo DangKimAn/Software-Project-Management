@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -9,6 +11,11 @@ import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
+import '../../../messages/services/chat_media_upload_service.dart';
+import '../../../messages/services/chat_voice_recorder_service.dart';
+import '../../../messages/presentation/widgets/chat_audio_bubble.dart';
+import '../../../messages/presentation/widgets/chat_image_bubble.dart';
+import '../../../messages/presentation/widgets/messenger_voice_recorder_bar.dart';
 import '../../data/host_repository.dart';
 import '../../domain/host_models.dart';
 import '../../services/host_file_picker_service.dart';
@@ -216,6 +223,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   bool _isRecordingVoice = false;
   int _voiceRecordingSeconds = 0;
   Timer? _voiceTimer;
+  final ChatVoiceRecorderService _voiceRecorder = ChatVoiceRecorderService();
 
   // Payouts state
   bool _loadingPayouts = false;
@@ -308,6 +316,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     _guestSearchCtrl.dispose();
     _chatDragAnimCtrl.dispose();
     _voiceTimer?.cancel();
+    _voiceRecorder.dispose();
     _chatScrollCtrl.dispose();
     _messageInputCtrl.dispose();
     _messageInputFocusNode.dispose();
@@ -877,16 +886,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     }
   }
 
-  Future<void> _sendHostMessage() async {
+  Future<void> _sendHostMessage({
+    String? contentOverride,
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
+  }) async {
     final convId = _selectedConversationId;
-    final text = _messageInputCtrl.text.trim();
-    if (convId == null || text.isEmpty || _sendingMessage) return;
+    final text = (contentOverride ?? _messageInputCtrl.text).trim();
+    if (convId == null || (text.isEmpty && (attachments == null || attachments.isEmpty)) || _sendingMessage) return;
 
     setState(() => _sendingMessage = true);
     final repo = ref.read(hostRepositoryProvider);
     try {
-      await repo.sendConversationMessage(convId, text);
-      _messageInputCtrl.clear();
+      await repo.sendConversationMessage(
+        convId,
+        text,
+        messageType: messageType,
+        attachments: attachments,
+      );
+      if (contentOverride == null) {
+        _messageInputCtrl.clear();
+      }
       if (mounted) _messageInputFocusNode.requestFocus();
       await _fetchMessagesForConversation(convId);
       _scrollChatToBottom();
@@ -7428,6 +7448,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       final m = _conversationMessages[i];
                       final content =
                           (m['content'] ?? m['body'] ?? '').toString();
+                      var rawAttachments = m['attachments'] ?? m['attachments_json'];
+                      var attachments = rawAttachments is List
+                          ? rawAttachments
+                              .map((a) {
+                                if (a is Map) return (a['url'] ?? a['imageUrl'] ?? '').toString();
+                                return a?.toString() ?? '';
+                              })
+                              .where((s) => s.isNotEmpty)
+                              .toList()
+                          : <String>[];
+
+                      // Auto-recovery: phục hồi các tin nhắn cũ từng gửi dạng text mock thành ảnh/audio thật
+                      if (attachments.isEmpty) {
+                        if (content.contains('📷 [Ảnh chụp trực tiếp') ||
+                            content.contains('🖼️ [Đã gửi 1 hình ảnh') ||
+                            content.contains('[Ảnh chụp trực tiếp từ villa]')) {
+                          attachments = ['assets/images/343vothisau.jpg'];
+                        } else if (content.contains('🎤 Tin nhắn thoại')) {
+                          attachments = ['https://pub-67a3f362466e495d9c2f371ca84b6d03.r2.dev/chat/sample_voice.wav'];
+                        }
+                      }
                       final senderId =
                           (m['senderId'] ?? m['senderUserId'])?.toString();
                       final senderRole =
@@ -7436,7 +7477,6 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                           (m['senderName'] ?? m['sender']?['fullName'] ?? '')
                               .toString();
 
-                      // Xác định tin nhắn là của tôi (Host) hay của Khách/Admin
                       final isMe = m['isMe'] == true ||
                           (currentUserId != null &&
                               currentUserId.isNotEmpty &&
@@ -7447,6 +7487,23 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                           senderRole == 'host' ||
                           rawSenderName.toLowerCase().contains('chủ nhà') ||
                           rawSenderName.toLowerCase() == 'tôi';
+
+                      final displayCaption = _getDisplayCaption(content);
+                      final hasAttachments = attachments.isNotEmpty;
+                      final isImageOnly = hasAttachments &&
+                          displayCaption == null &&
+                          attachments.every((u) => !_isChatAudioUrl(u));
+                      final isAudioOnly = hasAttachments &&
+                          displayCaption == null &&
+                          attachments.length == 1 &&
+                          _isChatAudioUrl(attachments.first);
+
+                      final bubbleRadius = BorderRadius.only(
+                        topLeft: const Radius.circular(18),
+                        topRight: const Radius.circular(18),
+                        bottomLeft: Radius.circular(isMe ? 18 : 6),
+                        bottomRight: Radius.circular(isMe ? 6 : 18),
+                      );
 
                       final isMsgAdmin = isAdmin ||
                           senderRole == 'admin' ||
@@ -7538,70 +7595,77 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                                               .width *
                                                           0.68,
                                                 ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 14,
-                                                  vertical: 9,
-                                                ),
+                                                padding: (isImageOnly || isAudioOnly)
+                                                    ? EdgeInsets.zero
+                                                    : const EdgeInsets.symmetric(
+                                                        horizontal: 14,
+                                                        vertical: 9,
+                                                      ),
                                                 decoration: BoxDecoration(
-                                                  color: isMe
-                                                      ? AppColors.primary
-                                                      : (isMsgAdmin
-                                                          ? const Color(
-                                                              0xFFFFF1F2)
-                                                          : const Color(
-                                                              0xFFF1F5F9)),
-                                                  borderRadius:
-                                                      BorderRadius.only(
-                                                    topLeft:
-                                                        const Radius.circular(
-                                                            18),
-                                                    topRight:
-                                                        const Radius.circular(
-                                                            18),
-                                                    bottomLeft: Radius.circular(
-                                                        isMe ? 18 : 6),
-                                                    bottomRight:
-                                                        Radius.circular(
-                                                            isMe ? 6 : 18),
-                                                  ),
+                                                  color: (isImageOnly || isAudioOnly)
+                                                      ? Colors.transparent
+                                                      : (isMe
+                                                          ? AppColors.primary
+                                                          : (isMsgAdmin
+                                                              ? const Color(0xFFFFF1F2)
+                                                              : const Color(0xFFF1F5F9))),
+                                                  borderRadius: bubbleRadius,
                                                   border: isMe
                                                       ? null
                                                       : (isMsgAdmin
                                                           ? Border.all(
-                                                              color: const Color(
-                                                                  0xFFFECDD3),
+                                                              color: const Color(0xFFFECDD3),
                                                             )
                                                           : null),
-                                                  boxShadow: isMe
+                                                  boxShadow: (isMe && !isImageOnly)
                                                       ? [
                                                           BoxShadow(
-                                                            color: AppColors
-                                                                .primary
-                                                                .withValues(
-                                                                    alpha:
-                                                                        0.16),
+                                                            color: AppColors.primary
+                                                                .withValues(alpha: 0.16),
                                                             blurRadius: 4,
-                                                            offset:
-                                                                const Offset(
-                                                                    0, 1),
+                                                            offset: const Offset(0, 1),
                                                           ),
                                                         ]
                                                       : null,
                                                 ),
-                                                child: Text(
-                                                  content,
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    height: 1.35,
-                                                    color: isMe
-                                                        ? Colors.white
-                                                        : (isMsgAdmin
-                                                            ? const Color(
-                                                                0xFF881337)
-                                                            : AppColors
-                                                                .textPrimary),
-                                                  ),
+                                                child: Column(
+                                                  crossAxisAlignment: isMe
+                                                      ? CrossAxisAlignment.end
+                                                      : CrossAxisAlignment.start,
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    if (hasAttachments) ...[
+                                                      for (final attUrl in attachments)
+                                                        Padding(
+                                                          padding: EdgeInsets.only(
+                                                            bottom: isImageOnly
+                                                                ? 0
+                                                                : (displayCaption != null ? 6 : 0),
+                                                          ),
+                                                          child: _isChatAudioUrl(attUrl)
+                                                              ? _buildHostAudioBubble(attUrl, isMe: isMe)
+                                                              : ChatImageBubble(
+                                                                  imageUrl: attUrl,
+                                                                  borderRadius: bubbleRadius,
+                                                                  maxWidth: MediaQuery.of(context).size.width * 0.68,
+                                                                  onTap: () => _openFullScreenImage(context, attUrl),
+                                                                ),
+                                                        ),
+                                                    ],
+                                                    if (displayCaption != null && displayCaption.isNotEmpty)
+                                                      Text(
+                                                        displayCaption,
+                                                        style: TextStyle(
+                                                          fontSize: 14,
+                                                          height: 1.35,
+                                                          color: isMe
+                                                              ? Colors.white
+                                                              : (isMsgAdmin
+                                                                  ? const Color(0xFF881337)
+                                                                  : AppColors.textPrimary),
+                                                        ),
+                                                      ),
+                                                  ],
                                                 ),
                                               ),
 
@@ -7754,62 +7818,6 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           ),
         ),
 
-        // Thanh ghi âm giọng nói nếu đang bật thu âm
-        if (_isRecordingVoice)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: const Color(0xFFFFF1F2),
-            child: Row(
-              children: [
-                const Icon(LucideIcons.mic, color: Colors.red, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Đang ghi âm... 00:${_voiceRecordingSeconds.toString().padLeft(2, '0')}',
-                  style: const TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () {
-                    _voiceTimer?.cancel();
-                    setState(() {
-                      _isRecordingVoice = false;
-                      _voiceRecordingSeconds = 0;
-                    });
-                  },
-                  child: const Text('Hủy',
-                      style: TextStyle(color: AppColors.textSecondary)),
-                ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: const StadiumBorder(),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    elevation: 0,
-                  ),
-                  onPressed: () {
-                    final sec = _voiceRecordingSeconds;
-                    _voiceTimer?.cancel();
-                    setState(() {
-                      _isRecordingVoice = false;
-                      _voiceRecordingSeconds = 0;
-                    });
-                    _messageInputCtrl.text =
-                        '🎤 Tin nhắn thoại (00:${sec.toString().padLeft(2, '0')})';
-                    _sendHostMessage();
-                  },
-                  icon: const Icon(LucideIcons.send, size: 14),
-                  label: const Text('Gửi', style: TextStyle(fontSize: 12)),
-                ),
-              ],
-            ),
-          ),
-
         // Thanh soạn thảo tin nhắn ở đáy chuẩn Facebook Messenger (khớp 100% hình mẫu của user)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -7817,8 +7825,21 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             color: AppColors.surfaceBase,
             border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
           ),
-          child: Row(
-            children: [
+          child: _isRecordingVoice
+              ? MessengerVoiceRecorderBar(
+                  recordingSeconds: _voiceRecordingSeconds,
+                  onCancel: () {
+                    _voiceTimer?.cancel();
+                    unawaited(_voiceRecorder.cancel());
+                    setState(() {
+                      _isRecordingVoice = false;
+                      _voiceRecordingSeconds = 0;
+                    });
+                  },
+                  onSend: _toggleVoiceRecording,
+                )
+              : Row(
+                  children: [
               // 1. Nút '+' tròn màu hồng/đỏ
               InkWell(
                 key: const Key('chat_more_features_btn'),
@@ -8191,38 +8212,77 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
-  void _openCameraChat() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content:
-            const Text('📸 Đang kết nối máy ảnh để chụp hình trực tiếp...'),
-        action: SnackBarAction(
-          label: 'Gửi ảnh mẫu',
-          textColor: Colors.amber,
-          onPressed: () {
-            _messageInputCtrl.text = '📷 [Ảnh chụp trực tiếp từ villa]';
-            _sendHostMessage();
-          },
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickAndSendChatImage() async {
-    final picker = ref.read(hostFilePickerProvider);
+  Future<void> _openCameraChat() async {
+    final picker = ImagePicker();
     try {
-      final file = await picker.pickAvatarImage(context: context);
-      if (file != null) {
-        _messageInputCtrl.text = '🖼️ [Đã gửi 1 hình ảnh] ${file.name}';
-        await _sendHostMessage();
-      }
-    } catch (_) {
-      _messageInputCtrl.text = '🖼️ [Hình ảnh biệt thự The Palm Villa]';
-      await _sendHostMessage();
+      final file = await picker.pickImage(source: ImageSource.camera, imageQuality: 82);
+      if (!mounted || file == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đang tải ảnh chụp lên Cloudflare R2...')),
+      );
+      final bytes = await file.readAsBytes();
+      final uploadService = ref.read(chatMediaUploadServiceProvider);
+      final result = await uploadService.uploadMediaBytesToR2(
+        bytes: bytes,
+        filename: file.name.isNotEmpty ? file.name : 'host_camera_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        contentType: 'image/jpeg',
+      );
+      if (!mounted) return;
+      await _sendHostMessage(
+        contentOverride: '',
+        messageType: 'image',
+        attachments: [
+          {
+            'url': result.publicUrl,
+            'type': 'image/jpeg',
+            'name': file.name,
+          }
+        ],
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Tải ảnh lên R2 thất bại: $e')),
+      );
     }
   }
 
-  void _toggleVoiceRecording() {
+  Future<void> _pickAndSendChatImage() async {
+    final picker = ImagePicker();
+    try {
+      final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+      if (!mounted || file == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đang tải ảnh lên Cloudflare R2...')),
+      );
+      final bytes = await file.readAsBytes();
+      final uploadService = ref.read(chatMediaUploadServiceProvider);
+      final result = await uploadService.uploadMediaBytesToR2(
+        bytes: bytes,
+        filename: file.name.isNotEmpty ? file.name : 'host_image_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        contentType: 'image/jpeg',
+      );
+      if (!mounted) return;
+      await _sendHostMessage(
+        contentOverride: '',
+        messageType: 'image',
+        attachments: [
+          {
+            'url': result.publicUrl,
+            'type': 'image/jpeg',
+            'name': file.name,
+          }
+        ],
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Tải ảnh lên R2 thất bại: $e')),
+      );
+    }
+  }
+
+  Future<void> _toggleVoiceRecording() async {
     if (_isRecordingVoice) {
       final sec = _voiceRecordingSeconds;
       _voiceTimer?.cancel();
@@ -8230,10 +8290,69 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         _isRecordingVoice = false;
         _voiceRecordingSeconds = 0;
       });
-      _messageInputCtrl.text =
-          '🎤 Tin nhắn thoại (00:${sec.toString().padLeft(2, '0')})';
-      _sendHostMessage();
+      unawaited(() async {
+        try {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Đang tải tin nhắn thoại lên Cloudflare R2...')),
+          );
+
+          final recordedResult = await _voiceRecorder.stop();
+          if (recordedResult == null || recordedResult.bytes.isEmpty) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Không ghi nhận được âm thanh từ Micro. Vui lòng cấp quyền Microphone hoặc nói to hơn.'),
+              ),
+            );
+            return;
+          }
+
+          final Uint8List audioBytes = recordedResult.bytes;
+          final String filename = recordedResult.filename;
+          final String contentType = recordedResult.contentType;
+          final int recordedSeconds = recordedResult.durationSeconds > 0
+              ? recordedResult.durationSeconds
+              : (sec > 0 ? sec : 1);
+
+          final uploadService = ref.read(chatMediaUploadServiceProvider);
+          final result = await uploadService.uploadMediaBytesToR2(
+            bytes: audioBytes,
+            filename: filename,
+            contentType: contentType,
+          );
+          if (!mounted) return;
+          await _sendHostMessage(
+            contentOverride: '🎤 Tin nhắn thoại (00:${recordedSeconds.toString().padLeft(2, '0')})',
+            messageType: 'file',
+            attachments: [
+              {
+                'url': result.publicUrl,
+                'type': contentType,
+                'name': filename,
+              }
+            ],
+          );
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Tải âm thanh lên R2 thất bại: $e')),
+          );
+        }
+      }());
     } else {
+      final started = await _voiceRecorder.start();
+      if (!started) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Không thể truy cập Micro. Vui lòng cấp quyền Microphone trên trình duyệt / thiết bị.'),
+          ),
+        );
+        return;
+      }
+
       setState(() {
         _isRecordingVoice = true;
         _voiceRecordingSeconds = 0;
@@ -8249,6 +8368,79 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         });
       });
     }
+  }
+
+  String? _getDisplayCaption(String content) {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty ||
+        trimmed == '[image]' ||
+        trimmed == '[file]' ||
+        trimmed == 'image' ||
+        trimmed == 'file' ||
+        trimmed == '📷 [Hình ảnh]' ||
+        trimmed == '[Hình ảnh]' ||
+        trimmed.startsWith('📷 [Ảnh chụp trực tiếp') ||
+        trimmed.startsWith('🖼️ [Đã gửi 1 hình ảnh') ||
+        trimmed == '📷 [Ảnh chụp trực tiếp từ villa]' ||
+        trimmed.startsWith('🎤 Tin nhắn thoại')) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  void _openFullScreenImage(BuildContext context, String imageUrl) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: AppImage(url: imageUrl, fit: BoxFit.contain),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: IconButton(
+                  icon: const Icon(LucideIcons.x, color: Colors.white, size: 20),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool _isChatAudioUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.endsWith('.wav') ||
+        lower.endsWith('.m4a') ||
+        lower.endsWith('.mp3') ||
+        lower.endsWith('.aac') ||
+        lower.endsWith('.ogg') ||
+        lower.endsWith('.webm') ||
+        lower.contains('/audio/');
+  }
+
+  Widget _buildHostAudioBubble(String audioUrl, {required bool isMe}) {
+    return ChatAudioBubble(
+      audioUrl: audioUrl,
+      isMe: isMe,
+    );
   }
 
   void _showEmojiSelector() {

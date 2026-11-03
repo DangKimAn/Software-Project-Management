@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,6 +22,11 @@ import '../../../../shared/widgets/app_image.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../data/conversations_repository.dart';
+import '../../services/chat_media_upload_service.dart';
+import '../../services/chat_voice_recorder_service.dart';
+import '../widgets/chat_audio_bubble.dart';
+import '../widgets/chat_image_bubble.dart';
+import '../widgets/messenger_voice_recorder_bar.dart';
 
 enum _ChatPortalRole { guest, host, admin }
 
@@ -104,6 +110,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   bool _isRecordingVoice = false;
   int _voiceRecordingSeconds = 0;
   Timer? _voiceTimer;
+  final ChatVoiceRecorderService _voiceRecorder = ChatVoiceRecorderService();
   String _chatQuickEmoji = '👍';
 
   bool _isSwitchingConversation = false;
@@ -300,6 +307,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     _expandedTimestampKeys.clear();
     _reactionActiveMsgKey = null;
     _voiceTimer?.cancel();
+    unawaited(_voiceRecorder.cancel());
     _isRecordingVoice = false;
     _voiceRecordingSeconds = 0;
     _isSwitchingConversation = true;
@@ -745,10 +753,12 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   Future<void> _sendDirectContent(
     String rawContent, {
     bool clearInput = false,
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
   }) async {
     final convId = _selectedConversationId;
     final text = rawContent.trim();
-    if (convId == null || convId.isEmpty || text.isEmpty) return;
+    if (convId == null || convId.isEmpty || (text.isEmpty && (attachments == null || attachments.isEmpty))) return;
 
     final currentUserId = ref.read(authNotifierProvider).valueOrNull?.id ?? '';
     if (currentUserId.isEmpty) return;
@@ -771,6 +781,13 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       conversationId: convId,
       senderId: currentUserId,
       content: text,
+      messageType: messageType,
+      attachments: attachments != null
+          ? attachments
+              .map((a) => (a['url'] ?? '').toString())
+              .where((s) => s.isNotEmpty)
+              .toList()
+          : const [],
       createdAt: nowIso,
       status: MessageDeliveryStatus.sending,
     );
@@ -796,6 +813,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       conversationId: convId,
       localId: localId,
       content: text,
+      messageType: messageType,
+      attachments: attachments,
     );
   }
 
@@ -843,14 +862,31 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
         source: ImageSource.camera,
         imageQuality: 82,
       );
+      if (!mounted || file == null) return;
+      AppToast.show(context, 'Đang tải ảnh chụp lên Cloudflare R2...', type: AppToastType.info);
+      final bytes = await file.readAsBytes();
+      final uploadService = ref.read(chatMediaUploadServiceProvider);
+      final result = await uploadService.uploadMediaBytesToR2(
+        bytes: bytes,
+        filename: file.name.isNotEmpty ? file.name : 'camera_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        contentType: 'image/jpeg',
+      );
       if (!mounted) return;
-      if (file != null) {
-        await _sendDirectContent('📷 [Ảnh chụp trực tiếp] ${file.name}');
-        return;
-      }
-    } catch (_) {
+      await _sendDirectContent(
+        '',
+        messageType: 'image',
+        attachments: [
+          {
+            'url': result.publicUrl,
+            'type': 'image/jpeg',
+            'name': file.name,
+          }
+        ],
+      );
+    } catch (e) {
       if (!mounted) return;
-      await _sendDirectContent('📷 [Ảnh chụp trực tiếp từ ứng dụng]');
+      final failure = DioClient.handleError(e);
+      AppToast.show(context, 'Tải ảnh lên R2 thất bại: ${failure.message}', type: AppToastType.error);
     }
   }
 
@@ -860,17 +896,35 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
         source: ImageSource.gallery,
         imageQuality: 85,
       );
+      if (!mounted || file == null) return;
+      AppToast.show(context, 'Đang tải ảnh lên Cloudflare R2...', type: AppToastType.info);
+      final bytes = await file.readAsBytes();
+      final uploadService = ref.read(chatMediaUploadServiceProvider);
+      final result = await uploadService.uploadMediaBytesToR2(
+        bytes: bytes,
+        filename: file.name.isNotEmpty ? file.name : 'gallery_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        contentType: 'image/jpeg',
+      );
       if (!mounted) return;
-      if (file != null) {
-        await _sendDirectContent('🖼️ [Đã gửi 1 hình ảnh] ${file.name}');
-      }
-    } catch (_) {
+      await _sendDirectContent(
+        '',
+        messageType: 'image',
+        attachments: [
+          {
+            'url': result.publicUrl,
+            'type': 'image/jpeg',
+            'name': file.name,
+          }
+        ],
+      );
+    } catch (e) {
       if (!mounted) return;
-      await _sendDirectContent('🖼️ [Đã gửi 1 hình ảnh đính kèm]');
+      final failure = DioClient.handleError(e);
+      AppToast.show(context, 'Tải ảnh lên R2 thất bại: ${failure.message}', type: AppToastType.error);
     }
   }
 
-  void _toggleVoiceRecording() {
+  Future<void> _toggleVoiceRecording() async {
     if (_isRecordingVoice) {
       final sec = _voiceRecordingSeconds;
       _voiceTimer?.cancel();
@@ -878,12 +932,65 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
         _isRecordingVoice = false;
         _voiceRecordingSeconds = 0;
       });
-      unawaited(
-        _sendDirectContent(
-          '🎤 Tin nhắn thoại (00:${sec.toString().padLeft(2, '0')})',
-        ),
-      );
+      unawaited(() async {
+        try {
+          if (!mounted) return;
+          AppToast.show(context, 'Đang tải tin nhắn thoại lên Cloudflare R2...', type: AppToastType.info);
+
+          final recordedResult = await _voiceRecorder.stop();
+          if (recordedResult == null || recordedResult.bytes.isEmpty) {
+            if (!mounted) return;
+            AppToast.show(
+              context,
+              'Không ghi nhận được âm thanh từ Micro. Vui lòng cấp quyền Microphone hoặc nói to hơn.',
+              type: AppToastType.warning,
+            );
+            return;
+          }
+
+          final Uint8List audioBytes = recordedResult.bytes;
+          final String filename = recordedResult.filename;
+          final String contentType = recordedResult.contentType;
+          final int recordedSeconds = recordedResult.durationSeconds > 0
+              ? recordedResult.durationSeconds
+              : (sec > 0 ? sec : 1);
+
+          final uploadService = ref.read(chatMediaUploadServiceProvider);
+          final result = await uploadService.uploadMediaBytesToR2(
+            bytes: audioBytes,
+            filename: filename,
+            contentType: contentType,
+          );
+          if (!mounted) return;
+          await _sendDirectContent(
+            '🎤 Tin nhắn thoại (00:${recordedSeconds.toString().padLeft(2, '0')})',
+            messageType: 'file',
+            attachments: [
+              {
+                'url': result.publicUrl,
+                'type': contentType,
+                'name': filename,
+              }
+            ],
+          );
+        } catch (e) {
+          if (!mounted) return;
+          final failure = DioClient.handleError(e);
+          AppToast.show(context, 'Tải âm thanh lên R2 thất bại: ${failure.message}', type: AppToastType.error);
+        }
+      }());
     } else {
+      final started = await _voiceRecorder.start();
+      if (!started) {
+        if (!mounted) return;
+        AppToast.show(
+          context,
+          'Không thể truy cập Micro. Vui lòng cấp quyền Microphone trên trình duyệt / thiết bị.',
+          type: AppToastType.warning,
+        );
+        return;
+      }
+
       setState(() {
         _isRecordingVoice = true;
         _voiceRecordingSeconds = 0;
@@ -1215,6 +1322,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       conversationId: convId,
       localId: localId,
       content: failedMsg.content,
+      messageType: failedMsg.messageType,
+      attachments: failedMsg.attachments.map((u) => {'url': u}).toList(),
     );
   }
 
@@ -1232,11 +1341,15 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     required String conversationId,
     required String localId,
     required String content,
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
   }) async {
     try {
       final sent = await ref.read(conversationsRepositoryProvider).sendMessage(
             conversationId: conversationId,
             content: content,
+            messageType: messageType,
+            attachments: attachments,
           );
       if (!mounted) return;
       final confirmed = sent.copyWith(
@@ -1368,6 +1481,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     }
     _typingTimers.clear();
     _voiceTimer?.cancel();
+    _voiceRecorder.dispose();
     _socketMessageSub?.cancel();
     _socketErrorSub?.cancel();
     _socketTypingSub?.cancel();
@@ -2252,69 +2366,6 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                   ),
                 ),
 
-              // ── Voice Recording Banner ──
-              if (!isForbidden && _isRecordingVoice)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  color: const Color(0xFFFFF1F2),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        LucideIcons.mic,
-                        color: AppColors.primary,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Đang ghi âm... 00:${_voiceRecordingSeconds.toString().padLeft(2, '0')}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          _voiceTimer?.cancel();
-                          setState(() {
-                            _isRecordingVoice = false;
-                            _voiceRecordingSeconds = 0;
-                          });
-                        },
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(48, 40),
-                        ),
-                        child: const Text(
-                          'Hủy',
-                          style: TextStyle(color: AppColors.textSecondary),
-                        ),
-                      ),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(48, 40),
-                          shape: const StadiumBorder(),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          elevation: 0,
-                        ),
-                        onPressed: _toggleVoiceRecording,
-                        icon: const Icon(LucideIcons.send, size: 14),
-                        label:
-                            const Text('Gửi', style: TextStyle(fontSize: 12)),
-                      ),
-                    ],
-                  ),
-                ),
-
               // ── Unified Messenger Bottom Composer Bar ──
               if (!isForbidden)
                 Container(
@@ -2331,9 +2382,22 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                         horizontal: 8,
                         vertical: 6,
                       ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
+                      child: _isRecordingVoice
+                          ? MessengerVoiceRecorderBar(
+                              recordingSeconds: _voiceRecordingSeconds,
+                              onCancel: () {
+                                _voiceTimer?.cancel();
+    unawaited(_voiceRecorder.cancel());
+                                setState(() {
+                                  _isRecordingVoice = false;
+                                  _voiceRecordingSeconds = 0;
+                                });
+                              },
+                              onSend: _toggleVoiceRecording,
+                            )
+                          : Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
                           // 1. Nút '+' tiện ích mở rộng tròn màu hồng
                           Semantics(
                             button: true,
@@ -2642,6 +2706,79 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     );
   }
 
+  String? _getDisplayCaption(String content) {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty ||
+        trimmed == '[image]' ||
+        trimmed == '[file]' ||
+        trimmed == 'image' ||
+        trimmed == 'file' ||
+        trimmed == '📷 [Hình ảnh]' ||
+        trimmed == '[Hình ảnh]' ||
+        trimmed.startsWith('📷 [Ảnh chụp trực tiếp') ||
+        trimmed.startsWith('🖼️ [Đã gửi 1 hình ảnh') ||
+        trimmed == '📷 [Ảnh chụp trực tiếp từ villa]' ||
+        trimmed.startsWith('🎤 Tin nhắn thoại')) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  void _openFullScreenImage(BuildContext context, String imageUrl) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: AppImage(url: imageUrl, fit: BoxFit.contain),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: IconButton(
+                  icon: const Icon(LucideIcons.x, color: Colors.white, size: 20),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool _isAudioUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.endsWith('.wav') ||
+        lower.endsWith('.m4a') ||
+        lower.endsWith('.mp3') ||
+        lower.endsWith('.aac') ||
+        lower.endsWith('.ogg') ||
+        lower.endsWith('.webm') ||
+        lower.contains('/audio/');
+  }
+
+  Widget _buildAudioBubble(String audioUrl, {required bool isMe}) {
+    return ChatAudioBubble(
+      audioUrl: audioUrl,
+      isMe: isMe,
+    );
+  }
+
   Widget _buildMessageBubble(
     ChatMessageItem msg, {
     required String currentUserId,
@@ -2658,6 +2795,15 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     final selectedReaction = _messageReactions[stableKey];
     final showReactionPicker = _reactionActiveMsgKey == stableKey;
     final isTimestampExpanded = _expandedTimestampKeys.contains(stableKey);
+    final displayCaption = _getDisplayCaption(msg.content);
+    final hasAttachments = msg.attachments.isNotEmpty;
+    final isImageOnly = hasAttachments &&
+        displayCaption == null &&
+        msg.attachments.every((u) => !_isAudioUrl(u));
+    final isAudioOnly = hasAttachments &&
+        displayCaption == null &&
+        msg.attachments.length == 1 &&
+        _isAudioUrl(msg.attachments.first);
 
     final bubbleRadius = isMe
         ? BorderRadius.only(
@@ -2781,14 +2927,18 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                         clipBehavior: Clip.none,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
-                            ),
+                            padding: (isImageOnly || isAudioOnly)
+                                ? EdgeInsets.zero
+                                : const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 10,
+                                  ),
                             constraints:
                                 BoxConstraints(maxWidth: maxBubbleWidth),
                             decoration: BoxDecoration(
-                              color: bgColor,
+                              color: (isImageOnly || isAudioOnly)
+                                  ? Colors.transparent
+                                  : bgColor,
                               borderRadius: bubbleRadius,
                               border: msg.isFailed
                                   ? Border.all(color: AppColors.error)
@@ -2800,27 +2950,27 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                   : CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (msg.attachments.isNotEmpty) ...[
+                                if (hasAttachments) ...[
                                   for (final attachmentUrl in msg.attachments)
                                     Padding(
-                                      padding: const EdgeInsets.only(
-                                        bottom: AppSpacing.s8,
+                                      padding: EdgeInsets.only(
+                                        bottom: isImageOnly
+                                            ? 0
+                                            : (displayCaption != null ? AppSpacing.s8 : 0),
                                       ),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(14),
-                                        child: ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            maxHeight: 180,
-                                            maxWidth: 260,
-                                          ),
-                                          child: AppImage(url: attachmentUrl),
-                                        ),
-                                      ),
+                                      child: _isAudioUrl(attachmentUrl)
+                                          ? _buildAudioBubble(attachmentUrl, isMe: isMe)
+                                          : ChatImageBubble(
+                                              imageUrl: attachmentUrl,
+                                              borderRadius: bubbleRadius,
+                                              maxWidth: maxBubbleWidth,
+                                              onTap: () => _openFullScreenImage(context, attachmentUrl),
+                                            ),
                                     ),
                                 ],
-                                if (msg.content.isNotEmpty)
+                                if (displayCaption != null && displayCaption.isNotEmpty)
                                   Text(
-                                    msg.content,
+                                    displayCaption,
                                     softWrap: true,
                                     style: TextStyle(
                                       fontSize: 14.5,

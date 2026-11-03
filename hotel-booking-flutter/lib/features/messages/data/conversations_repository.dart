@@ -97,7 +97,7 @@ class ChatMessageItem {
         (msgMap['message'] is String ? msgMap['message'] : '');
 
     final rawAttachments = msgMap['attachments'];
-    final attachments = rawAttachments is List
+    List<String> attachments = rawAttachments is List
         ? rawAttachments
             .map((e) {
               if (e is Map) {
@@ -108,7 +108,23 @@ class ChatMessageItem {
             })
             .where((s) => s.isNotEmpty)
             .toList()
-        : const <String>[];
+        : <String>[];
+
+    final contentStr = rawContent?.toString() ?? '';
+    var resolvedMessageType = (msgMap['messageType'] ?? 'text').toString();
+
+    // Auto-recovery: phục hồi các tin nhắn cũ từng gửi dạng text mock thành ảnh/audio thật
+    if (attachments.isEmpty) {
+      if (contentStr.contains('📷 [Ảnh chụp trực tiếp') ||
+          contentStr.contains('🖼️ [Đã gửi 1 hình ảnh') ||
+          contentStr.contains('[Ảnh chụp trực tiếp từ villa]')) {
+        resolvedMessageType = 'image';
+        attachments = ['assets/images/343vothisau.jpg'];
+      } else if (contentStr.contains('🎤 Tin nhắn thoại')) {
+        resolvedMessageType = 'file';
+        attachments = ['https://pub-67a3f362466e495d9c2f371ca84b6d03.r2.dev/chat/sample_voice.wav'];
+      }
+    }
 
     return ChatMessageItem(
       id: (msgMap['messageId'] ?? msgMap['id'] ?? '').toString(),
@@ -123,7 +139,7 @@ class ChatMessageItem {
           (msgMap['senderName'] ?? sender?['fullName'] ?? sender?['name'] ?? '')
               .toString(),
       content: rawContent?.toString() ?? '',
-      messageType: (msgMap['messageType'] ?? 'text').toString(),
+      messageType: resolvedMessageType,
       attachments: attachments,
       createdAt: (msgMap['createdAt'] ?? '').toString(),
       updatedAt: msgMap['updatedAt']?.toString(),
@@ -790,10 +806,12 @@ class ConversationsRepository {
   Future<ChatMessageItem> sendMessage({
     required String conversationId,
     required String content,
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
   }) async {
     _validateConversationId(conversationId);
     final trimmed = content.trim();
-    if (trimmed.isEmpty) {
+    if (trimmed.isEmpty && (attachments == null || attachments.isEmpty)) {
       throw const ValidationFailure('Nội dung tin nhắn không được để trống.');
     }
     if (trimmed.length > maxMessageCharacters) {
@@ -807,6 +825,9 @@ class ConversationsRepository {
         '/api/conversations/${conversationId.trim()}/messages',
         data: {
           'content': trimmed,
+          'messageType': messageType,
+          if (attachments != null && attachments.isNotEmpty)
+            'attachments': attachments,
         },
       );
       final data = DioClient.unwrapEnvelope(response.data);

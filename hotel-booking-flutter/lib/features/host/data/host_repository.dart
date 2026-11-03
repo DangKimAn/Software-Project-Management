@@ -1417,15 +1417,22 @@ class HostRepository {
   /// `POST /api/conversations/:conversationId/messages`
   Future<Map<String, dynamic>> sendConversationMessage(
     String conversationId,
-    String content,
-  ) async {
+    String content, {
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
+  }) async {
     final trimmed = content.trim();
-    if (trimmed.isEmpty) {
+    if (trimmed.isEmpty && (attachments == null || attachments.isEmpty)) {
       throw ArgumentError('Nội dung tin nhắn không được để trống.');
     }
     final response = await _client.dio.post<dynamic>(
       '/api/conversations/$conversationId/messages',
-      data: {'content': trimmed},
+      data: {
+        'content': trimmed,
+        'messageType': messageType,
+        if (attachments != null && attachments.isNotEmpty)
+          'attachments': attachments,
+      },
     );
     return _unwrapMap(response.data);
   }

@@ -529,7 +529,7 @@ const createMessageInTransaction = async (
         {
             conversationId,
             senderId,
-            content: content || (messageType === "image" ? "[image]" : "[file]"),
+            content: content || "",
             messageType,
             attachments,
             createdAt: now,
@@ -540,7 +540,7 @@ const createMessageInTransaction = async (
 
     await Conversation.update(
         {
-            lastMessage: message.content,
+            lastMessage: content || (messageType === "image" ? "📷 [Hình ảnh]" : "[Tệp đính kèm]"),
             lastMessageAt: now,
         },
         {
@@ -858,11 +858,11 @@ export const sendConversationMessage = async (
     input: SendMessageInput,
 ) => {
     const userId = getCurrentUserId(user);
-    const messageType = input.messageType ?? "text";
+    const messageType = input.messageType ?? (input.attachments && input.attachments.length > 0 ? "image" : "text");
     const content = normalizeMessageContent(input.content, true);
     const attachments = normalizeAttachments(input.attachments ?? [], messageType);
 
-    if (messageType === "text" && !content) {
+    if (messageType === "text" && !content && attachments.length === 0) {
         throw new ApiError(422, "Validation error", [
             {
                 path: "content",

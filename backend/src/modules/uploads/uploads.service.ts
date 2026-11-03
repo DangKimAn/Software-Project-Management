@@ -9,7 +9,7 @@ import { getEnv } from "../../config/env";
 import { logger } from "../../config/logger";
 import Listing from "../../models/listing";
 
-export type UploadFolder = "listings" | "avatars" | "verifications" | "misc";
+export type UploadFolder = "listings" | "avatars" | "verifications" | "misc" | "chat";
 
 export type PresignUploadInput = {
     folder: UploadFolder;
@@ -27,14 +27,31 @@ export type UploadActor = {
 
 const uploadUrlExpiresInSeconds = 300;
 
-const imageExtensionsByContentType: Record<string, string> = {
+const mediaExtensionsByContentType: Record<string, string> = {
     "image/jpeg": "jpg",
     "image/png": "png",
     "image/webp": "webp",
     "image/gif": "gif",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/m4a": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/mp4": "m4a",
+    "audio/aac": "aac",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/ogg": "ogg",
+    "audio/webm": "webm",
 };
 
-const allowedContentTypes = new Set(Object.keys(imageExtensionsByContentType));
+const imageContentTypes = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+]);
+
+const allowedContentTypes = new Set(Object.keys(mediaExtensionsByContentType));
 
 const assertRequiredR2Env = () => {
     const env = getEnv();
@@ -146,24 +163,38 @@ export const createPresignedUploadUrl = async (
     validateFilename(input.filename);
     assertFolderListingId(input);
 
-    if (!allowedContentTypes.has(input.contentType)) {
-        throw new ApiError(422, "Validation error", [
-            {
-                path: "contentType",
-                msg: "Only JPG, PNG, WebP, or GIF image files are allowed",
-            },
-        ]);
+    const isChatFolder = input.folder === "chat";
+    const isImage = imageContentTypes.has(input.contentType);
+
+    if (isChatFolder) {
+        if (!allowedContentTypes.has(input.contentType)) {
+            throw new ApiError(422, "Validation error", [
+                {
+                    path: "contentType",
+                    msg: "Unsupported media type. Allowed images: JPG, PNG, WebP, GIF. Allowed audio: MP3, M4A, AAC, WAV, OGG, WebM.",
+                },
+            ]);
+        }
+    } else {
+        if (!isImage) {
+            throw new ApiError(422, "Validation error", [
+                {
+                    path: "contentType",
+                    msg: "Unsupported media type. Only JPG, PNG, WebP, or GIF are allowed.",
+                },
+            ]);
+        }
     }
 
-    const maxUploadSizeBytes = 10 * 1024 * 1024;
+    const maxUploadSizeBytes = 25 * 1024 * 1024;
     if (input.size !== undefined && input.size !== null) {
         if (!Number.isInteger(input.size) || input.size < 1 || input.size > maxUploadSizeBytes) {
-            throw new ApiError(413, "Upload file size must be between 1 byte and 10MB");
+            throw new ApiError(413, "Upload file size must be between 1 byte and 25MB");
         }
     }
 
     const r2Config = assertRequiredR2Env();
-    const extension = imageExtensionsByContentType[input.contentType];
+    const extension = mediaExtensionsByContentType[input.contentType] ?? "bin";
     const uuid = crypto.randomUUID();
     const objectKey =
         input.folder === "listings"
@@ -188,5 +219,44 @@ export const createPresignedUploadUrl = async (
         publicUrl: `${r2Config.publicBaseUrl}/${objectKey}`,
         key: objectKey,
         expiresIn: uploadUrlExpiresInSeconds,
+    };
+};
+
+export const uploadBufferToR2 = async ({
+    userId,
+    buffer,
+    filename,
+    contentType,
+    folder = "chat",
+}: {
+    userId: string;
+    buffer: Buffer;
+    filename: string;
+    contentType: string;
+    folder?: UploadFolder;
+}) => {
+    validateFilename(filename);
+    if (!allowedContentTypes.has(contentType)) {
+        throw new ApiError(422, "Unsupported media type");
+    }
+    const r2Config = assertRequiredR2Env();
+    const extension = mediaExtensionsByContentType[contentType] ?? "bin";
+    const uuid = crypto.randomUUID();
+    const objectKey = `${folder}/${userId}/${uuid}.${extension}`;
+    const client = createR2Client(r2Config);
+    const command = new PutObjectCommand({
+        Bucket: r2Config.bucket,
+        Key: objectKey,
+        ContentType: contentType,
+        Body: buffer,
+    });
+    await client.send(command);
+
+    return {
+        publicUrl: `${r2Config.publicBaseUrl}/${objectKey}`,
+        key: objectKey,
+        filename,
+        contentType,
+        size: buffer.length,
     };
 };

@@ -43,6 +43,8 @@ export type SheetRgbColor = {
     blue: number;
 };
 
+export const SHEET_FONT_FAMILY = "Times New Roman";
+
 export const SHEET_COLORS = {
     WHITE: { red: 1, green: 1, blue: 1 } satisfies SheetRgbColor,
     PENDING_HOLD_ORANGE: { red: 1, green: 0.902, blue: 0.8 } satisfies SheetRgbColor, // #FFE6CC
@@ -70,11 +72,14 @@ export type RawSheetCell = {
         backgroundColor?: Partial<SheetRgbColor>;
         textFormat?: {
             bold?: boolean;
+            fontFamily?: string;
             foregroundColorStyle?: {
                 rgbColor?: Partial<SheetRgbColor>;
             };
         };
         horizontalAlignment?: string;
+        verticalAlignment?: string;
+        wrapStrategy?: string;
         numberFormat?: {
             type?: string;
             pattern?: string;
@@ -363,6 +368,12 @@ export const extractCellRawText = (cell?: RawSheetCell | null): string => {
 const SYSTEM_HOLD_MARKER_REGEX = /^G\s*#(\d+)$/i;
 const SYSTEM_BOOKED_MARKER_REGEX = /^(?:Đ|D)\s*#(\d+)$/i;
 
+export const isPriceOrNumericText = (text: string): boolean => {
+    const cleaned = text.trim().replace(/\s+/g, "").toLowerCase();
+    if (!cleaned) return false;
+    return /^(\d{1,3}([.,]\d{3})*|\d+)(\s*(?:đ|vnd|vnđ|k))?$/i.test(cleaned);
+};
+
 export const classifySheetCalendarCell = (cell?: RawSheetCell | null): ParsedCellClassification => {
     const rawValue = extractCellRawText(cell);
     const rgb = extractUserEnteredRgb(cell);
@@ -413,19 +424,19 @@ export const classifySheetCalendarCell = (cell?: RawSheetCell | null): ParsedCel
         }
     }
 
-    if (isWhiteOrUnset && rawValue === "") {
+    if (isWhiteOrUnset && (rawValue === "" || isPriceOrNumericText(rawValue))) {
         return {
             state: "empty",
-            rawValue: "",
+            rawValue,
             bgHex,
             bookingIdFromMarker: null,
         };
     }
 
-    // If cell has system Orange/Green color WITHOUT text (e.g. Host deleted text on a booked cell),
-    // treat as empty/tampered rather than a new Host manual block unless it's Red or custom!
+    // If cell has system Orange/Green color WITHOUT text (e.g. system displays hold/booked purely by color),
+    // accurately classify as pending_hold or booked!
     if (rawValue === "" && rgb) {
-        if (colorDistance(rgb, SHEET_COLORS.PENDING_HOLD_ORANGE) <= 0.08) {
+        if (colorDistance(rgb, SHEET_COLORS.PENDING_HOLD_ORANGE) <= 0.15) {
             return {
                 state: "pending_hold",
                 rawValue: "",
@@ -434,8 +445,8 @@ export const classifySheetCalendarCell = (cell?: RawSheetCell | null): ParsedCel
             };
         }
         if (
-            colorDistance(rgb, SHEET_COLORS.BOOKED_GREEN) <= 0.08 ||
-            colorDistance(rgb, SHEET_COLORS.BOOKED_BLUE) <= 0.08
+            colorDistance(rgb, SHEET_COLORS.BOOKED_GREEN) <= 0.15 ||
+            colorDistance(rgb, SHEET_COLORS.BOOKED_BLUE) <= 0.15
         ) {
             return {
                 state: "booked",
@@ -463,20 +474,24 @@ export const classifySheetCalendarCell = (cell?: RawSheetCell | null): ParsedCel
 };
 
 export const buildCalendarCellWriteData = (params: {
-    text: string;
+    text?: string;
+    numberValue?: number;
     bgColor: SheetRgbColor;
     bold?: boolean;
     note?: string | null;
     forcePlainText?: boolean;
+    fontFamily?: string;
 }): { cell: RawSheetCell; fields: string } => {
+    const fontFamily = params.fontFamily ?? SHEET_FONT_FAMILY;
+    const isNumber = params.numberValue !== undefined;
     const safeText = params.forcePlainText
         ? String(params.text ?? "").trim()
-        : sanitizeSheetTextValue(params.text);
+        : sanitizeSheetTextValue(params.text ?? "");
 
     const cell: RawSheetCell = {
-        userEnteredValue: {
-            stringValue: safeText,
-        },
+        userEnteredValue: isNumber
+            ? { numberValue: params.numberValue }
+            : { stringValue: safeText },
         userEnteredFormat: {
             backgroundColorStyle: {
                 rgbColor: params.bgColor,
@@ -484,21 +499,31 @@ export const buildCalendarCellWriteData = (params: {
             horizontalAlignment: "CENTER",
             textFormat: {
                 bold: Boolean(params.bold),
+                fontFamily,
             },
-            ...(params.forcePlainText
+            ...(isNumber
                 ? {
                       numberFormat: {
-                          type: "TEXT",
+                          type: "NUMBER",
+                          pattern: "#,##0",
                       },
                   }
-                : {}),
+                : params.forcePlainText
+                  ? {
+                        numberFormat: {
+                            type: "TEXT",
+                        },
+                    }
+                  : {}),
         },
         note: params.note ? sanitizeSheetTextValue(params.note, 450) : "",
     };
 
-    const fields = params.forcePlainText
-        ? "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,numberFormat),note"
-        : "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold),note";
+    const fields = isNumber
+        ? "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,textFormat.fontFamily,numberFormat),note"
+        : params.forcePlainText
+          ? "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,textFormat.fontFamily,numberFormat),note"
+          : "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,textFormat.fontFamily),note";
 
     return { cell, fields };
 };

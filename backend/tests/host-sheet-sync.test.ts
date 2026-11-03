@@ -419,6 +419,28 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
                         }
                     }
                 }
+            } else if (req.repeatCell) {
+                const rc = req.repeatCell as any;
+                const sheetId = rc.range?.sheetId;
+                const tab = doc.tabs.find((t) => t.sheetId === sheetId);
+                if (tab && rc.cell?.userEnteredFormat?.textFormat?.fontFamily) {
+                    (tab as any).defaultFontFamily = rc.cell.userEnteredFormat.textFormat.fontFamily;
+                }
+            } else if (req.unmergeCells) {
+                const uc = req.unmergeCells as any;
+                const sheetId = uc.range?.sheetId;
+                const tab = doc.tabs.find((t) => t.sheetId === sheetId);
+                if (tab) {
+                    (tab as any).merges = [];
+                }
+            } else if (req.mergeCells) {
+                const mc = req.mergeCells as any;
+                const sheetId = mc.range?.sheetId;
+                const tab = doc.tabs.find((t) => t.sheetId === sheetId);
+                if (tab) {
+                    (tab as any).merges = (tab as any).merges ?? [];
+                    (tab as any).merges.push(mc.range);
+                }
             } else if (req.addProtectedRange) {
                 const pr = (req.addProtectedRange as any).protectedRange;
                 const sheetId = pr?.range?.sheetId;
@@ -1425,15 +1447,23 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         const col801 = fakeSheets.findListingColIndex(tab, 801);
         const rDay5 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 4;
 
-        // Verify (a): Day 5 restored to Orange G #9201; Day 9 remains Admin-locked Red
-        assert.equal(tab.rows.get(rDay5)![col801]?.userEnteredValue?.stringValue, "G #9201");
+        // Verify (a): Day 5 restored to Orange (pure color, no text); Day 9 remains Admin-locked Red
+        assert.equal(tab.rows.get(rDay5)![col801]?.userEnteredValue?.stringValue ?? "", "");
+        assert.deepEqual(
+            tab.rows.get(rDay5)![col801]?.userEnteredFormat?.backgroundColorStyle?.rgbColor,
+            SHEET_COLORS.PENDING_HOLD_ORANGE,
+        );
         const adminCal = calendarStore.find((c) => Number(c.listingId) === 801 && c.date === dAdmin);
         assert.equal(adminCal.isBlockedByAdmin, true);
         assert.equal(adminCal.isAvailable, false);
 
-        // Verify (b): Day 7 restored to Green Đ #9202 & booking_vs_sheet_edit conflict logged
+        // Verify (b): Day 7 restored to Green (pure color, no text) & booking_vs_sheet_edit conflict logged
         const rDay7 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 6;
-        assert.equal(tab.rows.get(rDay7)![col801]?.userEnteredValue?.stringValue, "Đ #9202");
+        assert.equal(tab.rows.get(rDay7)![col801]?.userEnteredValue?.stringValue ?? "", "");
+        assert.deepEqual(
+            tab.rows.get(rDay7)![col801]?.userEnteredFormat?.backgroundColorStyle?.rgbColor,
+            SHEET_COLORS.BOOKED_GREEN,
+        );
         assert.ok(
             conflictsStore.some(
                 (c) => c.conflictType === "booking_vs_sheet_edit" && c.conflictDate === dPaid,
@@ -1586,7 +1616,8 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         const tab = fakeSheets.findMonthTab(sheetIdA, nextMonth.tabKey)!;
         const col801 = fakeSheets.findListingColIndex(tab, 801);
         const rDay26 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 25;
-        assert.equal(tab.rows.get(rDay26)![col801]?.userEnteredValue?.stringValue ?? "", "");
+        const rDay26Val = tab.rows.get(rDay26)![col801]?.userEnteredValue;
+        assert.ok(rDay26Val?.numberValue === 4500000 || rDay26Val?.stringValue === "4500000");
         assert.equal(
             calendarStore.find((c) => Number(c.listingId) === 801 && c.date === expDate),
             undefined,
@@ -1913,5 +1944,74 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
             "K",
             "Archived listing #801 historical blocked cell on Day 16 must remain intact",
         );
+    });
+
+    it("SS-17: Displays price on available days, pure color for hold & booked without text, and Times New Roman font", async () => {
+        const connectRes = await request(app)
+            .post("/api/host/sheet-sync/connect")
+            .set(hostAAuth)
+            .send({ spreadsheetUrlOrId: sheetUrlA });
+        assert.equal(connectRes.status, 200);
+
+        const rolling = hostSheetLayout.buildRollingMonthSpecs(
+            getTodayInVietnamDateString(),
+            6,
+        );
+        const tab = fakeSheets.findMonthTab(sheetIdA, rolling[0].tabKey)!;
+        assert.ok(tab);
+
+        // Check font on tab
+        assert.equal((tab as any).defaultFontFamily, "Times New Roman");
+
+        const col801 = fakeSheets.findListingColIndex(tab, 801);
+        assert.ok(col801 >= 1);
+
+        // Available day (Day 2): must display price (4,500,000 for listing #801) with Times New Roman font
+        const rDay2 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 1;
+        const cellDay2 = tab.rows.get(rDay2)![col801]!;
+        assert.ok(cellDay2.userEnteredValue?.numberValue === 4500000 || cellDay2.userEnteredValue?.stringValue === "4500000");
+        assert.equal(cellDay2.userEnteredFormat?.textFormat?.fontFamily, "Times New Roman");
+        assert.equal(cellDay2.userEnteredFormat?.numberFormat?.type, "NUMBER");
+
+        // Booked day: must have Green color and NO text
+        const dBooked = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-18`;
+        const dBookedOut = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-19`;
+        makeRecord(bookingsStore, "bookingId", {
+            bookingId: 9888,
+            listingId: 801,
+            guestUserId: 201,
+            hostUserId: 101,
+            checkInDate: dBooked,
+            checkOutDate: dBookedOut,
+            status: "confirmed",
+        });
+
+        // Held day: must have Orange color and NO text
+        const dHeld = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-20`;
+        const dHeldOut = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-21`;
+        makeRecord(bookingsStore, "bookingId", {
+            bookingId: 9889,
+            listingId: 801,
+            guestUserId: 201,
+            hostUserId: 101,
+            checkInDate: dHeld,
+            checkOutDate: dHeldOut,
+            status: "pending_payment",
+            lockedUntil: new Date(Date.now() + 10 * 60_000),
+        });
+
+        await request(app).post("/api/host/sheet-sync/sync-now").set(hostAAuth);
+
+        const rBooked = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 17;
+        const bookedCell = tab.rows.get(rBooked)![col801]!;
+        assert.equal(bookedCell.userEnteredValue?.stringValue ?? "", "");
+        assert.deepEqual(bookedCell.userEnteredFormat?.backgroundColorStyle?.rgbColor, SHEET_COLORS.BOOKED_GREEN);
+        assert.equal(bookedCell.userEnteredFormat?.textFormat?.fontFamily, "Times New Roman");
+
+        const rHeld = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 19;
+        const heldCell = tab.rows.get(rHeld)![col801]!;
+        assert.equal(heldCell.userEnteredValue?.stringValue ?? "", "");
+        assert.deepEqual(heldCell.userEnteredFormat?.backgroundColorStyle?.rgbColor, SHEET_COLORS.PENDING_HOLD_ORANGE);
+        assert.equal(heldCell.userEnteredFormat?.textFormat?.fontFamily, "Times New Roman");
     });
 });
