@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radii.dart';
@@ -21,6 +23,11 @@ import '../../../../shared/widgets/app_image.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../data/conversations_repository.dart';
+import '../../services/chat_media_upload_service.dart';
+import '../../services/chat_voice_recorder_service.dart';
+import '../widgets/chat_audio_bubble.dart';
+import '../widgets/chat_image_bubble.dart';
+import '../widgets/messenger_voice_recorder_bar.dart';
 
 enum _ChatPortalRole { guest, host, admin }
 
@@ -53,27 +60,6 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     '👍',
   ];
 
-  static const List<String> _guestQuickReplies = [
-    'Dạ căn còn trống lịch này không ạ?',
-    'Cho mình hỏi giờ nhận và trả phòng ạ?',
-    'Biệt thự có sẵn bếp BBQ và hồ bơi riêng không ạ?',
-    'Cảm ơn Chủ nhà nhiều ạ!',
-  ];
-
-  static const List<String> _hostQuickReplies = [
-    'Dạ vâng, bên em đã nhận thông tin ạ!',
-    'Quý khách nhận phòng lúc mấy giờ ạ?',
-    'The Palm Villa xin chào bạn! 🌴',
-    'Vị trí biệt thự em đã cập nhật trên hệ thống ạ.',
-  ];
-
-  static const List<String> _adminQuickReplies = [
-    'Chào bạn, Quản trị viên hệ thống hỗ trợ bạn vấn đề gì ạ?',
-    'Hệ thống đã tiếp nhận thông tin và đang kiểm tra ạ.',
-    'Hồ sơ/bài đăng của bạn đã được cập nhật trạng thái.',
-    'Cảm ơn bạn đã phản hồi cho Ban quản trị!',
-  ];
-
   String? _selectedConversationId;
   String? _activeUserId;
 
@@ -104,6 +90,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   bool _isRecordingVoice = false;
   int _voiceRecordingSeconds = 0;
   Timer? _voiceTimer;
+  final ChatVoiceRecorderService _voiceRecorder = ChatVoiceRecorderService();
   String _chatQuickEmoji = '👍';
 
   bool _isSwitchingConversation = false;
@@ -300,6 +287,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     _expandedTimestampKeys.clear();
     _reactionActiveMsgKey = null;
     _voiceTimer?.cancel();
+    unawaited(_voiceRecorder.cancel());
     _isRecordingVoice = false;
     _voiceRecordingSeconds = 0;
     _isSwitchingConversation = true;
@@ -745,10 +733,12 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   Future<void> _sendDirectContent(
     String rawContent, {
     bool clearInput = false,
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
   }) async {
     final convId = _selectedConversationId;
     final text = rawContent.trim();
-    if (convId == null || convId.isEmpty || text.isEmpty) return;
+    if (convId == null || convId.isEmpty || (text.isEmpty && (attachments == null || attachments.isEmpty))) return;
 
     final currentUserId = ref.read(authNotifierProvider).valueOrNull?.id ?? '';
     if (currentUserId.isEmpty) return;
@@ -771,6 +761,13 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       conversationId: convId,
       senderId: currentUserId,
       content: text,
+      messageType: messageType,
+      attachments: attachments != null
+          ? attachments
+              .map((a) => (a['url'] ?? '').toString())
+              .where((s) => s.isNotEmpty)
+              .toList()
+          : const [],
       createdAt: nowIso,
       status: MessageDeliveryStatus.sending,
     );
@@ -796,6 +793,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       conversationId: convId,
       localId: localId,
       content: text,
+      messageType: messageType,
+      attachments: attachments,
     );
   }
 
@@ -818,14 +817,33 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     return _ChatPortalRole.guest;
   }
 
-  List<String> _quickRepliesForRole(_ChatPortalRole role) {
+  AppLocalizations get _currentL10n =>
+      lookupAppLocalizations(Locale(ref.read(localeProvider)));
+
+  List<String> _quickRepliesForRole(_ChatPortalRole role, [AppLocalizations? l10n]) {
+    final loc = l10n ?? _currentL10n;
     switch (role) {
       case _ChatPortalRole.admin:
-        return _adminQuickReplies;
+        return [
+          loc.chatQuickReplyAdmin1,
+          loc.chatQuickReplyAdmin2,
+          loc.chatQuickReplyAdmin3,
+          loc.chatQuickReplyAdmin4,
+        ];
       case _ChatPortalRole.host:
-        return _hostQuickReplies;
+        return [
+          loc.chatQuickReplyHost1,
+          loc.chatQuickReplyHost2,
+          loc.chatQuickReplyHost3,
+          loc.chatQuickReplyHost4,
+        ];
       case _ChatPortalRole.guest:
-        return _guestQuickReplies;
+        return [
+          loc.chatQuickReplyGuest1,
+          loc.chatQuickReplyGuest2,
+          loc.chatQuickReplyGuest3,
+          loc.chatQuickReplyGuest4,
+        ];
     }
   }
 
@@ -838,39 +856,77 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   }
 
   Future<void> _openCameraChat() async {
+    final l10n = _currentL10n;
     try {
       final file = await _imagePicker.pickImage(
         source: ImageSource.camera,
         imageQuality: 82,
       );
+      if (!mounted || file == null) return;
+      AppToast.show(context, l10n.chatToastUploadingPhoto, type: AppToastType.info);
+      final bytes = await file.readAsBytes();
+      final uploadService = ref.read(chatMediaUploadServiceProvider);
+      final result = await uploadService.uploadMediaBytesToR2(
+        bytes: bytes,
+        filename: file.name.isNotEmpty ? file.name : 'camera_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        contentType: 'image/jpeg',
+      );
       if (!mounted) return;
-      if (file != null) {
-        await _sendDirectContent('📷 [Ảnh chụp trực tiếp] ${file.name}');
-        return;
-      }
-    } catch (_) {
+      await _sendDirectContent(
+        '',
+        messageType: 'image',
+        attachments: [
+          {
+            'url': result.publicUrl,
+            'type': 'image/jpeg',
+            'name': file.name,
+          }
+        ],
+      );
+    } catch (e) {
       if (!mounted) return;
-      await _sendDirectContent('📷 [Ảnh chụp trực tiếp từ ứng dụng]');
+      final failure = DioClient.handleError(e);
+      AppToast.show(context, failure.message, type: AppToastType.error);
     }
   }
 
   Future<void> _pickAndSendChatImage() async {
+    final l10n = _currentL10n;
     try {
       final file = await _imagePicker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 85,
       );
+      if (!mounted || file == null) return;
+      AppToast.show(context, l10n.chatToastUploadingPhoto, type: AppToastType.info);
+      final bytes = await file.readAsBytes();
+      final uploadService = ref.read(chatMediaUploadServiceProvider);
+      final result = await uploadService.uploadMediaBytesToR2(
+        bytes: bytes,
+        filename: file.name.isNotEmpty ? file.name : 'gallery_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        contentType: 'image/jpeg',
+      );
       if (!mounted) return;
-      if (file != null) {
-        await _sendDirectContent('🖼️ [Đã gửi 1 hình ảnh] ${file.name}');
-      }
-    } catch (_) {
+      await _sendDirectContent(
+        '',
+        messageType: 'image',
+        attachments: [
+          {
+            'url': result.publicUrl,
+            'type': 'image/jpeg',
+            'name': file.name,
+          }
+        ],
+      );
+    } catch (e) {
       if (!mounted) return;
-      await _sendDirectContent('🖼️ [Đã gửi 1 hình ảnh đính kèm]');
+      final failure = DioClient.handleError(e);
+      AppToast.show(context, failure.message, type: AppToastType.error);
     }
   }
 
-  void _toggleVoiceRecording() {
+  Future<void> _toggleVoiceRecording() async {
+    final l10n = _currentL10n;
     if (_isRecordingVoice) {
       final sec = _voiceRecordingSeconds;
       _voiceTimer?.cancel();
@@ -878,12 +934,65 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
         _isRecordingVoice = false;
         _voiceRecordingSeconds = 0;
       });
-      unawaited(
-        _sendDirectContent(
-          '🎤 Tin nhắn thoại (00:${sec.toString().padLeft(2, '0')})',
-        ),
-      );
+      unawaited(() async {
+        try {
+          if (!mounted) return;
+          AppToast.show(context, l10n.chatToastUploadingVoice, type: AppToastType.info);
+
+          final recordedResult = await _voiceRecorder.stop();
+          if (recordedResult == null || recordedResult.bytes.isEmpty) {
+            if (!mounted) return;
+            AppToast.show(
+              context,
+              l10n.chatToastMicNoAudio,
+              type: AppToastType.warning,
+            );
+            return;
+          }
+
+          final Uint8List audioBytes = recordedResult.bytes;
+          final String filename = recordedResult.filename;
+          final String contentType = recordedResult.contentType;
+          final int recordedSeconds = recordedResult.durationSeconds > 0
+              ? recordedResult.durationSeconds
+              : (sec > 0 ? sec : 1);
+
+          final uploadService = ref.read(chatMediaUploadServiceProvider);
+          final result = await uploadService.uploadMediaBytesToR2(
+            bytes: audioBytes,
+            filename: filename,
+            contentType: contentType,
+          );
+          if (!mounted) return;
+          await _sendDirectContent(
+            '🎤 Tin nhắn thoại (00:${recordedSeconds.toString().padLeft(2, '0')})',
+            messageType: 'file',
+            attachments: [
+              {
+                'url': result.publicUrl,
+                'type': contentType,
+                'name': filename,
+              }
+            ],
+          );
+        } catch (e) {
+          if (!mounted) return;
+          final failure = DioClient.handleError(e);
+          AppToast.show(context, 'Tải âm thanh lên R2 thất bại: ${failure.message}', type: AppToastType.error);
+        }
+      }());
     } else {
+      final started = await _voiceRecorder.start();
+      if (!started) {
+        if (!mounted) return;
+        AppToast.show(
+          context,
+          'Không thể truy cập Micro. Vui lòng cấp quyền Microphone trên trình duyệt / thiết bị.',
+          type: AppToastType.warning,
+        );
+        return;
+      }
+
       setState(() {
         _isRecordingVoice = true;
         _voiceRecordingSeconds = 0;
@@ -901,75 +1010,67 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     }
   }
 
-  void _showChatMoreOptions(_ChatPortalRole role, ConversationItem conv) {
+  void _showChatMoreOptions(_ChatPortalRole role, ConversationItem conv, [AppLocalizations? l10n]) {
+    final loc = l10n ?? _currentL10n;
     final templates = <({IconData icon, String title, String subtitle, String content})>[
       switch (role) {
         _ChatPortalRole.admin => (
             icon: LucideIcons.shieldCheck,
-            title: 'Yêu cầu bổ sung hồ sơ / giấy tờ',
-            subtitle: 'Nhắc Chủ nhà hoặc Khách cập nhật thông tin xác minh',
-            content:
-                '📋 Ban quản trị đề nghị bạn kiểm tra và bổ sung giấy tờ xác minh rõ nét để hệ thống hoàn tất phê duyệt.',
+            title: loc.chatTplAdminDocsTitle,
+            subtitle: loc.chatTplAdminDocsSubtitle,
+            content: loc.chatTplAdminDocsContent,
           ),
         _ChatPortalRole.host => (
             icon: LucideIcons.mapPin,
-            title: 'Gửi vị trí chỗ nghỉ',
-            subtitle: 'Địa chỉ chi tiết và hướng dẫn di chuyển',
-            content:
-                '📍 Vị trí ${conv.listingTitle}: Đường Thùy Vân, TP. Vũng Tàu (gần bãi tắm Bãi Sau).',
+            title: loc.chatTplHostLocationTitle,
+            subtitle: loc.chatTplHostLocationSubtitle,
+            content: loc.chatTplHostLocationContent(conv.listingTitle),
           ),
         _ChatPortalRole.guest => (
             icon: LucideIcons.calendarCheck,
-            title: 'Hỏi lịch trống & báo giá',
-            subtitle: 'Kiểm tra tình trạng phòng và phụ thu cuối tuần',
-            content:
-                '📅 Chào Chủ nhà, cho mình hỏi căn còn trống lịch cuối tuần này và giá trọn gói cho đoàn mình nhé ạ?',
+            title: loc.chatTplGuestInquiryTitle,
+            subtitle: loc.chatTplGuestInquirySubtitle,
+            content: loc.chatTplGuestInquiryContent,
           ),
       },
       switch (role) {
         _ChatPortalRole.admin => (
             icon: LucideIcons.clipboardCheck,
-            title: 'Thông báo kết quả kiểm duyệt',
-            subtitle: 'Cập nhật trạng thái bài đăng hoặc tài khoản',
-            content:
-                '✅ Quản trị viên đã kiểm tra và cập nhật trạng thái hồ sơ/bài đăng của bạn trên hệ thống.',
+            title: loc.chatTplAdminReviewTitle,
+            subtitle: loc.chatTplAdminReviewSubtitle,
+            content: loc.chatTplAdminReviewContent,
           ),
         _ChatPortalRole.host => (
             icon: LucideIcons.clock,
-            title: 'Giờ nhận & trả phòng',
-            subtitle: 'Check-in: 14:00 • Check-out: 12:00',
-            content:
-                '⏰ Thời gian nhận phòng: từ 14:00 | Thời gian trả phòng: trước 12:00 ngày hôm sau.',
+            title: loc.chatTplHostCheckinTitle,
+            subtitle: loc.chatTplHostCheckinSubtitle,
+            content: loc.chatTplHostCheckinContent,
           ),
         _ChatPortalRole.guest => (
             icon: LucideIcons.clock,
-            title: 'Xin nhận phòng sớm / trả phòng muộn',
-            subtitle: 'Hỏi hỗ trợ linh hoạt giờ check-in / check-out',
-            content:
-                '⏰ Đoàn mình dự kiến đến sớm hơn 14:00 một chút, Chủ nhà có thể hỗ trợ gửi hành lý hoặc nhận phòng sớm không ạ?',
+            title: loc.chatTplGuestCheckinTitle,
+            subtitle: loc.chatTplGuestCheckinSubtitle,
+            content: loc.chatTplGuestCheckinContent,
           ),
       },
       switch (role) {
         _ChatPortalRole.admin => (
             icon: LucideIcons.lifeBuoy,
-            title: 'Hướng dẫn chính sách nền tảng',
-            subtitle: 'Giải đáp quy định đặt phòng & phí dịch vụ',
-            content:
-                'ℹ️ Mọi giao dịch trên hệ thống đều được bảo vệ theo chính sách đặt phòng và hoàn hủy minh bạch của The Palm Villa.',
+            title: loc.chatTplAdminPolicyTitle,
+            subtitle: loc.chatTplAdminPolicySubtitle,
+            content: loc.chatTplAdminPolicyContent,
           ),
         _ChatPortalRole.host => (
             icon: LucideIcons.fileText,
-            title: 'Gửi nội quy lưu trú',
-            subtitle: 'Giữ gìn vệ sinh, yên tĩnh sau 22:00',
-            content:
-                '📋 Nội quy lưu trú: Vui lòng giữ gìn tài sản chung và hạn chế tiếng ồn lớn sau 22:00. Chúc quý khách kỳ nghỉ tuyệt vời!',
+            title: loc.chatTplHostHouseRulesTitle,
+            subtitle: loc.chatTplHostHouseRulesSubtitle,
+            content: loc.chatTplHostHouseRulesContent,
           ),
         _ChatPortalRole.guest => (
             icon: LucideIcons.flame,
-            title: 'Hỏi tiện ích BBQ & hồ bơi',
-            subtitle: 'Bếp nướng, than, phao bơi và chỗ đậu xe',
-            content:
-                '🔥 Biệt thự có sẵn lò nướng BBQ, dụng cụ bếp, hồ bơi riêng và chỗ đậu ô tô trong sân không ạ?',
+            title: loc.chatTplGuestAmenitiesTitle,
+            subtitle: loc.chatTplGuestAmenitiesSubtitle,
+            content: loc.chatTplGuestAmenitiesContent,
           ),
       },
     ];
@@ -1004,10 +1105,10 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                       ),
                     ),
                     const SizedBox(width: 10),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Tiện ích mở rộng & Mẫu tin nhanh',
-                        style: TextStyle(
+                        loc.chatExtensionsAndTemplatesTitle,
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
@@ -1031,7 +1132,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                         shape: const StadiumBorder(),
                       ),
                       icon: const Icon(LucideIcons.camera, size: 16),
-                      label: const Text('Chụp ảnh'),
+                      label: Text(loc.chatCamera),
                     ),
                     OutlinedButton.icon(
                       onPressed: () {
@@ -1043,7 +1144,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                         shape: const StadiumBorder(),
                       ),
                       icon: const Icon(LucideIcons.image, size: 16),
-                      label: const Text('Thư viện ảnh'),
+                      label: Text(loc.chatGalleryLabel),
                     ),
                     OutlinedButton.icon(
                       onPressed: () {
@@ -1055,7 +1156,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                         shape: const StadiumBorder(),
                       ),
                       icon: const Icon(LucideIcons.mic, size: 16),
-                      label: const Text('Tin nhắn thoại'),
+                      label: Text(loc.chatVoiceMessage),
                     ),
                   ],
                 ),
@@ -1094,7 +1195,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     );
   }
 
-  void _showEmojiSelector() {
+  void _showEmojiSelector([AppLocalizations? l10n]) {
+    final loc = l10n ?? _currentL10n;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surfaceBase,
@@ -1128,9 +1230,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Chọn biểu tượng cảm xúc',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                Text(
+                  loc.chatSelectEmojiTitle,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
@@ -1165,13 +1267,14 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     );
   }
 
-  void _chooseQuickEmoji() {
+  void _chooseQuickEmoji([AppLocalizations? l10n]) {
+    final loc = l10n ?? _currentL10n;
     showDialog<void>(
       context: context,
       builder: (ctx) {
         const quickOptions = ['👍', '❤️', '😤', '🌴', '🔥', '⭐'];
         return AlertDialog(
-          title: const Text('Chọn biểu tượng gửi nhanh'),
+          title: Text(loc.chatSelectQuickEmojiTitle),
           content: Wrap(
             spacing: 14,
             runSpacing: 12,
@@ -1215,6 +1318,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       conversationId: convId,
       localId: localId,
       content: failedMsg.content,
+      messageType: failedMsg.messageType,
+      attachments: failedMsg.attachments.map((u) => {'url': u}).toList(),
     );
   }
 
@@ -1232,11 +1337,15 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     required String conversationId,
     required String localId,
     required String content,
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
   }) async {
     try {
       final sent = await ref.read(conversationsRepositoryProvider).sendMessage(
             conversationId: conversationId,
             content: content,
+            messageType: messageType,
+            attachments: attachments,
           );
       if (!mounted) return;
       final confirmed = sent.copyWith(
@@ -1330,18 +1439,19 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     return merged;
   }
 
-  String _errorTitleFor(Object error) {
-    if (error is NetworkFailure) return 'Mất kết nối mạng';
+  String _errorTitleFor(Object error, [AppLocalizations? l10n]) {
+    final loc = l10n ?? _currentL10n;
+    if (error is NetworkFailure) return loc.chatErrorNetwork;
     if (error is AuthFailure) {
       return error.statusCode == 403
-          ? 'Không có quyền truy cập'
-          : 'Phiên đăng nhập hết hạn';
+          ? loc.chatErrorForbidden
+          : loc.chatErrorUnauthorized;
     }
-    if (error is NotFoundFailure) return 'Không tìm thấy cuộc trò chuyện';
-    if (error is RateLimitFailure) return 'Thao tác quá nhanh';
-    if (error is ServerFailure) return 'Lỗi máy chủ';
-    if (error is ValidationFailure) return 'Dữ liệu không hợp lệ';
-    return 'Đã có lỗi xảy ra';
+    if (error is NotFoundFailure) return loc.chatErrorNotFound;
+    if (error is RateLimitFailure) return loc.chatErrorRateLimit;
+    if (error is ServerFailure) return loc.chatErrorServer;
+    if (error is ValidationFailure) return loc.chatErrorValidation;
+    return loc.chatErrorGeneric;
   }
 
   String _formatTimestamp(String? raw) {
@@ -1368,6 +1478,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     }
     _typingTimers.clear();
     _voiceTimer?.cancel();
+    _voiceRecorder.dispose();
     _socketMessageSub?.cancel();
     _socketErrorSub?.cancel();
     _socketTypingSub?.cancel();
@@ -1383,6 +1494,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = lookupAppLocalizations(Locale(ref.watch(localeProvider)));
     ref.listen<AsyncValue<User?>>(authNotifierProvider, (prev, next) {
       final prevUser = prev?.valueOrNull;
       final nextUser = next.valueOrNull;
@@ -1403,10 +1515,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
             Expanded(
               child: AppEmptyView(
                 icon: LucideIcons.messageSquare,
-                title: 'Đăng nhập để xem tin nhắn',
-                description:
-                    'Trao đổi trực tiếp với Chủ nhà Vũng Tàu về lịch phòng, tiện nghi và ưu đãi.',
-                actionText: 'Đăng nhập ngay',
+                title: l10n.chatLoginTitle,
+                description: l10n.chatLoginDescription,
+                actionText: l10n.chatLoginAction,
                 onAction: () => context.push('/dang-nhap'),
               ),
             ),
@@ -1428,7 +1539,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       error: (err, _) {
         final failure = DioClient.handleError(err);
         return AppErrorView(
-          title: _errorTitleFor(failure),
+          title: _errorTitleFor(failure, l10n),
           message: failure.message,
           onRetry: () {
             ref.invalidate(conversationsListProvider);
@@ -1491,11 +1602,10 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
               if (widget.isAdminPortal || user.isAdmin) {
                 return AppEmptyView(
                   icon: LucideIcons.messageSquare,
-                  title: 'Chưa có cuộc trò chuyện hỗ trợ nào',
-                  description:
-                      'Các hội thoại hỗ trợ trực tiếp với Chủ nhà và Khách hàng trên hệ thống sẽ hiển thị tại đây.',
+                  title: l10n.chatEmptyAdminTitle,
+                  description: l10n.chatEmptyAdminDesc,
                   actionText: GoRouter.maybeOf(context) != null
-                      ? 'Quản lý người dùng'
+                      ? l10n.chatEmptyAdminAction
                       : null,
                   onAction: GoRouter.maybeOf(context) != null
                       ? () => context.go('/admin/nguoi-dung')
@@ -1503,19 +1613,17 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                 );
               }
               if (widget.isHostPortal || user.isHost) {
-                return const AppEmptyView(
+                return AppEmptyView(
                   icon: LucideIcons.messageSquare,
-                  title: 'Chưa có cuộc trò chuyện nào',
-                  description:
-                      'Khi khách hàng nhắn tin hỏi phòng hoặc đặt chỗ, hội thoại sẽ hiển thị tại đây.',
+                  title: l10n.chatEmptyHostTitle,
+                  description: l10n.chatEmptyHostDesc,
                 );
               }
               return AppEmptyView(
                 icon: LucideIcons.messageSquare,
-                title: 'Chưa có cuộc trò chuyện nào',
-                description:
-                    'Hãy chọn một biệt thự và bấm "Nhắn tin cho Chủ nhà" để bắt đầu trò chuyện.',
-                actionText: 'Khám phá biệt thự',
+                title: l10n.chatEmptyGuestTitle,
+                description: l10n.chatEmptyGuestDesc,
+                actionText: l10n.chatEmptyGuestAction,
                 onAction: () => context.push('/search'),
               );
             }
@@ -1535,7 +1643,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                 ? ConversationItem(
                     id: selectedId,
                     listingId: '',
-                    listingTitle: 'Trao đổi về chỗ nghỉ',
+                    listingTitle: l10n.chatAboutListing,
                     guestId: '',
                     guestName: '',
                     hostId: '',
@@ -1553,18 +1661,19 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                 children: [
                   SizedBox(
                     width: 340,
-                    child: _buildConversationList(conversations, user.id),
+                    child: _buildConversationList(conversations, user.id, l10n),
                   ),
                   const VerticalDivider(width: 1, color: AppColors.border),
                   Expanded(
                     child: effectiveActiveConv == null
-                        ? const Center(
-                            child: Text('Chọn một hội thoại để xem tin nhắn'),
+                        ? Center(
+                            child: Text(l10n.chatSelectConversationPrompt),
                           )
                         : _buildChatPane(
                             effectiveActiveConv,
                             user.id,
                             showBackButton: false,
+                            l10n: l10n,
                           ),
                   ),
                 ],
@@ -1577,9 +1686,10 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                 effectiveActiveConv,
                 user.id,
                 showBackButton: true,
+                l10n: l10n,
               );
             }
-            return _buildConversationList(conversations, user.id);
+            return _buildConversationList(conversations, user.id, l10n);
           },
         );
       },
@@ -1637,8 +1747,10 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
 
   Widget _buildConversationList(
     List<ConversationItem> conversations,
-    String currentUserId,
-  ) {
+    String currentUserId, [
+    AppLocalizations? l10n,
+  ]) {
+    final loc = l10n ?? _currentL10n;
     final totalUnread = conversations.fold<int>(
       0,
       (sum, item) => sum + (item.unreadCount > 0 ? item.unreadCount : 0),
@@ -1702,11 +1814,11 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                 final savedDraft = _draftsByConversation[conv.id]?.trim() ?? '';
                 final hasDraft = savedDraft.isNotEmpty && !isSelected;
                 final previewText = hasDraft
-                    ? 'Nháp: $savedDraft'
+                    ? '${loc.chatDraftPrefix}$savedDraft'
                     : (conv.lastMessage != null &&
                             conv.lastMessage!.trim().isNotEmpty)
                         ? conv.lastMessage!.trim()
-                        : 'Chưa có tin nhắn.';
+                        : loc.chatNoMessagesYet;
 
                 return InkWell(
                   key: ValueKey<String>('conv_tile_${conv.id}'),
@@ -1843,10 +1955,12 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     ConversationItem conv,
     String currentUserId, {
     required bool showBackButton,
+    AppLocalizations? l10n,
   }) {
+    final loc = l10n ?? _currentL10n;
     final user = ref.watch(authNotifierProvider).valueOrNull;
     final chatRole = _resolveChatRole(user, conv);
-    final quickReplies = _quickRepliesForRole(chatRole);
+    final quickReplies = _quickRepliesForRole(chatRole, loc);
     final counterpart = conv.displayNameFor(currentUserId);
     final convId = conv.id;
     final isLoading = _loadingMessagesByConversation[convId] ?? false;
@@ -1893,11 +2007,11 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                     if (showBackButton)
                       Semantics(
                         button: true,
-                        label: 'Quay lại danh sách',
+                        label: loc.chatBackToList,
                         child: IconButton(
                           key: const Key('chat_back_button'),
                           onPressed: _leaveActiveConversationToInbox,
-                          tooltip: 'Quay lại danh sách',
+                          tooltip: loc.chatBackToList,
                           constraints: const BoxConstraints(
                             minWidth: 48,
                             minHeight: 48,
@@ -1952,8 +2066,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                           });
                         },
                         tooltip: _showTimestampsPinned
-                            ? 'Ẩn thời gian'
-                            : 'Hiện khung thời gian',
+                            ? loc.chatHideTimestamps
+                            : loc.chatShowTimestamps,
                         constraints: const BoxConstraints(
                           minWidth: 48,
                           minHeight: 48,
@@ -1972,12 +2086,12 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                       isCompactHeader
                           ? Semantics(
                               button: true,
-                              label: 'Xem chỗ nghỉ',
+                              label: loc.chatViewListing,
                               child: IconButton(
                                 key: const Key('view_listing_button'),
                                 onPressed: () =>
                                     context.push('/villa/${conv.listingId}'),
-                                tooltip: 'Xem chỗ nghỉ',
+                                tooltip: loc.chatViewListing,
                                 constraints: const BoxConstraints(
                                   minWidth: 48,
                                   minHeight: 48,
@@ -1992,13 +2106,13 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                           : TextButton(
                               key: const Key('view_listing_button'),
                               onPressed: () =>
-                                  context.push('/villa/${conv.listingId}'),
+                                    context.push('/villa/${conv.listingId}'),
                               style: TextButton.styleFrom(
                                 minimumSize: const Size(48, 48),
                                 shape: const StadiumBorder(),
                                 foregroundColor: AppColors.textStrong,
                               ),
-                              child: const Text('Xem chỗ nghỉ'),
+                              child: Text(loc.chatViewListing),
                             ),
                   ],
                 ),
@@ -2012,7 +2126,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                     : error != null && messages.isEmpty
                         ? SingleChildScrollView(
                             child: AppErrorView(
-                              title: _errorTitleFor(error),
+                              title: _errorTitleFor(error, loc),
                               message: error.message,
                               onRetry: isForbidden
                                   ? null
@@ -2023,13 +2137,13 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                             ),
                           )
                         : messages.isEmpty
-                            ? const Center(
+                            ? Center(
                                 child: SingleChildScrollView(
-                                  padding: EdgeInsets.all(AppSpacing.s16),
+                                  padding: const EdgeInsets.all(AppSpacing.s16),
                                   child: Text(
-                                    'Hãy gửi tin nhắn đầu tiên để bắt đầu trao đổi.',
+                                    loc.chatEmptyPrompt,
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       color: AppColors.textSecondary,
                                     ),
                                   ),
@@ -2133,8 +2247,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                                       ),
                                                 label: Text(
                                                   isLoadingHistory
-                                                      ? 'Đang tải lịch sử...'
-                                                      : 'Tải thêm tin nhắn cũ hơn',
+                                                      ? loc.chatLoadingHistory
+                                                      : loc.chatLoadMoreHistory,
                                                   style: const TextStyle(
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.w600,
@@ -2168,6 +2282,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                           prevSameSender: prevSameSender,
                                           nextSameSender: nextSameSender,
                                           isLastMessage: isLastMessage,
+                                          l10n: loc,
                                         );
                                       },
                                     ),
@@ -2196,7 +2311,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                               color: Colors.white,
                                             ),
                                             label: Text(
-                                              'Tin nhắn mới ($unreadBelow)',
+                                              loc.chatNewMessagesCount(unreadBelow),
                                               style: const TextStyle(
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w600,
@@ -2221,7 +2336,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                     vertical: AppSpacing.s4,
                   ),
                   child: Text(
-                    '$typingUser đang nhập tin nhắn...',
+                    loc.chatUserTyping(typingUser),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -2252,69 +2367,6 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                   ),
                 ),
 
-              // ── Voice Recording Banner ──
-              if (!isForbidden && _isRecordingVoice)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  color: const Color(0xFFFFF1F2),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        LucideIcons.mic,
-                        color: AppColors.primary,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Đang ghi âm... 00:${_voiceRecordingSeconds.toString().padLeft(2, '0')}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          _voiceTimer?.cancel();
-                          setState(() {
-                            _isRecordingVoice = false;
-                            _voiceRecordingSeconds = 0;
-                          });
-                        },
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(48, 40),
-                        ),
-                        child: const Text(
-                          'Hủy',
-                          style: TextStyle(color: AppColors.textSecondary),
-                        ),
-                      ),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(48, 40),
-                          shape: const StadiumBorder(),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          elevation: 0,
-                        ),
-                        onPressed: _toggleVoiceRecording,
-                        icon: const Icon(LucideIcons.send, size: 14),
-                        label:
-                            const Text('Gửi', style: TextStyle(fontSize: 12)),
-                      ),
-                    ],
-                  ),
-                ),
-
               // ── Unified Messenger Bottom Composer Bar ──
               if (!isForbidden)
                 Container(
@@ -2331,19 +2383,32 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                         horizontal: 8,
                         vertical: 6,
                       ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
+                      child: _isRecordingVoice
+                          ? MessengerVoiceRecorderBar(
+                              recordingSeconds: _voiceRecordingSeconds,
+                              onCancel: () {
+                                _voiceTimer?.cancel();
+    unawaited(_voiceRecorder.cancel());
+                                setState(() {
+                                  _isRecordingVoice = false;
+                                  _voiceRecordingSeconds = 0;
+                                });
+                              },
+                              onSend: _toggleVoiceRecording,
+                            )
+                          : Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
                           // 1. Nút '+' tiện ích mở rộng tròn màu hồng
                           Semantics(
                             button: true,
-                            label: 'Tiện ích mở rộng',
+                            label: loc.chatMoreOptions,
                             child: Tooltip(
-                              message: 'Tiện ích mở rộng',
+                              message: loc.chatMoreOptions,
                               child: InkWell(
                                 key: const Key('chat_more_features_btn'),
                                 onTap: () =>
-                                    _showChatMoreOptions(chatRole, conv),
+                                    _showChatMoreOptions(chatRole, conv, loc),
                                 borderRadius: BorderRadius.circular(24),
                                 child: SizedBox(
                                   width: isCompactComposer ? 40 : 36,
@@ -2373,7 +2438,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                             IconButton(
                               key: const Key('chat_camera_btn'),
                               onPressed: _openCameraChat,
-                              tooltip: 'Chụp ảnh',
+                              tooltip: loc.chatCamera,
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(
                                 minWidth: 36,
@@ -2389,7 +2454,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                             IconButton(
                               key: const Key('chat_gallery_btn'),
                               onPressed: _pickAndSendChatImage,
-                              tooltip: 'Gửi hình ảnh',
+                              tooltip: loc.chatGallery,
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(
                                 minWidth: 36,
@@ -2406,8 +2471,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                               key: const Key('chat_mic_btn'),
                               onPressed: _toggleVoiceRecording,
                               tooltip: _isRecordingVoice
-                                  ? 'Dừng ghi âm'
-                                  : 'Tin nhắn thoại',
+                                  ? loc.chatStopRecording
+                                  : loc.chatVoiceMessage,
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(
                                 minWidth: 36,
@@ -2443,7 +2508,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                   color: AppColors.textStrong,
                                 ),
                                 decoration: InputDecoration(
-                                  hintText: 'Nhắn tin',
+                                  hintText: loc.chatInputPlaceholder,
                                   hintStyle: const TextStyle(
                                     color: Color(0xFF94A3B8),
                                     fontSize: 14.5,
@@ -2456,8 +2521,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                   ),
                                   suffixIcon: IconButton(
                                     key: const Key('chat_input_smile_btn'),
-                                    onPressed: _showEmojiSelector,
-                                    tooltip: 'Biểu tượng cảm xúc',
+                                    onPressed: () => _showEmojiSelector(loc),
+                                    tooltip: loc.chatEmojiTooltip,
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(
                                       minWidth: 36,
@@ -2484,12 +2549,12 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                               return Semantics(
                                 button: true,
                                 label: hasText
-                                    ? 'Gửi tin nhắn'
-                                    : 'Gửi biểu tượng nhanh',
+                                    ? loc.chatSendMessage
+                                    : loc.chatSendQuickEmoji,
                                 child: Tooltip(
                                   message: hasText
-                                      ? 'Gửi tin nhắn'
-                                      : 'Gửi biểu tượng nhanh (nhấn giữ để đổi)',
+                                      ? loc.chatSendMessage
+                                      : loc.chatSendQuickEmojiHint,
                                   child: InkWell(
                                     key: const Key('chat_send_button'),
                                     onTap: () {
@@ -2500,7 +2565,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                       }
                                     },
                                     onLongPress:
-                                        hasText ? null : _chooseQuickEmoji,
+                                        hasText ? null : () => _chooseQuickEmoji(loc),
                                     borderRadius: BorderRadius.circular(24),
                                     child: SizedBox(
                                       width: 48,
@@ -2642,6 +2707,79 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     );
   }
 
+  String? _getDisplayCaption(String content) {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty ||
+        trimmed == '[image]' ||
+        trimmed == '[file]' ||
+        trimmed == 'image' ||
+        trimmed == 'file' ||
+        trimmed == '📷 [Hình ảnh]' ||
+        trimmed == '[Hình ảnh]' ||
+        trimmed.startsWith('📷 [Ảnh chụp trực tiếp') ||
+        trimmed.startsWith('🖼️ [Đã gửi 1 hình ảnh') ||
+        trimmed == '📷 [Ảnh chụp trực tiếp từ villa]' ||
+        trimmed.startsWith('🎤 Tin nhắn thoại')) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  void _openFullScreenImage(BuildContext context, String imageUrl) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: AppImage(url: imageUrl, fit: BoxFit.contain),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: IconButton(
+                  icon: const Icon(LucideIcons.x, color: Colors.white, size: 20),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool _isAudioUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.endsWith('.wav') ||
+        lower.endsWith('.m4a') ||
+        lower.endsWith('.mp3') ||
+        lower.endsWith('.aac') ||
+        lower.endsWith('.ogg') ||
+        lower.endsWith('.webm') ||
+        lower.contains('/audio/');
+  }
+
+  Widget _buildAudioBubble(String audioUrl, {required bool isMe}) {
+    return ChatAudioBubble(
+      audioUrl: audioUrl,
+      isMe: isMe,
+    );
+  }
+
   Widget _buildMessageBubble(
     ChatMessageItem msg, {
     required String currentUserId,
@@ -2651,13 +2789,24 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     bool prevSameSender = false,
     bool nextSameSender = false,
     bool isLastMessage = false,
+    AppLocalizations? l10n,
   }) {
+    final loc = l10n ?? _currentL10n;
     final isMe = msg.senderId == currentUserId;
     final timeLabel = _formatTimestamp(msg.createdAt);
     final stableKey = msg.localId ?? msg.id;
     final selectedReaction = _messageReactions[stableKey];
     final showReactionPicker = _reactionActiveMsgKey == stableKey;
     final isTimestampExpanded = _expandedTimestampKeys.contains(stableKey);
+    final displayCaption = _getDisplayCaption(msg.content);
+    final hasAttachments = msg.attachments.isNotEmpty;
+    final isImageOnly = hasAttachments &&
+        displayCaption == null &&
+        msg.attachments.every((u) => !_isAudioUrl(u));
+    final isAudioOnly = hasAttachments &&
+        displayCaption == null &&
+        msg.attachments.length == 1 &&
+        _isAudioUrl(msg.attachments.first);
 
     final bubbleRadius = isMe
         ? BorderRadius.only(
@@ -2781,14 +2930,18 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                         clipBehavior: Clip.none,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
-                            ),
+                            padding: (isImageOnly || isAudioOnly)
+                                ? EdgeInsets.zero
+                                : const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 10,
+                                  ),
                             constraints:
                                 BoxConstraints(maxWidth: maxBubbleWidth),
                             decoration: BoxDecoration(
-                              color: bgColor,
+                              color: (isImageOnly || isAudioOnly)
+                                  ? Colors.transparent
+                                  : bgColor,
                               borderRadius: bubbleRadius,
                               border: msg.isFailed
                                   ? Border.all(color: AppColors.error)
@@ -2800,27 +2953,27 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                   : CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (msg.attachments.isNotEmpty) ...[
+                                if (hasAttachments) ...[
                                   for (final attachmentUrl in msg.attachments)
                                     Padding(
-                                      padding: const EdgeInsets.only(
-                                        bottom: AppSpacing.s8,
+                                      padding: EdgeInsets.only(
+                                        bottom: isImageOnly
+                                            ? 0
+                                            : (displayCaption != null ? AppSpacing.s8 : 0),
                                       ),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(14),
-                                        child: ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            maxHeight: 180,
-                                            maxWidth: 260,
-                                          ),
-                                          child: AppImage(url: attachmentUrl),
-                                        ),
-                                      ),
+                                      child: _isAudioUrl(attachmentUrl)
+                                          ? _buildAudioBubble(attachmentUrl, isMe: isMe)
+                                          : ChatImageBubble(
+                                              imageUrl: attachmentUrl,
+                                              borderRadius: bubbleRadius,
+                                              maxWidth: maxBubbleWidth,
+                                              onTap: () => _openFullScreenImage(context, attachmentUrl),
+                                            ),
                                     ),
                                 ],
-                                if (msg.content.isNotEmpty)
+                                if (displayCaption != null && displayCaption.isNotEmpty)
                                   Text(
-                                    msg.content,
+                                    displayCaption,
                                     softWrap: true,
                                     style: TextStyle(
                                       fontSize: 14.5,
@@ -2858,9 +3011,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                           size: 14,
                                           color: AppColors.iconStrong,
                                         ),
-                                        label: const Text(
-                                          'Thử lại',
-                                          style: TextStyle(
+                                        label: Text(
+                                          loc.chatRetry,
+                                          style: const TextStyle(
                                             fontSize: 12,
                                             fontWeight: FontWeight.w600,
                                           ),
@@ -2872,7 +3025,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                         ),
                                         onPressed: () =>
                                             _removeFailedMessage(msg),
-                                        tooltip: 'Xóa tin nhắn lỗi',
+                                        tooltip: loc.chatDeleteFailedMessage,
                                         constraints: const BoxConstraints(
                                           minWidth: 48,
                                           minHeight: 48,
@@ -2938,7 +3091,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
               Padding(
                 padding: const EdgeInsets.only(top: 3, right: 4),
                 child: Text(
-                  'Đang gửi...',
+                  loc.chatSending,
                   key: ValueKey<String>('msg_status_$stableKey'),
                   style: const TextStyle(
                     fontSize: 11,
@@ -2951,7 +3104,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
               Padding(
                 padding: const EdgeInsets.only(top: 3, right: 4),
                 child: Text(
-                  'Gửi thất bại',
+                  loc.chatFailed,
                   key: ValueKey<String>('msg_status_$stableKey'),
                   style: const TextStyle(
                     fontSize: 11,
@@ -2976,17 +3129,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      'Đã gửi',
+                      loc.chatSent,
                       key: ValueKey<String>('msg_status_$stableKey'),
                       style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                    const Text(
-                      ' • Đã xem',
-                      style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                         color: AppColors.textMuted,
@@ -3019,11 +3164,11 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
   final TextEditingController _msgCtrl = TextEditingController();
   bool _isSending = false;
 
-  static const List<String> _quickQuestions = [
-    'Chào Chủ nhà, biệt thự còn trống lịch cuối tuần này không ạ?',
-    'Hồ bơi của biệt thự là nước ngọt hay nước mặn và có phao bơi không ạ?',
-    'Biệt thự có sẵn lò nướng BBQ, than và dụng cụ bếp đầy đủ không ạ?',
-    'Đoàn mình muốn nhận phòng sớm hơn 14:00 có được hỗ trợ không ạ?',
+  List<String> _quickQuestionsFor(AppLocalizations l10n) => [
+    l10n.hostMsgQuestion1,
+    l10n.hostMsgQuestion2,
+    l10n.hostMsgQuestion3,
+    l10n.hostMsgQuestion4,
   ];
 
   @override
@@ -3061,6 +3206,7 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = lookupAppLocalizations(Locale(ref.watch(localeProvider)));
     final villaAsync = ref.watch(villaDetailProvider(widget.villaId));
 
     return Scaffold(
@@ -3109,18 +3255,18 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 size: 16,
                                 color: AppColors.iconStrong,
                               ),
-                              label: const Text(
-                                'Quay lại trang biệt thự',
-                                style: TextStyle(
+                              label: Text(
+                                l10n.hostMsgBackToVilla,
+                                style: const TextStyle(
                                   fontSize: 13.5,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
                             const SizedBox(height: AppSpacing.s8),
-                            const Text(
-                              'Liên hệ Chủ nhà',
-                              style: TextStyle(
+                            Text(
+                              l10n.hostMsgContactTitle,
+                              style: const TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.w800,
                                 color: AppColors.textStrong,
@@ -3170,7 +3316,7 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                           ),
                                           const SizedBox(height: 3),
                                           Text(
-                                            'Chủ nhà: ${villa.host?.fullName ?? 'Chủ nhà The Palm Villa'}',
+                                            l10n.hostMsgHostLabel(villa.host?.fullName ?? l10n.hostMsgDefaultHost),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
@@ -3186,9 +3332,9 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                               ),
                             ],
                             const SizedBox(height: AppSpacing.s16),
-                            const Text(
-                              'Câu hỏi thường gặp cho Chủ nhà:',
-                              style: TextStyle(
+                            Text(
+                              l10n.hostMsgFaqTitle,
+                              style: const TextStyle(
                                 fontSize: 13.5,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.textStrong,
@@ -3196,7 +3342,7 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                             ),
                             const SizedBox(height: AppSpacing.s8),
                             Column(
-                              children: _quickQuestions.map((q) {
+                              children: _quickQuestionsFor(l10n).map((q) {
                                 final isSelected = _msgCtrl.text.trim() == q;
                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 8),
@@ -3271,15 +3417,15 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                               }).toList(),
                             ),
                             const SizedBox(height: AppSpacing.s12),
-                            const Text.rich(
+                            Text.rich(
                               TextSpan(
-                                text: 'Nội dung tin nhắn gửi Chủ nhà ',
-                                style: TextStyle(
+                                text: '${l10n.hostMsgInputLabel} ',
+                                style: const TextStyle(
                                   fontSize: 13.5,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.textStrong,
                                 ),
-                                children: [
+                                children: const [
                                   TextSpan(
                                     text: '*',
                                     style: TextStyle(color: AppColors.primary),
@@ -3299,8 +3445,7 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 color: AppColors.textStrong,
                               ),
                               decoration: InputDecoration(
-                                hintText:
-                                    'Nhập câu hỏi của bạn về lịch trống, tiện nghi hoặc yêu cầu đặc biệt...',
+                                hintText: l10n.hostMsgInputPlaceholder,
                                 hintStyle: const TextStyle(
                                   fontSize: 13.5,
                                   height: 1.45,
@@ -3347,8 +3492,8 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 ),
                                 label: Text(
                                   _isSending
-                                      ? 'Đang gửi tin nhắn...'
-                                      : 'Gửi tin nhắn & Mở phòng chat',
+                                      ? l10n.hostMsgSendingAction
+                                      : l10n.hostMsgSendAction,
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,

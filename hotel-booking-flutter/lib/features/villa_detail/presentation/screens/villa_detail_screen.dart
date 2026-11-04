@@ -8,6 +8,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/date/booking_date.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/animations/animated_heart_button.dart';
 import '../../../../shared/animations/fade_slide_in.dart';
 import '../../../../shared/widgets/app_error_view.dart';
@@ -26,6 +27,7 @@ import '../widgets/booking_action_bar.dart';
 import '../widgets/daily_price_breakdown.dart';
 import '../widgets/mobile_spec_summary.dart';
 import '../widgets/property_faq_section.dart';
+import '../widgets/villa_description_section.dart';
 
 /// Complete port of `Source goc/frontend/src/views/pages/ListingDetail/ListingDetailPage.tsx`.
 class VillaDetailScreen extends ConsumerStatefulWidget {
@@ -149,7 +151,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Chỗ nghỉ này yêu cầu tối thiểu ${villa.minNights} đêm.',
+            context.l10n.villaDetailMinNightsRequired(villa.minNights),
           ),
         ),
       );
@@ -159,7 +161,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Chỗ nghỉ này giới hạn tối đa ${villa.maxNights} đêm mỗi lần đặt.',
+            context.l10n.villaDetailMaxNightsExceeded(villa.maxNights),
           ),
         ),
       );
@@ -176,8 +178,8 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Vui lòng đăng nhập để hoàn tất đặt phòng.'),
+        SnackBar(
+          content: Text(context.l10n.villaDetailLoginToBook),
         ),
       );
       await context.push('/dang-nhap');
@@ -204,9 +206,9 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
         await context.push('/thanh-toan/${booking.id}');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Đã gửi yêu cầu đặt phòng! Bạn có thể thanh toán ngay hoặc theo dõi tại Chuyến đi.',
+              context.l10n.villaDetailBookingSuccess,
             ),
           ),
         );
@@ -225,7 +227,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     showDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.92),
-      builder: (ctx) => _FullscreenGalleryModal(villa: villa),
+      builder: (ctx) => FullscreenGalleryModal(villa: villa),
     );
   }
 
@@ -308,7 +310,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                 actions: [
                   Semantics(
                     button: true,
-                    label: 'Xem toàn bộ ảnh',
+                    label: context.l10n.galleryViewAllPhotosSemantic,
                     child: InkWell(
                       onTap: () => _openFullscreenGallery(context, villa),
                       child: const SizedBox(
@@ -326,7 +328,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                   ),
                   Semantics(
                     button: true,
-                    label: 'Sao chép liên kết biệt thự',
+                    label: context.l10n.ctaCopyLink,
                     child: InkWell(
                       onTap: () {
                         Clipboard.setData(
@@ -335,10 +337,9 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                           ),
                         );
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content:
-                                Text('Đã sao chép liên kết vào bộ nhớ tạm'),
-                            duration: Duration(seconds: 2),
+                          SnackBar(
+                            content: Text(context.l10n.villaDetailShareCopied),
+                            duration: const Duration(seconds: 2),
                           ),
                         );
                       },
@@ -391,7 +392,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                             color: AppColors.iconStrong,
                           ),
                           label: Text(
-                            'Xem tất cả ${villa.imageUrls.length} ảnh',
+                            context.l10n.villaDetailViewAllPhotos(villa.imageUrls.length),
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -469,7 +470,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      '(${villa.reviewCount} đánh giá)',
+                                      '(${context.l10n.reviewsCount(villa.reviewCount)})',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w500,
                                         fontSize: 13,
@@ -507,28 +508,15 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
 
                             _buildSectionDivider(),
 
-                            // Description
-                            Text(
-                              'Giới thiệu biệt thự',
-                              style: AppTypography.sectionHeading
-                                  .copyWith(fontSize: 18),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              villa.description,
-                              style: AppTypography.bodyLarge.copyWith(
-                                fontSize: 15,
-                                height: 1.55,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
+                            // Description (with dynamic multi-language translation & original toggle)
+                            VillaDescriptionSection(villa: villa),
 
                             _buildSectionDivider(),
 
                             // Amenities List
                             if (villa.amenities.isNotEmpty) ...[
                               Text(
-                                'Tiện nghi có sẵn',
+                                context.l10n.villaDetailAmenitiesTitle,
                                 style: AppTypography.sectionHeading
                                     .copyWith(fontSize: 18),
                               ),
@@ -594,7 +582,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Gợi ý chỗ nghỉ tương tự gần đây',
+                                      context.l10n.villaDetailSimilarTitle,
                                       style: AppTypography.sectionHeading
                                           .copyWith(fontSize: 18),
                                     ),
@@ -686,11 +674,11 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
 
   Widget _buildHostCard(BuildContext context, Villa villa) {
     final rawName = villa.host?.fullName.trim() ?? '';
-    final hostName = rawName.isNotEmpty ? rawName : 'Chủ nhà VungTauStay';
+    final hostName =
+        rawName.isNotEmpty ? rawName : context.l10n.hostDefaultName;
     final rawBio = villa.host?.bio?.trim() ?? '';
-    final hostBio = rawBio.isNotEmpty
-        ? rawBio
-        : 'Chủ nhà tại Vũng Tàu, hỗ trợ thông tin lưu trú và nhận phòng.';
+    final hostBio =
+        rawBio.isNotEmpty ? rawBio : context.l10n.hostDefaultBio;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -711,7 +699,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Chủ nhà: $hostName',
+                  context.l10n.villaDetailHostPrefix(hostName),
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -767,11 +755,12 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
-                'Chọn lịch lưu trú & Đặt phòng',
+                context.l10n.villaDetailBookingCalendarTitle,
                 style: AppTypography.sectionHeading.copyWith(fontSize: 18),
               ),
               Text(
-                'Tối thiểu ${villa.minNights} đêm • Tối đa ${villa.maxNights} đêm',
+                context.l10n.villaDetailStayNightsRange(
+                    villa.minNights, villa.maxNights),
                 style: const TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary,
@@ -801,9 +790,9 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Số khách',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.guestCount,
+                      style: const TextStyle(
                         fontSize: 15.5,
                         fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary,
@@ -813,8 +802,9 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                     Text(
                       villa.includedGuests > 0 &&
                               villa.includedGuests < maxGuests
-                          ? 'Tiêu chuẩn ${villa.includedGuests} · Tối đa $maxGuests khách'
-                          : 'Tối đa $maxGuests khách',
+                          ? context.l10n.villaDetailGuestCapacityInfo(
+                              villa.includedGuests, maxGuests)
+                          : context.l10n.villaDetailGuestCapacityMax(maxGuests),
                       style: const TextStyle(
                         fontSize: 13,
                         color: AppColors.textSecondary,
@@ -864,7 +854,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                   textCapitalization: TextCapitalization.characters,
                   style: const TextStyle(fontSize: 14),
                   decoration: _compactFieldDecoration(
-                    hintText: 'Mã ưu đãi',
+                    hintText: context.l10n.villaDetailPromoCodeHint,
                   ),
                 ),
               ),
@@ -882,7 +872,9 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                   side: const BorderSide(color: AppColors.border),
                 ),
                 child: Text(
-                  _isValidatingCoupon ? 'Đang kiểm tra...' : 'Áp dụng',
+                  _isValidatingCoupon
+                      ? context.l10n.villaDetailPromoChecking
+                      : context.l10n.villaDetailPromoApply,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -922,7 +914,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
             maxLines: 2,
             style: const TextStyle(fontSize: 14),
             decoration: _compactFieldDecoration(
-              hintText: 'Ghi chú cho chủ nhà (tùy chọn)',
+              hintText: context.l10n.villaDetailSpecialRequestsHint,
             ),
           ),
           const SizedBox(height: 18),
@@ -933,7 +925,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
             children: [
               _PriceLine(
                 label:
-                    'Tiền phòng (${calc.nights} đêm${calc.weekendNights > 0 ? ', ${calc.weekendNights} đêm cuối tuần' : ''})',
+                    '${context.l10n.villaDetailRoomSubtotal(calc.nights)}${calc.weekendNights > 0 ? context.l10n.villaDetailWeekendNights(calc.weekendNights) : ''}',
                 value: formatter
                     .format(
                       calc.roomSubtotal,
@@ -943,7 +935,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
               ),
               if (calc.extraGuestTotal > 0)
                 _PriceLine(
-                  label: 'Phụ thu vượt khách tiêu chuẩn',
+                  label: context.l10n.villaDetailExtraGuestFee,
                   value: formatter
                       .format(
                         calc.extraGuestTotal,
@@ -953,7 +945,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                 ),
               if (calc.cleaningFee > 0)
                 _PriceLine(
-                  label: 'Phí vệ sinh',
+                  label: context.l10n.villaDetailCleaningFee,
                   value: formatter
                       .format(
                         calc.cleaningFee,
@@ -963,7 +955,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                 ),
               if (calc.serviceFee > 0)
                 _PriceLine(
-                  label: 'Phí dịch vụ',
+                  label: context.l10n.villaDetailServiceFee,
                   value: formatter
                       .format(
                         calc.serviceFee,
@@ -973,7 +965,8 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                 ),
               if (calc.discount > 0)
                 _PriceLine(
-                  label: 'Giảm giá ($_appliedCouponCode)',
+                  label: context.l10n.villaDetailDiscountLabel(
+                      _appliedCouponCode ?? ''),
                   value: formatter.formatDiscount(
                     calc.discount,
                     context: MoneyDisplayContext.breakdown,
@@ -988,9 +981,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      formatter.localeCode == 'vi'
-                          ? 'Tổng thanh toán tạm tính'
-                          : formatter.l10n.totalNightsWithFee(calc.nights),
+                      context.l10n.villaDetailEstimatedTotal,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -1080,7 +1071,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                       const SizedBox(width: 14),
                       Expanded(
                         child: Text(
-                          item,
+                          _resolveAmenityLabel(context, item),
                           style: AppTypography.bodyLarge.copyWith(
                             fontSize: 15,
                             fontWeight: FontWeight.w400,
@@ -1113,30 +1104,88 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     );
   }
 
+  String _resolveAmenityLabel(BuildContext context, String item) {
+    final lang = context.activeLanguageCode;
+    if (lang == 'vi') return item;
+    final lower = item.trim().toLowerCase();
+    if (lower.contains('wifi') || lower.contains('wi-fi') || lower.contains('internet')) {
+      return lang == 'ko' ? '초고속 와이파이' : 'High-speed Wi-Fi';
+    }
+    if (lower.contains('điều hòa') || lower.contains('máy lạnh') || lower.contains('air')) {
+      return lang == 'ko' ? '각 방 에어컨' : 'Air conditioning in each room';
+    }
+    if (lower.contains('bếp') && (lower.contains('dụng cụ') || lower.contains('đầy đủ') || lower.contains('kitchen'))) {
+      return lang == 'ko' ? '주방 조리도구 완비' : 'Fully equipped kitchen';
+    }
+    if (lower.contains('đỗ xe') || lower.contains('đậu xe') || lower.contains('parking')) {
+      return lang == 'ko' ? '주차 공간' : 'Car parking space';
+    }
+    if (lower.contains('tv') || lower.contains('tivi')) {
+      return lang == 'ko' ? '65인치 스마트 TV' : '65-inch Smart TV';
+    }
+    if (lower.contains('view biển') || lower.contains('biển') || lower.contains('ocean')) {
+      return lang == 'ko' ? '오션뷰' : 'Direct sea view';
+    }
+    if (lower.contains('ban công') || lower.contains('balcony')) {
+      return lang == 'ko' ? '발코니' : 'Airy balcony';
+    }
+    if (lower.contains('hồ bơi') || lower.contains('bể bơi') || lower.contains('pool')) {
+      return lang == 'ko' ? '프라이빗 수영장' : 'Private pool';
+    }
+    if (lower.contains('bbq') || lower.contains('nướng')) {
+      return lang == 'ko' ? 'BBQ 바비큐 그릴' : 'BBQ grill';
+    }
+    if (lower.contains('tủ lạnh') || lower.contains('fridge')) {
+      return lang == 'ko' ? '냉장고' : 'Refrigerator';
+    }
+    if (lower.contains('máy giặt') || lower.contains('washer')) {
+      return lang == 'ko' ? '세탁기' : 'Washing machine';
+    }
+    if (lower.contains('bồn tắm') || lower.contains('bathtub')) {
+      return lang == 'ko' ? '욕조' : 'Bathtub';
+    }
+    return item;
+  }
+
+  String _resolveCancellationPolicy(BuildContext context, String policy) {
+    final l10n = context.l10n;
+    switch (policy.toLowerCase()) {
+      case 'flexible':
+        return l10n.villaDetailPolicyFlexible;
+      case 'strict':
+        return l10n.villaDetailPolicyStrict;
+      case 'moderate':
+      default:
+        return l10n.villaDetailPolicyModerate;
+    }
+  }
+
   Widget _buildPoliciesCard(Villa villa) {
     final rules = villa.rules ?? const VillaRules();
     final policyItems = <Widget>[
       _PolicyItem(
         icon: AppSemanticIcons.checkIn,
-        label: 'Nhận phòng: ${rules.checkInFrom} – ${rules.checkInUntil}',
+        label: context.l10n.villaDetailCheckInTime(
+            rules.checkInFrom, rules.checkInUntil),
       ),
       _PolicyItem(
         icon: AppSemanticIcons.checkOut,
-        label: 'Trả phòng: Trước ${rules.checkOutBefore}',
+        label: context.l10n.villaDetailCheckOutTime(rules.checkOutBefore),
       ),
       if (rules.quietHours != null)
         _PolicyItem(
           icon: LucideIcons.volumeX,
-          label: 'Giờ yên tĩnh: ${rules.quietHours}',
+          label: context.l10n.villaDetailQuietHours(rules.quietHours!),
         ),
       _PolicyItem(
         icon: LucideIcons.pawPrint,
-        label:
-            rules.allowPets ? 'Cho phép mang thú cưng' : 'Không mang thú cưng',
+        label: rules.allowPets
+            ? context.l10n.villaDetailPetsAllowed
+            : context.l10n.villaDetailPetsNotAllowed,
       ),
       _PolicyItem(
         icon: LucideIcons.shieldCheck,
-        label: villa.cancellationPolicyLabelVi,
+        label: _resolveCancellationPolicy(context, villa.cancellationPolicy),
       ),
     ];
 
@@ -1144,7 +1193,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Nội quy chỗ nghỉ & Chính sách hoàn hủy',
+          context.l10n.villaDetailPoliciesTitle,
           style: AppTypography.sectionHeading.copyWith(fontSize: 18),
         ),
         const SizedBox(height: 16),
@@ -1347,17 +1396,17 @@ class _PolicyItem extends StatelessWidget {
   }
 }
 
-class _FullscreenGalleryModal extends StatefulWidget {
+class FullscreenGalleryModal extends StatefulWidget {
   final Villa villa;
 
-  const _FullscreenGalleryModal({required this.villa});
+  const FullscreenGalleryModal({super.key, required this.villa});
 
   @override
-  State<_FullscreenGalleryModal> createState() =>
+  State<FullscreenGalleryModal> createState() =>
       _FullscreenGalleryModalState();
 }
 
-class _FullscreenGalleryModalState extends State<_FullscreenGalleryModal> {
+class _FullscreenGalleryModalState extends State<FullscreenGalleryModal> {
   String _selectedType = 'all';
 
   @override
@@ -1388,7 +1437,7 @@ class _FullscreenGalleryModalState extends State<_FullscreenGalleryModal> {
                 children: [
                   Expanded(
                     child: Text(
-                      '${widget.villa.name} (${filtered.length} ảnh)',
+                      '${widget.villa.name} (${context.l10n.galleryPhotoCount(filtered.length)})',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -1396,16 +1445,20 @@ class _FullscreenGalleryModalState extends State<_FullscreenGalleryModal> {
                       ),
                     ),
                   ),
-                  InkWell(
-                    onTap: () => Navigator.of(context).pop(),
-                    child: const SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: Center(
-                        child: Icon(
-                          LucideIcons.x,
-                          color: Colors.white,
-                          size: 22,
+                  Semantics(
+                    button: true,
+                    label: MaterialLocalizations.of(context).closeButtonTooltip,
+                    child: InkWell(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: const SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Center(
+                          child: Icon(
+                            LucideIcons.x,
+                            color: Colors.white,
+                            size: 22,
+                          ),
                         ),
                       ),
                     ),
@@ -1424,7 +1477,7 @@ class _FullscreenGalleryModalState extends State<_FullscreenGalleryModal> {
                       showCheckmark: false,
                       selectedColor: AppColors.primary,
                       label: Text(
-                        'Tất cả không gian',
+                        context.l10n.reviewsFilterAll,
                         style: TextStyle(
                           fontWeight: _selectedType == 'all'
                               ? FontWeight.w700
@@ -1446,7 +1499,7 @@ class _FullscreenGalleryModalState extends State<_FullscreenGalleryModal> {
                           selectedColor: AppColors.primary,
                           label: Text(
                             VillaImage(imageId: '', url: '', type: t)
-                                    .typeLabelVi ??
+                                    .localizedType(context.l10n) ??
                                 t,
                             style: TextStyle(
                               fontWeight: _selectedType == t
@@ -1471,6 +1524,7 @@ class _FullscreenGalleryModalState extends State<_FullscreenGalleryModal> {
                 separatorBuilder: (_, __) => const SizedBox(height: 16),
                 itemBuilder: (context, index) {
                   final img = filtered[index];
+                  final spaceName = img.localizedType(context.l10n);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1486,10 +1540,10 @@ class _FullscreenGalleryModalState extends State<_FullscreenGalleryModal> {
                           ),
                         ),
                       ),
-                      if (img.typeLabelVi != null) ...[
+                      if (spaceName != null && spaceName.isNotEmpty) ...[
                         const SizedBox(height: 6),
                         Text(
-                          'Không gian: ${img.typeLabelVi}',
+                          context.l10n.gallerySpacePrefix(spaceName),
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 12,

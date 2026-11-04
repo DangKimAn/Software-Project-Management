@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/core/date/booking_date.dart';
+import 'package:hotel_booking_flutter/l10n/l10n.dart';
 import 'package:hotel_booking_flutter/core/storage/preferences_service.dart';
 import 'package:hotel_booking_flutter/features/search/presentation/widgets/booking_date_range_picker.dart';
 import 'package:hotel_booking_flutter/features/villa_detail/presentation/widgets/booking_action_bar.dart';
@@ -135,6 +136,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('vi'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SingleChildScrollView(
               child: BookingDateRangePicker(
@@ -176,6 +180,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('vi'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SingleChildScrollView(
               child: BookingDateRangePicker(
@@ -473,6 +480,9 @@ void main() {
     testWidgets('MobileSpecSummary hides zero-valued specs', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
+          locale: Locale('vi'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: MobileSpecSummary(
               specs: VillaSpecs(
@@ -521,6 +531,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('vi'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SingleChildScrollView(
               child: Column(

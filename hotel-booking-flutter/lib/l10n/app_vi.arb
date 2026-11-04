@@ -29,7 +29,9 @@
   "searchPlusMinusDays": "± {days} ngày",
   "@searchPlusMinusDays": {
     "placeholders": {
-      "days": { "type": "int" }
+      "days": {
+        "type": "int"
+      }
     }
   },
   "searchAdults": "Người lớn",
@@ -67,92 +69,122 @@
   "bedroomsCount": "{count, plural, =1{1 phòng} other{{count} phòng}}",
   "@bedroomsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "bedsCount": "{count, plural, =1{1 giường} other{{count} giường}}",
   "@bedsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "guestsCapacity": "{count, plural, =1{1 khách} other{{count} khách}}",
   "@guestsCapacity": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "guestsCount": "{count, plural, =1{1 khách} other{{count} khách}}",
   "@guestsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "adultsCount": "{count, plural, =1{1 người lớn} other{{count} người lớn}}",
   "@adultsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "childrenCount": "{count, plural, =1{1 trẻ em} other{{count} trẻ em}}",
   "@childrenCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "infantsCount": "{count, plural, =1{1 em bé} other{{count} em bé}}",
   "@infantsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "petsCount": "{count, plural, =1{1 thú cưng} other{{count} thú cưng}}",
   "@petsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "bathroomsCount": "{count, plural, =1{1 WC} other{{count} WC}}",
   "@bathroomsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "nightsCount": "{count, plural, =1{1 đêm} other{{count} đêm}}",
   "@nightsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "reviewsCount": "{count, plural, =0{Chưa có đánh giá} =1{1 đánh giá} other{{count} đánh giá}}",
   "@reviewsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "beachDistance": "{distance}m tới biển",
   "@beachDistance": {
     "placeholders": {
-      "distance": { "type": "int" }
+      "distance": {
+        "type": "int"
+      }
     }
   },
   "priceFrom": "Từ {price} / đêm",
   "@priceFrom": {
     "placeholders": {
-      "price": { "type": "String" }
+      "price": {
+        "type": "String"
+      }
     }
   },
   "pricePerNightUnit": "/ đêm",
   "saturdayPrice": "Thứ 7: {price}",
   "@saturdayPrice": {
     "placeholders": {
-      "price": { "type": "String" }
+      "price": {
+        "type": "String"
+      }
     }
   },
   "totalNightsWithFee": "{nights, plural, =1{Tổng 1 đêm • Đã gồm phí} other{Tổng {nights} đêm • Đã gồm phí}}",
   "@totalNightsWithFee": {
     "placeholders": {
-      "nights": { "type": "int" }
+      "nights": {
+        "type": "int"
+      }
     }
   },
   "contactForPrice": "Liên hệ báo giá",
@@ -186,8 +218,12 @@
   "paginationPageOf": "Trang {page} / {totalPages}",
   "@paginationPageOf": {
     "placeholders": {
-      "page": { "type": "int" },
-      "totalPages": { "type": "int" }
+      "page": {
+        "type": "int"
+      },
+      "totalPages": {
+        "type": "int"
+      }
     }
   },
   "loadingText": "Đang tải dữ liệu...",
@@ -210,6 +246,32 @@
   "errorVillaNotFoundMessage": "Biệt thự bạn tìm kiếm không tồn tại hoặc đã ngừng phục vụ.",
   "errorRateLimitMessage": "Bạn đã thao tác quá nhanh. Vui lòng thử lại sau ít phút.",
   "errorValidationMessage": "Thông tin gửi lên không hợp lệ. Vui lòng kiểm tra lại.",
+  "calendarPrevMonth": "Tháng trước",
+  "calendarNextMonth": "Tháng sau",
+  "calendarDay": "Ngày {day}",
+  "@calendarDay": {
+    "placeholders": {
+      "day": {
+        "type": "int"
+      }
+    }
+  },
+  "calendarDayBooked": "Ngày {day} đã kín",
+  "@calendarDayBooked": {
+    "placeholders": {
+      "day": {
+        "type": "int"
+      }
+    }
+  },
+  "calendarDayCheckOutOnly": "Ngày {day} chỉ trả phòng",
+  "@calendarDayCheckOutOnly": {
+    "placeholders": {
+      "day": {
+        "type": "int"
+      }
+    }
+  },
   "dateBooked": "Ngày này đã kín",
   "checkInDate": "Nhận phòng",
   "checkOutDate": "Trả phòng",
@@ -309,33 +371,43 @@
   "fxEstimatedPrice": "Giá tham khảo: ≈ {amount}",
   "@fxEstimatedPrice": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "fxTotalPayableVnd": "Tổng thanh toán thực tế: {amountVnd}",
   "@fxTotalPayableVnd": {
     "placeholders": {
-      "amountVnd": { "type": "String" }
+      "amountVnd": {
+        "type": "String"
+      }
     }
   },
   "fxChargedInVndNotice": "Thanh toán thực tế bằng VND.",
   "fxReferenceRateLabel": "Tỷ giá tham khảo ({source})",
   "@fxReferenceRateLabel": {
     "placeholders": {
-      "source": { "type": "String" }
+      "source": {
+        "type": "String"
+      }
     }
   },
   "fxRateUpdatedAt": "Tỷ giá cập nhật: {time}",
   "@fxRateUpdatedAt": {
     "placeholders": {
-      "time": { "type": "String" }
+      "time": {
+        "type": "String"
+      }
     }
   },
   "fxRateUnavailableFallback": "Chưa tải được tỷ giá ngoại tệ. Đang hiển thị giá chính thức bằng VND.",
   "fxRateStaleNotice": "Đang sử dụng tỷ giá cập nhật gần nhất ({time}).",
   "@fxRateStaleNotice": {
     "placeholders": {
-      "time": { "type": "String" }
+      "time": {
+        "type": "String"
+      }
     }
   },
   "fxBankConversionFeeNotice": "Ngân hàng phát hành thẻ có thể áp dụng tỷ giá và phí chuyển đổi riêng.",
@@ -345,13 +417,519 @@
   "fxPayButtonVnd": "Thanh toán {amountVnd} qua {method}",
   "@fxPayButtonVnd": {
     "placeholders": {
-      "amountVnd": { "type": "String" },
-      "method": { "type": "String" }
+      "amountVnd": {
+        "type": "String"
+      },
+      "method": {
+        "type": "String"
+      }
     }
   },
   "fxPriceRangePerNight": "Khoảng giá mỗi đêm",
   "vnpayGatewayTitle": "VNPay (QR Pay / Thẻ ATM nội địa)",
   "vnpayGatewaySubtitle": "Xác nhận thanh toán VND qua cổng bảo mật VNPay",
   "momoGatewayTitle": "Ví điện tử MoMo",
-  "momoGatewaySubtitle": "Thanh toán VND qua ứng dụng MoMo hoặc quét mã QR MoMo"
+  "momoGatewaySubtitle": "Thanh toán VND qua ứng dụng MoMo hoặc quét mã QR MoMo",
+  "footerSupport": "Hỗ trợ",
+  "footerBookingGuide": "Hướng dẫn đặt phòng",
+  "footerCancellationPolicy": "Chính sách hủy phòng",
+  "footerFeedback": "Khiếu nại & Góp ý",
+  "footerFaq": "Câu hỏi thường gặp (FAQ)",
+  "footerDiscover": "Khám phá Vũng Tàu",
+  "footerAboutUs": "Về chúng tôi",
+  "footerTravelGuide": "Cẩm nang du lịch",
+  "footerAddonServices": "Dịch vụ đi kèm",
+  "footerMemberOffers": "Ưu đãi thành viên",
+  "footerContact": "Liên hệ",
+  "footerOnlineConsultation": "Liên hệ tư vấn trực tuyến",
+  "footerHotline": "Hotline: {phone}",
+  "@footerHotline": {
+    "placeholders": {
+      "phone": {
+        "type": "String"
+      }
+    }
+  },
+  "footerAddress": "Địa chỉ: 28 Thi Sách",
+  "footerEmail": "Email: {email}",
+  "@footerEmail": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "footerSocial": "Mạng xã hội",
+  "footerCopyright": "© Bản quyền thuộc về Villa Vũng Tàu 2026",
+  "settingsAvatarUpdateTitle": "Cập nhật ảnh đại diện",
+  "settingsAvatarUpdateHint": "Chọn ảnh định dạng JPG, PNG, WebP hoặc GIF từ máy của bạn (dung lượng tối đa 5MB).",
+  "settingsAvatarPickFromDevice": "Chọn ảnh từ thiết bị (Tối đa 5MB)",
+  "settingsAvatarUploading": "Đang tải ảnh lên...",
+  "settingsAvatarSelected": "Đã chọn: {fileName} ({sizeKb} KB)",
+  "@settingsAvatarSelected": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      },
+      "sizeKb": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAvatarPickError": "Không thể chọn ảnh từ thiết bị. Vui lòng thử lại.",
+  "settingsAvatarUpdateSuccess": "Đã cập nhật ảnh đại diện thành công.",
+  "settingsChangeAvatarTooltip": "Đổi ảnh",
+  "settingsEditProfileTooltip": "Sửa hồ sơ",
+  "settingsEditProfileTitle": "Chỉnh sửa hồ sơ cá nhân",
+  "settingsAvatarSectionTitle": "Ảnh đại diện",
+  "settingsAvatarPickFromDeviceShort": "Chọn ảnh từ máy",
+  "settingsAvatarUploadingShort": "Đang tải...",
+  "settingsAvatarPickHint": "Chọn ảnh từ thiết bị (tối đa 5MB)",
+  "settingsAvatarSelectedShort": "Đã chọn: {fileName}",
+  "@settingsAvatarSelectedShort": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsFullNameLabel": "Họ và tên *",
+  "settingsFullNameHint": "Nhập họ và tên đầy đủ",
+  "settingsPhoneLabel": "Số điện thoại",
+  "settingsPhoneHint": "0912345678 hoặc +84912345678",
+  "settingsLocationLabel": "Nơi sinh sống",
+  "settingsLocationHint": "Ví dụ: Vũng Tàu, Việt Nam",
+  "settingsDreamDestinationLabel": "Nơi tôi luôn muốn đến",
+  "settingsDreamDestinationHint": "Nhập điểm đến yêu thích của bạn",
+  "settingsJobLabel": "Công việc / Nghề nghiệp",
+  "settingsJobHint": "Nhập công việc hiện tại",
+  "settingsSchoolLabel": "Trường học",
+  "settingsSchoolHint": "Nơi bạn từng theo học",
+  "settingsLanguagesLabel": "Ngôn ngữ giao tiếp",
+  "settingsLanguagesHint": "Tiếng Việt, English (phân cách bằng dấu phẩy)",
+  "settingsBioLabel": "Giới thiệu bản thân",
+  "settingsBioHint": "Chia sẻ đôi nét về bản thân...",
+  "settingsSaving": "Đang lưu...",
+  "settingsProfileUpdateSuccess": "Đã cập nhật hồ sơ thành công.",
+  "settingsUnsavedDraftBanner": "Bạn có bản nháp hồ sơ chưa lưu thành công.",
+  "settingsResumeEditing": "Tiếp tục sửa",
+  "settingsConfirmPhoneTitle": "Xác nhận thay đổi số điện thoại",
+  "settingsConfirmPhoneRemove": "Bạn sắp xóa số điện thoại liên hệ đã lưu ({oldPhone}). Bạn có chắc chắn muốn tiếp tục?",
+  "@settingsConfirmPhoneRemove": {
+    "placeholders": {
+      "oldPhone": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsConfirmPhoneChange": "Bạn sắp thay đổi số điện thoại liên hệ từ {oldPhone} sang {newPhone}. Bạn có chắc chắn muốn lưu thay đổi này?",
+  "@settingsConfirmPhoneChange": {
+    "placeholders": {
+      "oldPhone": {
+        "type": "String"
+      },
+      "newPhone": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsConfirmPhoneReview": "Kiểm tra lại",
+  "settingsConfirmPhoneSave": "Xác nhận lưu",
+  "settingsConfirmLogoutTitle": "Xác nhận đăng xuất",
+  "settingsConfirmLogoutDraft": "Bạn đang có bản nháp chỉnh sửa hồ sơ chưa lưu. Đăng xuất sẽ xóa dữ liệu nháp tạm thời trên phiên này. Bạn có chắc chắn muốn đăng xuất?",
+  "settingsConfirmLogout": "Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này không?",
+  "settingsRoleAdmin": "Quản trị viên (Admin)",
+  "settingsRoleHost": "Chủ nhà (Host)",
+  "settingsRoleHostPending": "Hồ sơ Chủ nhà đang chờ duyệt",
+  "settingsRoleGuest": "Khách lưu trú",
+  "settingsLoadingAccount": "Đang tải thông tin tài khoản...",
+  "settingsNotLoggedIn": "Chưa đăng nhập",
+  "settingsLoginPrompt": "Đăng nhập để xem kỳ nghỉ, tin nhắn và đồng bộ yêu thích",
+  "settingsSignInSignUp": "Đăng nhập / Đăng ký",
+  "settingsReLogin": "Đăng nhập lại",
+  "settingsContactSupportCenter": "Trung tâm Liên hệ & Hỗ trợ",
+  "settingsCallHotline": "Gọi tổng đài tư vấn",
+  "settingsZaloSupport": "Nhắn tin qua Zalo OA",
+  "settingsZaloInquiryDefaultMessage": "Xin chào The Palm, tôi cần hỗ trợ thông tin ứng dụng.",
+  "settingsManageProperties": "Quản lý chỗ nghỉ",
+  "settingsMyTrips": "Chuyến đi của tôi",
+  "settingsMyFavorites": "Danh sách yêu thích",
+  "settingsMessagesWithHost": "Tin nhắn với Chủ nhà",
+  "settingsStatusOfflineTitle": "Thiết bị đang ngoại tuyến",
+  "settingsStatusUnauthorizedTitle": "Phiên đăng nhập hết hạn hoặc bị từ chối",
+  "settingsStatusServerErrorTitle": "Không thể đồng bộ dữ liệu máy chủ",
+  "settingsStatusOfflineMessage": "Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.",
+  "settingsStatusUnauthorizedMessage": "Phiên đăng nhập không hợp lệ hoặc bạn không có quyền truy cập (401/403).",
+  "settingsStatusServerErrorMessage": "Máy chủ đang gặp sự cố tạm thời. Vui lòng thử lại sau.",
+  "villaDetailViewAllPhotos": "Xem tất cả {count} ảnh",
+  "@villaDetailViewAllPhotos": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "villaDetailShareCopied": "Đã sao chép liên kết vào bộ nhớ tạm",
+  "villaDetailAboutTitle": "Giới thiệu biệt thự",
+  "villaDetailTranslatedBadge": "Đã dịch sang Tiếng Việt",
+  "villaDetailShowOriginal": "Xem bản gốc",
+  "villaDetailShowTranslation": "Xem bản dịch",
+  "villaDetailOriginalBadge": "Bản gốc (Tiếng Việt)",
+  "villaDetailAmenitiesTitle": "Tiện nghi có sẵn",
+  "villaDetailBookingCalendarTitle": "Chọn lịch lưu trú & Đặt phòng",
+  "villaDetailStayNightsRange": "Tối thiểu {min} đêm • Tối đa {max} đêm",
+  "@villaDetailStayNightsRange": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "villaDetailGuestCapacityInfo": "Tiêu chuẩn {included} · Tối đa {max} khách",
+  "@villaDetailGuestCapacityInfo": {
+    "placeholders": {
+      "included": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "villaDetailGuestCapacityMax": "Tối đa {max} khách",
+  "@villaDetailGuestCapacityMax": {
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "villaDetailPromoCodeHint": "Mã ưu đãi",
+  "villaDetailPromoApply": "Áp dụng",
+  "villaDetailPromoChecking": "Đang kiểm tra...",
+  "villaDetailSpecialRequestsHint": "Ghi chú cho chủ nhà (tùy chọn)",
+  "villaDetailRoomSubtotal": "Tiền phòng ({nights} đêm)",
+  "@villaDetailRoomSubtotal": {
+    "placeholders": {
+      "nights": {
+        "type": "int"
+      }
+    }
+  },
+  "villaDetailWeekendNights": ", {count} đêm cuối tuần",
+  "@villaDetailWeekendNights": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "villaDetailExtraGuestFee": "Phụ thu vượt khách tiêu chuẩn",
+  "villaDetailCleaningFee": "Phí vệ sinh",
+  "villaDetailServiceFee": "Phí dịch vụ",
+  "villaDetailDiscountLabel": "Giảm giá ({code})",
+  "@villaDetailDiscountLabel": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "villaDetailEstimatedTotal": "Tổng thanh toán tạm tính",
+  "villaDetailPoliciesTitle": "Nội quy chỗ nghỉ & Chính sách hoàn hủy",
+  "villaDetailCheckInTime": "Nhận phòng: {from} – {until}",
+  "@villaDetailCheckInTime": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "until": {
+        "type": "String"
+      }
+    }
+  },
+  "villaDetailCheckOutTime": "Trả phòng: Trước {time}",
+  "@villaDetailCheckOutTime": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "villaDetailQuietHours": "Giờ yên tĩnh: {hours}",
+  "@villaDetailQuietHours": {
+    "placeholders": {
+      "hours": {
+        "type": "String"
+      }
+    }
+  },
+  "villaDetailPetsAllowed": "Cho phép mang thú cưng",
+  "villaDetailPetsNotAllowed": "Không mang thú cưng",
+  "villaDetailPolicyFlexible": "Linh hoạt — Hoàn tiền 100% trước 24 giờ nhận phòng",
+  "villaDetailPolicyModerate": "Trung bình — Hoàn tiền 100% trước 5 ngày nhận phòng",
+  "villaDetailPolicyStrict": "Nghiêm ngặt — Hoàn tiền 50% trước 7 ngày nhận phòng",
+  "villaDetailSimilarTitle": "Gợi ý chỗ nghỉ tương tự gần đây",
+  "villaDetailMessageHostTooltip": "Nhắn tin cho Chủ nhà",
+  "villaDetailHostPrefix": "Chủ nhà: {name}",
+  "@villaDetailHostPrefix": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "villaDetailMinNightsRequired": "Chỗ nghỉ này yêu cầu tối thiểu {min} đêm.",
+  "@villaDetailMinNightsRequired": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      }
+    }
+  },
+  "villaDetailMaxNightsExceeded": "Chỗ nghỉ này giới hạn tối đa {max} đêm mỗi lần đặt.",
+  "@villaDetailMaxNightsExceeded": {
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "villaDetailLoginToBook": "Vui lòng đăng nhập để hoàn tất đặt phòng.",
+  "villaDetailBookingSuccess": "Đã gửi yêu cầu đặt phòng! Bạn có thể thanh toán ngay hoặc theo dõi tại Chuyến đi.",
+  "specSaltwaterPool": "Hồ bơi nước mặn",
+  "specBeachDistance": "Cách biển {meters}m",
+  "@specBeachDistance": {
+    "placeholders": {
+      "meters": {
+        "type": "int"
+      }
+    }
+  },
+  "specBeachfront": "Sát biển",
+  "specGuestsCount": "{count} khách",
+  "@specGuestsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "specBedroomsCount": "{count} phòng",
+  "@specBedroomsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "specBedsCount": "{count} giường",
+  "@specBedsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "specBathsCount": "{count} WC",
+  "@specBathsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewsTranslate": "Dịch đánh giá",
+  "reviewsShowOriginal": "Xem bản gốc",
+  "reviewsTranslating": "Đang dịch...",
+  "reviewsTranslatedBadge": "Đã dịch tự động",
+  "reviewsFilterAll": "Tất cả",
+  "reviewsFilterStar": "{star} sao",
+  "@reviewsFilterStar": {
+    "placeholders": {
+      "star": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewsHostReply": "Phản hồi từ chủ nhà",
+  "reviewsLoadMore": "Xem thêm đánh giá",
+  "reviewsLoadError": "Không thể tải đánh giá vào lúc này.",
+  "reviewsEmpty": "Chưa có đánh giá nào cho villa này. Hãy là vị khách đầu tiên trải nghiệm!",
+  "reviewsEmptyRating": "Chưa có đánh giá {rating} sao nào cho chỗ nghỉ này.",
+  "@reviewsEmptyRating": {
+    "placeholders": {
+      "rating": {
+        "type": "int"
+      }
+    }
+  },
+  "chatBackToList": "Quay lại danh sách",
+  "chatShowTimestamps": "Hiện khung thời gian",
+  "chatHideTimestamps": "Ẩn thời gian",
+  "chatViewListing": "Xem chỗ nghỉ",
+  "chatAboutListing": "Trao đổi về chỗ nghỉ",
+  "chatSelectConversationPrompt": "Chọn một hội thoại để xem tin nhắn",
+  "chatInputPlaceholder": "Nhắn tin",
+  "chatMoreOptions": "Tiện ích mở rộng",
+  "chatCamera": "Chụp ảnh",
+  "chatGallery": "Gửi hình ảnh",
+  "chatGalleryLabel": "Thư viện ảnh",
+  "chatVoiceMessage": "Tin nhắn thoại",
+  "chatStopRecording": "Dừng ghi âm",
+  "chatEmojiTooltip": "Biểu tượng cảm xúc",
+  "chatSendMessage": "Gửi tin nhắn",
+  "chatSendQuickEmoji": "Gửi biểu tượng nhanh",
+  "chatSendQuickEmojiHint": "Gửi biểu tượng nhanh (nhấn giữ để đổi)",
+  "chatSending": "Đang gửi...",
+  "chatSent": "Đã gửi",
+  "chatSeen": " • Đã xem",
+  "chatFailed": "Gửi thất bại",
+  "chatRetry": "Thử lại",
+  "chatDeleteFailedMessage": "Xóa tin nhắn lỗi",
+  "chatEmptyPrompt": "Hãy gửi tin nhắn đầu tiên để bắt đầu trao đổi.",
+  "chatLoadMoreHistory": "Tải thêm tin nhắn cũ hơn",
+  "chatLoadingHistory": "Đang tải lịch sử...",
+  "chatNewMessagesCount": "Tin nhắn mới ({count})",
+  "@chatNewMessagesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chatUserTyping": "{user} đang nhập tin nhắn...",
+  "@chatUserTyping": {
+    "placeholders": {
+      "user": {
+        "type": "String"
+      }
+    }
+  },
+  "chatDraftPrefix": "Nháp: ",
+  "chatNoMessagesYet": "Chưa có tin nhắn.",
+  "chatSearchConversationsPlaceholder": "Tìm kiếm hội thoại...",
+  "chatLoginTitle": "Đăng nhập để xem tin nhắn",
+  "chatLoginDescription": "Trao đổi trực tiếp với Chủ nhà Vũng Tàu về lịch phòng, tiện nghi và ưu đãi.",
+  "chatLoginAction": "Đăng nhập ngay",
+  "chatEmptyAdminTitle": "Chưa có cuộc trò chuyện hỗ trợ nào",
+  "chatEmptyAdminDesc": "Các hội thoại hỗ trợ trực tiếp với Chủ nhà và Khách hàng trên hệ thống sẽ hiển thị tại đây.",
+  "chatEmptyAdminAction": "Quản lý người dùng",
+  "chatEmptyHostTitle": "Chưa có cuộc trò chuyện nào",
+  "chatEmptyHostDesc": "Khi khách hàng nhắn tin hỏi phòng hoặc đặt chỗ, hội thoại sẽ hiển thị tại đây.",
+  "chatEmptyGuestTitle": "Chưa có cuộc trò chuyện nào",
+  "chatEmptyGuestDesc": "Hãy chọn một biệt thự và bấm \"Nhắn tin cho Chủ nhà\" để bắt đầu trò chuyện.",
+  "chatEmptyGuestAction": "Khám phá biệt thự",
+  "chatExtensionsAndTemplatesTitle": "Tiện ích mở rộng & Mẫu tin nhanh",
+  "chatSelectEmojiTitle": "Chọn biểu tượng cảm xúc",
+  "chatSelectQuickEmojiTitle": "Chọn biểu tượng gửi nhanh",
+  "chatQuickReplyGuest1": "Dạ căn còn trống lịch này không ạ?",
+  "chatQuickReplyGuest2": "Cho mình hỏi giờ nhận và trả phòng ạ?",
+  "chatQuickReplyGuest3": "Biệt thự có sẵn bếp BBQ và hồ bơi riêng không ạ?",
+  "chatQuickReplyGuest4": "Cảm ơn Chủ nhà nhiều ạ!",
+  "chatQuickReplyHost1": "Dạ vâng, bên em đã nhận thông tin ạ!",
+  "chatQuickReplyHost2": "Quý khách nhận phòng lúc mấy giờ ạ?",
+  "chatQuickReplyHost3": "The Palm Villa xin chào bạn! 🌴",
+  "chatQuickReplyHost4": "Vị trí biệt thự em đã cập nhật trên hệ thống ạ.",
+  "chatQuickReplyAdmin1": "Chào bạn, Quản trị viên hệ thống hỗ trợ bạn vấn đề gì ạ?",
+  "chatQuickReplyAdmin2": "Hệ thống đã tiếp nhận thông tin và đang kiểm tra ạ.",
+  "chatQuickReplyAdmin3": "Hồ sơ/bài đăng của bạn đã được cập nhật trạng thái.",
+  "chatQuickReplyAdmin4": "Cảm ơn bạn đã phản hồi cho Ban quản trị!",
+  "chatTplAdminDocsTitle": "Yêu cầu bổ sung hồ sơ / giấy tờ",
+  "chatTplAdminDocsSubtitle": "Nhắc Chủ nhà hoặc Khách cập nhật thông tin xác minh",
+  "chatTplAdminDocsContent": "📋 Ban quản trị đề nghị bạn kiểm tra và bổ sung giấy tờ xác minh rõ nét để hệ thống hoàn tất phê duyệt.",
+  "chatTplHostLocationTitle": "Gửi vị trí chỗ nghỉ",
+  "chatTplHostLocationSubtitle": "Địa chỉ chi tiết và hướng dẫn di chuyển",
+  "chatTplHostLocationContent": "📍 Vị trí {villaTitle}: Đường Thùy Vân, TP. Vũng Tàu (gần bãi tắm Bãi Sau).",
+  "@chatTplHostLocationContent": {
+    "placeholders": {
+      "villaTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "chatTplGuestInquiryTitle": "Hỏi lịch trống & báo giá",
+  "chatTplGuestInquirySubtitle": "Kiểm tra tình trạng phòng và phụ thu cuối tuần",
+  "chatTplGuestInquiryContent": "📅 Chào Chủ nhà, cho mình hỏi căn còn trống lịch cuối tuần này và giá trọn gói cho đoàn mình nhé ạ?",
+  "chatTplAdminReviewTitle": "Thông báo kết quả kiểm duyệt",
+  "chatTplAdminReviewSubtitle": "Cập nhật trạng thái bài đăng hoặc tài khoản",
+  "chatTplAdminReviewContent": "✅ Quản trị viên đã kiểm tra và cập nhật trạng thái hồ sơ/bài đăng của bạn trên hệ thống.",
+  "chatTplHostCheckinTitle": "Giờ nhận & trả phòng",
+  "chatTplHostCheckinSubtitle": "Check-in: 14:00 • Check-out: 12:00",
+  "chatTplHostCheckinContent": "⏰ Thời gian nhận phòng: từ 14:00 | Thời gian trả phòng: trước 12:00 ngày hôm sau.",
+  "chatTplGuestCheckinTitle": "Xin nhận phòng sớm / trả phòng muộn",
+  "chatTplGuestCheckinSubtitle": "Hỏi hỗ trợ linh hoạt giờ check-in / check-out",
+  "chatTplGuestCheckinContent": "⏰ Đoàn mình dự kiến đến sớm hơn 14:00 một chút, Chủ nhà có thể hỗ trợ gửi hành lý hoặc nhận phòng sớm không ạ?",
+  "chatTplAdminPolicyTitle": "Hướng dẫn chính sách nền tảng",
+  "chatTplAdminPolicySubtitle": "Giải đáp quy định đặt phòng & phí dịch vụ",
+  "chatTplAdminPolicyContent": "ℹ️ Mọi giao dịch trên hệ thống đều được bảo vệ theo chính sách đặt phòng và hoàn hủy minh bạch của The Palm Villa.",
+  "chatTplHostHouseRulesTitle": "Gửi nội quy lưu trú",
+  "chatTplHostHouseRulesSubtitle": "Giữ gìn vệ sinh, yên tĩnh sau 22:00",
+  "chatTplHostHouseRulesContent": "📋 Nội quy lưu trú: Vui lòng giữ gìn tài sản chung và hạn chế tiếng ồn lớn sau 22:00. Chúc quý khách kỳ nghỉ tuyệt vời!",
+  "chatTplGuestAmenitiesTitle": "Hỏi tiện ích BBQ & hồ bơi",
+  "chatTplGuestAmenitiesSubtitle": "Bếp nướng, than, phao bơi và chỗ đậu xe",
+  "chatTplGuestAmenitiesContent": "🔥 Biệt thự có sẵn lò nướng BBQ, dụng cụ bếp, hồ bơi riêng và chỗ đậu ô tô trong sân không ạ?",
+  "chatToastUploadingPhoto": "Đang tải ảnh lên Cloudflare R2...",
+  "chatToastUploadPhotoFailed": "Tải ảnh lên R2 thất bại",
+  "chatToastUploadingVoice": "Đang tải tin nhắn thoại lên Cloudflare R2...",
+  "chatToastUploadVoiceFailed": "Tải âm thanh lên R2 thất bại",
+  "chatToastMicNoAudio": "Không ghi nhận được âm thanh từ Micro. Vui lòng cấp quyền Microphone hoặc nói to hơn.",
+  "chatToastMicAccessError": "Không thể truy cập Micro. Vui lòng cấp quyền Microphone trên trình duyệt / thiết bị.",
+  "chatErrorNetwork": "Mất kết nối mạng",
+  "chatErrorForbidden": "Không có quyền truy cập",
+  "chatErrorUnauthorized": "Phiên đăng nhập hết hạn",
+  "chatErrorNotFound": "Không tìm thấy cuộc trò chuyện",
+  "chatErrorRateLimit": "Thao tác quá nhanh",
+  "chatErrorServer": "Lỗi máy chủ",
+  "chatErrorValidation": "Dữ liệu không hợp lệ",
+  "chatErrorGeneric": "Đã có lỗi xảy ra",
+  "hostMsgBackToVilla": "Quay lại trang biệt thự",
+  "hostMsgContactTitle": "Liên hệ Chủ nhà",
+  "hostMsgHostLabel": "Chủ nhà: {name}",
+  "@hostMsgHostLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "hostMsgDefaultHost": "Chủ nhà The Palm Villa",
+  "hostMsgFaqTitle": "Câu hỏi thường gặp cho Chủ nhà:",
+  "hostMsgInputLabel": "Nội dung tin nhắn gửi Chủ nhà ",
+  "hostMsgInputPlaceholder": "Nhập câu hỏi của bạn về lịch trống, tiện nghi hoặc yêu cầu đặc biệt...",
+  "hostMsgSendAction": "Gửi tin nhắn & Mở phòng chat",
+  "hostMsgSendingAction": "Đang gửi tin nhắn...",
+  "hostMsgQuestion1": "Chào Chủ nhà, biệt thự còn trống lịch cuối tuần này không ạ?",
+  "hostMsgQuestion2": "Hồ bơi của biệt thự là nước ngọt hay nước mặn và có phao bơi không ạ?",
+  "hostMsgQuestion3": "Biệt thự có sẵn lò nướng BBQ, than và dụng cụ bếp đầy đủ không ạ?",
+  "hostMsgQuestion4": "Đoàn mình muốn nhận phòng sớm hơn 14:00 có được hỗ trợ không ạ?",
+  "galleryPhotoCount": "{count} ảnh",
+  "@galleryPhotoCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "galleryViewAllPhotosSemantic": "Xem toàn bộ ảnh",
+  "gallerySpacePrefix": "Không gian: {type}",
+  "@gallerySpacePrefix": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceBedroom": "Phòng ngủ",
+  "spaceLivingRoom": "Phòng khách",
+  "spaceKitchen": "Phòng bếp",
+  "spaceBathroom": "Phòng tắm",
+  "spacePool": "Hồ bơi",
+  "spaceExterior": "Ngoại thất",
+  "spaceView": "Tầm nhìn",
+  "spaceDining": "Phòng ăn",
+  "spaceOther": "Không gian khác"
 }

@@ -26,6 +26,7 @@ import '../../features/trips/presentation/screens/payment_result_screen.dart';
 import '../../features/trips/presentation/screens/trips_screen.dart';
 import '../../features/villa_detail/presentation/screens/villa_detail_screen.dart';
 import '../../features/villas/presentation/screens/villa_list_screen.dart';
+import '../../l10n/l10n.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -909,19 +910,20 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
     required this.navigationShell,
   });
 
-  static const _tabs = [
-    (icon: LucideIcons.compass, label: 'Khám phá'),
-    (icon: AppSemanticIcons.messageHost, label: 'Tin nhắn'),
-    (icon: AppSemanticIcons.bookings, label: 'Chuyến đi'),
-    (icon: AppSemanticIcons.userProfile, label: 'Tài khoản'),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width >= 1024;
     if (isWide) {
       return Scaffold(body: navigationShell);
     }
+
+    final l10n = context.l10n;
+    final tabs = [
+      (icon: LucideIcons.compass, label: l10n.navDiscover),
+      (icon: AppSemanticIcons.messageHost, label: l10n.navMessages),
+      (icon: AppSemanticIcons.bookings, label: l10n.navTrips),
+      (icon: AppSemanticIcons.userProfile, label: l10n.navAccount),
+    ];
 
     return Scaffold(
       body: navigationShell,
@@ -935,8 +937,8 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
           child: SizedBox(
             height: 60,
             child: Row(
-              children: List.generate(_tabs.length, (index) {
-                final tab = _tabs[index];
+              children: List.generate(tabs.length, (index) {
+                final tab = tabs[index];
                 final isSelected = navigationShell.currentIndex == index;
                 return Expanded(
                   child: GestureDetector(

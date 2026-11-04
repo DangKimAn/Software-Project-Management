@@ -207,13 +207,14 @@ abstract final class LocaleFormatters {
   }
 
   /// Formats calendar month and year header:
-  /// - `vi`: `Tháng 10, 2026`
+  /// - `vi`: `Tháng 10, 2026` (or `Tháng 10 2026` when [includeComma] is false)
   /// - `en`: `October 2026`
   /// - `ko`: `2026년 10월`
   static String formatMonthYear(
     int year,
     int month, {
     String localeCode = 'vi',
+    bool includeComma = true,
   }) {
     final lang = normalizeLanguageCode(localeCode);
     final safeMonth = month.clamp(1, 12);
@@ -224,7 +225,44 @@ abstract final class LocaleFormatters {
         return '$year년 $safeMonth월';
       case 'vi':
       default:
-        return 'Tháng $safeMonth, $year';
+        return includeComma
+            ? 'Tháng $safeMonth, $year'
+            : 'Tháng $safeMonth $year';
+    }
+  }
+
+  /// Formats single month for month selectors:
+  /// - `vi`: `Tháng 10`
+  /// - `en`: `October`
+  /// - `ko`: `10월`
+  static String formatMonth(int month, {String localeCode = 'vi'}) {
+    final lang = normalizeLanguageCode(localeCode);
+    final safeMonth = month.clamp(1, 12);
+    switch (lang) {
+      case 'en':
+        return _enMonths[safeMonth - 1];
+      case 'ko':
+        return '$safeMonth월';
+      case 'vi':
+      default:
+        return 'Tháng $safeMonth';
+    }
+  }
+
+  /// Ordered weekday header labels (Monday through Sunday) for calendar grids:
+  /// - `vi`: `['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']`
+  /// - `en`: `['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']`
+  /// - `ko`: `['월', '화', '수', '목', '금', '토', '일']`
+  static List<String> weekdayHeaders({String localeCode = 'vi'}) {
+    final lang = normalizeLanguageCode(localeCode);
+    switch (lang) {
+      case 'en':
+        return _enWeekdays;
+      case 'ko':
+        return _koWeekdays;
+      case 'vi':
+      default:
+        return _viWeekdays;
     }
   }
 

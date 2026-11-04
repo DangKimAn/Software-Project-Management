@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/storage/preferences_service.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
@@ -101,6 +102,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return 'Tối';
   }
 
+  String _greeting(String currentLocale) {
+    if (currentLocale == 'vi') {
+      return 'Chào buổi ${_greetingByHour()}!';
+    }
+    final l10n = lookupAppLocalizations(Locale(currentLocale));
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) return l10n.greetingMorning;
+    if (hour >= 12 && hour < 18) return l10n.greetingAfternoon;
+    return l10n.greetingEvening;
+  }
+
   @override
   Widget build(BuildContext context) {
     final popularVillasAsync = ref.watch(popularDestinationsProvider);
@@ -177,6 +189,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   /// Matches `Hero.tsx` + `SearchBar.tsx` (`variant="home"`).
   Widget _buildHeroAndSearchCard(BuildContext context) {
+    final currentLocale = ref.watch(localeProvider);
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isDesktop = screenWidth >= 768;
     final heroHeight = isDesktop ? 390.0 : 215.0;
@@ -248,7 +261,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'Chào buổi ${_greetingByHour()}!',
+                            _greeting(currentLocale),
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: isDesktop ? 34 : 24,
@@ -259,7 +272,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Trân trọng được chào đón bạn tại thành phố biển Vũng Tàu',
+                            currentLocale == 'vi'
+                                ? 'Trân trọng được chào đón bạn tại thành phố biển Vũng Tàu'
+                                : lookupAppLocalizations(Locale(currentLocale)).homeWelcomeSubtitle,
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: isDesktop ? 16 : 13.5,
@@ -308,22 +323,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 alignment: WrapAlignment.spaceBetween,
                 crossAxisAlignment: WrapCrossAlignment.end,
                 children: [
-                  const Column(
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'LỊCH SỬ XEM',
-                        style: TextStyle(
+                        ref.watch(localeProvider) == 'vi'
+                            ? 'LỊCH SỬ XEM'
+                            : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeRecentlyViewedTitle.toUpperCase(),
+                        style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 2.0,
                           color: AppColors.primary,
                         ),
                       ),
-                      SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       Text(
-                        'Đã xem gần đây',
-                        style: TextStyle(
+                        ref.watch(localeProvider) == 'vi'
+                            ? 'Đã xem gần đây'
+                            : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeRecentlyViewedTitle,
+                        style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w700,
                           letterSpacing: -0.5,
@@ -335,9 +354,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   TextButton(
                     onPressed: () =>
                         ref.read(recentlyViewedProvider.notifier).clear(),
-                    child: const Text(
-                      'Xóa lịch sử xem',
-                      style: TextStyle(
+                    child: Text(
+                      ref.watch(localeProvider) == 'vi'
+                          ? 'Xóa lịch sử xem'
+                          : (ref.watch(localeProvider) == 'ko' ? '기록 지우기' : 'Clear history'),
+                      style: const TextStyle(
                         fontSize: 13,
                         color: Color(0xFF71717A),
                       ),
@@ -412,12 +433,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1184),
           child: villasAsync.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
+            loading: () => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
+                  const SizedBox(
                     width: 28,
                     height: 28,
                     child: CircularProgressIndicator(
@@ -425,10 +446,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       color: AppColors.primary,
                     ),
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
-                    'Đang tải chỗ nghỉ ...',
-                    style: TextStyle(
+                    ref.watch(localeProvider) == 'vi'
+                        ? 'Đang tải chỗ nghỉ ...'
+                        : (ref.watch(localeProvider) == 'ko'
+                            ? '숙소를 불러오는 중...'
+                            : 'Loading stays...'),
+                    style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                       color: Color(0xFF71717A),
@@ -464,9 +489,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text(
-                              'ĐIỂM ĐẾN NỔI BẬT',
-                              style: TextStyle(
+                            Text(
+                              ref.watch(localeProvider) == 'vi'
+                                  ? 'ĐIỂM ĐẾN NỔI BẬT'
+                                  : (ref.watch(localeProvider) == 'ko'
+                                      ? '주요 목적지'
+                                      : 'FEATURED DESTINATIONS'),
+                              style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 1.8,
@@ -475,7 +504,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'Điểm đến được yêu thích',
+                              ref.watch(localeProvider) == 'vi'
+                                  ? 'Điểm đến được yêu thích'
+                                  : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homePopularDestinationsTitle,
                               style: TextStyle(
                                 fontSize: isDesktop ? 26 : 20,
                                 fontWeight: FontWeight.w800,
@@ -489,11 +520,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       const SizedBox(width: 12),
                       Semantics(
                         button: true,
-                        label:
-                            _isDestinationGridMode ? 'Thu gọn' : 'Xem tất cả',
+                        label: _isDestinationGridMode
+                            ? (ref.watch(localeProvider) == 'vi'
+                                ? 'Thu gọn'
+                                : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeShowLess)
+                            : (ref.watch(localeProvider) == 'vi'
+                                ? 'Xem tất cả'
+                                : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeSeeMoreVillas),
                         child: Tooltip(
-                          message:
-                              _isDestinationGridMode ? 'Thu gọn' : 'Xem tất cả',
+                          message: _isDestinationGridMode
+                              ? (ref.watch(localeProvider) == 'vi'
+                                  ? 'Thu gọn'
+                                  : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeShowLess)
+                              : (ref.watch(localeProvider) == 'vi'
+                                  ? 'Xem tất cả'
+                                  : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeSeeMoreVillas),
                           child: InkWell(
                             onTap: () {
                               setState(() {
@@ -701,7 +742,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             alignment: WrapAlignment.center,
                             children: [
                               _PillActionBtn(
-                                label: 'Quay lại',
+                                label: ref.watch(localeProvider) == 'vi'
+                                    ? 'Quay lại'
+                                    : (ref.watch(localeProvider) == 'ko'
+                                        ? '이전'
+                                        : 'Back'),
                                 leadingIcon: LucideIcons.arrowLeft,
                                 enabled: safePageIndex > 0,
                                 onTap: () {
@@ -712,7 +757,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 },
                               ),
                               _PillActionBtn(
-                                label: 'Xem tiếp',
+                                label: ref.watch(localeProvider) == 'vi'
+                                    ? 'Xem tiếp'
+                                    : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeSeeNext,
                                 trailingIcon: LucideIcons.arrowRight,
                                 enabled: safePageIndex < totalPages - 1,
                                 onTap: () {
@@ -723,7 +770,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 },
                               ),
                               _PillActionBtn(
-                                label: 'Thu gọn',
+                                label: ref.watch(localeProvider) == 'vi'
+                                    ? 'Thu gọn'
+                                    : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeShowLess,
                                 enabled: true,
                                 onTap: () {
                                   setState(() {
@@ -779,22 +828,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 alignment: WrapAlignment.spaceBetween,
                 crossAxisAlignment: WrapCrossAlignment.end,
                 children: [
-                  const Column(
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'BÀI VIẾT MỚI',
-                        style: TextStyle(
+                        ref.watch(localeProvider) == 'vi'
+                            ? 'BÀI VIẾT MỚI'
+                            : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeBlogBadge,
+                        style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 2.2,
                           color: AppColors.primary,
                         ),
                       ),
-                      SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       Text(
-                        'Kinh nghiệm lưu trú nổi bật',
-                        style: TextStyle(
+                        ref.watch(localeProvider) == 'vi'
+                            ? 'Kinh nghiệm lưu trú nổi bật'
+                            : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeBlogTitle,
+                        style: const TextStyle(
                           fontSize: 30,
                           fontWeight: FontWeight.w700,
                           letterSpacing: -0.6,
@@ -808,9 +861,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Nội dung tập trung vào nhu cầu thực tế khi đặt villa tại Vũng Tàu, từ nhóm gia đình đến nhóm bạn đông người.',
-                          style: TextStyle(
+                        Text(
+                          ref.watch(localeProvider) == 'vi'
+                              ? 'Nội dung tập trung vào nhu cầu thực tế khi đặt villa tại Vũng Tàu, từ nhóm gia đình đến nhóm bạn đông người.'
+                              : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeBlogSubtitle,
+                          style: const TextStyle(
                             fontSize: 14,
                             height: 1.7,
                             color: Color(0xFF64748B),
@@ -821,19 +876,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           onTap: () => context.push('/cam-nang'),
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(minHeight: 48),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  'Xem tất cả bài viết',
-                                  style: TextStyle(
+                                  ref.watch(localeProvider) == 'vi'
+                                      ? 'Xem tất cả bài viết'
+                                      : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeBlogSeeAll,
+                                  style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
                                     color: AppColors.primary,
                                   ),
                                 ),
-                                SizedBox(width: 8),
-                                Icon(
+                                const SizedBox(width: 8),
+                                const Icon(
                                   LucideIcons.arrowRight,
                                   size: 14,
                                   color: AppColors.iconStrong,
@@ -856,10 +913,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Text(
-                      'Đang tải bài viết...',
-                      style: TextStyle(
+                      ref.watch(localeProvider) == 'vi'
+                          ? 'Đang tải bài viết...'
+                          : (ref.watch(localeProvider) == 'ko'
+                              ? '글을 불러오는 중...'
+                              : 'Loading articles...'),
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                         color: Color(0xFF64748B),
@@ -874,9 +935,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
                   ),
-                  child: const Text(
-                    'Không tải được bài viết mới.',
-                    style: TextStyle(
+                  child: Text(
+                    ref.watch(localeProvider) == 'vi'
+                        ? 'Không tải được bài viết mới.'
+                        : (ref.watch(localeProvider) == 'ko'
+                            ? '새 글을 불러올 수 없습니다.'
+                            : 'Unable to load new articles.'),
+                    style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                       color: Color(0xFFB45309),
@@ -892,10 +957,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(24),
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Text(
-                          'Chưa có bài viết nổi bật.',
-                          style: TextStyle(
+                          ref.watch(localeProvider) == 'vi'
+                              ? 'Chưa có bài viết nổi bật.'
+                              : (ref.watch(localeProvider) == 'ko'
+                                  ? '추천 글이 아직 없습니다.'
+                                  : 'No featured articles yet.'),
+                          style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                             color: Color(0xFF64748B),
@@ -1322,7 +1391,7 @@ class _ListingCardWidget extends ConsumerWidget {
 }
 
 /// Exact port of `BlogPostCard.tsx` in Flat Minimal UI (no category badge box, no card border).
-class _BlogPostCardWidget extends StatelessWidget {
+class _BlogPostCardWidget extends ConsumerWidget {
   final BlogPost post;
   final VoidCallback onTap;
 
@@ -1332,7 +1401,63 @@ class _BlogPostCardWidget extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentLocale = ref.watch(localeProvider);
+    final isNonVi = currentLocale != 'vi';
+    final isKo = currentLocale == 'ko';
+
+    // Localized readTime
+    final mins = post.readTimeMinutes > 0 ? post.readTimeMinutes : 5;
+    final displayReadTime = !isNonVi
+        ? post.readTime
+        : (isKo ? '$mins분 읽기' : '$mins min read');
+
+    // Localized category
+    final String displayCategory;
+    if (!isNonVi) {
+      displayCategory = post.category;
+    } else if (post.category.toLowerCase().contains('review')) {
+      displayCategory = isKo ? '빌라 & 홈스테이 리뷰' : 'Villa & Homestay Reviews';
+    } else if (post.category.toLowerCase().contains('cẩm nang') ||
+        post.category.toLowerCase().contains('du lịch')) {
+      displayCategory = isKo ? '여행 가이드' : 'Travel Guide';
+    } else if (post.category.toLowerCase().contains('kinh nghiệm') ||
+        post.category.toLowerCase().contains('mẹo')) {
+      displayCategory = isKo ? '여행 팁 & 경험' : 'Tips & Experiences';
+    } else {
+      displayCategory = post.category;
+    }
+
+    // Localized title & excerpt for seeded articles
+    String displayTitle = post.title;
+    String displayExcerpt = post.excerpt;
+
+    if (isNonVi) {
+      if (post.slug.contains('thue-villa-vung-tau-gia-dinh') ||
+          post.title.contains('Kinh nghiệm chọn thuê')) {
+        displayTitle = isKo
+            ? '가족 및 단체 여행을 위한 붕따우 휴양 빌라 렌트 팁'
+            : 'Tips for renting vacation villas in Vung Tau for families and friend groups';
+        displayExcerpt = isKo
+            ? '빌라 예약 시 핵심 기준: 프라이빗 수영장, BBQ 시설, 해변 인접성 및 호스트 신뢰도.'
+            : 'Key criteria when booking villas: private pool, BBQ amenities, beachfront location, and host reputation.';
+      } else if (post.slug.contains('top-5-bai-bien') ||
+          post.title.contains('Top 5 bãi biển')) {
+        displayTitle = isKo
+            ? '붕따우에서 꼭 방문해야 할 가장 아름답고 평화로운 해변 Top 5'
+            : 'Top 5 most beautiful and peaceful beaches in Vung Tau to explore';
+        displayExcerpt = isKo
+            ? '바이저우, 바이두아의 원시적인 아름다움과 붕따우의 그림 같은 해안 명소를 만나보세요.'
+            : 'Discover the pristine beauty of Bai Dau, Bai Dua and scenic coastal check-in spots in Vung Tau.';
+      }
+    }
+
+    // Localized location
+    final displayLocation = isNonVi &&
+            (post.location == 'Vũng Tàu' || post.location.isEmpty)
+        ? (isKo ? '붕따우' : 'Vung Tau')
+        : post.location;
+
     return InkWell(
       onTap: onTap,
       child: Column(
@@ -1357,7 +1482,7 @@ class _BlogPostCardWidget extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      post.category,
+                      displayCategory,
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -1374,7 +1499,7 @@ class _BlogPostCardWidget extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      post.readTime,
+                      displayReadTime,
                       style: const TextStyle(
                         fontSize: 12,
                         color: Color(0xFF64748B),
@@ -1386,7 +1511,7 @@ class _BlogPostCardWidget extends StatelessWidget {
                 SizedBox(
                   height: 54,
                   child: Text(
-                    post.title,
+                    displayTitle,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -1401,7 +1526,7 @@ class _BlogPostCardWidget extends StatelessWidget {
                 SizedBox(
                   height: 76,
                   child: Text(
-                    post.excerpt,
+                    displayExcerpt,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -1421,7 +1546,7 @@ class _BlogPostCardWidget extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      post.location,
+                      displayLocation,
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,

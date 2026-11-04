@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/date/booking_date.dart';
+import '../../../../l10n/l10n.dart';
 
 import '../../../../shared/animations/source_animations.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
@@ -54,7 +55,7 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
     );
   }
 
-  String _locationSummary(VillaFilterState filter) {
+  String _locationSummary(VillaFilterState filter, {String locale = 'vi'}) {
     if (filter.locationGroup != null && filter.locationGroup!.isNotEmpty) {
       final match = VungTauMapConstants.findLocationGroup(filter.locationGroup);
       if (match != null) return match.label;
@@ -63,75 +64,136 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
       return filter.searchQuery.trim();
     }
     if (filter.lat != null && filter.lng != null) {
+      if (locale == 'en') return 'Map location (${filter.radius ?? 800}m)';
+      if (locale == 'ko') return '지도 위치 (${filter.radius ?? 800}m)';
       return 'Vị trí bản đồ (${filter.radius ?? 800}m)';
     }
+    if (locale == 'en') return 'Where to?';
+    if (locale == 'ko') return '어디로 여행가세요?';
     return 'Bạn muốn đi đâu?';
   }
 
-  String _checkInSummary(VillaFilterState filter) {
+  String _checkInSummary(VillaFilterState filter, {String locale = 'vi'}) {
     if (filter.dateMode == 'months' && filter.selectedMonths.isNotEmpty) {
       final sorted = [...filter.selectedMonths]..sort();
+      if (locale == 'en') return 'Month ${sorted.join(', ')}';
+      if (locale == 'ko') return '${sorted.join(', ')}월';
       return 'Tháng ${sorted.join(', ')}';
     }
     if (filter.dateMode == 'flexible') {
       final label = switch (filter.flexDuration) {
-        'week' => '1 tuần',
-        'month' => '1 tháng',
-        _ => 'Cuối tuần',
+        'week' => (locale == 'en' ? '1 week' : (locale == 'ko' ? '1주일' : '1 tuần')),
+        'month' => (locale == 'en' ? '1 month' : (locale == 'ko' ? '1개월' : '1 tháng')),
+        _ => (locale == 'en' ? 'Weekend' : (locale == 'ko' ? '주말' : 'Cuối tuần')),
       };
+      if (locale == 'en') return 'Flexible ($label)';
+      if (locale == 'ko') return '유연한 일정 ($label)';
       return 'Linh hoạt ($label)';
     }
     if (filter.checkIn != null) {
       return filter.checkIn!.toDisplayVi();
     }
+    if (locale == 'en') return 'Select dates';
+    if (locale == 'ko') return '날짜 추가';
     return 'Chọn ngày';
   }
 
-  String _checkOutSummary(VillaFilterState filter) {
+  String _checkOutSummary(VillaFilterState filter, {String locale = 'vi'}) {
     if (filter.dateMode == 'months' && filter.selectedMonths.isNotEmpty) {
+      if (locale == 'en') return 'Monthly';
+      if (locale == 'ko') return '월 단위';
       return 'Theo tháng';
     }
     if (filter.dateMode == 'flexible') {
+      if (locale == 'en') return 'Flexible';
+      if (locale == 'ko') return '유연한 일정';
       return 'Linh hoạt';
     }
     if (filter.checkOut != null) {
-      final suffix =
-          filter.exactnessDays > 0 ? ' (±${filter.exactnessDays}N)' : '';
+      final suffix = filter.exactnessDays > 0
+          ? (locale == 'en'
+              ? ' (±${filter.exactnessDays}d)'
+              : (locale == 'ko'
+                  ? ' (±${filter.exactnessDays}일)'
+                  : ' (±${filter.exactnessDays}N)'))
+          : '';
       return '${filter.checkOut!.toDisplayVi()}$suffix';
     }
+    if (locale == 'en') return 'Select dates';
+    if (locale == 'ko') return '날짜 추가';
     return 'Chọn ngày';
   }
 
-  String _dateSummary(VillaFilterState filter) {
+  String _dateSummary(VillaFilterState filter, {String locale = 'vi'}) {
     if (filter.dateMode == 'months' && filter.selectedMonths.isNotEmpty) {
       final sorted = [...filter.selectedMonths]..sort();
+      if (locale == 'en') return 'Month ${sorted.join(', ')}';
+      if (locale == 'ko') return '${sorted.join(', ')}월';
       return 'Tháng ${sorted.join(', ')}';
     }
     if (filter.dateMode == 'flexible') {
       final label = switch (filter.flexDuration) {
-        'week' => '1 tuần',
-        'month' => '1 tháng',
-        _ => 'Cuối tuần',
+        'week' => (locale == 'en' ? '1 week' : (locale == 'ko' ? '1주일' : '1 tuần')),
+        'month' => (locale == 'en' ? '1 month' : (locale == 'ko' ? '1개월' : '1 tháng')),
+        _ => (locale == 'en' ? 'Weekend' : (locale == 'ko' ? '주말' : 'Cuối tuần')),
       };
+      if (locale == 'en') return 'Flexible • $label';
+      if (locale == 'ko') return '유연한 일정 • $label';
       return 'Linh hoạt • $label';
     }
     if (filter.checkIn != null && filter.checkOut != null) {
-      final suffix =
-          filter.exactnessDays > 0 ? ' (±${filter.exactnessDays}N)' : '';
+      final suffix = filter.exactnessDays > 0
+          ? (locale == 'en'
+              ? ' (±${filter.exactnessDays}d)'
+              : (locale == 'ko'
+                  ? ' (±${filter.exactnessDays}일)'
+                  : ' (±${filter.exactnessDays}N)'))
+          : '';
+      if (locale == 'en' || locale == 'ko') {
+        return '${filter.checkIn!.toIsoDate()} - ${filter.checkOut!.toIsoDate()}$suffix';
+      }
       return '${filter.checkIn!.toDisplayVi()} - ${filter.checkOut!.toDisplayVi()}$suffix';
     }
+    if (locale == 'en') return 'Select dates';
+    if (locale == 'ko') return '날짜 추가';
     return 'Chọn ngày';
   }
 
-  String _guestSummary(VillaFilterState filter) {
+  String _guestSummary(VillaFilterState filter, {String locale = 'vi'}) {
     final total = filter.effectiveGuests;
     if (total <= 0 && filter.infants <= 0 && filter.pets <= 0) {
+      if (locale == 'en') return 'Add guests';
+      if (locale == 'ko') return '게스트 추가';
       return 'Thêm khách';
     }
     final parts = <String>[];
-    if (total > 0) parts.add('$total khách');
-    if (filter.infants > 0) parts.add('${filter.infants} em bé');
-    if (filter.pets > 0) parts.add('${filter.pets} thú cưng');
+    if (total > 0) {
+      if (locale == 'en') {
+        parts.add('$total guest${total > 1 ? 's' : ''}');
+      } else if (locale == 'ko') {
+        parts.add('게스트 $total명');
+      } else {
+        parts.add('$total khách');
+      }
+    }
+    if (filter.infants > 0) {
+      if (locale == 'en') {
+        parts.add('${filter.infants} infant${filter.infants > 1 ? 's' : ''}');
+      } else if (locale == 'ko') {
+        parts.add('유아 ${filter.infants}명');
+      } else {
+        parts.add('${filter.infants} em bé');
+      }
+    }
+    if (filter.pets > 0) {
+      if (locale == 'en') {
+        parts.add('${filter.pets} pet${filter.pets > 1 ? 's' : ''}');
+      } else if (locale == 'ko') {
+        parts.add('반려동물 ${filter.pets}마리');
+      } else {
+        parts.add('${filter.pets} thú cưng');
+      }
+    }
     return parts.join(', ');
   }
 
@@ -146,6 +208,7 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
   @override
   Widget build(BuildContext context) {
     final filter = ref.watch(villaFilterProvider);
+    final locale = ref.watch(localeProvider);
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isWide =
         screenWidth >= 768 && !widget.isCompact && !widget.isInHeader;
@@ -197,7 +260,7 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
                 Expanded(
                   child: inHeader
                       ? Text(
-                          _locationSummary(filter),
+                          _locationSummary(filter, locale: locale),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -211,7 +274,7 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              _locationSummary(filter),
+                              _locationSummary(filter, locale: locale),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -222,7 +285,7 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '${_dateSummary(filter)} • ${_guestSummary(filter)}',
+                              '${_dateSummary(filter, locale: locale)} • ${_guestSummary(filter, locale: locale)}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -236,7 +299,9 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
                 SizedBox(width: inHeader ? 4 : 8),
                 Semantics(
                   button: true,
-                  label: 'Tìm kiếm',
+                  label: locale == 'vi'
+                      ? 'Tìm kiếm'
+                      : (locale == 'ko' ? '검색' : 'Search'),
                   child: InkWell(
                     onTap: () => _triggerSubmit(context),
                     customBorder: const CircleBorder(),
@@ -291,8 +356,10 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
               Expanded(
                 flex: 12,
                 child: _SegmentTrigger(
-                  title: 'Địa điểm',
-                  subtitle: _locationSummary(filter),
+                  title: locale == 'vi'
+                      ? 'Địa điểm'
+                      : (locale == 'ko' ? '여행지' : 'Where'),
+                  subtitle: _locationSummary(filter, locale: locale),
                   onTap: () => _openSearchModal(context, initialTab: 0),
                 ),
               ),
@@ -300,8 +367,10 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
               Expanded(
                 flex: 9,
                 child: _SegmentTrigger(
-                  title: 'Nhận phòng',
-                  subtitle: _checkInSummary(filter),
+                  title: locale == 'vi'
+                      ? 'Nhận phòng'
+                      : (locale == 'ko' ? '체크인' : 'Check in'),
+                  subtitle: _checkInSummary(filter, locale: locale),
                   onTap: () => _openSearchModal(context, initialTab: 1),
                 ),
               ),
@@ -309,8 +378,10 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
               Expanded(
                 flex: 9,
                 child: _SegmentTrigger(
-                  title: 'Trả phòng',
-                  subtitle: _checkOutSummary(filter),
+                  title: locale == 'vi'
+                      ? 'Trả phòng'
+                      : (locale == 'ko' ? '체크아웃' : 'Check out'),
+                  subtitle: _checkOutSummary(filter, locale: locale),
                   onTap: () => _openSearchModal(context, initialTab: 1),
                 ),
               ),
@@ -334,9 +405,11 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text(
-                                'Khách',
-                                style: TextStyle(
+                              Text(
+                                locale == 'vi'
+                                    ? 'Khách'
+                                    : (locale == 'ko' ? '게스트' : 'Who'),
+                                style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
                                   color: Color(0xFF0F172A),
@@ -344,7 +417,7 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                _guestSummary(filter),
+                                _guestSummary(filter, locale: locale),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -363,7 +436,9 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
                         const SizedBox(width: 8),
                         Semantics(
                           button: true,
-                          label: 'Tìm kiếm',
+                          label: locale == 'vi'
+                              ? 'Tìm kiếm'
+                              : (locale == 'ko' ? '검색' : 'Search'),
                           child: InkWell(
                             onTap: () => _triggerSubmit(context),
                             customBorder: const CircleBorder(),
@@ -432,7 +507,14 @@ class _SegmentTrigger extends StatelessWidget {
   Widget build(BuildContext context) {
     final isPlaceholder = subtitle == 'Bạn muốn đi đâu?' ||
         subtitle == 'Chọn ngày' ||
-        subtitle == 'Thêm khách';
+        subtitle == 'Thêm khách' ||
+        subtitle == 'Where to?' ||
+        subtitle == 'Select dates' ||
+        subtitle == 'Add dates' ||
+        subtitle == 'Add guests' ||
+        subtitle == '어디로 여행가세요?' ||
+        subtitle == '날짜 추가' ||
+        subtitle == '게스트 추가';
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(999),
@@ -552,7 +634,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     widget.onSubmitted();
   }
 
-  String? _activeLocationBadge(VillaFilterState filter) {
+  String? _activeLocationBadge(VillaFilterState filter, {String locale = 'vi'}) {
     if (filter.locationGroup != null && filter.locationGroup!.isNotEmpty) {
       final match = VungTauMapConstants.findLocationGroup(filter.locationGroup);
       if (match != null) return match.label;
@@ -561,31 +643,62 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
       return filter.searchQuery.trim();
     }
     if (filter.lat != null && filter.lng != null) {
+      if (locale == 'en') return 'Near me (${filter.radius ?? 800}m)';
+      if (locale == 'ko') return '내 주변 (${filter.radius ?? 800}m)';
       return 'Gần tôi (${filter.radius ?? 800}m)';
     }
     return null;
   }
 
-  String? _activeDateBadge(VillaFilterState filter) {
+  String? _activeDateBadge(VillaFilterState filter, {String locale = 'vi'}) {
     if (filter.dateMode == 'months' && filter.selectedMonths.isNotEmpty) {
       final sorted = [...filter.selectedMonths]..sort();
+      if (locale == 'en') return 'Month ${sorted.join(', ')}';
+      if (locale == 'ko') return '${sorted.join(', ')}월';
       return 'Tháng ${sorted.join(', ')}';
     }
     if (filter.checkIn != null && filter.checkOut != null) {
+      if (locale == 'en' || locale == 'ko') {
+        return '${filter.checkIn!.toIsoDate()} → ${filter.checkOut!.toIsoDate()}';
+      }
       return '${filter.checkIn!.toDisplayVi()} → ${filter.checkOut!.toDisplayVi()}';
     }
     return null;
   }
 
-  String? _activeGuestBadge(VillaFilterState filter) {
+  String? _activeGuestBadge(VillaFilterState filter, {String locale = 'vi'}) {
     final total = filter.effectiveGuests;
     if (total <= 0 && filter.infants <= 0 && filter.pets <= 0) {
       return null;
     }
     final parts = <String>[];
-    if (total > 0) parts.add('$total khách');
-    if (filter.infants > 0) parts.add('${filter.infants} bé');
-    if (filter.pets > 0) parts.add('${filter.pets} thú cưng');
+    if (total > 0) {
+      if (locale == 'en') {
+        parts.add('$total guest${total > 1 ? 's' : ''}');
+      } else if (locale == 'ko') {
+        parts.add('게스트 $total명');
+      } else {
+        parts.add('$total khách');
+      }
+    }
+    if (filter.infants > 0) {
+      if (locale == 'en') {
+        parts.add('${filter.infants} infant${filter.infants > 1 ? 's' : ''}');
+      } else if (locale == 'ko') {
+        parts.add('유아 ${filter.infants}명');
+      } else {
+        parts.add('${filter.infants} bé');
+      }
+    }
+    if (filter.pets > 0) {
+      if (locale == 'en') {
+        parts.add('${filter.pets} pet${filter.pets > 1 ? 's' : ''}');
+      } else if (locale == 'ko') {
+        parts.add('반려동물 ${filter.pets}마리');
+      } else {
+        parts.add('${filter.pets} thú cưng');
+      }
+    }
     return parts.join(', ');
   }
 
@@ -677,25 +790,40 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
   Widget build(BuildContext context) {
     final filter = ref.watch(villaFilterProvider);
     final history = ref.watch(searchHistoryProvider);
+    final locale = ref.watch(localeProvider);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final screenWidth = MediaQuery.sizeOf(context).width;
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final horizontalPad = screenWidth < 360 ? 14.0 : 18.0;
 
-    final locBadge = _activeLocationBadge(filter);
-    final dateBadge = _activeDateBadge(filter);
-    final guestBadge = _activeGuestBadge(filter);
+    final locBadge = _activeLocationBadge(filter, locale: locale);
+    final dateBadge = _activeDateBadge(filter, locale: locale);
+    final guestBadge = _activeGuestBadge(filter, locale: locale);
     final hasAnySelection =
         locBadge != null || dateBadge != null || guestBadge != null;
 
     final tabs = [
-      (label: 'Địa điểm', icon: LucideIcons.mapPin, hasValue: locBadge != null),
       (
-        label: 'Thời gian',
+        label: locale == 'vi'
+            ? 'Địa điểm'
+            : (locale == 'ko' ? '여행지' : 'Where'),
+        icon: LucideIcons.mapPin,
+        hasValue: locBadge != null,
+      ),
+      (
+        label: locale == 'vi'
+            ? 'Thời gian'
+            : (locale == 'ko' ? '날짜' : 'Dates'),
         icon: LucideIcons.calendar,
         hasValue: dateBadge != null,
       ),
-      (label: 'Khách', icon: LucideIcons.users, hasValue: guestBadge != null),
+      (
+        label: locale == 'vi'
+            ? 'Khách'
+            : (locale == 'ko' ? '게스트' : 'Guests'),
+        icon: LucideIcons.users,
+        hasValue: guestBadge != null,
+      ),
     ];
 
     return SafeArea(
@@ -927,7 +1055,9 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                                     const VillaFilterState();
                               },
                               child: Text(
-                                'Xóa tất cả',
+                                locale == 'vi'
+                                    ? 'Xóa tất cả'
+                                    : (locale == 'ko' ? '모두 지우기' : 'Clear all'),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -956,8 +1086,10 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                                 size: 16,
                                 color: AppColors.iconOnBrand,
                               ),
-                              label: const Text(
-                                'Áp dụng & Tìm kiếm',
+                              label: Text(
+                                locale == 'vi'
+                                    ? 'Áp dụng & Tìm kiếm'
+                                    : (locale == 'ko' ? '검색' : 'Search'),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -2008,7 +2140,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                   children: [
                     Semantics(
                       button: true,
-                      label: 'Tháng trước',
+                      label: context.l10n.calendarPrevMonth,
                       child: InkWell(
                         onTap: () => _stepCalendarMonth(-1),
                         borderRadius: BorderRadius.circular(999),
@@ -2027,7 +2159,12 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                     ),
                     Flexible(
                       child: Text(
-                        'Tháng $_calendarMonth / $_calendarYear',
+                        LocaleFormatters.formatMonthYear(
+                          _calendarYear,
+                          _calendarMonth,
+                          localeCode: context.activeLanguageCode,
+                          includeComma: false,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -2039,7 +2176,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                     ),
                     Semantics(
                       button: true,
-                      label: 'Tháng sau',
+                      label: context.l10n.calendarNextMonth,
                       child: InkWell(
                         onTap: () => _stepCalendarMonth(1),
                         borderRadius: BorderRadius.circular(999),
@@ -2161,7 +2298,10 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Tháng $m',
+                        LocaleFormatters.formatMonth(
+                          m,
+                          localeCode: context.activeLanguageCode,
+                        ),
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight:
@@ -2597,7 +2737,9 @@ class _SimpleMonthGrid extends StatelessWidget {
       children: [
         Row(
           children: [
-            for (final w in ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'])
+            for (final w in LocaleFormatters.weekdayHeaders(
+              localeCode: context.activeLanguageCode,
+            ))
               Expanded(
                 child: Center(
                   child: FittedBox(

@@ -6,6 +6,7 @@ import {
     RawSheetTab,
     sanitizeSheetTextValue,
     SHEET_COLORS,
+    SHEET_FONT_FAMILY,
     SheetRgbColor,
 } from "../../services/google-sheets-client.service";
 
@@ -17,13 +18,13 @@ export const SHEET_METADATA_KEYS = {
     LISTING_ROW: "agy_listing_id",
 } as const;
 
-// Guide rows: 0..7 (Row 0 header, Rows 1, 3, 5, 7 examples, Rows 2, 4, 6 blank spacing rows)
-export const SHEET_GUIDE_ROW_COUNT = 8;
-// Calendar table headers: Row 8 (Mã căn), Row 9 (Tên căn & Ngày/Tháng/Năm)
+// Guide rows: 0..8 (Row 0 header, Rows 1..8 examples: 4 rules x 2 rows each = 8 rows, plus Row 0 header = 9 rows)
+export const SHEET_GUIDE_ROW_COUNT = 9;
+// Calendar table headers: Row 9 (Mã căn), Row 10 (Tên căn & Ngày/Tháng/Năm)
 export const SHEET_CALENDAR_HEADER_ROW_COUNT = 2;
-export const SHEET_HEADER_ROW_COUNT = SHEET_GUIDE_ROW_COUNT + SHEET_CALENDAR_HEADER_ROW_COUNT; // 10
-export const SHEET_CALENDAR_START_ROW_INDEX = 10; // Day 1 starts at Row 10 (0-indexed)
-export const SHEET_DAY_ROW_OFFSET = 10;
+export const SHEET_HEADER_ROW_COUNT = SHEET_GUIDE_ROW_COUNT + SHEET_CALENDAR_HEADER_ROW_COUNT; // 11
+export const SHEET_CALENDAR_START_ROW_INDEX = 11; // Day 1 starts at Row 11 (0-indexed, Sheet Row 12)
+export const SHEET_DAY_ROW_OFFSET = 11;
 export const SHEET_DATE_COLUMN_INDEX = 0; // Col A = 0 (Date: DD/MM/YYYY)
 export const SHEET_DAY_COLUMN_OFFSET = 1; // Col B.. = Listings (1, 2, ...)
 export const SHEET_TOTAL_COLUMNS = 35;
@@ -181,6 +182,7 @@ export type ExtractedMonthSheetStructure = {
     columnMetadataEntriesByCol: Map<number, RawDeveloperMetadata[]>;
     nextAppendColIndex: number;
     nextAppendRowIndex: number;
+    guideRowCount?: number;
 };
 
 export const parsePositiveListingId = (raw: string | undefined | null): number | null => {
@@ -295,18 +297,28 @@ export const extractMonthSheetStructure = (tab: RawSheetTab): ExtractedMonthShee
     const tamperedRowIndices: Array<{ rowIndex: number; colAText: string; metadataListingId: number | null }> = [];
     const columnMetadataEntriesByCol = new Map<number, RawDeveloperMetadata[]>();
 
-    // Header row 9 (0-based 8) has listing ID, Header row 10 (0-based 9) has listing Title
-    const idRowValues = rowData[SHEET_GUIDE_ROW_COUNT]?.values ?? [];
-    const titleRowValues = rowData[SHEET_GUIDE_ROW_COUNT + 1]?.values ?? [];
+    // Dynamically detect guide row offset: Look for "Mã căn" in Col A around rows 6..14
+    let guideRowCount = SHEET_GUIDE_ROW_COUNT;
+    for (let r = 6; r <= 14; r += 1) {
+        const text = extractCellRawText(rowData[r]?.values?.[0]);
+        if (text.startsWith("Mã căn")) {
+            guideRowCount = r;
+            break;
+        }
+    }
+    const calendarStartRow = guideRowCount + SHEET_CALENDAR_HEADER_ROW_COUNT;
+
+    const idRowValues = rowData[guideRowCount]?.values ?? [];
+    const titleRowValues = rowData[guideRowCount + 1]?.values ?? [];
 
     const row1ColAText = extractCellRawText(rowData[1]?.values?.[0]);
     const hasHorizontalHeader = row1ColAText.startsWith("Mã căn");
     const hasRowDeveloperMetadata = rowMetadata.some((rm) =>
         (rm?.developerMetadata ?? []).some((m) => m.metadataKey === SHEET_METADATA_KEYS.LISTING_ROW),
     );
-    const row8ColAText = extractCellRawText(rowData[SHEET_GUIDE_ROW_COUNT]?.values?.[0]);
-    const row9ColAText = extractCellRawText(rowData[SHEET_GUIDE_ROW_COUNT + 1]?.values?.[0]);
-    const row10ColAText = extractCellRawText(rowData[SHEET_CALENDAR_START_ROW_INDEX]?.values?.[0]);
+    const idColAText = extractCellRawText(rowData[guideRowCount]?.values?.[0]);
+    const titleColAText = extractCellRawText(rowData[guideRowCount + 1]?.values?.[0]);
+    const dateColAText = extractCellRawText(rowData[calendarStartRow]?.values?.[0]);
     const hasColumnDeveloperMetadata =
         columnMetadata.some((cm) =>
             (cm?.developerMetadata ?? []).some((m) => m.metadataKey === SHEET_METADATA_KEYS.LISTING_ROW),
@@ -316,7 +328,7 @@ export const extractMonthSheetStructure = (tab: RawSheetTab): ExtractedMonthShee
                 m.metadataKey === SHEET_METADATA_KEYS.LISTING_ROW &&
                 m.location?.dimensionRange?.dimension === "COLUMNS",
         );
-    const hasVerticalIdInRow8 = idRowValues
+    const hasVerticalIdInRow = idRowValues
         .slice(SHEET_DAY_COLUMN_OFFSET)
         .some((cell) => parsePositiveListingId(extractCellRawText(cell)) !== null);
 
@@ -324,11 +336,11 @@ export const extractMonthSheetStructure = (tab: RawSheetTab): ExtractedMonthShee
         !hasHorizontalHeader &&
         !hasRowDeveloperMetadata &&
         (rowData.length === 0 ||
-            row8ColAText.startsWith("Mã căn") ||
-            row9ColAText.startsWith("Ngày") ||
-            /^\d{2}\/\d{2}\/\d{4}$/.test(row10ColAText) ||
+            idColAText.startsWith("Mã căn") ||
+            titleColAText.startsWith("Ngày") ||
+            /^\d{2}\/\d{2}\/\d{4}$/.test(dateColAText) ||
             hasColumnDeveloperMetadata ||
-            hasVerticalIdInRow8);
+            hasVerticalIdInRow);
 
     if (isVerticalLayout) {
         let maxUsedColIndex = 0;
@@ -389,7 +401,7 @@ export const extractMonthSheetStructure = (tab: RawSheetTab): ExtractedMonthShee
             const resolvedListingId = metadataListingId ?? headerListingId!;
             const cellsByDay = new Map<number, RawSheetCell | undefined>();
             for (let day = 1; day <= 31; day += 1) {
-                const rowIdx = SHEET_CALENDAR_START_ROW_INDEX + (day - 1);
+                const rowIdx = calendarStartRow + (day - 1);
                 cellsByDay.set(day, rowData[rowIdx]?.values?.[colIndex]);
             }
 
@@ -427,6 +439,7 @@ export const extractMonthSheetStructure = (tab: RawSheetTab): ExtractedMonthShee
             columnMetadataEntriesByCol,
             nextAppendColIndex: maxUsedColIndex === 0 ? SHEET_DAY_COLUMN_OFFSET : maxUsedColIndex + 1,
             nextAppendRowIndex: maxUsedColIndex === 0 ? SHEET_DAY_COLUMN_OFFSET : maxUsedColIndex + 1,
+            guideRowCount,
         };
     }
 
@@ -512,13 +525,24 @@ export const extractMonthSheetStructure = (tab: RawSheetTab): ExtractedMonthShee
 const makeStyledHeaderCell = (
     text: string,
     bgColor: SheetRgbColor,
-    options: { bold?: boolean; align?: "LEFT" | "CENTER" } = {},
+    options: {
+        bold?: boolean;
+        align?: "LEFT" | "CENTER";
+        valign?: "TOP" | "MIDDLE" | "BOTTOM";
+        wrap?: boolean;
+        fontFamily?: string;
+    } = {},
 ): RawSheetCell => ({
     userEnteredValue: { stringValue: text },
     userEnteredFormat: {
         backgroundColorStyle: { rgbColor: bgColor },
         horizontalAlignment: options.align ?? "CENTER",
-        textFormat: { bold: options.bold ?? true },
+        verticalAlignment: options.valign ?? "MIDDLE",
+        wrapStrategy: options.wrap ? "WRAP" : "OVERFLOW_CELL",
+        textFormat: {
+            bold: options.bold ?? true,
+            fontFamily: options.fontFamily ?? SHEET_FONT_FAMILY,
+        },
     },
 });
 
@@ -560,6 +584,27 @@ export const buildMonthTabHeaderRequests = (
         });
     }
 
+    // Apply Times New Roman font to the entire tab across all columns and rows
+    requests.push({
+        repeatCell: {
+            range: {
+                sheetId,
+                startRowIndex: 0,
+                endRowIndex: neededRows,
+                startColumnIndex: 0,
+                endColumnIndex: neededCols,
+            },
+            cell: {
+                userEnteredFormat: {
+                    textFormat: {
+                        fontFamily: SHEET_FONT_FAMILY,
+                    },
+                },
+            },
+            fields: "userEnteredFormat.textFormat.fontFamily",
+        },
+    });
+
     const hasMonthMetadata = (tab.developerMetadata ?? []).some(
         (m) => m.metadataKey === SHEET_METADATA_KEYS.MONTH_TAB && m.metadataValue === monthSpec.tabKey,
     );
@@ -594,95 +639,123 @@ export const buildMonthTabHeaderRequests = (
         },
     );
 
-    // Build Rows 0 to 8: HƯỚNG DẪN & NOTE GHI CHÚ MÀU SẮC
-    // Mỗi ví dụ màu là 1 hàng, cách nhau 1 hàng trống
+    // 1. Unmerge any existing merges across guide rows (0..7) to guarantee clean, idempotent state
+    requests.push({
+        unmergeCells: {
+            range: {
+                sheetId,
+                startRowIndex: 0,
+                endRowIndex: SHEET_GUIDE_ROW_COUNT,
+                startColumnIndex: 0,
+                endColumnIndex: neededCols,
+            },
+        },
+    });
+
+    // 2. Set row heights for Guide rows (0..7) to 26px for balanced breathing room
+    requests.push({
+        updateDimensionProperties: {
+            range: { sheetId, dimension: "ROWS", startIndex: 0, endIndex: SHEET_GUIDE_ROW_COUNT },
+            properties: { pixelSize: 26 },
+            fields: "pixelSize",
+        },
+    });
+
+    // Build Rows 0 to 7: HƯỚNG DẪN & NOTE GHI CHÚ MÀU SẮC (Gộp dòng & gộp cột chuyên nghiệp, xác nhận hold/booked thuần màu không chữ)
     const rows: Array<{ values: RawSheetCell[] }> = [
-        // Row 0: Header Hướng dẫn
+        // Row 0: Header Hướng dẫn (Col A: HƯỚNG DẪN, Col B..end: Tiêu đề banner)
         {
             values: [
-                makeStyledHeaderCell("HƯỚNG DẪN", SHEET_COLORS.HEADER_BG, { bold: true, align: "CENTER" }),
+                makeStyledHeaderCell("HƯỚNG DẪN", SHEET_COLORS.HEADER_BG, { bold: true, align: "CENTER", valign: "MIDDLE" }),
                 makeStyledHeaderCell(
                     `QUY TẮC MÀU SẮC & ĐỒNG BỘ LỊCH TỰ ĐỘNG (THÁNG ${monthSpec.tabKey})`,
                     SHEET_COLORS.HEADER_BG,
-                    { bold: true, align: "LEFT" },
+                    { bold: true, align: "LEFT", valign: "MIDDLE" },
                 ),
             ],
         },
-        // Row 1: Ví dụ 1 - TRẮNG: Trống
+        // Row 1: Ví dụ 1 - TRẮNG: Trống / Giá phòng (Gộp dòng với Row 2)
         {
             values: [
-                makeStyledHeaderCell("Trống", SHEET_COLORS.WHITE, { bold: false, align: "CENTER" }),
+                makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
                 makeStyledHeaderCell(
-                    "Trắng: Phòng trống — Khách có thể xem và đặt phòng trên App (Điền 'K' hoặc đổi màu đỏ để đóng lịch)",
+                    "Màu trắng: Phòng trống — Tự động hiển thị giá phòng theo ngày. Khách có thể xem và đặt phòng trên App.",
                     SHEET_COLORS.WHITE,
-                    { bold: false, align: "LEFT" },
+                    { bold: false, align: "LEFT", valign: "MIDDLE", wrap: true },
                 ),
             ],
         },
-        // Row 2: (Hàng trống cách nhau)
+        // Row 2: (Hàng đệm gộp dòng với Row 1)
         {
             values: [
-                makeStyledHeaderCell("", SHEET_COLORS.WHITE),
-                makeStyledHeaderCell("", SHEET_COLORS.WHITE),
+                makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
+                makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
             ],
         },
-        // Row 3: Ví dụ 2 - CAM (G): Giữ chỗ
+        // Row 3: Ví dụ 2 - CAM: Giữ chỗ (Gộp dòng với Row 4) — Xác nhận thuần màu cam, không ghi chữ
         {
             values: [
-                makeStyledHeaderCell("G", SHEET_COLORS.PENDING_HOLD_ORANGE, { bold: true, align: "CENTER" }),
+                makeStyledHeaderCell("", SHEET_COLORS.PENDING_HOLD_ORANGE, { valign: "MIDDLE" }),
                 makeStyledHeaderCell(
-                    "Cam (G): Đang giữ chỗ — Đơn đang chờ khách thanh toán (Tạm giữ 10 phút, hệ thống tự xử lý)",
+                    "Màu cam: Đang giữ chỗ (Hold) — Tự động thể hiện bằng màu cam (không ghi chữ). Đơn tạm giữ 10 phút khi khách đang thanh toán.",
                     SHEET_COLORS.WHITE,
-                    { bold: false, align: "LEFT" },
+                    { bold: false, align: "LEFT", valign: "MIDDLE", wrap: true },
                 ),
             ],
         },
-        // Row 4: (Hàng trống cách nhau)
+        // Row 4: (Hàng đệm gộp dòng với Row 3)
         {
             values: [
-                makeStyledHeaderCell("", SHEET_COLORS.WHITE),
-                makeStyledHeaderCell("", SHEET_COLORS.WHITE),
+                makeStyledHeaderCell("", SHEET_COLORS.PENDING_HOLD_ORANGE, { valign: "MIDDLE" }),
+                makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
             ],
         },
-        // Row 5: Ví dụ 3 - XANH LÁ (Đ): Đã đặt
+        // Row 5: Ví dụ 3 - XANH LÁ: Đã đặt (Gộp dòng với Row 6) — Xác nhận thuần màu xanh, không ghi chữ
         {
             values: [
-                makeStyledHeaderCell("Đ", SHEET_COLORS.BOOKED_GREEN, { bold: true, align: "CENTER" }),
+                makeStyledHeaderCell("", SHEET_COLORS.BOOKED_GREEN, { valign: "MIDDLE" }),
                 makeStyledHeaderCell(
-                    "Xanh lá (Đ): Đã đặt phòng — Đơn đặt phòng thành công trên hệ thống (Không tự ý mở trống)",
+                    "Màu xanh lá: Đã đặt phòng (Booked) — Tự động thể hiện bằng màu xanh lá (không ghi chữ). Đơn đặt thành công (vui lòng không tự ý mở trống).",
                     SHEET_COLORS.WHITE,
-                    { bold: false, align: "LEFT" },
+                    { bold: false, align: "LEFT", valign: "MIDDLE", wrap: true },
                 ),
             ],
         },
-        // Row 6: (Hàng trống cách nhau)
+        // Row 6: (Hàng đệm gộp dòng với Row 5)
         {
             values: [
-                makeStyledHeaderCell("", SHEET_COLORS.WHITE),
-                makeStyledHeaderCell("", SHEET_COLORS.WHITE),
+                makeStyledHeaderCell("", SHEET_COLORS.BOOKED_GREEN, { valign: "MIDDLE" }),
+                makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
             ],
         },
-        // Row 7: Ví dụ 4 - ĐỎ (K): Host khóa
+        // Row 7: Ví dụ 4 - ĐỎ: Host khóa (Gộp dòng với Row 8) — Xác nhận thuần màu đỏ, không ghi chữ
         {
             values: [
-                makeStyledHeaderCell("K", SHEET_COLORS.HOST_BLOCKED_RED, { bold: true, align: "CENTER" }),
+                makeStyledHeaderCell("", SHEET_COLORS.HOST_BLOCKED_RED, { valign: "MIDDLE" }),
                 makeStyledHeaderCell(
-                    "Đỏ (K): Host khóa phòng — Chủ nhà đóng lịch (Điền chữ K hoặc tô màu đỏ tại ô ngày tương ứng)",
+                    "Màu đỏ: Host khóa phòng — Chủ nhà chủ động đóng lịch (Điền chữ K hoặc tô màu đỏ tại ô ngày tương ứng).",
                     SHEET_COLORS.WHITE,
-                    { bold: false, align: "LEFT" },
+                    { bold: false, align: "LEFT", valign: "MIDDLE", wrap: true },
                 ),
+            ],
+        },
+        // Row 8: (Hàng đệm gộp dòng với Row 7)
+        {
+            values: [
+                makeStyledHeaderCell("", SHEET_COLORS.HOST_BLOCKED_RED, { valign: "MIDDLE" }),
+                makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
             ],
         },
     ];
 
     const colATableRows: Array<{ values: RawSheetCell[] }> = [
-        // Row 8: Table Header 1 - Mã căn
+        // Row 9: Table Header 1 - Mã căn
         {
             values: [
                 makeStyledHeaderCell("Mã căn (ID)", SHEET_COLORS.SUBHEADER_BG, { bold: true, align: "CENTER" }),
             ],
         },
-        // Row 9: Table Header 2 - Ngày \ Tên căn
+        // Row 10: Table Header 2 - Ngày \ Tên căn
         {
             values: [
                 makeStyledHeaderCell("Ngày \\ Tên căn", SHEET_COLORS.SUBHEADER_BG, { bold: true, align: "CENTER" }),
@@ -703,7 +776,7 @@ export const buildMonthTabHeaderRequests = (
         });
     }
 
-    // Write Guide rows (Rows 0..7) across Col A..B ONLY
+    // Write Guide rows (Rows 0..7) across Col A..B
     requests.push({
         updateCells: {
             range: {
@@ -714,9 +787,144 @@ export const buildMonthTabHeaderRequests = (
                 endColumnIndex: 2,
             },
             rows,
-            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold)",
+            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,verticalAlignment,wrapStrategy,textFormat.bold,textFormat.fontFamily)",
         },
     });
+
+    // 3. Gộp dòng & Gộp cột chuyên nghiệp cho phần Hướng dẫn
+    requests.push(
+        // Header banner: Gộp cột B..end across row 0
+        {
+            mergeCells: {
+                range: {
+                    sheetId,
+                    startRowIndex: 0,
+                    endRowIndex: 1,
+                    startColumnIndex: 1,
+                    endColumnIndex: neededCols,
+                },
+                mergeType: "MERGE_ALL",
+            },
+        },
+        // Quy tắc 1 (Trống): Gộp dòng Cột A (A2:A3) & Gộp dòng + gộp cột Cột B..end (B2:end3)
+        {
+            mergeCells: {
+                range: {
+                    sheetId,
+                    startRowIndex: 1,
+                    endRowIndex: 3,
+                    startColumnIndex: 0,
+                    endColumnIndex: 1,
+                },
+                mergeType: "MERGE_ALL",
+            },
+        },
+        {
+            mergeCells: {
+                range: {
+                    sheetId,
+                    startRowIndex: 1,
+                    endRowIndex: 3,
+                    startColumnIndex: 1,
+                    endColumnIndex: neededCols,
+                },
+                mergeType: "MERGE_ALL",
+            },
+        },
+        // Quy tắc 2 (Giữ chỗ): Gộp dòng Cột A (A4:A5) & Gộp dòng + gộp cột Cột B..end (B4:end5)
+        {
+            mergeCells: {
+                range: {
+                    sheetId,
+                    startRowIndex: 3,
+                    endRowIndex: 5,
+                    startColumnIndex: 0,
+                    endColumnIndex: 1,
+                },
+                mergeType: "MERGE_ALL",
+            },
+        },
+        {
+            mergeCells: {
+                range: {
+                    sheetId,
+                    startRowIndex: 3,
+                    endRowIndex: 5,
+                    startColumnIndex: 1,
+                    endColumnIndex: neededCols,
+                },
+                mergeType: "MERGE_ALL",
+            },
+        },
+        // Quy tắc 3 (Đã đặt): Gộp dòng Cột A (A6:A7) & Gộp dòng + gộp cột Cột B..end (B6:end7)
+        {
+            mergeCells: {
+                range: {
+                    sheetId,
+                    startRowIndex: 5,
+                    endRowIndex: 7,
+                    startColumnIndex: 0,
+                    endColumnIndex: 1,
+                },
+                mergeType: "MERGE_ALL",
+            },
+        },
+        {
+            mergeCells: {
+                range: {
+                    sheetId,
+                    startRowIndex: 5,
+                    endRowIndex: 7,
+                    startColumnIndex: 1,
+                    endColumnIndex: neededCols,
+                },
+                mergeType: "MERGE_ALL",
+            },
+        },
+        // Quy tắc 4 (Host khóa): Gộp dòng Cột A (A8:A9) & Gộp dòng + gộp cột Cột B..end (B8:end9)
+        {
+            mergeCells: {
+                range: {
+                    sheetId,
+                    startRowIndex: 7,
+                    endRowIndex: 9,
+                    startColumnIndex: 0,
+                    endColumnIndex: 1,
+                },
+                mergeType: "MERGE_ALL",
+            },
+        },
+        {
+            mergeCells: {
+                range: {
+                    sheetId,
+                    startRowIndex: 7,
+                    endRowIndex: 9,
+                    startColumnIndex: 1,
+                    endColumnIndex: neededCols,
+                },
+                mergeType: "MERGE_ALL",
+            },
+        },
+        // Borders viền chuyên nghiệp, sắc nét cho toàn bộ bảng Hướng dẫn (Rows 0..7)
+        {
+            updateBorders: {
+                range: {
+                    sheetId,
+                    startRowIndex: 0,
+                    endRowIndex: SHEET_GUIDE_ROW_COUNT,
+                    startColumnIndex: 0,
+                    endColumnIndex: neededCols,
+                },
+                top: { style: "SOLID", width: 1, colorStyle: { rgbColor: { red: 0.8, green: 0.83, blue: 0.86 } } },
+                bottom: { style: "SOLID", width: 1, colorStyle: { rgbColor: { red: 0.8, green: 0.83, blue: 0.86 } } },
+                left: { style: "SOLID", width: 1, colorStyle: { rgbColor: { red: 0.8, green: 0.83, blue: 0.86 } } },
+                right: { style: "SOLID", width: 1, colorStyle: { rgbColor: { red: 0.8, green: 0.83, blue: 0.86 } } },
+                innerHorizontal: { style: "SOLID", width: 1, colorStyle: { rgbColor: { red: 0.88, green: 0.9, blue: 0.92 } } },
+                innerVertical: { style: "SOLID", width: 1, colorStyle: { rgbColor: { red: 0.88, green: 0.9, blue: 0.92 } } },
+            },
+        },
+    );
 
     // Write Table Headers & Date labels (Rows 8..10+daysInMonth) strictly in Col A ONLY
     // so Listing #1 in Col B (B9:B41) is NEVER wiped out by UpdateCellsRequest range clearing!
@@ -730,7 +938,7 @@ export const buildMonthTabHeaderRequests = (
                 endColumnIndex: 1,
             },
             rows: colATableRows,
-            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold)",
+            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,textFormat.fontFamily)",
         },
     });
 
@@ -808,6 +1016,9 @@ export const buildDirectoryTabRequests = (
         });
     }
 
+    const currentCols = Math.max(tab.properties.gridProperties?.columnCount ?? 8, 8);
+    const currentRows = Math.max(tab.properties.gridProperties?.rowCount ?? 200, listings.length + 25);
+
     requests.push({
         updateSheetProperties: {
             properties: {
@@ -815,11 +1026,52 @@ export const buildDirectoryTabRequests = (
                 gridProperties: {
                     frozenRowCount: 2,
                     frozenColumnCount: 1,
-                    columnCount: Math.max(tab.properties.gridProperties?.columnCount ?? 8, 8),
-                    rowCount: Math.max(tab.properties.gridProperties?.rowCount ?? 200, listings.length + 25),
+                    columnCount: currentCols,
+                    rowCount: currentRows,
                 },
             },
             fields: "gridProperties(frozenRowCount,frozenColumnCount,columnCount,rowCount)",
+        },
+    });
+
+    // Apply Times New Roman font to the entire directory tab across all cells
+    requests.push({
+        repeatCell: {
+            range: {
+                sheetId,
+                startRowIndex: 0,
+                endRowIndex: currentRows,
+                startColumnIndex: 0,
+                endColumnIndex: currentCols,
+            },
+            cell: {
+                userEnteredFormat: {
+                    textFormat: {
+                        fontFamily: SHEET_FONT_FAMILY,
+                    },
+                },
+            },
+            fields: "userEnteredFormat.textFormat.fontFamily",
+        },
+    });
+
+    const makeDirectoryDataCell = (
+        text: string,
+        bgColor: SheetRgbColor,
+        options: {
+            bold?: boolean;
+            align?: "LEFT" | "CENTER";
+            fontFamily?: string;
+        } = {},
+    ): RawSheetCell => ({
+        userEnteredValue: { stringValue: text },
+        userEnteredFormat: {
+            backgroundColorStyle: { rgbColor: bgColor },
+            horizontalAlignment: options.align ?? "LEFT",
+            textFormat: {
+                bold: options.bold ?? false,
+                fontFamily: options.fontFamily ?? SHEET_FONT_FAMILY,
+            },
         },
     });
 
@@ -881,66 +1133,42 @@ export const buildDirectoryTabRequests = (
                     bgColor: SHEET_COLORS.WHITE,
                     bold: true,
                     forcePlainText: true,
+                    fontFamily: SHEET_FONT_FAMILY,
                 }).cell,
-                {
-                    userEnteredValue: { stringValue: sanitizeSheetTextValue(item.title) },
-                    userEnteredFormat: {
-                        backgroundColorStyle: { rgbColor: SHEET_COLORS.WHITE },
-                        horizontalAlignment: "LEFT",
-                    },
-                },
-                {
-                    userEnteredValue: {
-                        stringValue: sanitizeSheetTextValue(`${item.district}, ${item.city}`),
-                    },
-                    userEnteredFormat: {
-                        backgroundColorStyle: { rgbColor: SHEET_COLORS.WHITE },
-                        horizontalAlignment: "LEFT",
-                    },
-                },
-                {
-                    userEnteredValue: {
-                        stringValue: `${Math.round(Number(item.basePrice || 0)).toLocaleString("en-US")} đ`,
-                    },
-                    userEnteredFormat: {
-                        backgroundColorStyle: { rgbColor: SHEET_COLORS.WHITE },
-                        horizontalAlignment: "CENTER",
-                    },
-                },
-                {
-                    userEnteredValue: { stringValue: statusLabel(item.status, item.deletedAt) },
-                    userEnteredFormat: {
-                        backgroundColorStyle: {
-                            rgbColor:
-                                item.status === "active" || item.status === "published" || item.status === "approved"
-                                    ? SHEET_COLORS.BOOKED_GREEN
-                                    : SHEET_COLORS.SUBHEADER_BG,
-                        },
-                        horizontalAlignment: "CENTER",
-                    },
-                },
-                {
-                    userEnteredValue: {
-                        stringValue:
-                            item.status === "inactive"
-                                ? "Căn đang tạm ẩn trên App — khách không thể đặt mới"
-                                : "Đồng bộ 2 chiều tự động",
-                    },
-                    userEnteredFormat: {
-                        backgroundColorStyle: { rgbColor: SHEET_COLORS.WHITE },
-                        horizontalAlignment: "LEFT",
-                    },
-                },
+                makeDirectoryDataCell(sanitizeSheetTextValue(item.title), SHEET_COLORS.WHITE, { align: "LEFT" }),
+                makeDirectoryDataCell(
+                    sanitizeSheetTextValue(`${item.district}, ${item.city}`),
+                    SHEET_COLORS.WHITE,
+                    { align: "LEFT" },
+                ),
+                makeDirectoryDataCell(
+                    `${Math.round(Number(item.basePrice || 0)).toLocaleString("en-US")} đ`,
+                    SHEET_COLORS.WHITE,
+                    { align: "CENTER" },
+                ),
+                makeDirectoryDataCell(
+                    statusLabel(item.status, item.deletedAt),
+                    item.status === "active" || item.status === "published" || item.status === "approved"
+                        ? SHEET_COLORS.BOOKED_GREEN
+                        : SHEET_COLORS.SUBHEADER_BG,
+                    { align: "CENTER" },
+                ),
+                makeDirectoryDataCell(
+                    item.status === "inactive"
+                        ? "Căn đang tạm ẩn trên App — khách không thể đặt mới"
+                        : "Đồng bộ 2 chiều tự động",
+                    SHEET_COLORS.WHITE,
+                    { align: "LEFT" },
+                ),
             ],
         });
     }
 
     // Blank separator + Archived section ("CĂN ĐÃ NGỪNG")
     rows.push({
-        values: Array.from({ length: 6 }, () => ({
-            userEnteredValue: { stringValue: "" },
-            userEnteredFormat: { backgroundColorStyle: { rgbColor: SHEET_COLORS.WHITE } },
-        })),
+        values: Array.from({ length: 6 }, () =>
+            makeDirectoryDataCell("", SHEET_COLORS.WHITE),
+        ),
     });
     rows.push({
         values: [
@@ -963,48 +1191,25 @@ export const buildDirectoryTabRequests = (
                     bgColor: SHEET_COLORS.ARCHIVED_BG,
                     bold: false,
                     forcePlainText: true,
+                    fontFamily: SHEET_FONT_FAMILY,
                 }).cell,
-                {
-                    userEnteredValue: { stringValue: sanitizeSheetTextValue(item.title) },
-                    userEnteredFormat: {
-                        backgroundColorStyle: { rgbColor: SHEET_COLORS.ARCHIVED_BG },
-                        horizontalAlignment: "LEFT",
-                    },
-                },
-                {
-                    userEnteredValue: {
-                        stringValue: sanitizeSheetTextValue(`${item.district}, ${item.city}`),
-                    },
-                    userEnteredFormat: {
-                        backgroundColorStyle: { rgbColor: SHEET_COLORS.ARCHIVED_BG },
-                        horizontalAlignment: "LEFT",
-                    },
-                },
-                {
-                    userEnteredValue: {
-                        stringValue: `${Math.round(Number(item.basePrice || 0)).toLocaleString("en-US")} đ`,
-                    },
-                    userEnteredFormat: {
-                        backgroundColorStyle: { rgbColor: SHEET_COLORS.ARCHIVED_BG },
-                        horizontalAlignment: "CENTER",
-                    },
-                },
-                {
-                    userEnteredValue: { stringValue: "Đã ngừng (Lưu trữ)" },
-                    userEnteredFormat: {
-                        backgroundColorStyle: { rgbColor: SHEET_COLORS.ARCHIVED_BG },
-                        horizontalAlignment: "CENTER",
-                    },
-                },
-                {
-                    userEnteredValue: {
-                        stringValue: "Có thể khôi phục lại trên App với nguyên mã căn cũ",
-                    },
-                    userEnteredFormat: {
-                        backgroundColorStyle: { rgbColor: SHEET_COLORS.ARCHIVED_BG },
-                        horizontalAlignment: "LEFT",
-                    },
-                },
+                makeDirectoryDataCell(sanitizeSheetTextValue(item.title), SHEET_COLORS.ARCHIVED_BG, { align: "LEFT" }),
+                makeDirectoryDataCell(
+                    sanitizeSheetTextValue(`${item.district}, ${item.city}`),
+                    SHEET_COLORS.ARCHIVED_BG,
+                    { align: "LEFT" },
+                ),
+                makeDirectoryDataCell(
+                    `${Math.round(Number(item.basePrice || 0)).toLocaleString("en-US")} đ`,
+                    SHEET_COLORS.ARCHIVED_BG,
+                    { align: "CENTER" },
+                ),
+                makeDirectoryDataCell("Đã ngừng (Lưu trữ)", SHEET_COLORS.ARCHIVED_BG, { align: "CENTER" }),
+                makeDirectoryDataCell(
+                    "Có thể khôi phục lại trên App với nguyên mã căn cũ",
+                    SHEET_COLORS.ARCHIVED_BG,
+                    { align: "LEFT" },
+                ),
             ],
         });
     }
@@ -1012,10 +1217,9 @@ export const buildDirectoryTabRequests = (
     // Pad 5 blank rows below to clean up any previously archived/removed trailing rows
     for (let pad = 0; pad < 5; pad += 1) {
         rows.push({
-            values: Array.from({ length: 6 }, () => ({
-                userEnteredValue: { stringValue: "" },
-                userEnteredFormat: { backgroundColorStyle: { rgbColor: SHEET_COLORS.WHITE } },
-            })),
+            values: Array.from({ length: 6 }, () =>
+                makeDirectoryDataCell("", SHEET_COLORS.WHITE),
+            ),
         });
     }
 
@@ -1029,7 +1233,7 @@ export const buildDirectoryTabRequests = (
                 endColumnIndex: 6,
             },
             rows,
-            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,numberFormat)",
+            fields: "userEnteredValue,userEnteredFormat(backgroundColorStyle,horizontalAlignment,textFormat.bold,textFormat.fontFamily,numberFormat)",
         },
     });
 

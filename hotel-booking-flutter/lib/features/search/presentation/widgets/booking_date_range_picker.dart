@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/date/booking_date.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/animations/source_animations.dart';
 
 /// `@keyframes datePop` interactive day cell wrapper respecting reduced motion.
@@ -161,7 +161,7 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
         });
         return;
       }
-      setState(() => _errorMessage = 'Ngày này đã kín');
+      setState(() => _errorMessage = context.l10n.dateBooked);
       return;
     }
 
@@ -189,7 +189,7 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
           );
 
           if (!isAvailable) {
-            _errorMessage = 'Ngày này đã kín';
+            _errorMessage = context.l10n.dateBooked;
           } else {
             _checkOut = day;
             widget.onRangeSelected((_checkIn, _checkOut));
@@ -201,8 +201,12 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
 
   @override
   Widget build(BuildContext context) {
-    final monthFormat = DateFormat('MMMM yyyy', 'vi_VN');
-    final monthTitle = monthFormat.format(_currentMonth);
+    final monthTitle = LocaleFormatters.formatMonthYear(
+      _currentMonth.year,
+      _currentMonth.month,
+      localeCode: context.activeLanguageCode,
+      includeComma: false,
+    );
 
     final daysInMonth =
         DateTime(_currentMonth.year, _currentMonth.month + 1, 0).day;
@@ -220,7 +224,7 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
             children: [
               Semantics(
                 button: true,
-                label: 'Tháng trước',
+                label: context.l10n.calendarPrevMonth,
                 child: InkWell(
                   onTap: () {
                     setState(() {
@@ -252,7 +256,7 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
               ),
               Semantics(
                 button: true,
-                label: 'Tháng tiếp theo',
+                label: context.l10n.calendarNextMonth,
                 child: InkWell(
                   onTap: () {
                     setState(() {
@@ -282,7 +286,9 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
           // Weekday labels
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: const ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((w) {
+            children: LocaleFormatters.weekdayHeaders(
+              localeCode: context.activeLanguageCode,
+            ).map((w) {
               return Expanded(
                 child: Text(
                   w,
@@ -402,10 +408,10 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
 
     return Semantics(
       label: isBooked
-          ? 'Ngày $dayNumber đã kín'
+          ? context.l10n.calendarDayBooked(dayNumber)
           : (isAllowedCheckOutBoundary
-              ? 'Ngày $dayNumber chỉ trả phòng'
-              : 'Ngày $dayNumber'),
+              ? context.l10n.calendarDayCheckOutOnly(dayNumber)
+              : context.l10n.calendarDay(dayNumber)),
       button: !isPast,
       child: DatePopButton(
         isSelected: isSelectedEnd,

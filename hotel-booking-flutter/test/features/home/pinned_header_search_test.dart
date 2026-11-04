@@ -500,7 +500,12 @@ void main() {
       expect(find.text('Thời gian lưu trú'), findsOneWidget);
 
       // 2. Multi-night range selection on calendar (next month so days 10 & 13 are always in the future)
-      await tester.tap(find.bySemanticsLabel('Tháng sau'));
+      final nextMonthBtn = find.bySemanticsLabel('Tháng sau');
+      if (nextMonthBtn.evaluate().isNotEmpty) {
+        await tester.tap(nextMonthBtn);
+      } else {
+        await tester.tap(find.bySemanticsLabel('Tháng tiếp theo'));
+      }
       await tester.pumpAndSettle();
       await tester.tap(find.text('10'));
       await tester.pumpAndSettle();

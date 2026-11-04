@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/di/providers.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_typography.dart';
 import 'app_header_footer.dart';
@@ -298,7 +299,7 @@ Future<void> showGlassNotificationsOverlay({
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
-    barrierLabel: 'Đóng thông báo',
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     barrierColor: Colors.transparent,
     transitionDuration:
         disableAnimations ? Duration.zero : const Duration(milliseconds: 230),
@@ -341,6 +342,10 @@ class _GlassNotificationsModal extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifState = ref.watch(notificationsProvider);
+    final locale = ref.watch(localeProvider);
+    final formatter = ref.watch(moneyFormatterProvider);
+    final isEn = locale.startsWith('en');
+    final isKo = locale.startsWith('ko');
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isWide = screenWidth >= 640;
     final isNarrow = screenWidth < 350;
@@ -416,7 +421,11 @@ class _GlassNotificationsModal extends ConsumerWidget {
                               runSpacing: 8,
                               children: [
                                 Text(
-                                  'Thông báo (${notifState.unreadCount} chưa đọc)',
+                                  isEn
+                                      ? 'Notifications (${notifState.unreadCount} unread)'
+                                      : (isKo
+                                          ? '알림 (${notifState.unreadCount}개 안 읽음)'
+                                          : 'Thông báo (${notifState.unreadCount} chưa đọc)'),
                                   style: const TextStyle(
                                     fontFamily: AppTypography.primaryFontFamily,
                                     fontFamilyFallback:
@@ -429,7 +438,11 @@ class _GlassNotificationsModal extends ConsumerWidget {
                                 ),
                                 if (notifState.unreadCount > 0)
                                   _FrostedActionPill(
-                                    label: 'Đánh dấu tất cả đã đọc',
+                                    label: isEn
+                                        ? 'Mark all as read'
+                                        : (isKo
+                                            ? '모두 읽음으로 표시'
+                                            : 'Đánh dấu tất cả đã đọc'),
                                     onTap: () => ref
                                         .read(notificationsProvider.notifier)
                                         .markAllAsRead(),
@@ -441,9 +454,15 @@ class _GlassNotificationsModal extends ConsumerWidget {
                           // Floating frosted-glass capsule list (or empty capsule)
                           Flexible(
                             child: notifState.items.isEmpty
-                                ? const Padding(
-                                    padding: EdgeInsets.fromLTRB(14, 8, 14, 14),
-                                    child: _EmptyNotificationGlassCard(),
+                                ? Padding(
+                                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+                                    child: _EmptyNotificationGlassCard(
+                                      label: isEn
+                                          ? 'No new notifications.'
+                                          : (isKo
+                                              ? '새로운 알림이 없습니다.'
+                                              : 'Chưa có thông báo mới.'),
+                                    ),
                                   )
                                 : ListView.separated(
                                     shrinkWrap: true,
@@ -464,6 +483,8 @@ class _GlassNotificationsModal extends ConsumerWidget {
                                         item: item,
                                         timeText: formatTime(item.createdAt),
                                         compactIcon: isNarrow,
+                                        locale: locale,
+                                        formatter: formatter,
                                         onTap: () {
                                           if (!item.isRead) {
                                             ref
@@ -493,7 +514,9 @@ class _GlassNotificationsModal extends ConsumerWidget {
                                   discDiameter: 50,
                                   boxWidth: 54,
                                   boxHeight: 54,
-                                  semanticsLabel: 'Đóng thông báo',
+                                  semanticsLabel: isEn
+                                      ? 'Close notifications'
+                                      : (isKo ? '알림 닫기' : 'Đóng thông báo'),
                                   onTap: onClose,
                                 ),
                               ),
@@ -572,7 +595,11 @@ class _FrostedActionPillState extends State<_FrostedActionPill> {
 }
 
 class _EmptyNotificationGlassCard extends StatelessWidget {
-  const _EmptyNotificationGlassCard();
+  final String label;
+
+  const _EmptyNotificationGlassCard({
+    this.label = 'Chưa có thông báo mới.',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -600,17 +627,17 @@ class _EmptyNotificationGlassCard extends StatelessWidget {
           ),
         ],
       ),
-      child: const Row(
+      child: Row(
         children: [
-          _PastelGlassIconBadge(
+          const _PastelGlassIconBadge(
             style: _NotificationVisualStyle._warmButterGold,
             diameter: 46,
           ),
-          SizedBox(width: 14),
+          const SizedBox(width: 14),
           Expanded(
             child: Text(
-              'Chưa có thông báo mới.',
-              style: TextStyle(
+              label,
+              style: const TextStyle(
                 fontFamily: AppTypography.textFontFamily,
                 fontFamilyFallback: AppTypography.fontFallbacks,
                 fontSize: 14,
@@ -632,12 +659,16 @@ class _NotificationGlassCapsuleCard extends StatefulWidget {
   final AppNotificationItem item;
   final String timeText;
   final bool compactIcon;
+  final String? locale;
+  final MoneyFormatter? formatter;
   final VoidCallback onTap;
 
   const _NotificationGlassCapsuleCard({
     required this.item,
     required this.timeText,
     required this.compactIcon,
+    this.locale,
+    this.formatter,
     required this.onTap,
   });
 
@@ -654,11 +685,13 @@ class _NotificationGlassCapsuleCardState
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    final displayTitle = item.titleDisplayFor(widget.locale, widget.formatter);
+    final rawDisplayBody = item.bodyDisplayFor(widget.locale, widget.formatter);
     final visualStyle = _NotificationVisualStyle.resolveFor(item);
     final iconSize = widget.compactIcon ? 42.0 : 48.0;
-    final compactBody = item.body.contains('\n')
-        ? item.body.replaceAll(RegExp(r'\s+'), ' ').trim()
-        : item.body;
+    final compactBody = rawDisplayBody.contains('\n')
+        ? rawDisplayBody.replaceAll(RegExp(r'\s+'), ' ').trim()
+        : rawDisplayBody;
 
     Widget card = AnimatedContainer(
       duration: const Duration(milliseconds: 180),
@@ -738,7 +771,7 @@ class _NotificationGlassCapsuleCardState
                     ],
                     Expanded(
                       child: Text(
-                        item.title,
+                        displayTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

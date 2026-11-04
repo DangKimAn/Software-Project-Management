@@ -136,7 +136,9 @@ class PropertyCard extends StatelessWidget {
 
                 // Description / Tagline preview
                 Text(
-                  villa.tagline.isNotEmpty ? villa.tagline : villa.description,
+                  villa.tagline.isNotEmpty
+                      ? villa.tagline
+                      : villa.descriptionDisplayFor(context.activeLanguageCode),
                   style: AppTypography.caption.copyWith(
                     color: const Color(0xFF4B5563),
                     height: 1.45,

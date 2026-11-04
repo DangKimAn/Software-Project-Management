@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/app/di/providers.dart';
 import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
 import 'package:hotel_booking_flutter/app/theme/app_theme.dart';
+import 'package:hotel_booking_flutter/core/constants/app_constants.dart';
+import 'package:hotel_booking_flutter/core/storage/preferences_service.dart';
 import 'package:hotel_booking_flutter/core/network/dio_client.dart';
 import 'package:hotel_booking_flutter/core/network/socket_service.dart';
 import 'package:hotel_booking_flutter/core/security/secure_storage_service.dart';
@@ -131,6 +133,13 @@ const _guestUser = User(
   lastName: 'Khách',
   role: 'guest',
 );
+
+class _FakeLocaleNotifier extends LocaleNotifier {
+  _FakeLocaleNotifier([String initial = 'vi'])
+      : super(PreferencesService.inMemory({AppConstants.storageLocaleKey: initial})) {
+    state = initial;
+  }
+}
 
 Future<void> _setViewport(WidgetTester tester, Size size) async {
   tester.view.physicalSize = size;
@@ -383,6 +392,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
               dioClientProvider.overrideWithValue(client),
               socketServiceProvider.overrideWithValue(socketService),
               authNotifierProvider.overrideWith((_) => authNotifier),
@@ -533,6 +543,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
               dioClientProvider.overrideWithValue(client),
               socketServiceProvider.overrideWithValue(socketService),
               authNotifierProvider.overrideWith((_) => authNotifier),
@@ -627,6 +638,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
               dioClientProvider.overrideWithValue(client),
               socketServiceProvider.overrideWithValue(socketService),
               authNotifierProvider.overrideWith((_) => authNotifier),
@@ -741,6 +753,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
               dioClientProvider.overrideWithValue(client),
               socketServiceProvider.overrideWithValue(socketService),
               authNotifierProvider.overrideWith((_) => authNotifier),
@@ -878,6 +891,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
               dioClientProvider.overrideWithValue(client),
               socketServiceProvider.overrideWithValue(socketService),
               authNotifierProvider.overrideWith((_) => authNotifier),
@@ -1007,6 +1021,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
               dioClientProvider.overrideWithValue(client),
               socketServiceProvider.overrideWithValue(socketService),
               authNotifierProvider.overrideWith((_) => authNotifier),
@@ -1161,6 +1176,7 @@ void main() {
             await tester.pumpWidget(
               ProviderScope(
                 overrides: [
+                  localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
                   dioClientProvider.overrideWithValue(client),
                   socketServiceProvider.overrideWithValue(socketService),
                   authNotifierProvider.overrideWith((_) => authNotifier),
@@ -1211,6 +1227,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
               dioClientProvider.overrideWithValue(client),
               socketServiceProvider.overrideWithValue(socketService),
               authNotifierProvider.overrideWith((_) => authNotifier),
@@ -1326,6 +1343,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
               dioClientProvider.overrideWithValue(client),
               socketServiceProvider.overrideWithValue(socketService),
               authNotifierProvider.overrideWith((_) => guestAuth),
@@ -1352,7 +1370,7 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('Đã gửi'), findsOneWidget);
-        expect(find.text(' • Đã xem'), findsOneWidget);
+        expect(find.textContaining('Đã xem'), findsNothing);
 
         // Tap a Guest quick-reply chip -> populates input field
         await tester.tap(find.text('Dạ căn còn trống lịch này không ạ?'));
@@ -1453,6 +1471,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
               dioClientProvider.overrideWithValue(client),
               socketServiceProvider.overrideWithValue(socketService),
               authNotifierProvider.overrideWith((_) => hostAuth),

@@ -810,77 +810,144 @@ class Booking {
 
   bool get canRebook => isCompleted || isCancelled;
 
-  String statusDisplayAt([DateTime? now]) {
+  String statusDisplayAt([DateTime? now, String? localeCode]) {
     final raw = status.trim().toLowerCase();
     final eff = effectiveStatusAt(now);
+    final isEn = localeCode == 'en' || (localeCode != null && localeCode.startsWith('en'));
+    final isKo = localeCode == 'ko' || (localeCode != null && localeCode.startsWith('ko'));
 
-    if (eff == 'refunded') return 'Đã hoàn tiền';
-    if (eff == 'refund_pending') return 'Đang chờ hoàn tiền';
-    if (eff == 'payment_expired') return 'Quá hạn thanh toán';
-    if (eff == 'cancelled_by_host') return 'Host đã hủy';
-    if (eff == 'cancelled_by_admin') return 'Admin đã hủy';
-    if (eff == 'rejected') return 'Host đã từ chối';
+    if (eff == 'refunded') {
+      if (isEn) return 'Refunded';
+      if (isKo) return '환불 완료';
+      return 'Đã hoàn tiền';
+    }
+    if (eff == 'refund_pending') {
+      if (isEn) return 'Refund pending';
+      if (isKo) return '환불 대기 중';
+      return 'Đang chờ hoàn tiền';
+    }
+    if (eff == 'payment_expired') {
+      if (isEn) return 'Payment expired';
+      if (isKo) return '결제 기한 만료';
+      return 'Quá hạn thanh toán';
+    }
+    if (eff == 'cancelled_by_host') {
+      if (isEn) return 'Cancelled by host';
+      if (isKo) return '호스트 취소';
+      return 'Host đã hủy';
+    }
+    if (eff == 'cancelled_by_admin') {
+      if (isEn) return 'Cancelled by admin';
+      if (isKo) return '관리자 취소';
+      return 'Admin đã hủy';
+    }
+    if (eff == 'rejected') {
+      if (isEn) return 'Host rejected';
+      if (isKo) return '호스트 거절';
+      return 'Host đã từ chối';
+    }
     if (eff == 'cancelled_by_guest') {
       // Preserve legacy 'Đã hủy' only when raw status was generic 'cancelled'
       // while returning 'Khách đã hủy' for canonical 'cancelled_by_guest'.
+      if (isEn) return raw == 'cancelled' ? 'Cancelled' : 'Cancelled by guest';
+      if (isKo) return raw == 'cancelled' ? '취소됨' : '게스트 취소';
       return raw == 'cancelled' ? 'Đã hủy' : 'Khách đã hủy';
     }
 
     switch (eff) {
       case 'pending_payment':
+        if (isEn) return 'Pending payment';
+        if (isKo) return '결제 대기';
         return 'Chờ thanh toán';
       case 'paid':
+        if (isEn) return 'Payment successful';
+        if (isKo) return '결제 완료';
         return 'Thanh toán thành công';
       case 'confirmed':
+        if (isEn) return 'Confirmed';
+        if (isKo) return '예약 확정';
         return 'Đã xác nhận';
       case 'checked_in':
+        if (isEn) return 'Checked in';
+        if (isKo) return '체크인 완료';
         return 'Đã nhận phòng';
       case 'checked_out':
+        if (isEn) return raw == 'completed' ? 'Completed' : 'Checked out';
+        if (isKo) return raw == 'completed' ? '이용 완료' : '체크아웃 완료';
         return raw == 'completed' ? 'Đã hoàn thành' : 'Đã trả phòng';
       case 'completed':
+        if (isEn) return 'Completed';
+        if (isKo) return '이용 완료';
         return 'Đã hoàn thành';
       default:
+        if (isEn) return 'Processing';
+        if (isKo) return '처리 중';
         return 'Đang xử lý';
     }
   }
 
   String get statusDisplay => statusDisplayAt();
 
+  String statusDisplayFor(String? localeCode, [DateTime? now]) =>
+      statusDisplayAt(now, localeCode);
+
   String? get cancellationReasonDisplay =>
       localizeCancellationReason(cancellationReason);
 
-  static String? localizeCancellationReason(String? rawReason) {
+  String? cancellationReasonDisplayFor(String? localeCode) =>
+      localizeCancellationReason(cancellationReason, localeCode);
+
+  static String? localizeCancellationReason(String? rawReason, [String? localeCode]) {
     if (rawReason == null || rawReason.trim().isEmpty) return null;
     final trimmed = rawReason.trim();
     final upper = trimmed.toUpperCase();
+    final isEn = localeCode == 'en' || (localeCode != null && localeCode.startsWith('en'));
+    final isKo = localeCode == 'ko' || (localeCode != null && localeCode.startsWith('ko'));
+
     switch (upper) {
       case 'PAYMENT_EXPIRED':
       case 'EXPIRED':
       case 'HOLD_EXPIRED':
+        if (isEn) return 'Payment window expired (system auto-released hold)';
+        if (isKo) return '결제 기한 만료 (자동 예약 취소)';
         return 'Quá thời hạn thanh toán (hệ thống tự động hủy giữ chỗ)';
       case 'CUSTOMER_CANCELLED':
       case 'CANCELLED_BY_GUEST':
       case 'GUEST_CANCELLED':
       case 'USER_CANCELLED':
+        if (isEn) return 'Guest cancelled booking';
+        if (isKo) return '게스트 예약 취소';
         return 'Khách hàng chủ động hủy đặt phòng';
       case 'HOST_REJECTED':
       case 'REJECTED':
       case 'REJECTED_BY_HOST':
+        if (isEn) return 'Host rejected booking request';
+        if (isKo) return '호스트 예약 거절';
         return 'Chủ nhà từ chối yêu cầu đặt phòng';
       case 'HOST_CANCELLED':
       case 'CANCELLED_BY_HOST':
+        if (isEn) return 'Host cancelled booking';
+        if (isKo) return '호스트 예약 취소';
         return 'Chủ nhà đã hủy đặt phòng';
       case 'ADMIN_CANCELLED':
       case 'CANCELLED_BY_ADMIN':
+        if (isEn) return 'Admin cancelled booking';
+        if (isKo) return '관리자 예약 취소';
         return 'Quản trị viên đã hủy đặt phòng';
       case 'LATE_PAYMENT_AFTER_BOOKING_EXPIRED':
       case 'PAYMENT_SUCCESS_AFTER_HOLD_EXPIRED':
+        if (isEn) return 'Payment made after hold window expired';
+        if (isKo) return '예약 대기 시간 만료 후 결제됨';
         return 'Thanh toán phát sinh sau khi đã hết thời gian giữ chỗ';
       case 'SYSTEM_CANCELLED':
       case 'AUTO_CANCELLED':
+        if (isEn) return 'System auto-cancelled booking';
+        if (isKo) return '시스템 자동 취소';
         return 'Hệ thống tự động hủy đặt phòng';
     }
     if (RegExp(r'^[A-Za-z0-9]+(_[A-Za-z0-9]+)+$').hasMatch(trimmed)) {
+      if (isEn) return 'Booking cancelled according to system policy';
+      if (isKo) return '시스템 규정에 따라 예약이 취소되었습니다';
       return 'Đơn đặt phòng đã bị hủy theo quy định hệ thống';
     }
     return trimmed;

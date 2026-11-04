@@ -1,6 +1,5 @@
 import 'package:flutter/widgets.dart';
 import 'generated/app_localizations.dart';
-import 'locale_formatters.dart';
 
 export 'generated/app_localizations.dart';
 export 'locale_formatters.dart';
@@ -15,14 +14,31 @@ extension AppLocalizationsX on BuildContext {
       return fromTree;
     }
     final activeLocale = Localizations.maybeLocaleOf(this);
-    final code = LocaleFormatters.normalizeLanguageCode(
-      activeLocale?.languageCode,
-    );
-    return lookupAppLocalizations(Locale(code));
+    if (activeLocale?.languageCode == 'ko') {
+      return lookupAppLocalizations(const Locale('ko'));
+    }
+    if (activeLocale?.languageCode == 'en' &&
+        (activeLocale?.countryCode == null ||
+            activeLocale!.countryCode!.isEmpty)) {
+      return lookupAppLocalizations(const Locale('en'));
+    }
+    return lookupAppLocalizations(const Locale('vi'));
   }
 
   String get activeLanguageCode {
+    final fromTree = Localizations.of<AppLocalizations>(this, AppLocalizations);
+    if (fromTree != null) {
+      return fromTree.localeName;
+    }
     final activeLocale = Localizations.maybeLocaleOf(this);
-    return LocaleFormatters.normalizeLanguageCode(activeLocale?.languageCode);
+    if (activeLocale?.languageCode == 'ko') {
+      return 'ko';
+    }
+    if (activeLocale?.languageCode == 'en' &&
+        (activeLocale?.countryCode == null ||
+            activeLocale!.countryCode!.isEmpty)) {
+      return 'en';
+    }
+    return 'vi';
   }
 }
