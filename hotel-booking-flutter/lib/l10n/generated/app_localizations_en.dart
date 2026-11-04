@@ -502,6 +502,27 @@ class AppLocalizationsEn extends AppLocalizations {
       'The submitted information is invalid. Please check and try again.';
 
   @override
+  String get calendarPrevMonth => 'Previous month';
+
+  @override
+  String get calendarNextMonth => 'Next month';
+
+  @override
+  String calendarDay(int day) {
+    return 'Day $day';
+  }
+
+  @override
+  String calendarDayBooked(int day) {
+    return 'Day $day is booked';
+  }
+
+  @override
+  String calendarDayCheckOutOnly(int day) {
+    return 'Day $day check-out only';
+  }
+
+  @override
   String get dateBooked => 'This date is booked';
 
   @override
@@ -867,4 +888,917 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get momoGatewaySubtitle => 'Pay in VND via MoMo app or MoMo QR code';
+
+  @override
+  String get footerSupport => 'Support';
+
+  @override
+  String get footerBookingGuide => 'Booking Guide';
+
+  @override
+  String get footerCancellationPolicy => 'Cancellation Policy';
+
+  @override
+  String get footerFeedback => 'Complaints & Feedback';
+
+  @override
+  String get footerFaq => 'Frequently Asked Questions (FAQ)';
+
+  @override
+  String get footerDiscover => 'Explore Vung Tau';
+
+  @override
+  String get footerAboutUs => 'About Us';
+
+  @override
+  String get footerTravelGuide => 'Travel Guide';
+
+  @override
+  String get footerAddonServices => 'Add-on Services';
+
+  @override
+  String get footerMemberOffers => 'Member Offers';
+
+  @override
+  String get footerContact => 'Contact';
+
+  @override
+  String get footerOnlineConsultation => 'Online Consultation';
+
+  @override
+  String footerHotline(String phone) {
+    return 'Hotline: $phone';
+  }
+
+  @override
+  String get footerAddress => 'Address: 28 Thi Sach';
+
+  @override
+  String footerEmail(String email) {
+    return 'Email: $email';
+  }
+
+  @override
+  String get footerSocial => 'Social';
+
+  @override
+  String get footerCopyright => '© Copyright Villa Vung Tau 2026';
+
+  @override
+  String get settingsAvatarUpdateTitle => 'Update profile photo';
+
+  @override
+  String get settingsAvatarUpdateHint =>
+      'Select a JPG, PNG, WebP, or GIF image from your device (maximum 5MB).';
+
+  @override
+  String get settingsAvatarPickFromDevice =>
+      'Choose photo from device (Max 5MB)';
+
+  @override
+  String get settingsAvatarUploading => 'Uploading photo...';
+
+  @override
+  String settingsAvatarSelected(String fileName, String sizeKb) {
+    return 'Selected: $fileName ($sizeKb KB)';
+  }
+
+  @override
+  String get settingsAvatarPickError =>
+      'Unable to choose photo from device. Please try again.';
+
+  @override
+  String get settingsAvatarUpdateSuccess =>
+      'Profile photo updated successfully.';
+
+  @override
+  String get settingsChangeAvatarTooltip => 'Change photo';
+
+  @override
+  String get settingsEditProfileTooltip => 'Edit profile';
+
+  @override
+  String get settingsEditProfileTitle => 'Edit personal profile';
+
+  @override
+  String get settingsAvatarSectionTitle => 'Profile photo';
+
+  @override
+  String get settingsAvatarPickFromDeviceShort => 'Choose from device';
+
+  @override
+  String get settingsAvatarUploadingShort => 'Uploading...';
+
+  @override
+  String get settingsAvatarPickHint => 'Choose photo from device (max 5MB)';
+
+  @override
+  String settingsAvatarSelectedShort(String fileName) {
+    return 'Selected: $fileName';
+  }
+
+  @override
+  String get settingsFullNameLabel => 'Full name *';
+
+  @override
+  String get settingsFullNameHint => 'Enter your full name';
+
+  @override
+  String get settingsPhoneLabel => 'Phone number';
+
+  @override
+  String get settingsPhoneHint => '0912345678 or +84912345678';
+
+  @override
+  String get settingsLocationLabel => 'Location';
+
+  @override
+  String get settingsLocationHint => 'e.g. Vung Tau, Vietnam';
+
+  @override
+  String get settingsDreamDestinationLabel => 'Dream destination';
+
+  @override
+  String get settingsDreamDestinationHint => 'Enter your favorite destination';
+
+  @override
+  String get settingsJobLabel => 'Profession / Occupation';
+
+  @override
+  String get settingsJobHint => 'Enter your current profession';
+
+  @override
+  String get settingsSchoolLabel => 'School / University';
+
+  @override
+  String get settingsSchoolHint => 'Where you studied';
+
+  @override
+  String get settingsLanguagesLabel => 'Languages spoken';
+
+  @override
+  String get settingsLanguagesHint => 'English, Vietnamese (comma-separated)';
+
+  @override
+  String get settingsBioLabel => 'About me';
+
+  @override
+  String get settingsBioHint => 'Tell us a bit about yourself...';
+
+  @override
+  String get settingsSaving => 'Saving...';
+
+  @override
+  String get settingsProfileUpdateSuccess => 'Profile updated successfully.';
+
+  @override
+  String get settingsUnsavedDraftBanner => 'You have unsaved profile changes.';
+
+  @override
+  String get settingsResumeEditing => 'Continue editing';
+
+  @override
+  String get settingsConfirmPhoneTitle => 'Confirm phone number change';
+
+  @override
+  String settingsConfirmPhoneRemove(String oldPhone) {
+    return 'You are about to remove saved phone number ($oldPhone). Are you sure you want to proceed?';
+  }
+
+  @override
+  String settingsConfirmPhoneChange(String oldPhone, String newPhone) {
+    return 'You are about to change phone number from $oldPhone to $newPhone. Are you sure you want to save this change?';
+  }
+
+  @override
+  String get settingsConfirmPhoneReview => 'Review';
+
+  @override
+  String get settingsConfirmPhoneSave => 'Confirm save';
+
+  @override
+  String get settingsConfirmLogoutTitle => 'Confirm sign out';
+
+  @override
+  String get settingsConfirmLogoutDraft =>
+      'You have unsaved profile edits. Signing out will discard temporary draft data on this session. Are you sure you want to sign out?';
+
+  @override
+  String get settingsConfirmLogout =>
+      'Are you sure you want to sign out of this account?';
+
+  @override
+  String get settingsRoleAdmin => 'Administrator (Admin)';
+
+  @override
+  String get settingsRoleHost => 'Host';
+
+  @override
+  String get settingsRoleHostPending => 'Host application pending approval';
+
+  @override
+  String get settingsRoleGuest => 'Guest';
+
+  @override
+  String get settingsLoadingAccount => 'Loading account information...';
+
+  @override
+  String get settingsNotLoggedIn => 'Not signed in';
+
+  @override
+  String get settingsLoginPrompt =>
+      'Sign in to view your trips, messages, and synced wishlists';
+
+  @override
+  String get settingsSignInSignUp => 'Sign In / Register';
+
+  @override
+  String get settingsReLogin => 'Sign in again';
+
+  @override
+  String get settingsContactSupportCenter => 'Contact & Support Center';
+
+  @override
+  String get settingsCallHotline => 'Call hotline support';
+
+  @override
+  String get settingsZaloSupport => 'Message via Zalo OA';
+
+  @override
+  String get settingsZaloInquiryDefaultMessage =>
+      'Hello The Palm, I need assistance with the app.';
+
+  @override
+  String get settingsManageProperties => 'Manage listings';
+
+  @override
+  String get settingsMyTrips => 'My trips';
+
+  @override
+  String get settingsMyFavorites => 'My wishlist';
+
+  @override
+  String get settingsMessagesWithHost => 'Messages with hosts';
+
+  @override
+  String get settingsStatusOfflineTitle => 'Device is offline';
+
+  @override
+  String get settingsStatusUnauthorizedTitle =>
+      'Session expired or access denied';
+
+  @override
+  String get settingsStatusServerErrorTitle => 'Unable to sync server data';
+
+  @override
+  String get settingsStatusOfflineMessage =>
+      'Unable to connect to the server. Please check your network connection and try again.';
+
+  @override
+  String get settingsStatusUnauthorizedMessage =>
+      'Invalid session or you do not have permission to access (401/403).';
+
+  @override
+  String get settingsStatusServerErrorMessage =>
+      'The server is experiencing temporary issues. Please try again later.';
+
+  @override
+  String villaDetailViewAllPhotos(int count) {
+    return 'See all $count photos';
+  }
+
+  @override
+  String get villaDetailShareCopied => 'Link copied to clipboard';
+
+  @override
+  String get villaDetailAboutTitle => 'About this villa';
+
+  @override
+  String get villaDetailTranslatedBadge => 'Translated to English';
+
+  @override
+  String get villaDetailShowOriginal => 'Show original';
+
+  @override
+  String get villaDetailShowTranslation => 'Show translation';
+
+  @override
+  String get villaDetailOriginalBadge => 'Original (Vietnamese)';
+
+  @override
+  String get villaDetailAmenitiesTitle => 'Amenities';
+
+  @override
+  String get villaDetailBookingCalendarTitle => 'Select stay dates & Book';
+
+  @override
+  String villaDetailStayNightsRange(int min, int max) {
+    return 'Minimum $min nights • Maximum $max nights';
+  }
+
+  @override
+  String villaDetailGuestCapacityInfo(int included, int max) {
+    return 'Standard $included · Up to $max guests';
+  }
+
+  @override
+  String villaDetailGuestCapacityMax(int max) {
+    return 'Up to $max guests';
+  }
+
+  @override
+  String get villaDetailPromoCodeHint => 'Promo code';
+
+  @override
+  String get villaDetailPromoApply => 'Apply';
+
+  @override
+  String get villaDetailPromoChecking => 'Checking...';
+
+  @override
+  String get villaDetailSpecialRequestsHint => 'Note for the host (optional)';
+
+  @override
+  String villaDetailRoomSubtotal(int nights) {
+    return 'Room rate ($nights nights)';
+  }
+
+  @override
+  String villaDetailWeekendNights(int count) {
+    return ', $count weekend nights';
+  }
+
+  @override
+  String get villaDetailExtraGuestFee => 'Extra guest fee';
+
+  @override
+  String get villaDetailCleaningFee => 'Cleaning fee';
+
+  @override
+  String get villaDetailServiceFee => 'Service fee';
+
+  @override
+  String villaDetailDiscountLabel(String code) {
+    return 'Discount ($code)';
+  }
+
+  @override
+  String get villaDetailEstimatedTotal => 'Estimated total';
+
+  @override
+  String get villaDetailPoliciesTitle => 'House rules & Cancellation policy';
+
+  @override
+  String villaDetailCheckInTime(String from, String until) {
+    return 'Check-in: $from – $until';
+  }
+
+  @override
+  String villaDetailCheckOutTime(String time) {
+    return 'Check-out: Before $time';
+  }
+
+  @override
+  String villaDetailQuietHours(String hours) {
+    return 'Quiet hours: $hours';
+  }
+
+  @override
+  String get villaDetailPetsAllowed => 'Pets allowed';
+
+  @override
+  String get villaDetailPetsNotAllowed => 'No pets allowed';
+
+  @override
+  String get villaDetailPolicyFlexible =>
+      'Flexible — 100% refund up to 24 hours before check-in';
+
+  @override
+  String get villaDetailPolicyModerate =>
+      'Moderate — 100% refund up to 5 days before check-in';
+
+  @override
+  String get villaDetailPolicyStrict =>
+      'Strict — 50% refund up to 7 days before check-in';
+
+  @override
+  String get villaDetailSimilarTitle => 'Similar stays nearby';
+
+  @override
+  String get villaDetailMessageHostTooltip => 'Message Host';
+
+  @override
+  String villaDetailHostPrefix(String name) {
+    return 'Host: $name';
+  }
+
+  @override
+  String villaDetailMinNightsRequired(int min) {
+    return 'This stay requires a minimum of $min nights.';
+  }
+
+  @override
+  String villaDetailMaxNightsExceeded(int max) {
+    return 'This stay limits reservations to a maximum of $max nights.';
+  }
+
+  @override
+  String get villaDetailLoginToBook =>
+      'Please log in to complete your reservation.';
+
+  @override
+  String get villaDetailBookingSuccess =>
+      'Booking request sent! You can pay now or track it in Trips.';
+
+  @override
+  String get specSaltwaterPool => 'Saltwater pool';
+
+  @override
+  String specBeachDistance(int meters) {
+    return '${meters}m to beach';
+  }
+
+  @override
+  String get specBeachfront => 'Beachfront';
+
+  @override
+  String specGuestsCount(int count) {
+    return '$count guests';
+  }
+
+  @override
+  String specBedroomsCount(int count) {
+    return '$count bedrooms';
+  }
+
+  @override
+  String specBedsCount(int count) {
+    return '$count beds';
+  }
+
+  @override
+  String specBathsCount(int count) {
+    return '$count baths';
+  }
+
+  @override
+  String get reviewsTranslate => 'Translate review';
+
+  @override
+  String get reviewsShowOriginal => 'Show original';
+
+  @override
+  String get reviewsTranslating => 'Translating...';
+
+  @override
+  String get reviewsTranslatedBadge => 'Automatically translated';
+
+  @override
+  String get reviewsFilterAll => 'All';
+
+  @override
+  String reviewsFilterStar(int star) {
+    return '$star stars';
+  }
+
+  @override
+  String get reviewsHostReply => 'Host response';
+
+  @override
+  String get reviewsLoadMore => 'Show more reviews';
+
+  @override
+  String get reviewsLoadError => 'Unable to load reviews right now.';
+
+  @override
+  String get reviewsEmpty =>
+      'No reviews for this villa yet. Be the first guest to share your experience!';
+
+  @override
+  String reviewsEmptyRating(int rating) {
+    return 'No $rating-star reviews for this property yet.';
+  }
+
+  @override
+  String get chatBackToList => 'Back to list';
+
+  @override
+  String get chatShowTimestamps => 'Show timestamps';
+
+  @override
+  String get chatHideTimestamps => 'Hide timestamps';
+
+  @override
+  String get chatViewListing => 'View listing';
+
+  @override
+  String get chatAboutListing => 'About listing';
+
+  @override
+  String get chatSelectConversationPrompt =>
+      'Select a conversation to view messages';
+
+  @override
+  String get chatInputPlaceholder => 'Message';
+
+  @override
+  String get chatMoreOptions => 'More options';
+
+  @override
+  String get chatCamera => 'Take photo';
+
+  @override
+  String get chatGallery => 'Send photo';
+
+  @override
+  String get chatGalleryLabel => 'Photo gallery';
+
+  @override
+  String get chatVoiceMessage => 'Voice message';
+
+  @override
+  String get chatStopRecording => 'Stop recording';
+
+  @override
+  String get chatEmojiTooltip => 'Emoji';
+
+  @override
+  String get chatSendMessage => 'Send message';
+
+  @override
+  String get chatSendQuickEmoji => 'Send quick emoji';
+
+  @override
+  String get chatSendQuickEmojiHint =>
+      'Send quick emoji (press and hold to change)';
+
+  @override
+  String get chatSending => 'Sending...';
+
+  @override
+  String get chatSent => 'Sent';
+
+  @override
+  String get chatSeen => ' • Seen';
+
+  @override
+  String get chatFailed => 'Failed to send';
+
+  @override
+  String get chatRetry => 'Retry';
+
+  @override
+  String get chatDeleteFailedMessage => 'Delete failed message';
+
+  @override
+  String get chatEmptyPrompt => 'Send a message to start the conversation.';
+
+  @override
+  String get chatLoadMoreHistory => 'Load older messages';
+
+  @override
+  String get chatLoadingHistory => 'Loading history...';
+
+  @override
+  String chatNewMessagesCount(int count) {
+    return 'New messages ($count)';
+  }
+
+  @override
+  String chatUserTyping(String user) {
+    return '$user is typing...';
+  }
+
+  @override
+  String get chatDraftPrefix => 'Draft';
+
+  @override
+  String get chatNoMessagesYet => 'No messages yet.';
+
+  @override
+  String get chatSearchConversationsPlaceholder => 'Search conversations...';
+
+  @override
+  String get chatLoginTitle => 'Sign in to view messages';
+
+  @override
+  String get chatLoginDescription =>
+      'Chat directly with Vung Tau hosts about availability, amenities, and offers.';
+
+  @override
+  String get chatLoginAction => 'Sign in now';
+
+  @override
+  String get chatEmptyAdminTitle => 'No support conversations yet';
+
+  @override
+  String get chatEmptyAdminDesc =>
+      'Direct support conversations with hosts and guests will appear here.';
+
+  @override
+  String get chatEmptyAdminAction => 'User management';
+
+  @override
+  String get chatEmptyHostTitle => 'No conversations yet';
+
+  @override
+  String get chatEmptyHostDesc =>
+      'When guests inquire or book, conversations will appear here.';
+
+  @override
+  String get chatEmptyGuestTitle => 'No conversations yet';
+
+  @override
+  String get chatEmptyGuestDesc =>
+      'Choose a villa and click \"Contact host\" to start a chat.';
+
+  @override
+  String get chatEmptyGuestAction => 'Explore villas';
+
+  @override
+  String get chatExtensionsAndTemplatesTitle => 'Extensions & Quick templates';
+
+  @override
+  String get chatSelectEmojiTitle => 'Choose emoji';
+
+  @override
+  String get chatSelectQuickEmojiTitle => 'Choose quick emoji';
+
+  @override
+  String get chatQuickReplyGuest1 => 'Is this villa available for these dates?';
+
+  @override
+  String get chatQuickReplyGuest2 =>
+      'What are the check-in and check-out times?';
+
+  @override
+  String get chatQuickReplyGuest3 =>
+      'Does the villa have a private pool and BBQ kitchen?';
+
+  @override
+  String get chatQuickReplyGuest4 => 'Thank you very much, host!';
+
+  @override
+  String get chatQuickReplyHost1 => 'Yes, we have received your information!';
+
+  @override
+  String get chatQuickReplyHost2 => 'What time will you be checking in?';
+
+  @override
+  String get chatQuickReplyHost3 => 'The Palm Villa welcomes you! 🌴';
+
+  @override
+  String get chatQuickReplyHost4 =>
+      'Villa location has been updated on the system.';
+
+  @override
+  String get chatQuickReplyAdmin1 =>
+      'Hello! How can system administration assist you?';
+
+  @override
+  String get chatQuickReplyAdmin2 =>
+      'The system has received the request and is reviewing it.';
+
+  @override
+  String get chatQuickReplyAdmin3 =>
+      'Your profile/listing status has been updated.';
+
+  @override
+  String get chatQuickReplyAdmin4 =>
+      'Thank you for your feedback to the administration!';
+
+  @override
+  String get chatTplAdminDocsTitle => 'Request document supplement';
+
+  @override
+  String get chatTplAdminDocsSubtitle =>
+      'Remind host or guest to update verification details';
+
+  @override
+  String get chatTplAdminDocsContent =>
+      '📋 The administration requests that you check and submit clear verification documents for review.';
+
+  @override
+  String get chatTplHostLocationTitle => 'Send property location';
+
+  @override
+  String get chatTplHostLocationSubtitle => 'Detailed address and directions';
+
+  @override
+  String chatTplHostLocationContent(String villaTitle) {
+    return '📍 Location of $villaTitle: Thuy Van St., Vung Tau City (near Back Beach).';
+  }
+
+  @override
+  String get chatTplGuestInquiryTitle => 'Check availability & rate';
+
+  @override
+  String get chatTplGuestInquirySubtitle =>
+      'Check room status and weekend surcharge';
+
+  @override
+  String get chatTplGuestInquiryContent =>
+      '📅 Hello host, is this villa available this weekend and what is the total package rate for our group?';
+
+  @override
+  String get chatTplAdminReviewTitle => 'Review result notification';
+
+  @override
+  String get chatTplAdminReviewSubtitle => 'Update listing or account status';
+
+  @override
+  String get chatTplAdminReviewContent =>
+      '✅ Administrators have reviewed and updated your listing/profile status on the system.';
+
+  @override
+  String get chatTplHostCheckinTitle => 'Check-in & Check-out times';
+
+  @override
+  String get chatTplHostCheckinSubtitle => 'Check-in: 14:00 • Check-out: 12:00';
+
+  @override
+  String get chatTplHostCheckinContent =>
+      '⏰ Check-in time: from 14:00 | Check-out time: before 12:00 the next day.';
+
+  @override
+  String get chatTplGuestCheckinTitle =>
+      'Early check-in / late check-out request';
+
+  @override
+  String get chatTplGuestCheckinSubtitle =>
+      'Inquire about flexible check-in / check-out';
+
+  @override
+  String get chatTplGuestCheckinContent =>
+      '⏰ We expect to arrive a bit earlier than 14:00, could you support early check-in or luggage storage?';
+
+  @override
+  String get chatTplAdminPolicyTitle => 'Platform policy guidance';
+
+  @override
+  String get chatTplAdminPolicySubtitle =>
+      'Explain booking policies and service fees';
+
+  @override
+  String get chatTplAdminPolicyContent =>
+      'ℹ️ All transactions on the system are protected under the transparent booking and cancellation policy of The Palm Villa.';
+
+  @override
+  String get chatTplHostHouseRulesTitle => 'Send house rules';
+
+  @override
+  String get chatTplHostHouseRulesSubtitle =>
+      'Keep clean, quiet hours after 22:00';
+
+  @override
+  String get chatTplHostHouseRulesContent =>
+      '📋 House rules: Please respect common property and keep noise down after 22:00. Wish you a wonderful stay!';
+
+  @override
+  String get chatTplGuestAmenitiesTitle => 'Inquire about BBQ & pool amenities';
+
+  @override
+  String get chatTplGuestAmenitiesSubtitle =>
+      'Grill, charcoal, floats, and parking';
+
+  @override
+  String get chatTplGuestAmenitiesContent =>
+      '🔥 Does the villa come with a BBQ grill, kitchen utensils, private pool, and on-site parking?';
+
+  @override
+  String get chatToastUploadingPhoto => 'Uploading photo to Cloudflare R2...';
+
+  @override
+  String get chatToastUploadPhotoFailed => 'Photo upload failed';
+
+  @override
+  String get chatToastUploadingVoice =>
+      'Uploading voice message to Cloudflare R2...';
+
+  @override
+  String get chatToastUploadVoiceFailed => 'Voice message upload failed';
+
+  @override
+  String get chatToastMicNoAudio =>
+      'No microphone audio detected. Please grant microphone permission or speak louder.';
+
+  @override
+  String get chatToastMicAccessError =>
+      'Cannot access microphone. Please grant microphone permission in your browser / device.';
+
+  @override
+  String get chatErrorNetwork => 'No network connection';
+
+  @override
+  String get chatErrorForbidden => 'Access denied';
+
+  @override
+  String get chatErrorUnauthorized => 'Session expired';
+
+  @override
+  String get chatErrorNotFound => 'Conversation not found';
+
+  @override
+  String get chatErrorRateLimit => 'Too many requests';
+
+  @override
+  String get chatErrorServer => 'Server error';
+
+  @override
+  String get chatErrorValidation => 'Invalid data';
+
+  @override
+  String get chatErrorGeneric => 'An error occurred';
+
+  @override
+  String get hostMsgBackToVilla => 'Back to villa details';
+
+  @override
+  String get hostMsgContactTitle => 'Contact Host';
+
+  @override
+  String hostMsgHostLabel(String name) {
+    return 'Host: $name';
+  }
+
+  @override
+  String get hostMsgDefaultHost => 'The Palm Villa Host';
+
+  @override
+  String get hostMsgFaqTitle => 'Frequently asked questions for Host:';
+
+  @override
+  String get hostMsgInputLabel => 'Message to Host ';
+
+  @override
+  String get hostMsgInputPlaceholder =>
+      'Ask about availability, amenities, or special requests...';
+
+  @override
+  String get hostMsgSendAction => 'Send message & Open chat';
+
+  @override
+  String get hostMsgSendingAction => 'Sending message...';
+
+  @override
+  String get hostMsgQuestion1 =>
+      'Hello host, is the villa available this weekend?';
+
+  @override
+  String get hostMsgQuestion2 =>
+      'Is the pool freshwater or saltwater, and are there floats available?';
+
+  @override
+  String get hostMsgQuestion3 =>
+      'Does the villa have a BBQ grill, charcoal, and complete cookware?';
+
+  @override
+  String get hostMsgQuestion4 =>
+      'Can our group be accommodated for check-in before 14:00?';
+
+  @override
+  String galleryPhotoCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count photos',
+      one: '1 photo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get galleryViewAllPhotosSemantic => 'View all photos';
+
+  @override
+  String gallerySpacePrefix(String type) {
+    return 'Space: $type';
+  }
+
+  @override
+  String get spaceBedroom => 'Bedroom';
+
+  @override
+  String get spaceLivingRoom => 'Living room';
+
+  @override
+  String get spaceKitchen => 'Kitchen';
+
+  @override
+  String get spaceBathroom => 'Bathroom';
+
+  @override
+  String get spacePool => 'Swimming pool';
+
+  @override
+  String get spaceExterior => 'Exterior';
+
+  @override
+  String get spaceView => 'View';
+
+  @override
+  String get spaceDining => 'Dining room';
+
+  @override
+  String get spaceOther => 'Other space';
 }

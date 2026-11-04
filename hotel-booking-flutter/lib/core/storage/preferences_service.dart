@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_constants.dart';
 
@@ -535,8 +536,33 @@ class PreferencesService {
   }
 
   // --- Locale ---
+  /// Resolves the app default locale based on the device's system language:
+  /// - Vietnamese ('vi') -> 'vi'
+  /// - Korean ('ko') -> 'ko'
+  /// - English ('en') -> 'en'
+  /// - Any other language -> defaults to 'en'
+  static String resolveDefaultLocale([String? systemLanguageCode]) {
+    final code = (systemLanguageCode ?? _detectSystemLanguageCode()).toLowerCase().trim();
+    if (code.startsWith('vi')) return 'vi';
+    if (code.startsWith('ko')) return 'ko';
+    if (code.startsWith('en')) return 'en';
+    return 'en';
+  }
+
+  static String _detectSystemLanguageCode() {
+    try {
+      return ui.PlatformDispatcher.instance.locale.languageCode;
+    } catch (_) {
+      return 'en';
+    }
+  }
+
   String getLocale() {
-    return _getString(AppConstants.storageLocaleKey) ?? 'vi';
+    final saved = _getString(AppConstants.storageLocaleKey);
+    if (saved != null && saved.trim().isNotEmpty) {
+      return saved.trim();
+    }
+    return resolveDefaultLocale();
   }
 
   Future<bool> setLocale(String languageCode) {

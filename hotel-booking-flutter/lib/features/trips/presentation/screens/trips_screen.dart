@@ -7,7 +7,6 @@ import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/formatters/currency_formatter.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
@@ -61,18 +60,26 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
   Future<void> _handleCancelBooking(Booking booking) async {
     if (!booking.canCancel) return;
 
+    final locale = ref.read(localeProvider);
+    final isEn = locale.startsWith('en');
+    final isKo = locale.startsWith('ko');
+
     final reasonController = TextEditingController();
     final shouldCancel = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Hủy đặt phòng'),
+        title: Text(isEn ? 'Cancel booking' : (isKo ? '예약 취소' : 'Hủy đặt phòng')),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Bạn có chắc chắn muốn hủy đặt phòng tại "${booking.propertyName}"?',
+                isEn
+                    ? 'Are you sure you want to cancel your booking at "${booking.propertyName}"?'
+                    : (isKo
+                        ? '"${booking.propertyName}" 예약을 취소하시겠습니까?'
+                        : 'Bạn có chắc chắn muốn hủy đặt phòng tại "${booking.propertyName}"?'),
                 style: AppTypography.body,
               ),
               const SizedBox(height: AppSpacing.s16),
@@ -80,12 +87,16 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                 controller: reasonController,
                 maxLines: 1,
                 style: const TextStyle(fontSize: 13, height: 1.2),
-                decoration: const InputDecoration(
-                  labelText: 'Lý do hủy (bắt buộc)',
-                  hintText: 'Thay đổi kế hoạch cá nhân...',
+                decoration: InputDecoration(
+                  labelText: isEn
+                      ? 'Cancellation reason (required)'
+                      : (isKo ? '취소 사유 (필수)' : 'Lý do hủy (bắt buộc)'),
+                  hintText: isEn
+                      ? 'Change of personal plans...'
+                      : (isKo ? '개인 일정 변경...' : 'Thay đổi kế hoạch cá nhân...'),
                   isDense: true,
                   contentPadding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
             ],
@@ -94,7 +105,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Giữ đặt phòng'),
+            child: Text(isEn ? 'Keep booking' : (isKo ? '예약 유지' : 'Giữ đặt phòng')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
@@ -102,7 +113,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
               if (reasonController.text.trim().isEmpty) return;
               Navigator.of(ctx).pop(true);
             },
-            child: const Text('Xác nhận hủy'),
+            child: Text(isEn ? 'Confirm cancellation' : (isKo ? '취소 확인' : 'Xác nhận hủy')),
           ),
         ],
       ),
@@ -119,7 +130,13 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
         ref.invalidate(bookingDetailProvider(booking.id));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đã hủy đặt phòng thành công.')),
+            SnackBar(
+              content: Text(isEn
+                  ? 'Booking cancelled successfully.'
+                  : (isKo
+                      ? '예약이 성공적으로 취소되었습니다.'
+                      : 'Đã hủy đặt phòng thành công.')),
+            ),
           );
         }
       } catch (e) {
@@ -127,7 +144,11 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Không thể hủy: ${e.toString().replaceFirst('Exception: ', '')}',
+                isEn
+                    ? 'Cannot cancel: ${e.toString().replaceFirst('Exception: ', '')}'
+                    : (isKo
+                        ? '취소 실패: ${e.toString().replaceFirst('Exception: ', '')}'
+                        : 'Không thể hủy: ${e.toString().replaceFirst('Exception: ', '')}'),
               ),
             ),
           );
@@ -137,6 +158,10 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
   }
 
   Future<void> _openReviewModal(Booking booking) async {
+    final locale = ref.read(localeProvider);
+    final isEn = locale.startsWith('en');
+    final isKo = locale.startsWith('ko');
+
     int selectedRating = 5;
     final commentCtrl = TextEditingController();
 
@@ -146,16 +171,22 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AlertDialog(
-              title: Text('Đánh giá kỳ nghỉ tại ${booking.propertyName}'),
+              title: Text(isEn
+                  ? 'Review your stay at ${booking.propertyName}'
+                  : (isKo
+                      ? '${booking.propertyName} 숙박 후기 작성'
+                      : 'Đánh giá kỳ nghỉ tại ${booking.propertyName}')),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Mức độ hài lòng của bạn:',
+                    Text(
+                      isEn
+                          ? 'Your rating:'
+                          : (isKo ? '만족도 평가:' : 'Mức độ hài lòng của bạn:'),
                       style:
-                          TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 8),
                     Wrap(
@@ -209,10 +240,17 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                     TextField(
                       controller: commentCtrl,
                       maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: 'Chia sẻ trải nghiệm thực tế của bạn *',
-                        hintText:
-                            'Không gian biệt thự, hồ bơi, sự hỗ trợ của chủ nhà...',
+                      decoration: InputDecoration(
+                        labelText: isEn
+                            ? 'Share your experience *'
+                            : (isKo
+                                ? '실제 이용 후기를 공유해 주세요 *'
+                                : 'Chia sẻ trải nghiệm thực tế của bạn *'),
+                        hintText: isEn
+                            ? 'Villa space, swimming pool, host support...'
+                            : (isKo
+                                ? '숙소 공간, 수영장, 호스트의 응대 등...'
+                                : 'Không gian biệt thự, hồ bơi, sự hỗ trợ của chủ nhà...'),
                       ),
                     ),
                   ],
@@ -221,14 +259,16 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(false),
-                  child: const Text('Đóng'),
+                  child: Text(isEn ? 'Close' : (isKo ? '닫기' : 'Đóng')),
                 ),
                 FilledButton(
                   onPressed: () {
                     if (commentCtrl.text.trim().length < 5) return;
                     Navigator.of(ctx).pop(true);
                   },
-                  child: const Text('Gửi đánh giá'),
+                  child: Text(isEn
+                      ? 'Submit review'
+                      : (isKo ? '후기 등록' : 'Gửi đánh giá')),
                 ),
               ],
             );
@@ -250,8 +290,12 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Cảm ơn bạn đã gửi đánh giá kỳ nghỉ!'),
+            SnackBar(
+              content: Text(isEn
+                  ? 'Thank you for submitting your review!'
+                  : (isKo
+                      ? '소중한 후기를 남겨주셔서 감사합니다!'
+                      : 'Cảm ơn bạn đã gửi đánh giá kỳ nghỉ!')),
             ),
           );
         }
@@ -269,6 +313,9 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
     final user = authState.valueOrNull;
+    final locale = ref.watch(localeProvider);
+    final isEn = locale.startsWith('en');
+    final isKo = locale.startsWith('ko');
 
     if (user == null) {
       return Scaffold(
@@ -293,21 +340,29 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                           color: AppColors.iconStrong,
                         ),
                         const SizedBox(height: AppSpacing.s16),
-                        const Text(
-                          'Đăng nhập để xem chuyến đi',
+                        Text(
+                          isEn
+                              ? 'Log in to view trips'
+                              : (isKo ? '로그인하여 여행 확인' : 'Đăng nhập để xem chuyến đi'),
                           style: AppTypography.sectionHeading,
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: AppSpacing.s8),
                         Text(
-                          'Khi đăng nhập, bạn có thể theo dõi tình trạng đặt phòng, thanh toán và quản lý kỳ nghỉ của mình.',
+                          isEn
+                              ? 'When logged in, you can track booking status, payment, and manage your stays.'
+                              : (isKo
+                                  ? '로그인하시면 예약 상태, 결제 내역 확인 및 여행 관리가 가능합니다.'
+                                  : 'Khi đăng nhập, bạn có thể theo dõi tình trạng đặt phòng, thanh toán và quản lý kỳ nghỉ của mình.'),
                           style: AppTypography.body
                               .copyWith(color: AppColors.textMuted),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: AppSpacing.s24),
                         AppButton(
-                          text: 'Đăng nhập ngay',
+                          text: isEn
+                              ? 'Log in now'
+                              : (isKo ? '지금 로그인' : 'Đăng nhập ngay'),
                           onPressed: () => context.push('/dang-nhap'),
                         ),
                       ],
@@ -340,10 +395,10 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
               indicatorWeight: 2.5,
               labelStyle:
                   AppTypography.caption.copyWith(fontWeight: FontWeight.w700),
-              tabs: const [
-                Tab(text: 'Sắp tới'),
-                Tab(text: 'Hoàn tất'),
-                Tab(text: 'Đã hủy'),
+              tabs: [
+                Tab(text: isEn ? 'Upcoming' : (isKo ? '예정된 여행' : 'Sắp tới')),
+                Tab(text: isEn ? 'Completed' : (isKo ? '완료된 여행' : 'Hoàn tất')),
+                Tab(text: isEn ? 'Cancelled' : (isKo ? '취소된 예약' : 'Đã hủy')),
               ],
             ),
           ),
@@ -352,8 +407,13 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
             child: SafeArea(
               top: false,
               child: bookingsAsync.when(
-                loading: () => const Center(
-                    child: AppLoading(message: 'Đang tải lịch trình...')),
+                loading: () => Center(
+                    child: AppLoading(
+                        message: isEn
+                            ? 'Loading trips...'
+                            : (isKo
+                                ? '여행 일정을 불러오는 중...'
+                                : 'Đang tải lịch trình...'))),
                 error: (err, _) => Center(
                   child: AppErrorView(
                     message: err.toString().replaceFirst('Exception: ', ''),
@@ -403,20 +463,45 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                     children: [
                       _buildBookingList(
                         bookings: activeBookings,
-                        emptyTitle: 'Chưa có chuyến đi sắp tới',
-                        emptyDescription:
-                            'Bạn chưa có kỳ nghỉ nào sắp diễn ra. Hãy khám phá và đặt villa ngay!',
+                        emptyTitle: isEn
+                            ? 'No upcoming trips'
+                            : (isKo
+                                ? '예정된 여행이 없습니다'
+                                : 'Chưa có chuyến đi sắp tới'),
+                        emptyDescription: isEn
+                            ? 'You have no upcoming vacations. Explore and book a villa now!'
+                            : (isKo
+                                ? '예정된 여행이 없습니다. 지금 빌라를 둘러보고 예약해보세요!'
+                                : 'Bạn chưa có kỳ nghỉ nào sắp diễn ra. Hãy khám phá và đặt villa ngay!'),
+                        locale: locale,
                       ),
                       _buildBookingList(
                         bookings: completedBookings,
-                        emptyTitle: 'Chưa có kỳ nghỉ đã hoàn tất',
-                        emptyDescription:
-                            'Các chuyến đi đã qua sẽ được lưu giữ tại đây.',
+                        emptyTitle: isEn
+                            ? 'No completed trips'
+                            : (isKo
+                                ? '완료된 여행이 없습니다'
+                                : 'Chưa có kỳ nghỉ đã hoàn tất'),
+                        emptyDescription: isEn
+                            ? 'Your past trips will be saved here.'
+                            : (isKo
+                                ? '지난 여행 기록이 여기에 표시됩니다.'
+                                : 'Các chuyến đi đã qua sẽ được lưu giữ tại đây.'),
+                        locale: locale,
                       ),
                       _buildBookingList(
                         bookings: cancelledBookings,
-                        emptyTitle: 'Không có đơn đặt đã hủy',
-                        emptyDescription: 'Không có chuyến đi nào bị hủy.',
+                        emptyTitle: isEn
+                            ? 'No cancelled bookings'
+                            : (isKo
+                                ? '취소된 예약이 없습니다'
+                                : 'Không có đơn đặt đã hủy'),
+                        emptyDescription: isEn
+                            ? 'No bookings have been cancelled.'
+                            : (isKo
+                                ? '취소된 내역이 없습니다.'
+                                : 'Không có chuyến đi nào bị hủy.'),
+                        locale: locale,
                       ),
                     ],
                   );
@@ -433,12 +518,18 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
     required List<Booking> bookings,
     required String emptyTitle,
     required String emptyDescription,
+    required String locale,
   }) {
+    final isEn = locale.startsWith('en');
+    final isKo = locale.startsWith('ko');
+
     if (bookings.isEmpty) {
       return AppEmptyView(
         title: emptyTitle,
         description: emptyDescription,
-        actionText: 'Khám phá villa',
+        actionText: isEn
+            ? 'Explore villas'
+            : (isKo ? '빌라 둘러보기' : 'Khám phá villa'),
         onAction: () => context.go('/'),
       );
     }
@@ -452,18 +543,19 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
         separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.s16),
         itemBuilder: (context, index) {
           final booking = bookings[index];
-          return _buildBookingCard(booking);
+          return _buildBookingCard(booking, locale);
         },
       ),
     );
   }
 
-  Widget _buildBookingCard(Booking booking) {
+  Widget _buildBookingCard(Booking booking, String locale) {
+    final isEn = locale.startsWith('en');
+    final isKo = locale.startsWith('ko');
     final formatter = ref.watch(moneyFormatterProvider);
-    final refResult = formatter.format(
+    final totalResult = formatter.format(
       booking.totalAmount,
-      context: MoneyDisplayContext.checkoutReference,
-      includeApproximatePrefix: false,
+      context: MoneyDisplayContext.breakdown,
     );
     final isRefundStatus = booking.effectiveStatus == 'refund_pending' ||
         booking.effectiveStatus == 'refunded';
@@ -524,7 +616,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
-                        booking.statusDisplay,
+                        booking.statusDisplayFor(locale),
                         textAlign: TextAlign.right,
                         style: AppTypography.caption.copyWith(
                           color: badgeText,
@@ -577,11 +669,19 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                         ),
                       ],
                     ),
-                    Text(
-                      '${booking.nights} đêm • ${booking.guestCount} khách',
-                      style: AppTypography.caption
-                          .copyWith(color: AppColors.textMuted),
-                    ),
+                    () {
+                      final nightsText = isEn
+                          ? '${booking.nights} ${booking.nights == 1 ? "night" : "nights"}'
+                          : (isKo ? '${booking.nights}박' : '${booking.nights} đêm');
+                      final guestsText = isEn
+                          ? '${booking.guestCount} ${booking.guestCount == 1 ? "guest" : "guests"}'
+                          : (isKo ? '${booking.guestCount}명' : '${booking.guestCount} khách');
+                      return Text(
+                        '$nightsText • $guestsText',
+                        style: AppTypography.caption
+                            .copyWith(color: AppColors.textMuted),
+                      );
+                    }(),
                   ],
                 ),
 
@@ -598,8 +698,16 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                       Expanded(
                         child: Text(
                           remainingHoldSeconds > 0
-                              ? 'Giữ chỗ còn: ${_formatHoldCountdown(remainingHoldSeconds)}'
-                              : 'Đã hết thời gian giữ chỗ 15 phút',
+                              ? (isEn
+                                  ? 'Hold time remaining: ${_formatHoldCountdown(remainingHoldSeconds)}'
+                                  : (isKo
+                                      ? '예약 대기 시간: ${_formatHoldCountdown(remainingHoldSeconds)}'
+                                      : 'Giữ chỗ còn: ${_formatHoldCountdown(remainingHoldSeconds)}'))
+                              : (isEn
+                                  ? '15-minute hold time expired'
+                                  : (isKo
+                                      ? '예약 대기 시간(15분) 만료'
+                                      : 'Đã hết thời gian giữ chỗ 15 phút')),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -623,7 +731,11 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Chi tiết đơn đặt #${booking.id}',
+                          isEn
+                              ? 'Booking details #${booking.id}'
+                              : (isKo
+                                  ? '예약 상세 내역 #${booking.id}'
+                                  : 'Chi tiết đơn đặt #${booking.id}'),
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -631,65 +743,109 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                         ),
                         const SizedBox(height: 6),
                         _DetailItemRow(
-                          label: 'Tiền phòng (${booking.nights} đêm)',
-                          value:
-                              CurrencyFormatter.formatVnd(pb.baseNightsAmount),
+                          label: isEn
+                              ? 'Room rate (${booking.nights} ${booking.nights == 1 ? "night" : "nights"})'
+                              : (isKo
+                                  ? '숙박 요금 (${booking.nights}박)'
+                                  : 'Tiền phòng (${booking.nights} đêm)'),
+                          value: formatter.format(
+                            pb.baseNightsAmount,
+                            context: MoneyDisplayContext.breakdown,
+                          ).formatted,
                         ),
                         if (pb.weekendSurchargeAmount > 0)
                           _DetailItemRow(
-                            label: 'Phụ thu cuối tuần',
-                            value: CurrencyFormatter.formatVnd(
-                                pb.weekendSurchargeAmount),
+                            label: isEn
+                                ? 'Weekend surcharge'
+                                : (isKo ? '주말 할증료' : 'Phụ thu cuối tuần'),
+                            value: formatter.format(
+                              pb.weekendSurchargeAmount,
+                              context: MoneyDisplayContext.breakdown,
+                            ).formatted,
                           ),
                         if (pb.extraGuestFeeAmount > 0)
                           _DetailItemRow(
-                            label: 'Phụ thu khách thêm',
-                            value: CurrencyFormatter.formatVnd(
-                                pb.extraGuestFeeAmount),
+                            label: isEn
+                                ? 'Extra guest fee'
+                                : (isKo ? '추가 인원 요금' : 'Phụ thu khách thêm'),
+                            value: formatter.format(
+                              pb.extraGuestFeeAmount,
+                              context: MoneyDisplayContext.breakdown,
+                            ).formatted,
                           ),
                         if (pb.surchargeAmount > 0)
                           _DetailItemRow(
-                            label: 'Phụ thu cố định',
-                            value:
-                                CurrencyFormatter.formatVnd(pb.surchargeAmount),
+                            label: isEn
+                                ? 'Standard surcharge'
+                                : (isKo ? '고정 추가 요금' : 'Phụ thu cố định'),
+                            value: formatter.format(
+                              pb.surchargeAmount,
+                              context: MoneyDisplayContext.breakdown,
+                            ).formatted,
                           ),
                         if (pb.cleaningFee > 0)
                           _DetailItemRow(
-                            label: 'Phí vệ sinh',
-                            value: CurrencyFormatter.formatVnd(pb.cleaningFee),
+                            label: isEn
+                                ? 'Cleaning fee'
+                                : (isKo ? '청소비' : 'Phí vệ sinh'),
+                            value: formatter.format(
+                              pb.cleaningFee,
+                              context: MoneyDisplayContext.breakdown,
+                            ).formatted,
                           ),
                         if (pb.serviceFee > 0)
                           _DetailItemRow(
-                            label: 'Phí dịch vụ',
-                            value: CurrencyFormatter.formatVnd(pb.serviceFee),
+                            label: isEn
+                                ? 'Service fee'
+                                : (isKo ? '서비스 수수료' : 'Phí dịch vụ'),
+                            value: formatter.format(
+                              pb.serviceFee,
+                              context: MoneyDisplayContext.breakdown,
+                            ).formatted,
                           ),
                         if (pb.discountAmount > 0)
                           _DetailItemRow(
                             label: booking.couponCode != null &&
                                     booking.couponCode!.isNotEmpty
-                                ? 'Giảm giá (${booking.couponCode})'
-                                : 'Giảm giá',
-                            value:
-                                '-${CurrencyFormatter.formatVnd(pb.discountAmount)}',
+                                ? (isEn
+                                    ? 'Discount (${booking.couponCode})'
+                                    : (isKo
+                                        ? '할인 (${booking.couponCode})'
+                                        : 'Giảm giá (${booking.couponCode})'))
+                                : (isEn
+                                    ? 'Discount'
+                                    : (isKo ? '할인' : 'Giảm giá')),
+                            value: formatter.formatDiscount(
+                              pb.discountAmount,
+                              context: MoneyDisplayContext.breakdown,
+                            ),
                           ),
                         if (booking.specialRequests != null &&
                             booking.specialRequests!.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
-                              'Ghi chú: ${booking.specialRequests}',
+                              isEn
+                                  ? 'Note: ${booking.specialRequests}'
+                                  : (isKo
+                                      ? '요청 사항: ${booking.specialRequests}'
+                                      : 'Ghi chú: ${booking.specialRequests}'),
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.textSecondary,
                               ),
                             ),
                           ),
-                        if (booking.cancellationReasonDisplay != null &&
-                            booking.cancellationReasonDisplay!.isNotEmpty)
+                        if (booking.cancellationReasonDisplayFor(locale) != null &&
+                            booking.cancellationReasonDisplayFor(locale)!.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
-                              'Lý do hủy: ${booking.cancellationReasonDisplay}',
+                              isEn
+                                  ? 'Cancellation reason: ${booking.cancellationReasonDisplayFor(locale)}'
+                                  : (isKo
+                                      ? '취소 사유: ${booking.cancellationReasonDisplayFor(locale)}'
+                                      : 'Lý do hủy: ${booking.cancellationReasonDisplayFor(locale)}'),
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.error,
@@ -706,18 +862,21 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Tổng thanh toán',
-                        style: AppTypography.caption.copyWith(
-                            color: AppColors.textMuted,
-                            fontWeight: FontWeight.w400)),
+                    Text(
+                      isEn
+                          ? 'Total payment'
+                          : (isKo ? '총 결제 금액' : 'Tổng thanh toán'),
+                      style: AppTypography.caption.copyWith(
+                          color: AppColors.textMuted,
+                          fontWeight: FontWeight.w400)),
                     const SizedBox(height: 4),
-                    Text(CurrencyFormatter.formatVnd(booking.totalAmount),
+                    Text(totalResult.formatted,
                         style: AppTypography.cardTitle
                             .copyWith(color: AppColors.primary)),
-                    if (refResult.isForeignDisplayed) ...[
+                    if (totalResult.isForeignDisplayed) ...[
                       const SizedBox(height: 2),
                       Text(
-                        '${formatter.l10n.fxEstimatedPrice(refResult.formatted)} • ${formatter.l10n.fxHistoricalReferenceNote}',
+                        '${formatter.l10n.fxTotalPayableVnd(formatter.formatExactVnd(booking.totalAmount, withCode: true))} • ${formatter.l10n.fxHistoricalReferenceNote}',
                         style: AppTypography.caption.copyWith(
                           color: AppColors.textSecondary,
                         ),
@@ -750,7 +909,10 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                                       borderRadius: BorderRadius.circular(12))),
                               onPressed: () =>
                                   context.push('/thanh-toan/${booking.id}'),
-                              child: const Text('Thanh toán',
+                              child: Text(
+                                  isEn
+                                      ? 'Pay now'
+                                      : (isKo ? '결제하기' : 'Thanh toán'),
                                   textAlign: TextAlign.center))),
                       const SizedBox(height: 10),
                     ],
@@ -794,7 +956,13 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                               children: [
                                 Flexible(
                                   child: Text(
-                                    isExpanded ? 'Ẩn chi tiết' : 'Chi tiết',
+                                    isExpanded
+                                        ? (isEn
+                                            ? 'Hide details'
+                                            : (isKo ? '상세 숨기기' : 'Ẩn chi tiết'))
+                                        : (isEn
+                                            ? 'Details'
+                                            : (isKo ? '상세 정보' : 'Chi tiết')),
                                     textAlign: TextAlign.center,
                                   ),
                                 ),
@@ -821,13 +989,19 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                                   shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12))),
                               onPressed: () => _handleCancelBooking(booking),
-                              child: const Text('Hủy phòng',
+                              child: Text(
+                                  isEn
+                                      ? 'Cancel booking'
+                                      : (isKo ? '예약 취소' : 'Hủy phòng'),
                                   textAlign: TextAlign.center)),
                         if (booking.isCompleted && !booking.hasReview)
                           OutlinedButton(
                               style: secondaryStyle,
                               onPressed: () => _openReviewModal(booking),
-                              child: const Text('Đánh giá',
+                              child: Text(
+                                  isEn
+                                      ? 'Review'
+                                      : (isKo ? '후기 작성' : 'Đánh giá'),
                                   textAlign: TextAlign.center)),
                       ];
                       if (constraints.maxWidth < 280 ||

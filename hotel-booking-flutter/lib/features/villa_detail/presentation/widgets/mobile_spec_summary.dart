@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../villas/domain/entities/villa_specs.dart';
 
 /// 2-tier specification summary conforming to FLUTTER_RULES.md section 8.1:
@@ -22,16 +23,32 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
   @override
   Widget build(BuildContext context) {
     final specs = widget.specs;
+    final l10n = context.l10n;
     final coreItems = <Widget>[
       if (specs.maxGuests > 0)
         _buildCoreItem(
-            LucideIcons.users, '${specs.maxGuests} khách', 'Sức chứa'),
+          LucideIcons.users,
+          l10n.specGuestsCount(specs.maxGuests),
+          l10n.specCapacityLabel,
+        ),
       if (specs.bedrooms > 0)
-        _buildCoreItem(LucideIcons.bed, '${specs.bedrooms} phòng', 'Phòng ngủ'),
+        _buildCoreItem(
+          LucideIcons.bed,
+          l10n.specBedroomsCount(specs.bedrooms),
+          l10n.specBedroomsLabel,
+        ),
       if (specs.beds > 0)
-        _buildCoreItem(LucideIcons.bedDouble, '${specs.beds} giường', 'Giường'),
+        _buildCoreItem(
+          LucideIcons.bedDouble,
+          l10n.specBedsCount(specs.beds),
+          l10n.specBedsLabel,
+        ),
       if (specs.bathrooms > 0)
-        _buildCoreItem(LucideIcons.bath, '${specs.bathrooms} WC', 'Phòng tắm'),
+        _buildCoreItem(
+          LucideIcons.bath,
+          l10n.specBathsCount(specs.bathrooms),
+          l10n.specBathroomsLabel,
+        ),
     ];
 
     return Padding(
@@ -58,7 +75,7 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                         child: Divider(color: AppColors.borderSoft),
                       ),
                       Text(
-                        'Tiện ích nổi bật & Vị trí',
+                        l10n.specHighlightsTitle,
                         style: AppTypography.cardTitle.copyWith(fontSize: 14),
                       ),
                       const SizedBox(height: 10),
@@ -69,18 +86,18 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                             child: _buildSupportingItem(
                               LucideIcons.waves,
                               specs.hasSaltwaterPool
-                                  ? 'Hồ bơi nước mặn'
+                                  ? l10n.specSaltwaterPool
                                   : (specs.hasPrivatePool
-                                      ? 'Hồ bơi riêng'
-                                      : 'Không có hồ bơi'),
+                                      ? l10n.specPrivatePool
+                                      : l10n.specNoPool),
                             ),
                           ),
                           Expanded(
                             child: _buildSupportingItem(
                               LucideIcons.utensils,
                               specs.hasBbqKitchen
-                                  ? 'Bếp & Lò BBQ đầy đủ'
-                                  : 'Bếp cơ bản',
+                                  ? l10n.specBbqKitchen
+                                  : l10n.specBasicKitchen,
                             ),
                           ),
                         ],
@@ -92,8 +109,8 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                             child: _buildSupportingItem(
                               LucideIcons.car,
                               specs.hasParking
-                                  ? 'Chỗ đậu xe ô tô'
-                                  : 'Đậu xe tự túc',
+                                  ? l10n.specParking
+                                  : l10n.specSelfParking,
                             ),
                           ),
                           Expanded(
@@ -101,8 +118,9 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                               LucideIcons.mapPin,
                               specs.beachDistanceMeters != null &&
                                       specs.beachDistanceMeters! > 0
-                                  ? '${specs.beachDistanceMeters}m ra bãi tắm'
-                                  : 'Gần trung tâm',
+                                  ? l10n.specBeachDistance(
+                                      specs.beachDistanceMeters!)
+                                  : l10n.specNearCenter,
                             ),
                           ),
                         ],
@@ -131,8 +149,8 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                     children: [
                       Text(
                         _isExpanded
-                            ? 'Thu gọn thông số'
-                            : 'Xem thêm thông số chi tiết',
+                            ? l10n.specCollapseAction
+                            : l10n.specExpandAction,
                         style: AppTypography.caption.copyWith(
                           color: AppColors.primary,
                           fontWeight: FontWeight.w600,

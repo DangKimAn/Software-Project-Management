@@ -501,6 +501,27 @@ class AppLocalizationsVi extends AppLocalizations {
       'Thông tin gửi lên không hợp lệ. Vui lòng kiểm tra lại.';
 
   @override
+  String get calendarPrevMonth => 'Tháng trước';
+
+  @override
+  String get calendarNextMonth => 'Tháng tiếp theo';
+
+  @override
+  String calendarDay(int day) {
+    return 'Ngày $day';
+  }
+
+  @override
+  String calendarDayBooked(int day) {
+    return 'Ngày $day đã kín';
+  }
+
+  @override
+  String calendarDayCheckOutOnly(int day) {
+    return 'Ngày $day chỉ trả phòng';
+  }
+
+  @override
   String get dateBooked => 'Ngày này đã kín';
 
   @override
@@ -866,4 +887,915 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get momoGatewaySubtitle =>
       'Thanh toán VND qua ứng dụng MoMo hoặc quét mã QR MoMo';
+
+  @override
+  String get footerSupport => 'Hỗ trợ';
+
+  @override
+  String get footerBookingGuide => 'Hướng dẫn đặt phòng';
+
+  @override
+  String get footerCancellationPolicy => 'Chính sách hủy phòng';
+
+  @override
+  String get footerFeedback => 'Khiếu nại & Góp ý';
+
+  @override
+  String get footerFaq => 'Câu hỏi thường gặp (FAQ)';
+
+  @override
+  String get footerDiscover => 'Khám phá Vũng Tàu';
+
+  @override
+  String get footerAboutUs => 'Về chúng tôi';
+
+  @override
+  String get footerTravelGuide => 'Cẩm nang du lịch';
+
+  @override
+  String get footerAddonServices => 'Dịch vụ đi kèm';
+
+  @override
+  String get footerMemberOffers => 'Ưu đãi thành viên';
+
+  @override
+  String get footerContact => 'Liên hệ';
+
+  @override
+  String get footerOnlineConsultation => 'Liên hệ tư vấn trực tuyến';
+
+  @override
+  String footerHotline(String phone) {
+    return 'Hotline: $phone';
+  }
+
+  @override
+  String get footerAddress => 'Địa chỉ: 28 Thi Sách';
+
+  @override
+  String footerEmail(String email) {
+    return 'Email: $email';
+  }
+
+  @override
+  String get footerSocial => 'Mạng xã hội';
+
+  @override
+  String get footerCopyright => '© Bản quyền thuộc về Villa Vũng Tàu 2026';
+
+  @override
+  String get settingsAvatarUpdateTitle => 'Cập nhật ảnh đại diện';
+
+  @override
+  String get settingsAvatarUpdateHint =>
+      'Chọn ảnh định dạng JPG, PNG, WebP hoặc GIF từ máy của bạn (dung lượng tối đa 5MB).';
+
+  @override
+  String get settingsAvatarPickFromDevice =>
+      'Chọn ảnh từ thiết bị (Tối đa 5MB)';
+
+  @override
+  String get settingsAvatarUploading => 'Đang tải ảnh lên...';
+
+  @override
+  String settingsAvatarSelected(String fileName, String sizeKb) {
+    return 'Đã chọn: $fileName ($sizeKb KB)';
+  }
+
+  @override
+  String get settingsAvatarPickError =>
+      'Không thể chọn ảnh từ thiết bị. Vui lòng thử lại.';
+
+  @override
+  String get settingsAvatarUpdateSuccess =>
+      'Đã cập nhật ảnh đại diện thành công.';
+
+  @override
+  String get settingsChangeAvatarTooltip => 'Đổi ảnh';
+
+  @override
+  String get settingsEditProfileTooltip => 'Sửa hồ sơ';
+
+  @override
+  String get settingsEditProfileTitle => 'Chỉnh sửa hồ sơ cá nhân';
+
+  @override
+  String get settingsAvatarSectionTitle => 'Ảnh đại diện';
+
+  @override
+  String get settingsAvatarPickFromDeviceShort => 'Chọn ảnh từ máy';
+
+  @override
+  String get settingsAvatarUploadingShort => 'Đang tải...';
+
+  @override
+  String get settingsAvatarPickHint => 'Chọn ảnh từ thiết bị (tối đa 5MB)';
+
+  @override
+  String settingsAvatarSelectedShort(String fileName) {
+    return 'Đã chọn: $fileName';
+  }
+
+  @override
+  String get settingsFullNameLabel => 'Họ và tên *';
+
+  @override
+  String get settingsFullNameHint => 'Nhập họ và tên đầy đủ';
+
+  @override
+  String get settingsPhoneLabel => 'Số điện thoại';
+
+  @override
+  String get settingsPhoneHint => '0912345678 hoặc +84912345678';
+
+  @override
+  String get settingsLocationLabel => 'Nơi sinh sống';
+
+  @override
+  String get settingsLocationHint => 'Ví dụ: Vũng Tàu, Việt Nam';
+
+  @override
+  String get settingsDreamDestinationLabel => 'Nơi tôi luôn muốn đến';
+
+  @override
+  String get settingsDreamDestinationHint => 'Nhập điểm đến yêu thích của bạn';
+
+  @override
+  String get settingsJobLabel => 'Công việc / Nghề nghiệp';
+
+  @override
+  String get settingsJobHint => 'Nhập công việc hiện tại';
+
+  @override
+  String get settingsSchoolLabel => 'Trường học';
+
+  @override
+  String get settingsSchoolHint => 'Nơi bạn từng theo học';
+
+  @override
+  String get settingsLanguagesLabel => 'Ngôn ngữ giao tiếp';
+
+  @override
+  String get settingsLanguagesHint =>
+      'Tiếng Việt, English (phân cách bằng dấu phẩy)';
+
+  @override
+  String get settingsBioLabel => 'Giới thiệu bản thân';
+
+  @override
+  String get settingsBioHint => 'Chia sẻ đôi nét về bản thân...';
+
+  @override
+  String get settingsSaving => 'Đang lưu...';
+
+  @override
+  String get settingsProfileUpdateSuccess => 'Đã cập nhật hồ sơ thành công.';
+
+  @override
+  String get settingsUnsavedDraftBanner =>
+      'Bạn có bản nháp hồ sơ chưa lưu thành công.';
+
+  @override
+  String get settingsResumeEditing => 'Tiếp tục sửa';
+
+  @override
+  String get settingsConfirmPhoneTitle => 'Xác nhận thay đổi số điện thoại';
+
+  @override
+  String settingsConfirmPhoneRemove(String oldPhone) {
+    return 'Bạn sắp xóa số điện thoại liên hệ đã lưu ($oldPhone). Bạn có chắc chắn muốn tiếp tục?';
+  }
+
+  @override
+  String settingsConfirmPhoneChange(String oldPhone, String newPhone) {
+    return 'Bạn sắp thay đổi số điện thoại liên hệ từ $oldPhone sang $newPhone. Bạn có chắc chắn muốn lưu thay đổi này?';
+  }
+
+  @override
+  String get settingsConfirmPhoneReview => 'Kiểm tra lại';
+
+  @override
+  String get settingsConfirmPhoneSave => 'Xác nhận lưu';
+
+  @override
+  String get settingsConfirmLogoutTitle => 'Xác nhận đăng xuất';
+
+  @override
+  String get settingsConfirmLogoutDraft =>
+      'Bạn đang có bản nháp chỉnh sửa hồ sơ chưa lưu. Đăng xuất sẽ xóa dữ liệu nháp tạm thời trên phiên này. Bạn có chắc chắn muốn đăng xuất?';
+
+  @override
+  String get settingsConfirmLogout =>
+      'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này không?';
+
+  @override
+  String get settingsRoleAdmin => 'Quản trị viên (Admin)';
+
+  @override
+  String get settingsRoleHost => 'Chủ nhà (Host)';
+
+  @override
+  String get settingsRoleHostPending => 'Hồ sơ Chủ nhà đang chờ duyệt';
+
+  @override
+  String get settingsRoleGuest => 'Khách lưu trú';
+
+  @override
+  String get settingsLoadingAccount => 'Đang tải thông tin tài khoản...';
+
+  @override
+  String get settingsNotLoggedIn => 'Chưa đăng nhập';
+
+  @override
+  String get settingsLoginPrompt =>
+      'Đăng nhập để xem kỳ nghỉ, tin nhắn và đồng bộ yêu thích';
+
+  @override
+  String get settingsSignInSignUp => 'Đăng nhập / Đăng ký';
+
+  @override
+  String get settingsReLogin => 'Đăng nhập lại';
+
+  @override
+  String get settingsContactSupportCenter => 'Trung tâm Liên hệ & Hỗ trợ';
+
+  @override
+  String get settingsCallHotline => 'Gọi tổng đài tư vấn';
+
+  @override
+  String get settingsZaloSupport => 'Nhắn tin qua Zalo OA';
+
+  @override
+  String get settingsZaloInquiryDefaultMessage =>
+      'Xin chào The Palm, tôi cần hỗ trợ thông tin ứng dụng.';
+
+  @override
+  String get settingsManageProperties => 'Quản lý chỗ nghỉ';
+
+  @override
+  String get settingsMyTrips => 'Chuyến đi của tôi';
+
+  @override
+  String get settingsMyFavorites => 'Danh sách yêu thích';
+
+  @override
+  String get settingsMessagesWithHost => 'Tin nhắn với Chủ nhà';
+
+  @override
+  String get settingsStatusOfflineTitle => 'Thiết bị đang ngoại tuyến';
+
+  @override
+  String get settingsStatusUnauthorizedTitle =>
+      'Phiên đăng nhập hết hạn hoặc bị từ chối';
+
+  @override
+  String get settingsStatusServerErrorTitle =>
+      'Không thể đồng bộ dữ liệu máy chủ';
+
+  @override
+  String get settingsStatusOfflineMessage =>
+      'Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.';
+
+  @override
+  String get settingsStatusUnauthorizedMessage =>
+      'Phiên đăng nhập không hợp lệ hoặc bạn không có quyền truy cập (401/403).';
+
+  @override
+  String get settingsStatusServerErrorMessage =>
+      'Máy chủ đang gặp sự cố tạm thời. Vui lòng thử lại sau.';
+
+  @override
+  String villaDetailViewAllPhotos(int count) {
+    return 'Xem tất cả $count ảnh';
+  }
+
+  @override
+  String get villaDetailShareCopied => 'Đã sao chép liên kết vào bộ nhớ tạm';
+
+  @override
+  String get villaDetailAboutTitle => 'Giới thiệu biệt thự';
+
+  @override
+  String get villaDetailTranslatedBadge => 'Đã dịch sang Tiếng Việt';
+
+  @override
+  String get villaDetailShowOriginal => 'Xem bản gốc';
+
+  @override
+  String get villaDetailShowTranslation => 'Xem bản dịch';
+
+  @override
+  String get villaDetailOriginalBadge => 'Bản gốc (Tiếng Việt)';
+
+  @override
+  String get villaDetailAmenitiesTitle => 'Tiện nghi có sẵn';
+
+  @override
+  String get villaDetailBookingCalendarTitle => 'Chọn lịch lưu trú & Đặt phòng';
+
+  @override
+  String villaDetailStayNightsRange(int min, int max) {
+    return 'Tối thiểu $min đêm • Tối đa $max đêm';
+  }
+
+  @override
+  String villaDetailGuestCapacityInfo(int included, int max) {
+    return 'Tiêu chuẩn $included · Tối đa $max khách';
+  }
+
+  @override
+  String villaDetailGuestCapacityMax(int max) {
+    return 'Tối đa $max khách';
+  }
+
+  @override
+  String get villaDetailPromoCodeHint => 'Mã ưu đãi';
+
+  @override
+  String get villaDetailPromoApply => 'Áp dụng';
+
+  @override
+  String get villaDetailPromoChecking => 'Đang kiểm tra...';
+
+  @override
+  String get villaDetailSpecialRequestsHint => 'Ghi chú cho chủ nhà (tùy chọn)';
+
+  @override
+  String villaDetailRoomSubtotal(int nights) {
+    return 'Tiền phòng ($nights đêm)';
+  }
+
+  @override
+  String villaDetailWeekendNights(int count) {
+    return ', $count đêm cuối tuần';
+  }
+
+  @override
+  String get villaDetailExtraGuestFee => 'Phụ thu vượt khách tiêu chuẩn';
+
+  @override
+  String get villaDetailCleaningFee => 'Phí vệ sinh';
+
+  @override
+  String get villaDetailServiceFee => 'Phí dịch vụ';
+
+  @override
+  String villaDetailDiscountLabel(String code) {
+    return 'Giảm giá ($code)';
+  }
+
+  @override
+  String get villaDetailEstimatedTotal => 'Tổng thanh toán tạm tính';
+
+  @override
+  String get villaDetailPoliciesTitle =>
+      'Nội quy chỗ nghỉ & Chính sách hoàn hủy';
+
+  @override
+  String villaDetailCheckInTime(String from, String until) {
+    return 'Nhận phòng: $from – $until';
+  }
+
+  @override
+  String villaDetailCheckOutTime(String time) {
+    return 'Trả phòng: Trước $time';
+  }
+
+  @override
+  String villaDetailQuietHours(String hours) {
+    return 'Giờ yên tĩnh: $hours';
+  }
+
+  @override
+  String get villaDetailPetsAllowed => 'Cho phép mang thú cưng';
+
+  @override
+  String get villaDetailPetsNotAllowed => 'Không mang thú cưng';
+
+  @override
+  String get villaDetailPolicyFlexible =>
+      'Linh hoạt — Hoàn tiền 100% trước 24 giờ nhận phòng';
+
+  @override
+  String get villaDetailPolicyModerate =>
+      'Trung bình — Hoàn tiền 100% trước 5 ngày nhận phòng';
+
+  @override
+  String get villaDetailPolicyStrict =>
+      'Nghiêm ngặt — Hoàn tiền 50% trước 7 ngày nhận phòng';
+
+  @override
+  String get villaDetailSimilarTitle => 'Gợi ý chỗ nghỉ tương tự gần đây';
+
+  @override
+  String get villaDetailMessageHostTooltip => 'Nhắn tin cho Chủ nhà';
+
+  @override
+  String villaDetailHostPrefix(String name) {
+    return 'Chủ nhà: $name';
+  }
+
+  @override
+  String villaDetailMinNightsRequired(int min) {
+    return 'Chỗ nghỉ này yêu cầu tối thiểu $min đêm.';
+  }
+
+  @override
+  String villaDetailMaxNightsExceeded(int max) {
+    return 'Chỗ nghỉ này giới hạn tối đa $max đêm mỗi lần đặt.';
+  }
+
+  @override
+  String get villaDetailLoginToBook =>
+      'Vui lòng đăng nhập để hoàn tất đặt phòng.';
+
+  @override
+  String get villaDetailBookingSuccess =>
+      'Đã gửi yêu cầu đặt phòng! Bạn có thể thanh toán ngay hoặc theo dõi tại Chuyến đi.';
+
+  @override
+  String get specSaltwaterPool => 'Hồ bơi nước mặn';
+
+  @override
+  String specBeachDistance(int meters) {
+    return 'Cách biển ${meters}m';
+  }
+
+  @override
+  String get specBeachfront => 'Sát biển';
+
+  @override
+  String specGuestsCount(int count) {
+    return '$count khách';
+  }
+
+  @override
+  String specBedroomsCount(int count) {
+    return '$count phòng';
+  }
+
+  @override
+  String specBedsCount(int count) {
+    return '$count giường';
+  }
+
+  @override
+  String specBathsCount(int count) {
+    return '$count WC';
+  }
+
+  @override
+  String get reviewsTranslate => 'Dịch đánh giá';
+
+  @override
+  String get reviewsShowOriginal => 'Xem bản gốc';
+
+  @override
+  String get reviewsTranslating => 'Đang dịch...';
+
+  @override
+  String get reviewsTranslatedBadge => 'Đã dịch tự động';
+
+  @override
+  String get reviewsFilterAll => 'Tất cả';
+
+  @override
+  String reviewsFilterStar(int star) {
+    return '$star sao';
+  }
+
+  @override
+  String get reviewsHostReply => 'Phản hồi từ chủ nhà';
+
+  @override
+  String get reviewsLoadMore => 'Xem thêm đánh giá';
+
+  @override
+  String get reviewsLoadError => 'Không thể tải đánh giá vào lúc này.';
+
+  @override
+  String get reviewsEmpty =>
+      'Chưa có đánh giá nào cho villa này. Hãy là vị khách đầu tiên trải nghiệm!';
+
+  @override
+  String reviewsEmptyRating(int rating) {
+    return 'Chưa có đánh giá $rating sao nào cho chỗ nghỉ này.';
+  }
+
+  @override
+  String get chatBackToList => 'Quay lại danh sách';
+
+  @override
+  String get chatShowTimestamps => 'Hiện khung thời gian';
+
+  @override
+  String get chatHideTimestamps => 'Ẩn thời gian';
+
+  @override
+  String get chatViewListing => 'Xem chỗ nghỉ';
+
+  @override
+  String get chatAboutListing => 'Trao đổi về chỗ nghỉ';
+
+  @override
+  String get chatSelectConversationPrompt =>
+      'Chọn một hội thoại để xem tin nhắn';
+
+  @override
+  String get chatInputPlaceholder => 'Nhắn tin';
+
+  @override
+  String get chatMoreOptions => 'Tiện ích mở rộng';
+
+  @override
+  String get chatCamera => 'Chụp ảnh';
+
+  @override
+  String get chatGallery => 'Gửi hình ảnh';
+
+  @override
+  String get chatGalleryLabel => 'Thư viện ảnh';
+
+  @override
+  String get chatVoiceMessage => 'Tin nhắn thoại';
+
+  @override
+  String get chatStopRecording => 'Dừng ghi âm';
+
+  @override
+  String get chatEmojiTooltip => 'Biểu tượng cảm xúc';
+
+  @override
+  String get chatSendMessage => 'Gửi tin nhắn';
+
+  @override
+  String get chatSendQuickEmoji => 'Gửi biểu tượng nhanh';
+
+  @override
+  String get chatSendQuickEmojiHint => 'Gửi biểu tượng nhanh (nhấn giữ để đổi)';
+
+  @override
+  String get chatSending => 'Đang gửi...';
+
+  @override
+  String get chatSent => 'Đã gửi';
+
+  @override
+  String get chatSeen => ' • Đã xem';
+
+  @override
+  String get chatFailed => 'Gửi thất bại';
+
+  @override
+  String get chatRetry => 'Thử lại';
+
+  @override
+  String get chatDeleteFailedMessage => 'Xóa tin nhắn lỗi';
+
+  @override
+  String get chatEmptyPrompt =>
+      'Hãy gửi tin nhắn đầu tiên để bắt đầu trao đổi.';
+
+  @override
+  String get chatLoadMoreHistory => 'Tải thêm tin nhắn cũ hơn';
+
+  @override
+  String get chatLoadingHistory => 'Đang tải lịch sử...';
+
+  @override
+  String chatNewMessagesCount(int count) {
+    return 'Tin nhắn mới ($count)';
+  }
+
+  @override
+  String chatUserTyping(String user) {
+    return '$user đang nhập tin nhắn...';
+  }
+
+  @override
+  String get chatDraftPrefix => 'Nháp: ';
+
+  @override
+  String get chatNoMessagesYet => 'Chưa có tin nhắn.';
+
+  @override
+  String get chatSearchConversationsPlaceholder => 'Tìm kiếm hội thoại...';
+
+  @override
+  String get chatLoginTitle => 'Đăng nhập để xem tin nhắn';
+
+  @override
+  String get chatLoginDescription =>
+      'Trao đổi trực tiếp với Chủ nhà Vũng Tàu về lịch phòng, tiện nghi và ưu đãi.';
+
+  @override
+  String get chatLoginAction => 'Đăng nhập ngay';
+
+  @override
+  String get chatEmptyAdminTitle => 'Chưa có cuộc trò chuyện hỗ trợ nào';
+
+  @override
+  String get chatEmptyAdminDesc =>
+      'Các hội thoại hỗ trợ trực tiếp với Chủ nhà và Khách hàng trên hệ thống sẽ hiển thị tại đây.';
+
+  @override
+  String get chatEmptyAdminAction => 'Quản lý người dùng';
+
+  @override
+  String get chatEmptyHostTitle => 'Chưa có cuộc trò chuyện nào';
+
+  @override
+  String get chatEmptyHostDesc =>
+      'Khi khách hàng nhắn tin hỏi phòng hoặc đặt chỗ, hội thoại sẽ hiển thị tại đây.';
+
+  @override
+  String get chatEmptyGuestTitle => 'Chưa có cuộc trò chuyện nào';
+
+  @override
+  String get chatEmptyGuestDesc =>
+      'Hãy chọn một biệt thự và bấm \"Nhắn tin cho Chủ nhà\" để bắt đầu trò chuyện.';
+
+  @override
+  String get chatEmptyGuestAction => 'Khám phá biệt thự';
+
+  @override
+  String get chatExtensionsAndTemplatesTitle =>
+      'Tiện ích mở rộng & Mẫu tin nhanh';
+
+  @override
+  String get chatSelectEmojiTitle => 'Chọn biểu tượng cảm xúc';
+
+  @override
+  String get chatSelectQuickEmojiTitle => 'Chọn biểu tượng gửi nhanh';
+
+  @override
+  String get chatQuickReplyGuest1 => 'Dạ căn còn trống lịch này không ạ?';
+
+  @override
+  String get chatQuickReplyGuest2 => 'Cho mình hỏi giờ nhận và trả phòng ạ?';
+
+  @override
+  String get chatQuickReplyGuest3 =>
+      'Biệt thự có sẵn bếp BBQ và hồ bơi riêng không ạ?';
+
+  @override
+  String get chatQuickReplyGuest4 => 'Cảm ơn Chủ nhà nhiều ạ!';
+
+  @override
+  String get chatQuickReplyHost1 => 'Dạ vâng, bên em đã nhận thông tin ạ!';
+
+  @override
+  String get chatQuickReplyHost2 => 'Quý khách nhận phòng lúc mấy giờ ạ?';
+
+  @override
+  String get chatQuickReplyHost3 => 'The Palm Villa xin chào bạn! 🌴';
+
+  @override
+  String get chatQuickReplyHost4 =>
+      'Vị trí biệt thự em đã cập nhật trên hệ thống ạ.';
+
+  @override
+  String get chatQuickReplyAdmin1 =>
+      'Chào bạn, Quản trị viên hệ thống hỗ trợ bạn vấn đề gì ạ?';
+
+  @override
+  String get chatQuickReplyAdmin2 =>
+      'Hệ thống đã tiếp nhận thông tin và đang kiểm tra ạ.';
+
+  @override
+  String get chatQuickReplyAdmin3 =>
+      'Hồ sơ/bài đăng của bạn đã được cập nhật trạng thái.';
+
+  @override
+  String get chatQuickReplyAdmin4 => 'Cảm ơn bạn đã phản hồi cho Ban quản trị!';
+
+  @override
+  String get chatTplAdminDocsTitle => 'Yêu cầu bổ sung hồ sơ / giấy tờ';
+
+  @override
+  String get chatTplAdminDocsSubtitle =>
+      'Nhắc Chủ nhà hoặc Khách cập nhật thông tin xác minh';
+
+  @override
+  String get chatTplAdminDocsContent =>
+      '📋 Ban quản trị đề nghị bạn kiểm tra và bổ sung giấy tờ xác minh rõ nét để hệ thống hoàn tất phê duyệt.';
+
+  @override
+  String get chatTplHostLocationTitle => 'Gửi vị trí chỗ nghỉ';
+
+  @override
+  String get chatTplHostLocationSubtitle =>
+      'Địa chỉ chi tiết và hướng dẫn di chuyển';
+
+  @override
+  String chatTplHostLocationContent(String villaTitle) {
+    return '📍 Vị trí $villaTitle: Đường Thùy Vân, TP. Vũng Tàu (gần bãi tắm Bãi Sau).';
+  }
+
+  @override
+  String get chatTplGuestInquiryTitle => 'Hỏi lịch trống & báo giá';
+
+  @override
+  String get chatTplGuestInquirySubtitle =>
+      'Kiểm tra tình trạng phòng và phụ thu cuối tuần';
+
+  @override
+  String get chatTplGuestInquiryContent =>
+      '📅 Chào Chủ nhà, cho mình hỏi căn còn trống lịch cuối tuần này và giá trọn gói cho đoàn mình nhé ạ?';
+
+  @override
+  String get chatTplAdminReviewTitle => 'Thông báo kết quả kiểm duyệt';
+
+  @override
+  String get chatTplAdminReviewSubtitle =>
+      'Cập nhật trạng thái bài đăng hoặc tài khoản';
+
+  @override
+  String get chatTplAdminReviewContent =>
+      '✅ Quản trị viên đã kiểm tra và cập nhật trạng thái hồ sơ/bài đăng của bạn trên hệ thống.';
+
+  @override
+  String get chatTplHostCheckinTitle => 'Giờ nhận & trả phòng';
+
+  @override
+  String get chatTplHostCheckinSubtitle => 'Check-in: 14:00 • Check-out: 12:00';
+
+  @override
+  String get chatTplHostCheckinContent =>
+      '⏰ Thời gian nhận phòng: từ 14:00 | Thời gian trả phòng: trước 12:00 ngày hôm sau.';
+
+  @override
+  String get chatTplGuestCheckinTitle => 'Xin nhận phòng sớm / trả phòng muộn';
+
+  @override
+  String get chatTplGuestCheckinSubtitle =>
+      'Hỏi hỗ trợ linh hoạt giờ check-in / check-out';
+
+  @override
+  String get chatTplGuestCheckinContent =>
+      '⏰ Đoàn mình dự kiến đến sớm hơn 14:00 một chút, Chủ nhà có thể hỗ trợ gửi hành lý hoặc nhận phòng sớm không ạ?';
+
+  @override
+  String get chatTplAdminPolicyTitle => 'Hướng dẫn chính sách nền tảng';
+
+  @override
+  String get chatTplAdminPolicySubtitle =>
+      'Giải đáp quy định đặt phòng & phí dịch vụ';
+
+  @override
+  String get chatTplAdminPolicyContent =>
+      'ℹ️ Mọi giao dịch trên hệ thống đều được bảo vệ theo chính sách đặt phòng và hoàn hủy minh bạch của The Palm Villa.';
+
+  @override
+  String get chatTplHostHouseRulesTitle => 'Gửi nội quy lưu trú';
+
+  @override
+  String get chatTplHostHouseRulesSubtitle =>
+      'Giữ gìn vệ sinh, yên tĩnh sau 22:00';
+
+  @override
+  String get chatTplHostHouseRulesContent =>
+      '📋 Nội quy lưu trú: Vui lòng giữ gìn tài sản chung và hạn chế tiếng ồn lớn sau 22:00. Chúc quý khách kỳ nghỉ tuyệt vời!';
+
+  @override
+  String get chatTplGuestAmenitiesTitle => 'Hỏi tiện ích BBQ & hồ bơi';
+
+  @override
+  String get chatTplGuestAmenitiesSubtitle =>
+      'Bếp nướng, than, phao bơi và chỗ đậu xe';
+
+  @override
+  String get chatTplGuestAmenitiesContent =>
+      '🔥 Biệt thự có sẵn lò nướng BBQ, dụng cụ bếp, hồ bơi riêng và chỗ đậu ô tô trong sân không ạ?';
+
+  @override
+  String get chatToastUploadingPhoto => 'Đang tải ảnh lên Cloudflare R2...';
+
+  @override
+  String get chatToastUploadPhotoFailed => 'Tải ảnh lên R2 thất bại';
+
+  @override
+  String get chatToastUploadingVoice =>
+      'Đang tải tin nhắn thoại lên Cloudflare R2...';
+
+  @override
+  String get chatToastUploadVoiceFailed => 'Tải âm thanh lên R2 thất bại';
+
+  @override
+  String get chatToastMicNoAudio =>
+      'Không ghi nhận được âm thanh từ Micro. Vui lòng cấp quyền Microphone hoặc nói to hơn.';
+
+  @override
+  String get chatToastMicAccessError =>
+      'Không thể truy cập Micro. Vui lòng cấp quyền Microphone trên trình duyệt / thiết bị.';
+
+  @override
+  String get chatErrorNetwork => 'Mất kết nối mạng';
+
+  @override
+  String get chatErrorForbidden => 'Không có quyền truy cập';
+
+  @override
+  String get chatErrorUnauthorized => 'Phiên đăng nhập hết hạn';
+
+  @override
+  String get chatErrorNotFound => 'Không tìm thấy cuộc trò chuyện';
+
+  @override
+  String get chatErrorRateLimit => 'Thao tác quá nhanh';
+
+  @override
+  String get chatErrorServer => 'Lỗi máy chủ';
+
+  @override
+  String get chatErrorValidation => 'Dữ liệu không hợp lệ';
+
+  @override
+  String get chatErrorGeneric => 'Đã có lỗi xảy ra';
+
+  @override
+  String get hostMsgBackToVilla => 'Quay lại trang biệt thự';
+
+  @override
+  String get hostMsgContactTitle => 'Liên hệ Chủ nhà';
+
+  @override
+  String hostMsgHostLabel(String name) {
+    return 'Chủ nhà: $name';
+  }
+
+  @override
+  String get hostMsgDefaultHost => 'Chủ nhà The Palm Villa';
+
+  @override
+  String get hostMsgFaqTitle => 'Câu hỏi thường gặp cho Chủ nhà:';
+
+  @override
+  String get hostMsgInputLabel => 'Nội dung tin nhắn gửi Chủ nhà ';
+
+  @override
+  String get hostMsgInputPlaceholder =>
+      'Nhập câu hỏi của bạn về lịch trống, tiện nghi hoặc yêu cầu đặc biệt...';
+
+  @override
+  String get hostMsgSendAction => 'Gửi tin nhắn & Mở phòng chat';
+
+  @override
+  String get hostMsgSendingAction => 'Đang gửi tin nhắn...';
+
+  @override
+  String get hostMsgQuestion1 =>
+      'Chào Chủ nhà, biệt thự còn trống lịch cuối tuần này không ạ?';
+
+  @override
+  String get hostMsgQuestion2 =>
+      'Hồ bơi của biệt thự là nước ngọt hay nước mặn và có phao bơi không ạ?';
+
+  @override
+  String get hostMsgQuestion3 =>
+      'Biệt thự có sẵn lò nướng BBQ, than và dụng cụ bếp đầy đủ không ạ?';
+
+  @override
+  String get hostMsgQuestion4 =>
+      'Đoàn mình muốn nhận phòng sớm hơn 14:00 có được hỗ trợ không ạ?';
+
+  @override
+  String galleryPhotoCount(int count) {
+    return '$count ảnh';
+  }
+
+  @override
+  String get galleryViewAllPhotosSemantic => 'Xem toàn bộ ảnh';
+
+  @override
+  String gallerySpacePrefix(String type) {
+    return 'Không gian: $type';
+  }
+
+  @override
+  String get spaceBedroom => 'Phòng ngủ';
+
+  @override
+  String get spaceLivingRoom => 'Phòng khách';
+
+  @override
+  String get spaceKitchen => 'Phòng bếp';
+
+  @override
+  String get spaceBathroom => 'Phòng tắm';
+
+  @override
+  String get spacePool => 'Hồ bơi';
+
+  @override
+  String get spaceExterior => 'Ngoại thất';
+
+  @override
+  String get spaceView => 'Tầm nhìn';
+
+  @override
+  String get spaceDining => 'Phòng ăn';
+
+  @override
+  String get spaceOther => 'Không gian khác';
 }

@@ -17,6 +17,11 @@ extension AppLocalizationsX on BuildContext {
     if (activeLocale?.languageCode == 'ko') {
       return lookupAppLocalizations(const Locale('ko'));
     }
+    if (activeLocale?.languageCode == 'en' &&
+        (activeLocale?.countryCode == null ||
+            activeLocale!.countryCode!.isEmpty)) {
+      return lookupAppLocalizations(const Locale('en'));
+    }
     return lookupAppLocalizations(const Locale('vi'));
   }
 
@@ -28,6 +33,11 @@ extension AppLocalizationsX on BuildContext {
     final activeLocale = Localizations.maybeLocaleOf(this);
     if (activeLocale?.languageCode == 'ko') {
       return 'ko';
+    }
+    if (activeLocale?.languageCode == 'en' &&
+        (activeLocale?.countryCode == null ||
+            activeLocale!.countryCode!.isEmpty)) {
+      return 'en';
     }
     return 'vi';
   }

@@ -169,6 +169,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required String oldPhone,
     required String newPhone,
   }) async {
+    final currentLocale = ref.read(localeProvider);
+    final dialogL10n = lookupAppLocalizations(Locale(currentLocale));
     final confirmed = await showDialog<bool>(
       context: parentContext,
       builder: (dialogCtx) {
@@ -179,14 +181,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.modal),
           ),
-          title: const Text(
-            'Xác nhận thay đổi số điện thoại',
+          title: Text(
+            dialogL10n.settingsConfirmPhoneTitle,
             style: AppTypography.sectionHeading,
           ),
           content: Text(
             newPhone.isEmpty
-                ? 'Bạn sắp xóa số điện thoại liên hệ đã lưu ($oldPhone). Bạn có chắc chắn muốn tiếp tục?'
-                : 'Bạn sắp thay đổi số điện thoại liên hệ từ $oldPhone sang $newPhone. Bạn có chắc chắn muốn lưu thay đổi này?',
+                ? dialogL10n.settingsConfirmPhoneRemove(oldPhone)
+                : dialogL10n.settingsConfirmPhoneChange(oldPhone, newPhone),
             style: AppTypography.bodyMedium,
           ),
           actions: [
@@ -196,7 +198,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 key: const Key('sensitive_change_cancel_btn'),
                 style: OutlinedButton.styleFrom(shape: const StadiumBorder()),
                 onPressed: () => Navigator.of(dialogCtx).pop(false),
-                child: const Text('Kiểm tra lại'),
+                child: Text(dialogL10n.settingsConfirmPhoneReview),
               ),
             ),
             ConstrainedBox(
@@ -208,7 +210,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   shape: const StadiumBorder(),
                 ),
                 onPressed: () => Navigator.of(dialogCtx).pop(true),
-                child: const Text('Xác nhận lưu'),
+                child: Text(dialogL10n.settingsConfirmPhoneSave),
               ),
             ),
           ],
@@ -222,6 +224,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final hasUnsaved =
         _unsavedDraft != null && _unsavedDraft!.userId == user.id;
 
+    final currentLocale = ref.read(localeProvider);
+    final dialogL10n = lookupAppLocalizations(Locale(currentLocale));
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogCtx) {
@@ -232,14 +236,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.modal),
           ),
-          title: const Text(
-            'Xác nhận đăng xuất',
+          title: Text(
+            dialogL10n.settingsConfirmLogoutTitle,
             style: AppTypography.sectionHeading,
           ),
           content: Text(
             hasUnsaved
-                ? 'Bạn đang có bản nháp chỉnh sửa hồ sơ chưa lưu. Đăng xuất sẽ xóa dữ liệu nháp tạm thời trên phiên này. Bạn có chắc chắn muốn đăng xuất?'
-                : 'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này không?',
+                ? dialogL10n.settingsConfirmLogoutDraft
+                : dialogL10n.settingsConfirmLogout,
             style: AppTypography.bodyMedium,
           ),
           actions: [
@@ -249,7 +253,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 key: const Key('logout_cancel_btn'),
                 style: OutlinedButton.styleFrom(shape: const StadiumBorder()),
                 onPressed: () => Navigator.of(dialogCtx).pop(false),
-                child: const Text('Hủy'),
+                child: Text(dialogL10n.ctaCancel),
               ),
             ),
             ConstrainedBox(
@@ -261,7 +265,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   shape: const StadiumBorder(),
                 ),
                 onPressed: () => Navigator.of(dialogCtx).pop(true),
-                child: const Text('Đăng xuất'),
+                child: Text(dialogL10n.authLogout),
               ),
             ),
           ],
@@ -280,6 +284,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _openAvatarUpdateModal(User user) async {
+    final currentLocale = ref.read(localeProvider);
+    final modalL10n = lookupAppLocalizations(Locale(currentLocale));
     bool isSaving = false;
     String? modalError;
     AvatarPickedFile? selectedLocalFile;
@@ -314,7 +320,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (!ctx.mounted) return;
                 setModalState(() {
                   modalError =
-                      'Không thể chọn ảnh từ thiết bị. Vui lòng thử lại.';
+                      modalL10n.settingsAvatarPickError;
                 });
                 return;
               }
@@ -346,8 +352,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Navigator.of(ctx).pop();
                 if (mounted) {
                   ScaffoldMessenger.of(this.context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Đã cập nhật ảnh đại diện thành công.'),
+                    SnackBar(
+                      content: Text(
+                        modalL10n.settingsAvatarUpdateSuccess,
+                      ),
                     ),
                   );
                 }
@@ -379,7 +387,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              'Cập nhật ảnh đại diện',
+                              modalL10n.settingsAvatarUpdateTitle,
                               style: AppTypography.sectionHeading.copyWith(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w600,
@@ -393,7 +401,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             ),
                             child: IconButton(
                               key: const Key('avatar_modal_close_button'),
-                              tooltip: 'Đóng',
+                              tooltip: modalL10n.ctaClose,
                               onPressed: isSaving
                                   ? null
                                   : () => Navigator.of(ctx).pop(),
@@ -408,7 +416,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                       const SizedBox(height: AppSpacing.s8),
                       Text(
-                        'Chọn ảnh định dạng JPG, PNG, WebP hoặc GIF từ máy của bạn (dung lượng tối đa 5MB).',
+                        modalL10n.settingsAvatarUpdateHint,
                         style: AppTypography.caption.copyWith(
                           color: AppColors.textSecondary,
                         ),
@@ -419,7 +427,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           padding:
                               const EdgeInsets.only(bottom: AppSpacing.s12),
                           child: Text(
-                            'Đã chọn: ${selectedLocalFile!.name} (${(selectedLocalFile!.sizeBytes / 1024).toStringAsFixed(1)} KB)',
+                            modalL10n.settingsAvatarSelected(
+                              selectedLocalFile!.name,
+                              (selectedLocalFile!.sizeBytes / 1024)
+                                  .toStringAsFixed(1),
+                            ),
                             style: AppTypography.caption.copyWith(
                               color: AppColors.textSecondary,
                             ),
@@ -482,8 +494,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             ),
                             label: Text(
                               isSaving
-                                  ? 'Đang tải ảnh lên...'
-                                  : 'Chọn ảnh từ thiết bị (Tối đa 5MB)',
+                                  ? modalL10n.settingsAvatarUploading
+                                  : modalL10n.settingsAvatarPickFromDevice,
                             ),
                           ),
                         ),
@@ -500,6 +512,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _openEditProfileModal(User user) async {
+    final currentLocale = ref.read(localeProvider);
+    final editL10n = lookupAppLocalizations(Locale(currentLocale));
     final draft = (_unsavedDraft != null && _unsavedDraft!.userId == user.id)
         ? _unsavedDraft
         : null;
@@ -594,7 +608,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (!ctx.mounted) return;
                 setModalState(() {
                   errorMessage =
-                      'Không thể chọn ảnh từ thiết bị. Vui lòng thử lại.';
+                      editL10n.settingsAvatarPickError;
                 });
                 return;
               }
@@ -718,8 +732,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (mounted) {
                   setState(() {});
                   ScaffoldMessenger.of(this.context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Đã cập nhật hồ sơ thành công.'),
+                    SnackBar(
+                      content: Text(
+                        editL10n.settingsProfileUpdateSuccess,
+                      ),
                     ),
                   );
                 }
@@ -775,7 +791,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           children: [
                             Expanded(
                               child: Text(
-                                'Chỉnh sửa hồ sơ cá nhân',
+                                editL10n.settingsEditProfileTitle,
                                 style: AppTypography.sectionHeading.copyWith(
                                   fontSize: 17,
                                   fontWeight: FontWeight.w600,
@@ -789,7 +805,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ),
                               child: IconButton(
                                 key: const Key('edit_profile_close_button'),
-                                tooltip: 'Đóng',
+                                tooltip: editL10n.ctaClose,
                                 onPressed: busy
                                     ? null
                                     : () {
@@ -912,7 +928,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Text(
-                                            'Ảnh đại diện',
+                                            editL10n.settingsAvatarSectionTitle,
                                             style: AppTypography.bodyMedium
                                                 .copyWith(
                                               fontWeight: FontWeight.w600,
@@ -922,10 +938,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                           const SizedBox(height: 2),
                                           Text(
                                             isUploadingAvatar
-                                                ? 'Đang tải ảnh lên...'
+                                                ? editL10n.settingsAvatarUploading
                                                 : (selectedLocalAvatar != null
-                                                    ? 'Đã chọn: ${selectedLocalAvatar!.name}'
-                                                    : 'Chọn ảnh từ thiết bị (tối đa 5MB)'),
+                                                    ? editL10n.settingsAvatarSelectedShort(selectedLocalAvatar!.name)
+                                                    : editL10n.settingsAvatarPickHint),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style:
@@ -964,8 +980,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                         ),
                                         label: Text(
                                           isUploadingAvatar
-                                              ? 'Đang tải...'
-                                              : 'Chọn ảnh từ máy',
+                                              ? editL10n.settingsAvatarUploadingShort
+                                              : editL10n.settingsAvatarPickFromDeviceShort,
                                           style: AppTypography.caption.copyWith(
                                             fontWeight: FontWeight.w600,
                                             color: AppColors.textStrong,
@@ -986,8 +1002,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     const Key('edit_profile_full_name_input'),
                                 controller: fullNameCtrl,
                                 enabled: !busy,
-                                labelText: 'Họ và tên *',
-                                hintText: 'Nhập họ và tên đầy đủ',
+                                labelText: editL10n.settingsFullNameLabel,
+                                hintText: editL10n.settingsFullNameHint,
                                 errorText: fieldErrors['fullName'],
                               ),
                               _buildCleanProfileField(
@@ -995,8 +1011,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 controller: phoneCtrl,
                                 enabled: !busy,
                                 keyboardType: TextInputType.phone,
-                                labelText: 'Số điện thoại',
-                                hintText: '0912345678 hoặc +84912345678',
+                                labelText: editL10n.settingsPhoneLabel,
+                                hintText: editL10n.settingsPhoneHint,
                                 errorText: fieldErrors['phone'],
                               ),
                               _buildCleanProfileField(
@@ -1004,8 +1020,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     const Key('edit_profile_location_input'),
                                 controller: locationCtrl,
                                 enabled: !busy,
-                                labelText: 'Nơi sinh sống',
-                                hintText: 'Ví dụ: Vũng Tàu, Việt Nam',
+                                labelText: editL10n.settingsLocationLabel,
+                                hintText: editL10n.settingsLocationHint,
                                 errorText: fieldErrors['location'],
                               ),
                               _buildCleanProfileField(
@@ -1014,16 +1030,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 ),
                                 controller: dreamDestinationCtrl,
                                 enabled: !busy,
-                                labelText: 'Nơi tôi luôn muốn đến',
-                                hintText: 'Nhập điểm đến yêu thích của bạn',
+                                labelText: editL10n.settingsDreamDestinationLabel,
+                                hintText: editL10n.settingsDreamDestinationHint,
                                 errorText: fieldErrors['dreamDestination'],
                               ),
                               _buildCleanProfileField(
                                 fieldKey: const Key('edit_profile_job_input'),
                                 controller: jobCtrl,
                                 enabled: !busy,
-                                labelText: 'Công việc / Nghề nghiệp',
-                                hintText: 'Nhập công việc hiện tại',
+                                labelText: editL10n.settingsJobLabel,
+                                hintText: editL10n.settingsJobHint,
                                 errorText: fieldErrors['job'],
                               ),
                               _buildCleanProfileField(
@@ -1031,8 +1047,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     const Key('edit_profile_school_input'),
                                 controller: schoolCtrl,
                                 enabled: !busy,
-                                labelText: 'Trường học',
-                                hintText: 'Nơi bạn từng theo học',
+                                labelText: editL10n.settingsSchoolLabel,
+                                hintText: editL10n.settingsSchoolHint,
                                 errorText: fieldErrors['school'],
                               ),
                               _buildCleanProfileField(
@@ -1040,9 +1056,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     const Key('edit_profile_languages_input'),
                                 controller: languagesCtrl,
                                 enabled: !busy,
-                                labelText: 'Ngôn ngữ giao tiếp',
-                                hintText:
-                                    'Tiếng Việt, English (phân cách bằng dấu phẩy)',
+                                labelText: editL10n.settingsLanguagesLabel,
+                                hintText: editL10n.settingsLanguagesHint,
                                 errorText: fieldErrors['languages'],
                               ),
                               _buildCleanProfileField(
@@ -1053,8 +1068,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 minLines: 2,
                                 keyboardType: TextInputType.multiline,
                                 textInputAction: TextInputAction.newline,
-                                labelText: 'Giới thiệu bản thân',
-                                hintText: 'Chia sẻ đôi nét về bản thân...',
+                                labelText: editL10n.settingsBioLabel,
+                                hintText: editL10n.settingsBioHint,
                                 errorText: fieldErrors['bio'],
                               ),
                               const SizedBox(height: AppSpacing.s8),
@@ -1076,8 +1091,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     ),
                                     child: Text(
                                       isSubmitting
-                                          ? 'Đang lưu...'
-                                          : 'Lưu thay đổi',
+                                          ? editL10n.settingsSaving
+                                          : editL10n.ctaSave,
                                     ),
                                   ),
                                 ),
@@ -1097,7 +1112,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  String _roleLabelForUser(User user) {
+  String _roleLabelForUser(User user, [AppLocalizations? l10n]) {
+    if (l10n != null) {
+      if (user.isAdmin) return l10n.settingsRoleAdmin;
+      if (user.isHost) return l10n.settingsRoleHost;
+      if (user.isNewHost) return l10n.settingsRoleHostPending;
+      return l10n.settingsRoleGuest;
+    }
     if (user.isAdmin) return 'Quản trị viên (Admin)';
     if (user.isHost) return 'Chủ nhà (Host)';
     if (user.isNewHost) return 'Hồ sơ Chủ nhà đang chờ duyệt';
@@ -1131,6 +1152,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         (authState.isLoading || activeSyncState.isLoading) &&
             effectiveUser == null;
 
+    final l10n = lookupAppLocalizations(Locale(currentLocale));
+
     return Scaffold(
       backgroundColor: AppColors.surfaceBase,
       body: Column(
@@ -1157,7 +1180,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       if (activeSyncState.isOffline ||
                           activeSyncState.isError ||
                           activeSyncState.isUnauthorized) ...[
-                        _buildAsyncStatusBanner(activeSyncState),
+                        _buildAsyncStatusBanner(activeSyncState, l10n),
                         const SizedBox(height: AppSpacing.s16),
                       ],
 
@@ -1166,10 +1189,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         padding:
                             const EdgeInsets.symmetric(vertical: AppSpacing.s8),
                         child: isInitialLoading
-                            ? _buildLoadingProfileCard()
-                            : (effectiveUser != null
-                                ? _buildSignedInProfileCard(effectiveUser)
-                                : _buildLoggedOutProfileCard()),
+                             ? _buildLoadingProfileCard(l10n)
+                             : (effectiveUser != null
+                                 ? _buildSignedInProfileCard(effectiveUser, l10n)
+                                 : _buildLoggedOutProfileCard(l10n)),
                       ),
 
                       _buildGroupDivider(),
@@ -1178,9 +1201,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       _buildSettingsMenuTile(
                         tileKey: const Key('menu_trips_history'),
                         icon: LucideIcons.calendarCheck,
-                        title: currentLocale == 'vi'
-                            ? 'Chuyến đi của tôi'
-                            : lookupAppLocalizations(Locale(currentLocale)).navTrips,
+                        title: l10n.settingsMyTrips,
                         onTap: () => _navigateProtectedRoute(
                           context,
                           '/account/trips',
@@ -1190,17 +1211,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       _buildSettingsMenuTile(
                         tileKey: const Key('menu_favorites'),
                         icon: LucideIcons.heart,
-                        title: currentLocale == 'vi'
-                            ? 'Danh sách yêu thích'
-                            : lookupAppLocalizations(Locale(currentLocale)).navFavorites,
+                        title: l10n.settingsMyFavorites,
                         onTap: () => context.push('/yeu-thich'),
                       ),
                       _buildSettingsMenuTile(
                         tileKey: const Key('menu_messages'),
                         icon: AppSemanticIcons.messageHost,
-                        title: currentLocale == 'vi'
-                            ? 'Tin nhắn với Chủ nhà'
-                            : lookupAppLocalizations(Locale(currentLocale)).navMessages,
+                        title: l10n.settingsMessagesWithHost,
                         onTap: () => _navigateProtectedRoute(
                           context,
                           '/messages',
@@ -1215,25 +1232,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         _buildSettingsMenuTile(
                           tileKey: const Key('menu_admin_portal'),
                           icon: AppSemanticIcons.adminPortal,
-                          title: lookupAppLocalizations(Locale(currentLocale)).navAdminPortal,
+                          title: l10n.navAdminPortal,
                           onTap: () => context.push('/admin'),
                         )
                       else if (effectiveUser != null && effectiveUser.isHost)
                         _buildSettingsMenuTile(
                           tileKey: const Key('menu_host_portal'),
                           icon: AppSemanticIcons.home,
-                          title: currentLocale == 'vi'
-                              ? 'Quản lý chỗ nghỉ'
-                              : lookupAppLocalizations(Locale(currentLocale)).navHostPortal,
+                          title: l10n.settingsManageProperties,
                           onTap: () => context.push('/chu-nha/cho-nghi'),
                         )
                       else if (effectiveUser != null && effectiveUser.isNewHost)
                         _buildSettingsMenuTile(
                           tileKey: const Key('menu_host_status'),
                           icon: AppSemanticIcons.hostApplications,
-                          title: currentLocale == 'vi'
-                              ? 'Trạng thái hồ sơ Chủ nhà'
-                              : lookupAppLocalizations(Locale(currentLocale)).hostKycStatusTitle,
+                          title: l10n.hostKycStatusTitle,
                           onTap: () =>
                               context.push('/tro-thanh-host/trang-thai'),
                         )
@@ -1241,7 +1254,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         _buildSettingsMenuTile(
                           tileKey: const Key('menu_become_host'),
                           icon: AppSemanticIcons.becomeHost,
-                          title: lookupAppLocalizations(Locale(currentLocale)).navBecomeHost,
+                          title: l10n.navBecomeHost,
                           onTap: () => context.push('/tro-thanh-host'),
                         ),
 
@@ -1338,30 +1351,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       _buildSettingsMenuTile(
                         tileKey: const Key('menu_contact_page'),
                         icon: AppSemanticIcons.supportCenter,
-                        title: currentLocale == 'vi'
-                            ? 'Trung tâm Liên hệ & Hỗ trợ'
-                            : lookupAppLocalizations(Locale(currentLocale)).navContact,
+                        title: l10n.settingsContactSupportCenter,
                         onTap: () => context.push('/lien-he'),
                       ),
                       _buildSettingsMenuTile(
                         tileKey: const Key('menu_call_hotline'),
                         icon: LucideIcons.phone,
-                        title: currentLocale == 'vi'
-                            ? 'Gọi tổng đài tư vấn'
-                            : lookupAppLocalizations(Locale(currentLocale)).navHotline,
+                        title: l10n.settingsCallHotline,
                         trailingText: AppConfig.hotlineNumber,
                         onTap: () => ContactService.callHotline(),
                       ),
                       _buildSettingsMenuTile(
                         tileKey: const Key('menu_zalo_support'),
                         icon: AppSemanticIcons.zaloSupport,
-                        title: currentLocale == 'vi'
-                            ? 'Nhắn tin qua Zalo OA'
-                            : lookupAppLocalizations(Locale(currentLocale)).navZalo,
+                        title: l10n.settingsZaloSupport,
                         onTap: () {
                           ContactService.openZaloInquiry(
-                            messageText:
-                                'Xin chào The Palm, tôi cần hỗ trợ thông tin ứng dụng.',
+                            messageText: l10n.settingsZaloInquiryDefaultMessage,
                           );
                         },
                       ),
@@ -1370,7 +1376,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         _buildSettingsMenuTile(
                           tileKey: const Key('settings_bottom_logout_button'),
                           icon: AppSemanticIcons.logout,
-                          title: lookupAppLocalizations(Locale(currentLocale)).authLogout,
+                          title: l10n.authLogout,
                           showChevron: false,
                           onTap: () => _confirmAndLogout(effectiveUser),
                         ),
@@ -1387,7 +1393,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildAsyncStatusBanner(AccountSyncState syncState) {
+  Widget _buildAsyncStatusBanner(
+    AccountSyncState syncState, [
+    AppLocalizations? l10n,
+  ]) {
+    final effectiveL10n = l10n ?? context.l10n;
     final bool isOffline = syncState.isOffline;
     final bool isUnauthorized = syncState.isUnauthorized;
 
@@ -1402,17 +1412,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         : (isUnauthorized ? LucideIcons.lock : AppSemanticIcons.errorAlert);
 
     final String bannerTitle = isOffline
-        ? 'Thiết bị đang ngoại tuyến'
+        ? effectiveL10n.settingsStatusOfflineTitle
         : (isUnauthorized
-            ? 'Phiên đăng nhập hết hạn hoặc bị từ chối'
-            : 'Không thể đồng bộ dữ liệu máy chủ');
+            ? effectiveL10n.settingsStatusUnauthorizedTitle
+            : effectiveL10n.settingsStatusServerErrorTitle);
 
     final String bannerMessage = syncState.message ??
         (isOffline
-            ? 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.'
+            ? effectiveL10n.settingsStatusOfflineMessage
             : (isUnauthorized
-                ? 'Phiên đăng nhập không hợp lệ hoặc bạn không có quyền truy cập (401/403).'
-                : 'Máy chủ đang gặp sự cố tạm thời. Vui lòng thử lại sau.'));
+                ? effectiveL10n.settingsStatusUnauthorizedMessage
+                : effectiveL10n.settingsStatusServerErrorMessage));
 
     return Container(
       key: bannerKey,
@@ -1468,7 +1478,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     size: 16,
                     color: AppColors.iconStrong,
                   ),
-                  label: const Text('Thử lại'),
+                  label: Text(effectiveL10n.ctaRetry),
                 ),
               ),
               if (isUnauthorized)
@@ -1486,7 +1496,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       size: 16,
                       color: AppColors.textInverse,
                     ),
-                    label: const Text('Đăng nhập lại'),
+                    label: Text(effectiveL10n.settingsReLogin),
                   ),
                 ),
             ],
@@ -1496,7 +1506,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildLoadingProfileCard() {
+  Widget _buildLoadingProfileCard([AppLocalizations? l10n]) {
+    final effectiveL10n = l10n ?? context.l10n;
     return Padding(
       key: const Key('settings_loading_state'),
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.s16),
@@ -1513,7 +1524,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(width: AppSpacing.s16),
           Expanded(
             child: Text(
-              'Đang tải thông tin tài khoản...',
+              effectiveL10n.settingsLoadingAccount,
               style: AppTypography.bodyMedium.copyWith(
                 color: AppColors.textSecondary,
               ),
@@ -1524,7 +1535,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildLoggedOutProfileCard() {
+  Widget _buildLoggedOutProfileCard([AppLocalizations? l10n]) {
+    final effectiveL10n = l10n ?? context.l10n;
     return Column(
       key: const Key('settings_logged_out_card'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1544,7 +1556,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Chưa đăng nhập',
+                    effectiveL10n.settingsNotLoggedIn,
                     style: AppTypography.cardTitle.copyWith(
                       fontSize: 15.5,
                       fontWeight: FontWeight.w600,
@@ -1553,7 +1565,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: AppSpacing.s4),
                   Text(
-                    'Đăng nhập để xem kỳ nghỉ, tin nhắn và đồng bộ yêu thích',
+                    effectiveL10n.settingsLoginPrompt,
                     style: AppTypography.caption.copyWith(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w400,
@@ -1578,7 +1590,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 textStyle: AppTypography.buttonText.copyWith(fontSize: 14),
               ),
               onPressed: () => context.push('/dang-nhap'),
-              child: const Text('Đăng nhập / Đăng ký'),
+              child: Text(effectiveL10n.settingsSignInSignUp),
             ),
           ),
         ),
@@ -1630,27 +1642,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildSignedInProfileCard(User user) {
+  Widget _buildSignedInProfileCard(
+    User user, [
+    AppLocalizations? l10n,
+  ]) {
+    final effectiveL10n = l10n ?? context.l10n;
     final bool hasDraft =
         _unsavedDraft != null && _unsavedDraft!.userId == user.id;
 
     final avatarBtn = _buildProfileActionIconButton(
       buttonKey: const Key('settings_change_avatar_button'),
       icon: AppSemanticIcons.changeAvatar,
-      tooltip: 'Đổi ảnh',
+      tooltip: effectiveL10n.settingsChangeAvatarTooltip,
       onPressed: () => _openAvatarUpdateModal(user),
     );
 
     final editProfileBtn = _buildProfileActionIconButton(
       buttonKey: const Key('settings_edit_profile_button'),
       icon: LucideIcons.pencil,
-      tooltip: 'Sửa hồ sơ',
+      tooltip: effectiveL10n.settingsEditProfileTooltip,
       onPressed: () => _openEditProfileModal(user),
     );
 
     final avatarWidget = Semantics(
       button: true,
-      label: 'Cập nhật ảnh đại diện',
+      label: effectiveL10n.settingsAvatarUpdateTitle,
       child: InkWell(
         key: const Key('settings_avatar_tap_target'),
         customBorder: const CircleBorder(),
@@ -1731,7 +1747,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             border: Border.all(color: AppColors.borderSoft),
           ),
           child: Text(
-            _roleLabelForUser(user),
+            _roleLabelForUser(user, effectiveL10n),
             key: const Key('settings_role_label'),
             style: AppTypography.caption.copyWith(
               fontSize: 11,
@@ -1810,7 +1826,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(
-                  'Bạn có bản nháp hồ sơ chưa lưu thành công.',
+                  effectiveL10n.settingsUnsavedDraftBanner,
                   style: AppTypography.caption.copyWith(
                     color: AppColors.textStrong,
                     fontWeight: FontWeight.w600,
@@ -1826,7 +1842,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       size: 16,
                       color: AppColors.iconStrong,
                     ),
-                    label: const Text('Tiếp tục sửa'),
+                    label: Text(effectiveL10n.settingsResumeEditing),
                   ),
                 ),
               ],

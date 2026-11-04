@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hotel_booking_flutter/app/di/providers.dart';
 import 'package:hotel_booking_flutter/app/router/app_router.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
 import 'package:hotel_booking_flutter/features/auth/presentation/view_models/auth_notifier.dart';
@@ -44,6 +45,7 @@ void main() {
         ProviderScope(
           overrides: [
             authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
             myBookingsProvider.overrideWith((ref) => Future.value([])),
             activePendingBookingProvider.overrideWithValue(null),
           ],
@@ -71,6 +73,7 @@ void main() {
         ProviderScope(
           overrides: [
             authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
             myBookingsProvider.overrideWith((ref) => Future.value([testPendingBooking])),
             activePendingBookingProvider.overrideWithValue(testPendingBooking),
           ],
@@ -141,6 +144,7 @@ void main() {
           overrides: [
             appRouterProvider.overrideWithValue(testRouter),
             authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
             myBookingsProvider.overrideWith((ref) => Future.value([testPendingBooking])),
             activePendingBookingProvider.overrideWithValue(testPendingBooking),
           ],
@@ -168,6 +172,19 @@ void main() {
 class _FakeAuthNotifier extends StateNotifier<AsyncValue<User?>>
     implements AuthNotifier {
   _FakeAuthNotifier([User? user]) : super(AsyncValue.data(user));
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeLocaleNotifier extends StateNotifier<String>
+    implements LocaleNotifier {
+  _FakeLocaleNotifier([super.locale = 'vi']);
+
+  @override
+  Future<void> setLocale(String languageCode) async {
+    state = languageCode;
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

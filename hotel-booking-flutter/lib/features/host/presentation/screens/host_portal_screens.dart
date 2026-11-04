@@ -7775,7 +7775,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                         ),
                                         SizedBox(width: 4),
                                         Text(
-                                          'Đã gửi • Đã xem',
+                                          'Đã gửi',
                                           style: TextStyle(
                                             fontSize: 10.5,
                                             fontWeight: FontWeight.w500,
