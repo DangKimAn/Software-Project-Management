@@ -504,7 +504,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get calendarPrevMonth => 'Tháng trước';
 
   @override
-  String get calendarNextMonth => 'Tháng tiếp theo';
+  String get calendarNextMonth => 'Tháng sau';
 
   @override
   String calendarDay(int day) {

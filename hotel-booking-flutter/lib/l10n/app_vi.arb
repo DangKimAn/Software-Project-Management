@@ -247,7 +247,7 @@
   "errorRateLimitMessage": "Bạn đã thao tác quá nhanh. Vui lòng thử lại sau ít phút.",
   "errorValidationMessage": "Thông tin gửi lên không hợp lệ. Vui lòng kiểm tra lại.",
   "calendarPrevMonth": "Tháng trước",
-  "calendarNextMonth": "Tháng tiếp theo",
+  "calendarNextMonth": "Tháng sau",
   "calendarDay": "Ngày {day}",
   "@calendarDay": {
     "placeholders": {

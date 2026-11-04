@@ -562,7 +562,7 @@ class PreferencesService {
     if (saved != null && saved.trim().isNotEmpty) {
       return saved.trim();
     }
-    return resolveDefaultLocale();
+    return 'vi';
   }
 
   Future<bool> setLocale(String languageCode) {
