@@ -704,12 +704,12 @@ export const buildMonthTabHeaderRequests = (
                 makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
             ],
         },
-        // Row 3: Ví dụ 2 - CAM: Giữ chỗ (Gộp dòng với Row 4) — Xác nhận thuần màu cam, không ghi chữ
+        // Row 3: Ví dụ 2 - CAM: Giữ chỗ (Gộp dòng với Row 4)
         {
             values: [
                 makeStyledHeaderCell("", SHEET_COLORS.PENDING_HOLD_ORANGE, { valign: "MIDDLE" }),
                 makeStyledHeaderCell(
-                    "Màu cam: Đang giữ chỗ (Hold) — Tự động thể hiện bằng màu cam (không ghi chữ). Đơn tạm giữ 10 phút khi khách đang thanh toán.",
+                    "Màu cam: Đang giữ chỗ (Hold) — Tự động đổi màu cam và giữ nguyên giá phòng. Đơn tạm giữ 10 phút khi khách đang thanh toán.",
                     SHEET_COLORS.WHITE,
                     { bold: false, align: "LEFT", valign: "MIDDLE", wrap: true },
                 ),
@@ -722,12 +722,12 @@ export const buildMonthTabHeaderRequests = (
                 makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
             ],
         },
-        // Row 5: Ví dụ 3 - XANH LÁ: Đã đặt (Gộp dòng với Row 6) — Xác nhận thuần màu xanh, không ghi chữ
+        // Row 5: Ví dụ 3 - XANH LÁ: Đã đặt (Gộp dòng với Row 6)
         {
             values: [
                 makeStyledHeaderCell("", SHEET_COLORS.BOOKED_GREEN, { valign: "MIDDLE" }),
                 makeStyledHeaderCell(
-                    "Màu xanh lá: Đã đặt phòng (Booked) — Tự động thể hiện bằng màu xanh lá (không ghi chữ). Đơn đặt thành công (vui lòng không tự ý mở trống).",
+                    "Màu xanh lá: Đã đặt phòng (Booked) — Tự động đổi màu xanh lá và giữ nguyên giá phòng. Đơn đặt thành công (vui lòng không tự ý mở trống).",
                     SHEET_COLORS.WHITE,
                     { bold: false, align: "LEFT", valign: "MIDDLE", wrap: true },
                 ),

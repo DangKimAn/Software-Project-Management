@@ -1492,15 +1492,21 @@ export const runHostSheetSyncCycle = async (
 
                     if (authBooking) {
                         activeBookingId = authBooking.booking.bookingId;
-                        if (authBooking.category === "pending_hold") {
+                        const dailyPrice = cal?.priceOverride ?? getDefaultDailyPrice(listing, isoDate);
+                        if (dailyPrice !== null && dailyPrice !== undefined && Number(dailyPrice) > 0) {
+                            desiredNumberValue = Math.round(Number(dailyPrice));
+                            desiredText = String(desiredNumberValue);
+                        } else {
                             desiredText = "";
+                        }
+
+                        if (authBooking.category === "pending_hold") {
                             desiredColor = SHEET_COLORS.PENDING_HOLD_ORANGE;
                             desiredBold = false;
                             desiredNote = `Giữ chỗ chờ thanh toán #${activeBookingId} (${authBooking.booking.checkInDate} → ${authBooking.booking.checkOutDate})`;
                             snapState = "pending_hold";
                             snapLockSource = "booking_hold";
                         } else {
-                            desiredText = "";
                             desiredColor = SHEET_COLORS.BOOKED_GREEN;
                             desiredBold = false;
                             desiredNote = `Đã đặt #${activeBookingId} (${authBooking.booking.checkInDate} → ${authBooking.booking.checkOutDate})`;

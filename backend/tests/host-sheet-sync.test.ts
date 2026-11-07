@@ -1455,8 +1455,11 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         const col801 = fakeSheets.findListingColIndex(tab, 801);
         const rDay5 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 4;
 
-        // Verify (a): Day 5 restored to Orange (pure color, no text); Day 9 remains Admin-locked Red
-        assert.equal(tab.rows.get(rDay5)![col801]?.userEnteredValue?.stringValue ?? "", "");
+        // Verify (a): Day 5 restored to Orange while retaining price; Day 9 remains Admin-locked Red
+        assert.ok(
+            tab.rows.get(rDay5)![col801]?.userEnteredValue?.numberValue === 4500000 ||
+            tab.rows.get(rDay5)![col801]?.userEnteredValue?.stringValue === "4500000",
+        );
         assert.deepEqual(
             tab.rows.get(rDay5)![col801]?.userEnteredFormat?.backgroundColorStyle?.rgbColor,
             SHEET_COLORS.PENDING_HOLD_ORANGE,
@@ -1985,7 +1988,7 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         assert.equal(cellDay2.userEnteredFormat?.textFormat?.fontFamily, "Times New Roman");
         assert.equal(cellDay2.userEnteredFormat?.numberFormat?.type, "NUMBER");
 
-        // Booked day: must have Green color and NO text
+        // Booked day: must have Green color and retain price
         const dBooked = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-18`;
         const dBookedOut = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-19`;
         makeRecord(bookingsStore, "bookingId", {
@@ -1998,7 +2001,7 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
             status: "confirmed",
         });
 
-        // Held day: must have Orange color and NO text
+        // Held day: must have Orange color and retain price
         const dHeld = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-20`;
         const dHeldOut = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-21`;
         makeRecord(bookingsStore, "bookingId", {
@@ -2016,13 +2019,13 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
 
         const rBooked = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 17;
         const bookedCell = tab.rows.get(rBooked)![col801]!;
-        assert.equal(bookedCell.userEnteredValue?.stringValue ?? "", "");
+        assert.ok(bookedCell.userEnteredValue?.numberValue === 4500000 || bookedCell.userEnteredValue?.stringValue === "4500000");
         assert.deepEqual(bookedCell.userEnteredFormat?.backgroundColorStyle?.rgbColor, SHEET_COLORS.BOOKED_GREEN);
         assert.equal(bookedCell.userEnteredFormat?.textFormat?.fontFamily, "Times New Roman");
 
         const rHeld = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 19;
         const heldCell = tab.rows.get(rHeld)![col801]!;
-        assert.equal(heldCell.userEnteredValue?.stringValue ?? "", "");
+        assert.ok(heldCell.userEnteredValue?.numberValue === 4500000 || heldCell.userEnteredValue?.stringValue === "4500000");
         assert.deepEqual(heldCell.userEnteredFormat?.backgroundColorStyle?.rgbColor, SHEET_COLORS.PENDING_HOLD_ORANGE);
         assert.equal(heldCell.userEnteredFormat?.textFormat?.fontFamily, "Times New Roman");
     });

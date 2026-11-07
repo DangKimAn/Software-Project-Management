@@ -437,47 +437,47 @@ export const classifySheetCalendarCell = (cell?: RawSheetCell | null): ParsedCel
         !rgb || (rgb.red >= 0.965 && rgb.green >= 0.965 && rgb.blue >= 0.965);
 
     const holdMatch = SYSTEM_HOLD_MARKER_REGEX.exec(rawValue);
-    if (holdMatch) {
-        const isHoldColor =
-            !rgb ||
-            isWhiteOrUnset ||
-            colorDistance(rgb, SHEET_COLORS.PENDING_HOLD_ORANGE) <= 0.25 ||
-            colorDistance(rgb, LEGACY_PASTEL_COLORS.PENDING_HOLD_ORANGE) <= 0.25;
-        if (isHoldColor) {
-            return {
-                state: "pending_hold",
-                rawValue,
-                bgHex,
-                bookingIdFromMarker: Number(holdMatch[1]),
-            };
-        }
-    }
-
     const bookedMatch = SYSTEM_BOOKED_MARKER_REGEX.exec(rawValue);
-    if (bookedMatch) {
-        const isBookedColor =
-            !rgb ||
-            isWhiteOrUnset ||
-            colorDistance(rgb, SHEET_COLORS.BOOKED_GREEN) <= 0.25 ||
-            colorDistance(rgb, LEGACY_PASTEL_COLORS.BOOKED_GREEN) <= 0.25 ||
-            colorDistance(rgb, SHEET_COLORS.BOOKED_BLUE) <= 0.2;
-        if (isBookedColor) {
-            return {
-                state: "booked",
-                rawValue,
-                bgHex,
-                bookingIdFromMarker: Number(bookedMatch[1]),
-            };
-        }
-    }
+
+    const isHoldColor =
+        Boolean(rgb) &&
+        !isWhiteOrUnset &&
+        (colorDistance(rgb!, SHEET_COLORS.PENDING_HOLD_ORANGE) <= 0.25 ||
+            colorDistance(rgb!, LEGACY_PASTEL_COLORS.PENDING_HOLD_ORANGE) <= 0.25);
+
+    const isBookedColor =
+        Boolean(rgb) &&
+        !isWhiteOrUnset &&
+        (colorDistance(rgb!, SHEET_COLORS.BOOKED_GREEN) <= 0.25 ||
+            colorDistance(rgb!, LEGACY_PASTEL_COLORS.BOOKED_GREEN) <= 0.25 ||
+            colorDistance(rgb!, SHEET_COLORS.BOOKED_BLUE) <= 0.2);
 
     const isRedColor =
         Boolean(rgb) &&
+        !isWhiteOrUnset &&
         (colorDistance(rgb!, SHEET_COLORS.HOST_BLOCKED_RED) <= 0.25 ||
             colorDistance(rgb!, LEGACY_PASTEL_COLORS.HOST_BLOCKED_RED) <= 0.25);
 
-    // If cell is Red, host intentionally locked/closed the day (e.g. external guest),
-    // even if the cell still contains the room price!
+    // If cell is Hold (Orange), Booked (Green/Blue), or Blocked (Red),
+    // retain state even if the cell contains the daily room price!
+    if (isHoldColor) {
+        return {
+            state: "pending_hold",
+            rawValue,
+            bgHex,
+            bookingIdFromMarker: holdMatch ? Number(holdMatch[1]) : null,
+        };
+    }
+
+    if (isBookedColor) {
+        return {
+            state: "booked",
+            rawValue,
+            bgHex,
+            bookingIdFromMarker: bookedMatch ? Number(bookedMatch[1]) : null,
+        };
+    }
+
     if (isRedColor) {
         return {
             state: "host_blocked",
