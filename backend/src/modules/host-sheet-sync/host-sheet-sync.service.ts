@@ -889,7 +889,7 @@ export const runHostSheetSyncCycle = async (
 
                     const sheetChanged = sheetBlockChanged || sheetPriceChanged;
 
-                    if (classified.state === "host_blocked" && classified.rawValue) {
+                    if (classified.state === "host_blocked" && classified.rawValue && !isPriceOrNumericText(classified.rawValue)) {
                         customHostTextMap.set(
                             cellKey,
                             sanitizeSheetTextValue(classified.rawValue, 24) || "K",
@@ -960,7 +960,9 @@ export const runHostSheetSyncCycle = async (
 
                         const nextRev = Math.max(calRev, snapRev) + 1;
                         const customNote =
-                            classified.rawValue && classified.rawValue.toUpperCase() !== "K"
+                            classified.rawValue &&
+                            classified.rawValue.toUpperCase() !== "K" &&
+                            !isPriceOrNumericText(classified.rawValue)
                                 ? sanitizeSheetTextValue(classified.rawValue, 180)
                                 : cal?.notes ?? "Khóa lịch từ Google Sheets";
 
@@ -969,6 +971,9 @@ export const runHostSheetSyncCycle = async (
                             cal.isAvailable = false;
                             cal.lockSource = "sheet_manual";
                             cal.notes = customNote;
+                            if (parsedSheetPrice !== null && parsedSheetPrice > 0) {
+                                cal.priceOverride = parsedSheetPrice;
+                            }
                             cal.syncRevision = nextRev;
                             cal.lastSheetSyncedAt = now;
                             await cal.save();
@@ -980,7 +985,7 @@ export const runHostSheetSyncCycle = async (
                                 isBlockedByHost: true,
                                 isBlockedByAdmin: false,
                                 lockSource: "sheet_manual",
-                                priceOverride: null,
+                                priceOverride: parsedSheetPrice !== null && parsedSheetPrice > 0 ? parsedSheetPrice : null,
                                 minNightsOverride: null,
                                 notes: customNote,
                                 syncRevision: nextRev,
@@ -1511,12 +1516,31 @@ export const runHostSheetSyncCycle = async (
                         snapLockSource = "admin_lock";
                     } else if (cal?.isBlockedByHost || cal?.isAvailable === false) {
                         const existingClassified = classifySheetCalendarCell(existingCell);
+                        const dailyPrice = cal?.priceOverride ?? getDefaultDailyPrice(listing, isoDate);
+                        const existingPrice = existingClassified.rawValue ? parsePriceFromSheetText(existingClassified.rawValue) : null;
+                        const effectivePriceNum = dailyPrice !== null && dailyPrice !== undefined && Number(dailyPrice) > 0
+                            ? Math.round(Number(dailyPrice))
+                            : (existingPrice ?? null);
+
                         const preservedCustomText =
                             customHostTextMap.get(cellKey) ||
-                            (existingClassified.state === "host_blocked" && existingClassified.rawValue && !isPriceOrNumericText(existingClassified.rawValue)
+                            (existingClassified.state === "host_blocked" &&
+                            existingClassified.rawValue &&
+                            !isPriceOrNumericText(existingClassified.rawValue)
                                 ? sanitizeSheetTextValue(existingClassified.rawValue, 24)
-                                : "K");
-                        desiredText = preservedCustomText || "K";
+                                : null);
+
+                        if (preservedCustomText) {
+                            desiredText = preservedCustomText;
+                            desiredNumberValue = undefined;
+                        } else if (effectivePriceNum !== null) {
+                            desiredNumberValue = effectivePriceNum;
+                            desiredText = String(effectivePriceNum);
+                        } else {
+                            desiredText = "";
+                            desiredNumberValue = undefined;
+                        }
+
                         desiredColor = SHEET_COLORS.HOST_BLOCKED_RED;
                         desiredBold = true;
                         desiredNote = cal?.notes ? sanitizeSheetTextValue(cal.notes, 200) : "Host khóa lịch";
@@ -2874,9 +2898,12 @@ export const previewSheetButtonChanges = async (spreadsheetId: string) => {
 
                 if (sheetBlockChanged) {
                     if (sheetWantsBlock) {
-                        const note = classified.rawValue && classified.rawValue.toUpperCase() !== "K"
-                            ? ` (${classified.rawValue})`
-                            : "";
+                        const note =
+                            classified.rawValue &&
+                            classified.rawValue.toUpperCase() !== "K" &&
+                            !isPriceOrNumericText(classified.rawValue)
+                                ? ` (${classified.rawValue})`
+                                : (parsedSheetPrice ? ` (Giá: ${parsedSheetPrice.toLocaleString("vi-VN")}đ)` : "");
                         changes.push(`[KHÓA LỊCH] Căn ${listing.listingId} (${listing.title}) · Ngày ${displayDate}: Mở ➔ Khóa${note}`);
                     } else if (cal?.isBlockedByHost) {
                         const newPriceDesc = parsedSheetPrice && parsedSheetPrice !== defaultPrice

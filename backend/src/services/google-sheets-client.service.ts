@@ -471,9 +471,24 @@ export const classifySheetCalendarCell = (cell?: RawSheetCell | null): ParsedCel
         }
     }
 
-    // If cell explicitly contains price / numeric text (e.g. "4200000", "4,200,000", "4200k"),
-    // the host clearly wants this day OPEN and available, even if they typed it directly over a red cell
-    // and forgot to manually clear the background color!
+    const isRedColor =
+        Boolean(rgb) &&
+        (colorDistance(rgb!, SHEET_COLORS.HOST_BLOCKED_RED) <= 0.25 ||
+            colorDistance(rgb!, LEGACY_PASTEL_COLORS.HOST_BLOCKED_RED) <= 0.25);
+
+    // If cell is Red, host intentionally locked/closed the day (e.g. external guest),
+    // even if the cell still contains the room price!
+    if (isRedColor) {
+        return {
+            state: "host_blocked",
+            rawValue,
+            bgHex,
+            bookingIdFromMarker: null,
+        };
+    }
+
+    // If cell explicitly contains price / numeric text (e.g. "4200000", "4,200,000", "4200k")
+    // and is NOT red, the day is OPEN and available.
     if (isPriceOrNumericText(rawValue)) {
         return {
             state: "empty",

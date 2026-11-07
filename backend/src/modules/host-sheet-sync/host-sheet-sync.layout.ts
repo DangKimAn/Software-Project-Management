@@ -740,12 +740,12 @@ export const buildMonthTabHeaderRequests = (
                 makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
             ],
         },
-        // Row 7: Ví dụ 4 - ĐỎ: Host khóa (Gộp dòng với Row 8) — Xác nhận thuần màu đỏ, không ghi chữ
+        // Row 7: Ví dụ 4 - ĐỎ: Host khóa (Gộp dòng với Row 8)
         {
             values: [
                 makeStyledHeaderCell("", SHEET_COLORS.HOST_BLOCKED_RED, { valign: "MIDDLE" }),
                 makeStyledHeaderCell(
-                    "Màu đỏ: Host khóa phòng — Chủ nhà chủ động đóng lịch (Điền chữ K hoặc tô màu đỏ tại ô ngày tương ứng).",
+                    "Màu đỏ: Host khóa phòng — Chủ nhà chủ động đóng lịch (Tô màu đỏ tại ô ngày tương ứng, nội dung giá phòng vẫn được giữ nguyên).",
                     SHEET_COLORS.WHITE,
                     { bold: false, align: "LEFT", valign: "MIDDLE", wrap: true },
                 ),
