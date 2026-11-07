@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
@@ -15,6 +16,7 @@ import '../../../messages/services/chat_media_upload_service.dart';
 import '../../../messages/services/chat_voice_recorder_service.dart';
 import '../../../messages/presentation/widgets/chat_audio_bubble.dart';
 import '../../../messages/presentation/widgets/chat_image_bubble.dart';
+import '../../../messages/presentation/widgets/chat_time_divider.dart';
 import '../../../messages/presentation/widgets/messenger_voice_recorder_bar.dart';
 import '../../data/host_repository.dart';
 import '../../domain/host_models.dart';
@@ -7121,9 +7123,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 c['lastMessage']['message'])
             : c['lastMessage']) ??
         c['lastMessageContent'];
-    final previewText = (rawLastMsg != null && '$rawLastMsg'.trim().isNotEmpty)
-        ? '$rawLastMsg'.trim()
-        : 'Chưa có tin nhắn.';
+    final currentLocale = ref.watch(localeProvider);
+    final previewText = localizeChatPreview(
+      rawLastMsg?.toString(),
+      localeCode: currentLocale,
+    );
 
     final unreadCount = (c['unreadCount'] as num?)?.toInt() ?? 0;
     final avatarUrl = _resolveHostConversationParticipantAvatar(c);
@@ -7280,6 +7284,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     final isAdmin = _isConversationAdmin(matchedConv);
     final participantAvatar =
         _resolveHostConversationParticipantAvatar(matchedConv);
+    final rawListingId = matchedConv['listingId'] ??
+        (matchedConv['listing'] is Map
+            ? ((matchedConv['listing'] as Map)['id'] ??
+                (matchedConv['listing'] as Map)['listingId'])
+            : null);
+    final listingId = (rawListingId ?? '').toString().trim();
+    final effectiveListingId = listingId.isNotEmpty
+        ? listingId
+        : (listingTitle.isNotEmpty ? '1' : '');
 
     return Column(
       children: [
@@ -7374,15 +7387,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   });
                 },
               ),
-              IconButton(
-                icon: const Icon(LucideIcons.refreshCw, size: 18),
-                tooltip: 'Tải lại tin nhắn',
-                onPressed: () {
-                  if (_selectedConversationId != null) {
-                    _fetchMessagesForConversation(_selectedConversationId!);
-                  }
-                },
-              ),
+              if (!isAdmin && effectiveListingId.isNotEmpty)
+                Semantics(
+                  button: true,
+                  label: 'Xem chỗ nghỉ',
+                  child: IconButton(
+                    key: const Key('view_listing_button'),
+                    icon: const Icon(
+                      LucideIcons.externalLink,
+                      size: 18,
+                      color: AppColors.iconStrong,
+                    ),
+                    tooltip: 'Xem chỗ nghỉ',
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                    onPressed: () {
+                      context.push('/villa/$effectiveListingId');
+                    },
+                  ),
+                ),
             ],
           ),
         ),
@@ -7514,15 +7539,28 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       final reaction = _messageReactions[msgKey];
                       final isReactionOpen = _reactionActiveMsgKey == msgKey;
 
-                      // Format time nếu có
+                      // Format time nếu có & tính toán Time Divider tự động
                       String? msgTime;
+                      DateTime? msgDt;
                       final rawCreatedAt = m['createdAt'];
                       if (rawCreatedAt != null) {
-                        final dt = DateTime.tryParse(rawCreatedAt.toString());
-                        if (dt != null) {
-                          msgTime = DateFormat('HH:mm').format(dt);
+                        msgDt = DateTime.tryParse(rawCreatedAt.toString());
+                        if (msgDt != null) {
+                          msgTime = DateFormat('HH:mm').format(msgDt);
                         }
                       }
+
+                      DateTime? prevDt;
+                      if (i > 0) {
+                        final prevRawCreatedAt = _conversationMessages[i - 1]['createdAt'];
+                        if (prevRawCreatedAt != null) {
+                          prevDt = DateTime.tryParse(prevRawCreatedAt.toString());
+                        }
+                      }
+
+                      final currentLocale = ref.watch(localeProvider);
+                      final showTimeDivider = msgDt != null && shouldShowChatTimeDivider(msgDt, prevDt);
+                      final timeDividerLabel = msgDt != null ? formatChatTimeDivider(msgDt, localeCode: currentLocale) : '';
 
                       // Render bong bóng tin nhắn tinh gọn kiểu Messenger kèm reaction & avatar bên trái
                       return AnimatedBuilder(
@@ -7537,13 +7575,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                               bottom: reaction != null ? 10 : 6,
                             ),
                             child: Column(
-                              crossAxisAlignment: isMe
-                                  ? CrossAxisAlignment.end
-                                  : CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // Thanh chọn cảm xúc nổi khi đè vào tin nhắn
-                                if (isReactionOpen)
-                                  _buildReactionPicker(msgKey),
+                                if (showTimeDivider)
+                                  ChatTimeDivider(label: timeDividerLabel),
+                                Column(
+                                  crossAxisAlignment: isMe
+                                      ? CrossAxisAlignment.end
+                                      : CrossAxisAlignment.start,
+                                  children: [
+                                    // Thanh chọn cảm xúc nổi khi đè vào tin nhắn
+                                    if (isReactionOpen)
+                                      _buildReactionPicker(msgKey),
 
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -7759,36 +7802,33 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                   ],
                                 ),
 
-                                // Trạng thái đã gửi / đã xem ở tin nhắn cuối cùng của Host
+                                // Trạng thái Messenger tách biệt ở góc dưới cùng bên phải của cụm tin nhắn cuối cùng
                                 if (i == _conversationMessages.length - 1 &&
                                     isMe) ...[
-                                  const SizedBox(height: 6),
-                                  const Padding(
-                                    padding: EdgeInsets.only(right: 4),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          LucideIcons.checkCheck,
-                                          size: 13,
-                                          color: AppColors.primary,
-                                        ),
-                                        SizedBox(width: 4),
-                                        Text(
-                                          'Đã gửi',
-                                          style: TextStyle(
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w500,
-                                            color: AppColors.textSecondary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  MessengerStatusIndicator(
+                                    state: (m['status'] == 'failed' || m['isFailed'] == true)
+                                        ? MessengerDeliveryState.failed
+                                        : (m['status'] == 'sending' || m['status'] == 'pending')
+                                            ? MessengerDeliveryState.sending
+                                            : (m['isRead'] == true || m['readAt'] != null || m['seen'] == true || m['status'] == 'read')
+                                                ? MessengerDeliveryState.seen
+                                                : MessengerDeliveryState.sent,
+                                    recipientName: participantName,
+                                    recipientAvatar: participantAvatar,
+                                    customLabel: (m['isRead'] == true || m['readAt'] != null || m['seen'] == true || m['status'] == 'read')
+                                        ? 'Đã xem'
+                                        : (m['status'] == 'sending' || m['status'] == 'pending')
+                                            ? 'Đang gửi...'
+                                            : (m['status'] == 'failed' || m['isFailed'] == true)
+                                                ? 'Gửi thất bại'
+                                                : 'Đã gửi',
                                   ),
                                 ],
                               ],
                             ),
-                          );
+                          ],
+                        ),
+                      );
                         },
                       );
                     },
@@ -8322,8 +8362,14 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             contentType: contentType,
           );
           if (!mounted) return;
+          final currentLocale = ref.read(localeProvider);
+          final voiceLabel = currentLocale.startsWith('en')
+              ? 'Voice message'
+              : currentLocale.startsWith('ko')
+                  ? '음성 메시지'
+                  : 'Tin nhắn thoại';
           await _sendHostMessage(
-            contentOverride: '🎤 Tin nhắn thoại (00:${recordedSeconds.toString().padLeft(2, '0')})',
+            contentOverride: '🎤 $voiceLabel (00:${recordedSeconds.toString().padLeft(2, '0')})',
             messageType: 'file',
             attachments: [
               {
@@ -8382,7 +8428,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         trimmed.startsWith('📷 [Ảnh chụp trực tiếp') ||
         trimmed.startsWith('🖼️ [Đã gửi 1 hình ảnh') ||
         trimmed == '📷 [Ảnh chụp trực tiếp từ villa]' ||
-        trimmed.startsWith('🎤 Tin nhắn thoại')) {
+        trimmed.startsWith('🎤')) {
       return null;
     }
     return trimmed;

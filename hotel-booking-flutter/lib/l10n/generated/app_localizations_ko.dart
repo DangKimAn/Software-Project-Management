@@ -430,6 +430,21 @@ class AppLocalizationsKo extends AppLocalizations {
   String get loadingFavorites => '위시리스트를 불러오는 중...';
 
   @override
+  String get loadingTrips => '여행 일정을 불러오는 중...';
+
+  @override
+  String get loadingPaymentInfo => '예약 결제 정보를 불러오는 중...';
+
+  @override
+  String get guestPaymentConnectingGateway => '결제 게이트웨이에 연결 중...';
+
+  @override
+  String get guestPaymentBookingNotFoundTitle => '예약을 찾을 수 없습니다';
+
+  @override
+  String get guestPaymentBookingNotFoundMessage => '예약이 존재하지 않거나 만료되었습니다.';
+
+  @override
   String get emptyList => '일치하는 빌라가 없습니다';
 
   @override
@@ -1728,4 +1743,110 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get spaceOther => '기타 공간';
+
+  @override
+  String get blogAllArticles => '모든 글';
+
+  @override
+  String get blogShareTooltip => '글 공유';
+
+  @override
+  String get blogShareInvalidLink => '공유할 글 링크가 유효하지 않습니다.';
+
+  @override
+  String get blogShareSuccess => '글 링크가 클립보드에 복사되었습니다';
+
+  @override
+  String get blogShareFailure => '이 기기에서 글 링크를 복사할 수 없습니다.';
+
+  @override
+  String get blogNotFoundTitle => '글을 찾을 수 없습니다';
+
+  @override
+  String get blogNotFoundDescription => '글이 삭제되었거나 경로가 올바르지 않습니다.';
+
+  @override
+  String get blogBackToBlog => '여행 가이드로 돌아가기';
+
+  @override
+  String get blogLoadingArticle => '글을 불러오는 중...';
+
+  @override
+  String get blogRelatedArticlesBadge => '관련 글';
+
+  @override
+  String get blogRelatedArticlesTitle => '추천 글';
+
+  @override
+  String get blogViewAllArticles => '모든 글 보기';
+
+  @override
+  String blogReadMinutes(int minutes) {
+    return '$minutes분 읽기';
+  }
+
+  @override
+  String get blogDefaultAuthor => 'The Palm 편집팀';
+
+  @override
+  String get blogListBadge => '붕따우 숙박 가이드';
+
+  @override
+  String get blogListHeroTitle => '숙박 노하우, 여행 일정 & 붕따우 오션뷰 빌라 예약 비법';
+
+  @override
+  String get blogSearchHint => '붕따우 여행 가이드 검색...';
+
+  @override
+  String get blogClearSearchTooltip => '검색어 지우기';
+
+  @override
+  String get blogCategoryAll => '전체';
+
+  @override
+  String get blogCategoryTravelGuide => '여행 가이드';
+
+  @override
+  String get blogCategoryReviews => '빌라 & 홈스테이 리뷰';
+
+  @override
+  String get blogCategoryTripGuide => '여행 가이드북';
+
+  @override
+  String get blogCategoryBookingTips => '예약 꿀팁';
+
+  @override
+  String get blogCategoryLocalDiscovery => '로컬 명소 탐방';
+
+  @override
+  String get blogCategoryStayTips => '숙박 팁';
+
+  @override
+  String get blogCategoryNearBeach => '해변 근처 빌라';
+
+  @override
+  String get blogCategoryBookingChecklist => '예약 체크리스트';
+
+  @override
+  String get blogEmptyTitle => '조건에 맞는 글이 없습니다';
+
+  @override
+  String get blogEmptyDescription => '다른 카테고리나 검색어를 선택해보세요.';
+
+  @override
+  String get blogClearFilters => '필터 초기화';
+
+  @override
+  String get blogLoadingList => '글 목록 불러오는 중...';
+
+  @override
+  String get blogPaginationPrev => '이전 페이지';
+
+  @override
+  String get blogPaginationNext => '다음 페이지';
+
+  @override
+  String blogPaginationPage(int page) {
+    return '$page페이지';
+  }
 }

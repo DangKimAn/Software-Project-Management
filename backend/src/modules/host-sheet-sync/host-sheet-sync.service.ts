@@ -32,6 +32,7 @@ import {
     GoogleSheetsClientError,
     isPriceOrNumericText,
     parseAndValidateSpreadsheetInput,
+    parsePriceFromSheetText,
     RawSheetCell,
     RawSheetTab,
     rgbToHex,
@@ -51,6 +52,7 @@ import {
     ExtractedSheetListingRow,
     extractMonthSheetStructure,
     formatIsoDate,
+    isMonthTabCheckboxConfirmed,
     monthTabKeyFromIsoDate,
     parsePositiveListingId,
     resolveDirectorySheetTab,
@@ -438,7 +440,11 @@ export type SyncCycleResult = {
 
 export const runHostSheetSyncCycle = async (
     hostUserId: number,
-    options: { mode?: "initialize" | "bidirectional" } = {},
+    options: {
+        mode?: "initialize" | "bidirectional";
+        trigger?: string;
+        forceConfirm?: boolean;
+    } = {},
 ): Promise<SyncCycleResult> => {
     const env = getEnv();
     const integration = await HostSheetIntegration.findOne({
@@ -706,12 +712,19 @@ export const runHostSheetSyncCycle = async (
 
         // 3. PHASE A: Safe Sheet -> App Import (with strict BOLA, structural checks & 3-way diff)
         const monthStructures = new Map<string, ReturnType<typeof extractMonthSheetStructure>>();
+        const pendingDraftCellKeys = new Set<string>();
 
         for (const monthSpec of rollingMonths) {
             const tab = resolvedMonthTabs.get(monthSpec.tabKey);
             if (!tab) {
                 continue;
             }
+
+            const isMonthConfirmed = Boolean(
+                options.forceConfirm ||
+                options.mode === "initialize" ||
+                isMonthTabCheckboxConfirmed(tab),
+            );
 
             const structure = extractMonthSheetStructure(tab);
             monthStructures.set(monthSpec.tabKey, structure);
@@ -858,7 +871,23 @@ export const runHostSheetSyncCycle = async (
 
                     const sheetWantsBlock = classified.state === "host_blocked";
                     const prevSheetManualBlock = snap ? snap.lastSheetState === "host_blocked" : false;
-                    const sheetChanged = snap ? sheetWantsBlock !== prevSheetManualBlock : sheetWantsBlock;
+                    const sheetBlockChanged = snap ? sheetWantsBlock !== prevSheetManualBlock : sheetWantsBlock;
+
+                    const defaultDailyPrice = Number(getDefaultDailyPrice(listing, isoDate) ?? 0);
+                    const currentEffectivePrice =
+                        cal?.priceOverride !== null && cal?.priceOverride !== undefined
+                            ? Number(cal.priceOverride)
+                            : defaultDailyPrice;
+                    const parsedSheetPrice = parsePriceFromSheetText(classified.rawValue);
+                    const prevSheetPrice = snap?.lastSheetRawValue ? parsePriceFromSheetText(snap.lastSheetRawValue) : null;
+
+                    const sheetPriceChanged =
+                        classified.state === "empty" &&
+                        (parsedSheetPrice !== null
+                            ? parsedSheetPrice !== currentEffectivePrice && parsedSheetPrice !== prevSheetPrice
+                            : classified.rawValue === "" && cal?.priceOverride !== null && cal?.priceOverride !== undefined);
+
+                    const sheetChanged = sheetBlockChanged || sheetPriceChanged;
 
                     if (classified.state === "host_blocked" && classified.rawValue) {
                         customHostTextMap.set(
@@ -868,6 +897,11 @@ export const runHostSheetSyncCycle = async (
                     }
 
                     if (!sheetChanged) {
+                        continue;
+                    }
+
+                    if (!isMonthConfirmed) {
+                        pendingDraftCellKeys.add(cellKey);
                         continue;
                     }
 
@@ -979,6 +1013,12 @@ export const runHostSheetSyncCycle = async (
                         ) {
                             cal.notes = null;
                         }
+
+                        // If host typed a specific price while unblocking
+                        if (parsedSheetPrice !== null && parsedSheetPrice !== defaultDailyPrice) {
+                            cal.priceOverride = parsedSheetPrice;
+                        }
+
                         cal.syncRevision = nextRev;
                         cal.lastSheetSyncedAt = now;
 
@@ -1007,6 +1047,102 @@ export const runHostSheetSyncCycle = async (
                             newValue: "available",
                             metadataJson: { monthTab: monthSpec.tabKey },
                         });
+
+                        if (parsedSheetPrice !== null && parsedSheetPrice !== defaultDailyPrice) {
+                            await HostSheetChangeLog.create({
+                                hostUserId,
+                                integrationId: integration.integrationId,
+                                listingId: listing.listingId,
+                                targetDate: isoDate,
+                                direction: "sheet_to_app",
+                                action: "price_override_updated",
+                                previousValue: String(defaultDailyPrice),
+                                newValue: String(parsedSheetPrice),
+                                metadataJson: { monthTab: monthSpec.tabKey, defaultPrice: defaultDailyPrice },
+                            });
+                        }
+                    } else if (sheetPriceChanged) {
+                        const nextRev = Math.max(calRev, snapRev) + 1;
+                        if (parsedSheetPrice !== null) {
+                            const targetOverride = parsedSheetPrice === defaultDailyPrice ? null : parsedSheetPrice;
+                            if (cal) {
+                                cal.priceOverride = targetOverride;
+                                cal.syncRevision = nextRev;
+                                cal.lastSheetSyncedAt = now;
+                                if (
+                                    cal.isAvailable &&
+                                    !cal.isBlockedByHost &&
+                                    !cal.isBlockedByAdmin &&
+                                    cal.priceOverride === null &&
+                                    cal.minNightsOverride === null &&
+                                    cal.notes === null
+                                ) {
+                                    await cal.destroy();
+                                    calendarMap.delete(cellKey);
+                                } else {
+                                    await cal.save();
+                                }
+                            } else if (targetOverride !== null) {
+                                const created = await AvailabilityCalendar.create({
+                                    listingId: listing.listingId,
+                                    date: isoDate,
+                                    isAvailable: true,
+                                    isBlockedByHost: false,
+                                    isBlockedByAdmin: false,
+                                    lockSource: null,
+                                    priceOverride: targetOverride,
+                                    minNightsOverride: null,
+                                    notes: null,
+                                    syncRevision: nextRev,
+                                    lastSheetSyncedAt: now,
+                                });
+                                calendarMap.set(cellKey, created);
+                            }
+
+                            importedUnblocksCount += 1;
+                            await HostSheetChangeLog.create({
+                                hostUserId,
+                                integrationId: integration.integrationId,
+                                listingId: listing.listingId,
+                                targetDate: isoDate,
+                                direction: "sheet_to_app",
+                                action: "price_override_updated",
+                                previousValue: String(currentEffectivePrice),
+                                newValue: String(parsedSheetPrice),
+                                metadataJson: { monthTab: monthSpec.tabKey, defaultPrice: defaultDailyPrice },
+                            });
+                        } else if (classified.rawValue === "" && cal && cal.priceOverride !== null) {
+                            // Host cleared the cell on sheet -> revert to default price
+                            cal.priceOverride = null;
+                            cal.syncRevision = nextRev;
+                            cal.lastSheetSyncedAt = now;
+                            if (
+                                cal.isAvailable &&
+                                !cal.isBlockedByHost &&
+                                !cal.isBlockedByAdmin &&
+                                cal.priceOverride === null &&
+                                cal.minNightsOverride === null &&
+                                cal.notes === null
+                            ) {
+                                await cal.destroy();
+                                calendarMap.delete(cellKey);
+                            } else {
+                                await cal.save();
+                            }
+
+                            importedUnblocksCount += 1;
+                            await HostSheetChangeLog.create({
+                                hostUserId,
+                                integrationId: integration.integrationId,
+                                listingId: listing.listingId,
+                                targetDate: isoDate,
+                                direction: "sheet_to_app",
+                                action: "price_override_removed",
+                                previousValue: String(currentEffectivePrice),
+                                newValue: String(defaultDailyPrice),
+                                metadataJson: { monthTab: monthSpec.tabKey },
+                            });
+                        }
                     }
                 }
 
@@ -1072,6 +1208,12 @@ export const runHostSheetSyncCycle = async (
             if (!tab) {
                 continue;
             }
+
+            const isMonthConfirmed = Boolean(
+                options.forceConfirm ||
+                options.mode === "initialize" ||
+                isMonthTabCheckboxConfirmed(tab),
+            );
 
             const sheetId = tab.properties.sheetId;
             const structure = monthStructures.get(monthSpec.tabKey) ?? extractMonthSheetStructure(tab);
@@ -1328,6 +1470,11 @@ export const runHostSheetSyncCycle = async (
                         now,
                     );
                     const cal = calendarMap.get(cellKey);
+
+                    if (!isMonthConfirmed && pendingDraftCellKeys.has(cellKey) && existingCell && !authBooking) {
+                        fullColCells.push(existingCell);
+                        continue;
+                    }
 
                     let desiredText = "";
                     let desiredNumberValue: number | undefined;
@@ -1787,7 +1934,11 @@ export const initializeHostStandardCalendar = async (hostUserId: number) => {
 };
 
 export const syncHostSpreadsheetNow = async (hostUserId: number) => {
-    const syncResult = await runHostSheetSyncCycle(hostUserId, { mode: "bidirectional" });
+    const syncResult = await runHostSheetSyncCycle(hostUserId, {
+        mode: "bidirectional",
+        forceConfirm: true,
+        trigger: "manual_sync",
+    });
     const status = await getHostSheetSyncStatus(hostUserId);
     return {
         ...status,
@@ -2588,5 +2739,187 @@ export const listHostSheetChangeLogs = async (
             totalItems: count,
             totalPages: Math.max(1, Math.ceil(count / limit)),
         },
+    };
+};
+
+export const previewSheetButtonChanges = async (spreadsheetId: string) => {
+    const integration = await HostSheetIntegration.findOne({
+        where: { spreadsheetId },
+    });
+    if (!integration || integration.status === "disconnected") {
+        throw new ApiError(404, "Không tìm thấy cấu hình tích hợp Google Sheets cho bảng tính này");
+    }
+
+    const hostUserId = integration.hostUserId;
+    const transport = getGoogleSheetsTransport();
+    const now = new Date();
+    const todayVN = getTodayInVietnamDateString(now);
+
+    const [hostListings, metaSpreadsheet] = await Promise.all([
+        Listing.findAll({
+            where: { hostId: hostUserId },
+            order: [["listingId", "ASC"]],
+        }),
+        transport.getSpreadsheet({
+            spreadsheetId: integration.spreadsheetId,
+            includeGridData: false,
+            fields: "spreadsheetId,properties.title,sheets(properties(sheetId,title,index,gridProperties),developerMetadata)",
+        }),
+    ]);
+
+    const activeListings = hostListings.filter((l) => !l.deletedAt);
+    const activeListingIds = activeListings.map((l) => l.listingId);
+
+    const rollingMonths = buildRollingMonthSpecs(todayVN, 6);
+    const sheetsList = metaSpreadsheet.sheets ?? [];
+    const resolvedMonthTabs = new Map<string, RawSheetTab>();
+
+    for (const monthSpec of rollingMonths) {
+        const tab = resolveMonthSheetTab(sheetsList, monthSpec.tabKey);
+        if (tab) {
+            resolvedMonthTabs.set(monthSpec.tabKey, tab);
+        }
+    }
+
+    if (resolvedMonthTabs.size === 0) {
+        return {
+            success: true,
+            changesCount: 0,
+            changes: [],
+            warnings: [],
+        };
+    }
+
+    const monthRanges = Array.from(resolvedMonthTabs.values()).map((tab) =>
+        buildMonthTabA1Range(tab, activeListings.length),
+    );
+    const gridResponse = await transport.getSpreadsheet({
+        spreadsheetId: integration.spreadsheetId,
+        ranges: monthRanges,
+        includeGridData: true,
+        fields: "sheets(properties(sheetId,title),data(startRow,startColumn,rowMetadata.developerMetadata,columnMetadata.developerMetadata,rowData.values(userEnteredValue,userEnteredFormat(backgroundColorStyle,backgroundColor))))",
+    });
+
+    const gridSheets = gridResponse.sheets ?? [];
+    const firstMonth = rollingMonths[0].firstDate;
+    const lastMonth = rollingMonths[rollingMonths.length - 1].lastDate;
+
+    const [calendarRows, snapshots] = await Promise.all([
+        AvailabilityCalendar.findAll({
+            where: {
+                listingId: { [Op.in]: activeListingIds },
+                date: { [Op.between]: [firstMonth, lastMonth] },
+            },
+        }),
+        HostSheetCellSnapshot.findAll({
+            where: {
+                hostUserId,
+                listingId: { [Op.in]: activeListingIds },
+                date: { [Op.between]: [firstMonth, lastMonth] },
+            },
+        }),
+    ]);
+
+    const calendarMap = new Map<string, AvailabilityCalendar>(
+        calendarRows.map((r) => [`${r.listingId}:${r.date}`, r]),
+    );
+    const snapshotMap = new Map<string, HostSheetCellSnapshot>(
+        snapshots.map((s) => [`${s.listingId}:${s.date}`, s]),
+    );
+
+    const changes: string[] = [];
+    const warnings: string[] = [];
+
+    for (const monthSpec of rollingMonths) {
+        const tab = gridSheets.find((s) => s.properties.title.trim() === monthSpec.tabKey);
+        if (!tab) continue;
+
+        const structure = extractMonthSheetStructure(tab);
+        for (const listing of activeListings) {
+            const rows = structure.rowsByListingId.get(listing.listingId);
+            if (!rows || rows.length !== 1) continue;
+
+            const sheetRow = rows[0];
+            for (let day = 1; day <= monthSpec.daysInMonth; day += 1) {
+                const isoDate = formatIsoDate(monthSpec.year, monthSpec.month, day);
+                if (isoDate < todayVN) continue;
+
+                const cell = sheetRow.cellsByDay.get(day);
+                const classified = classifySheetCalendarCell(cell);
+                const cellKey = `${listing.listingId}:${isoDate}`;
+                const cal = calendarMap.get(cellKey);
+                const snap = snapshotMap.get(cellKey);
+
+                if (cal?.isBlockedByAdmin) continue;
+
+                const sheetWantsBlock = classified.state === "host_blocked";
+                const prevSheetManualBlock = snap ? snap.lastSheetState === "host_blocked" : false;
+                const sheetBlockChanged = snap ? sheetWantsBlock !== prevSheetManualBlock : sheetWantsBlock;
+
+                const defaultPrice = Number(getDefaultDailyPrice(listing, isoDate) ?? 0);
+                const currentEffectivePrice =
+                    cal?.priceOverride !== null && cal?.priceOverride !== undefined
+                        ? Number(cal.priceOverride)
+                        : defaultPrice;
+                const parsedSheetPrice = parsePriceFromSheetText(classified.rawValue);
+                const prevSheetPrice = snap?.lastSheetRawValue ? parsePriceFromSheetText(snap.lastSheetRawValue) : null;
+
+                const sheetPriceChanged =
+                    classified.state === "empty" &&
+                    (parsedSheetPrice !== null
+                        ? parsedSheetPrice !== currentEffectivePrice && parsedSheetPrice !== prevSheetPrice
+                        : classified.rawValue === "" && cal?.priceOverride !== null && cal?.priceOverride !== undefined);
+
+                const displayDate = `${String(day).padStart(2, "0")}/${monthSpec.tabKey}`;
+
+                if (sheetBlockChanged) {
+                    if (sheetWantsBlock) {
+                        const note = classified.rawValue && classified.rawValue.toUpperCase() !== "K"
+                            ? ` (${classified.rawValue})`
+                            : "";
+                        changes.push(`[KHÓA LỊCH] Căn ${listing.listingId} (${listing.title}) · Ngày ${displayDate}: Mở ➔ Khóa${note}`);
+                    } else if (cal?.isBlockedByHost) {
+                        const newPriceDesc = parsedSheetPrice && parsedSheetPrice !== defaultPrice
+                            ? ` · Giá mới: ${parsedSheetPrice.toLocaleString("vi-VN")}đ`
+                            : ` · Giá: ${defaultPrice.toLocaleString("vi-VN")}đ`;
+                        changes.push(`[MỞ BÁN] Căn ${listing.listingId} (${listing.title}) · Ngày ${displayDate}: Khóa ➔ Mở${newPriceDesc}`);
+                    }
+                } else if (sheetPriceChanged) {
+                    if (parsedSheetPrice !== null) {
+                        changes.push(`[ĐỔI GIÁ] Căn ${listing.listingId} (${listing.title}) · Ngày ${displayDate}: ${currentEffectivePrice.toLocaleString("vi-VN")}đ ➔ ${parsedSheetPrice.toLocaleString("vi-VN")}đ`);
+                    } else if (classified.rawValue === "" && cal?.priceOverride !== null) {
+                        changes.push(`[HỦY GIÁ TÙY CHỈNH] Căn ${listing.listingId} (${listing.title}) · Ngày ${displayDate}: Quay về giá gốc ${defaultPrice.toLocaleString("vi-VN")}đ`);
+                    }
+                }
+            }
+        }
+    }
+
+    return {
+        success: true,
+        changesCount: changes.length,
+        changes,
+        warnings,
+    };
+};
+
+export const applySheetButtonSync = async (spreadsheetId: string) => {
+    const integration = await HostSheetIntegration.findOne({
+        where: { spreadsheetId },
+    });
+    if (!integration || integration.status === "disconnected") {
+        throw new ApiError(404, "Không tìm thấy cấu hình tích hợp Google Sheets cho bảng tính này");
+    }
+
+    const result = await runHostSheetSyncCycle(integration.hostUserId, {
+        mode: "bidirectional",
+        forceConfirm: true,
+        trigger: "sheet_button",
+    });
+
+    return {
+        success: true,
+        message: `Đã đồng bộ thành công lên App! (${result.importedBlocksCount} ngày khóa, ${result.importedUnblocksCount} ngày mở/đổi giá).`,
+        data: result,
     };
 };

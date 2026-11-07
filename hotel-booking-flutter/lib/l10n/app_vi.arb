@@ -230,6 +230,11 @@
   "loadingVillas": "Đang tải chỗ nghỉ...",
   "loadingVillaDetail": "Đang tải thông tin chi tiết biệt thự...",
   "loadingFavorites": "Đang tải danh sách yêu thích...",
+  "loadingTrips": "Đang tải lịch trình...",
+  "loadingPaymentInfo": "Đang tải thông tin thanh toán đặt phòng...",
+  "guestPaymentConnectingGateway": "Đang kết nối cổng thanh toán...",
+  "guestPaymentBookingNotFoundTitle": "Không tìm thấy đơn đặt phòng",
+  "guestPaymentBookingNotFoundMessage": "Đơn đặt phòng không tồn tại hoặc đã hết hạn.",
   "emptyList": "Không tìm thấy villa nào phù hợp",
   "emptyListDesc": "Hãy thử thay đổi tiêu chí tìm kiếm hoặc khoảng thời gian lưu trú.",
   "errorOccurred": "Đã có lỗi xảy ra",
@@ -931,5 +936,53 @@
   "spaceExterior": "Ngoại thất",
   "spaceView": "Tầm nhìn",
   "spaceDining": "Phòng ăn",
-  "spaceOther": "Không gian khác"
+  "spaceOther": "Không gian khác",
+  "blogAllArticles": "Tất cả bài viết",
+  "blogShareTooltip": "Chia sẻ bài viết",
+  "blogShareInvalidLink": "Liên kết bài viết không hợp lệ để chia sẻ.",
+  "blogShareSuccess": "Đã sao chép liên kết bài viết vào bộ nhớ tạm",
+  "blogShareFailure": "Không thể sao chép liên kết bài viết trên thiết bị này.",
+  "blogNotFoundTitle": "Không tìm thấy bài viết",
+  "blogNotFoundDescription": "Bài viết có thể đã được gỡ hoặc đường dẫn không chính xác.",
+  "blogBackToBlog": "Quay lại Cẩm nang",
+  "blogLoadingArticle": "Đang tải bài viết...",
+  "blogRelatedArticlesBadge": "BÀI VIẾT LIÊN QUAN",
+  "blogRelatedArticlesTitle": "Gợi ý đọc tiếp",
+  "blogViewAllArticles": "Xem tất cả bài viết",
+  "blogReadMinutes": "{minutes} phút đọc",
+  "@blogReadMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "blogDefaultAuthor": "Ban biên tập The Palm",
+  "blogListBadge": "CẨM NANG LƯU TRÚ VŨNG TÀU",
+  "blogListHeroTitle": "Kinh nghiệm lưu trú, lịch trình & bí quyết đặt Villa biển Vũng Tàu",
+  "blogSearchHint": "Tìm bài viết cẩm nang Vũng Tàu...",
+  "blogClearSearchTooltip": "Xóa từ khóa tìm kiếm",
+  "blogCategoryAll": "Tất cả",
+  "blogCategoryTravelGuide": "Cẩm nang du lịch",
+  "blogCategoryReviews": "Đánh giá Villa & Homestay",
+  "blogCategoryTripGuide": "Cẩm nang chuyến đi",
+  "blogCategoryBookingTips": "Kinh nghiệm đặt phòng",
+  "blogCategoryLocalDiscovery": "Khám phá địa phương",
+  "blogCategoryStayTips": "Mẹo lưu trú",
+  "blogCategoryNearBeach": "Villa gần biển",
+  "blogCategoryBookingChecklist": "Checklist đặt phòng",
+  "blogEmptyTitle": "Chưa có bài viết phù hợp",
+  "blogEmptyDescription": "Hãy thử chọn chuyên mục khác hoặc từ khóa khác.",
+  "blogClearFilters": "Xóa bộ lọc",
+  "blogLoadingList": "Đang tải danh sách bài viết...",
+  "blogPaginationPrev": "Trang trước",
+  "blogPaginationNext": "Trang sau",
+  "blogPaginationPage": "Trang {page}",
+  "@blogPaginationPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  }
 }

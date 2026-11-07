@@ -10,8 +10,8 @@ import 'package:hotel_booking_flutter/features/settings/presentation/screens/set
 import 'package:hotel_booking_flutter/features/trips/domain/entities/booking.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/screens/trips_screen.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/view_models/trips_view_model.dart';
+import 'package:hotel_booking_flutter/features/trips/presentation/widgets/global_pending_booking_banner.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
-import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class _FakeAuthNotifier extends StateNotifier<AsyncValue<User?>>
@@ -43,8 +43,26 @@ void main() {
     role: 'guest',
   );
 
-  group('Top Header with Search Bar across Bottom Navigation Tabs', () {
-    testWidgets('1. MessagesScreen (Tin nhắn) renders top search header and bell',
+  final now = DateTime.now();
+  final testPendingBooking = Booking(
+    id: 'test-pending-123',
+    listingId: 'villa-1',
+    propertyName: 'MinhThanh Luxury Sea View Villa Bãi Dâu',
+    checkInDate: '2026-11-01',
+    checkOutDate: '2026-11-03',
+    nights: 2,
+    guestCount: 2,
+    totalAmount: 3500000,
+    status: 'pending_payment',
+    paymentStatus: 'pending',
+    lockedUntil: now.add(const Duration(minutes: 9, seconds: 40)),
+    paymentExpiresAt: now.add(const Duration(minutes: 9, seconds: 40)),
+    createdAt: now,
+  );
+
+  group('Header & Pending Booking Banner Alternation across Tabs (Messages, Trips, Account)', () {
+    testWidgets(
+        '1. MessagesScreen without pending booking: shows header (search bar & bell)',
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -52,6 +70,7 @@ void main() {
             authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
             conversationsListProvider
                 .overrideWith((ref) => Future.value(<ConversationItem>[])),
+            activePendingBookingProvider.overrideWithValue(null),
           ],
           child: MaterialApp(
             theme: AppTheme.lightTheme,
@@ -61,21 +80,45 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Search bar pill
-      expect(
-        find.byKey(const ValueKey<String>('header-search-bar')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsOneWidget);
       expect(find.text('Bạn muốn đi đâu?'), findsOneWidget);
-
-      // Notification bell
       expect(find.byType(NotificationBell), findsOneWidget);
-
-      // Header component
-      expect(find.byType(AppSearchHeader), findsOneWidget);
+      expect(find.byType(GlobalPendingBookingBanner), findsNothing);
     });
 
-    testWidgets('2. TripsScreen (Chuyến đi) renders top search header and bell',
+    testWidgets(
+        '2. MessagesScreen with pending booking: prioritizes pending banner and hides search header & bell',
+        (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            conversationsListProvider
+                .overrideWith((ref) => Future.value(<ConversationItem>[])),
+            activePendingBookingProvider.overrideWithValue(testPendingBooking),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: const MessagesScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GlobalPendingBookingBanner), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(GlobalPendingBookingBanner),
+          matching: find.text('MinhThanh Luxury Sea View Villa Bãi Dâu'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsNothing);
+      expect(find.byType(NotificationBell), findsNothing);
+    });
+
+    testWidgets(
+        '3. TripsScreen without pending booking: shows header (search bar & bell)',
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -92,26 +135,50 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Search bar pill
-      expect(
-        find.byKey(const ValueKey<String>('header-search-bar')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsOneWidget);
       expect(find.text('Bạn muốn đi đâu?'), findsOneWidget);
-
-      // Notification bell
       expect(find.byType(NotificationBell), findsOneWidget);
-
-      // Header component
-      expect(find.byType(AppSearchHeader), findsOneWidget);
+      expect(find.byType(GlobalPendingBookingBanner), findsNothing);
     });
 
-    testWidgets('3. SettingsScreen (Tài khoản) renders top search header and bell',
+    testWidgets(
+        '4. TripsScreen with pending booking: prioritizes pending banner and hides search header & bell',
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            myBookingsProvider.overrideWith((ref) => Future.value(<Booking>[testPendingBooking])),
+            activePendingBookingProvider.overrideWithValue(testPendingBooking),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: const TripsScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GlobalPendingBookingBanner), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(GlobalPendingBookingBanner),
+          matching: find.text('MinhThanh Luxury Sea View Villa Bãi Dâu'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsNothing);
+      expect(find.byType(NotificationBell), findsNothing);
+    });
+
+    testWidgets(
+        '5. SettingsScreen without pending booking: shows header (search bar & bell)',
+        (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            activePendingBookingProvider.overrideWithValue(null),
           ],
           child: MaterialApp(
             theme: AppTheme.lightTheme,
@@ -121,20 +188,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Search bar pill
-      expect(
-        find.byKey(const ValueKey<String>('header-search-bar')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsOneWidget);
       expect(find.text('Bạn muốn đi đâu?'), findsOneWidget);
-
-      // Notification bell
       expect(find.byType(NotificationBell), findsOneWidget);
-
-      // Header component
-      expect(find.byType(AppSearchHeader), findsOneWidget);
-
-      // Verify Guest bottom logout tile and top-right header menu both use LucideIcons.doorOpen
+      expect(find.byType(GlobalPendingBookingBanner), findsNothing);
       expect(
         find.descendant(
           of: find.byKey(const Key('settings_bottom_logout_button')),
@@ -142,28 +199,35 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
 
-      await tester.tap(find.byType(PopupMenuButton<String>));
+    testWidgets(
+        '6. SettingsScreen with pending booking: prioritizes pending banner and hides search header & bell',
+        (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            activePendingBookingProvider.overrideWithValue(testPendingBooking),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: const SettingsScreen(),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
-      final headerLogoutItem = find.byWidgetPredicate(
-        (w) => w is PopupMenuItem<String> && w.value == 'logout',
-      );
-      expect(headerLogoutItem, findsOneWidget);
+      expect(find.byType(GlobalPendingBookingBanner), findsOneWidget);
       expect(
         find.descendant(
-          of: headerLogoutItem,
-          matching: find.byIcon(AppSemanticIcons.logout),
+          of: find.byType(GlobalPendingBookingBanner),
+          matching: find.text('MinhThanh Luxury Sea View Villa Bãi Dâu'),
         ),
         findsOneWidget,
       );
-      expect(
-        find.descendant(
-          of: headerLogoutItem,
-          matching: find.byIcon(LucideIcons.logOut),
-        ),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsNothing);
+      expect(find.byType(NotificationBell), findsNothing);
     });
   });
 }

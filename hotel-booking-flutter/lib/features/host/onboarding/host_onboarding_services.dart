@@ -3,9 +3,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../app/di/providers.dart';
+import '../../../app/theme/app_colors.dart';
+import '../../../app/theme/app_radii.dart';
+import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/app_typography.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/logging/app_logger.dart';
@@ -92,17 +98,120 @@ class HostKycPermissionResult {
 }
 
 abstract class HostOnboardingPermissionService {
-  Future<HostKycPermissionResult> requestPermission(HostKycFileSource source);
+  Future<HostKycPermissionResult> requestPermission(
+    HostKycFileSource source, {
+    BuildContext? context,
+  });
 }
 
 class DefaultHostOnboardingPermissionService
     implements HostOnboardingPermissionService {
   const DefaultHostOnboardingPermissionService();
 
+  static const String kCameraPermissionPrefKey = 'kyc_camera_permission_granted';
+
   @override
   Future<HostKycPermissionResult> requestPermission(
-    HostKycFileSource source,
-  ) async {
+    HostKycFileSource source, {
+    BuildContext? context,
+  }) async {
+    if (source == HostKycFileSource.cameraScan) {
+      final prefs = await SharedPreferences.getInstance();
+      final alreadyGranted = prefs.getBool(kCameraPermissionPrefKey) ?? false;
+      if (alreadyGranted) {
+        return const HostKycPermissionResult(
+          status: HostKycPermissionStatus.granted,
+        );
+      }
+
+      if (context != null && context.mounted) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              backgroundColor: AppColors.surfaceBase,
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.s8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      LucideIcons.camera,
+                      size: 24,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s12),
+                  const Expanded(
+                    child: Text(
+                      'Yêu cầu mở Máy ảnh',
+                      style: AppTypography.cardTitle,
+                    ),
+                  ),
+                ],
+              ),
+              content: const Text(
+                'The Palm cần sử dụng Máy ảnh của bạn để chụp / quét mặt giấy tờ xác minh (CCCD / Hộ chiếu) rõ nét phục vụ xác minh tài khoản Chủ nhà.\n\nBạn có muốn mở máy ảnh ngay bây giờ không?',
+                style: AppTypography.body,
+              ),
+              actionsPadding: const EdgeInsets.only(
+                right: AppSpacing.s16,
+                bottom: AppSpacing.s16,
+              ),
+              actions: [
+                TextButton(
+                  key: const Key('kyc_camera_permission_deny_btn'),
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: Text(
+                    'Để sau',
+                    style: AppTypography.buttonText.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  key: const Key('kyc_camera_permission_grant_btn'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.surfaceBase,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadii.pill),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.s20,
+                      vertical: 10,
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Mở Máy ảnh'),
+                ),
+              ],
+            );
+          },
+        );
+
+        if (confirmed == true) {
+          await prefs.setBool(kCameraPermissionPrefKey, true);
+          return const HostKycPermissionResult(
+            status: HostKycPermissionStatus.granted,
+          );
+        } else {
+          return const HostKycPermissionResult(
+            status: HostKycPermissionStatus.denied,
+            messageVi:
+                'Ứng dụng cần quyền mở Máy ảnh để chụp trực tiếp giấy tờ xác minh. Vui lòng thử lại và nhấn "Mở Máy ảnh".',
+          );
+        }
+      }
+    }
+
     return const HostKycPermissionResult(
       status: HostKycPermissionStatus.granted,
     );
@@ -711,6 +820,17 @@ abstract final class HostOnboardingErrorClassifier {
     }
 
     final rawText = error.toString().replaceFirst('Exception: ', '').trim();
+    final lower = rawText.toLowerCase();
+    if (lower.contains('camera_access_denied') ||
+        lower.contains('camera access denied') ||
+        (lower.contains('camera') && lower.contains('denied')) ||
+        lower.contains('permission denied')) {
+      return const HostOnboardingClassifiedError(
+        kind: HostOnboardingErrorKind.validation,
+        messageVi:
+            'Quyền truy cập Máy ảnh đã bị từ chối. Vui lòng cấp quyền trong Cài đặt thiết bị để tiếp tục.',
+      );
+    }
     return HostOnboardingClassifiedError(
       kind: HostOnboardingErrorKind.server,
       messageVi: rawText.isNotEmpty ? rawText : fallbackMessage,

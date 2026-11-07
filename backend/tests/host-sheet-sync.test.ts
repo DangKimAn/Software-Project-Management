@@ -452,6 +452,14 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
                         warningOnly: pr.warningOnly,
                     });
                 }
+            } else if (req.setDataValidation) {
+                const sdv = (req.setDataValidation as any);
+                const sheetId = sdv.range?.sheetId;
+                const tab = doc.tabs.find((t) => t.sheetId === sheetId);
+                if (tab) {
+                    (tab as any).dataValidations = (tab as any).dataValidations ?? [];
+                    (tab as any).dataValidations.push(sdv);
+                }
             } else if (req.updateCells) {
                 const uc = req.updateCells as any;
                 if (typeof uc.fields === "string") {
@@ -2013,5 +2021,167 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         assert.equal(heldCell.userEnteredValue?.stringValue ?? "", "");
         assert.deepEqual(heldCell.userEnteredFormat?.backgroundColorStyle?.rgbColor, SHEET_COLORS.PENDING_HOLD_ORANGE);
         assert.equal(heldCell.userEnteredFormat?.textFormat?.fontFamily, "Times New Roman");
+    });
+
+    it("SS-18: Two-way price synchronization & Apps Script button endpoints (preview & sync)", async () => {
+        const connectRes = await request(app)
+            .post("/api/host/sheet-sync/connect")
+            .set(hostAAuth)
+            .send({ spreadsheetUrlOrId: sheetUrlA });
+        assert.equal(connectRes.status, 200);
+
+        const rolling = hostSheetLayout.buildRollingMonthSpecs(
+            getTodayInVietnamDateString(),
+            6,
+        );
+        const tab = fakeSheets.findMonthTab(sheetIdA, rolling[0].tabKey)!;
+        assert.ok(tab);
+
+        // Host edits Day 15 on listing 801: sets custom price 5,200,000 via "5200k"
+        fakeSheets.paintHostDay(sheetIdA, rolling[0].tabKey, 801, 15, {
+            text: "5200k",
+            bgColor: SHEET_COLORS.WHITE,
+        });
+
+        // 1. Test preview endpoint
+        const previewRes = await request(app)
+            .post("/api/host/sheet-sync/sheet-button-preview")
+            .send({ spreadsheetId: sheetIdA });
+        assert.equal(previewRes.status, 200);
+        assert.ok(previewRes.body.data.changesCount >= 1);
+        assert.ok(
+            previewRes.body.data.changes.some((c: string) =>
+                c.includes("5.200.000") && c.includes("ĐỔI GIÁ"),
+            ),
+        );
+
+        // 2. Test button sync endpoint
+        const syncRes = await request(app)
+            .post("/api/host/sheet-sync/sheet-button-sync")
+            .send({ spreadsheetId: sheetIdA });
+        assert.equal(syncRes.status, 200);
+
+        const dDay15 = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-15`;
+        const calDay15 = calendarStore.find(
+            (c) => Number(c.listingId) === 801 && c.date === dDay15,
+        );
+        assert.ok(calDay15);
+        assert.equal(calDay15.priceOverride, 5200000);
+
+        // 3. Host clears Day 15 back to default price
+        fakeSheets.paintHostDay(sheetIdA, rolling[0].tabKey, 801, 15, {
+            text: "",
+            bgColor: SHEET_COLORS.WHITE,
+        });
+        const syncResetRes = await request(app)
+            .post("/api/host/sheet-sync/sheet-button-sync")
+            .send({ spreadsheetId: sheetIdA });
+        assert.equal(syncResetRes.status, 200);
+
+        const calDay15After = calendarStore.find(
+            (c) => Number(c.listingId) === 801 && c.date === dDay15,
+        );
+        assert.ok(!calDay15After || calDay15After.priceOverride === null);
+    });
+
+    it("SS-19: Native Confirmation Checkbox on Sheet Header (Option A) — Draft edits ignored when unchecked, applied and auto-unchecked when checked", async () => {
+        const connectRes = await request(app)
+            .post("/api/host/sheet-sync/connect")
+            .set(hostAAuth)
+            .send({ spreadsheetUrlOrId: sheetUrlA });
+        assert.equal(connectRes.status, 200);
+
+        const rolling = hostSheetLayout.buildRollingMonthSpecs(
+            getTodayInVietnamDateString(),
+            6,
+        );
+        const tab = fakeSheets.findMonthTab(sheetIdA, rolling[0].tabKey)!;
+        assert.ok(tab);
+
+        // 1. Checkbox header structure verification
+        const cellA1 = tab.rows.get(0)?.[0];
+        assert.ok(cellA1);
+        assert.equal(cellA1?.userEnteredValue?.boolValue, false);
+
+        const bannerCell = tab.rows.get(0)?.[1];
+        assert.ok(bannerCell);
+        assert.ok(
+            (bannerCell?.userEnteredValue?.stringValue ?? "").includes("TÍCH VÀO Ô BÊN TRÁI ĐỂ XÁC NHẬN"),
+        );
+
+        const hasCheckboxValidation = (tab as any).dataValidations?.some(
+            (v: any) =>
+                v.range?.startRowIndex === 0 &&
+                v.range?.startColumnIndex === 0 &&
+                v.rule?.condition?.type === "BOOLEAN",
+        );
+        assert.ok(hasCheckboxValidation);
+
+        // 2. Host edits Day 20 on listing 801 to 6,000,000, but DOES NOT check the checkbox (A1 is false)
+        const dDay20 = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-20`;
+        fakeSheets.paintHostDay(sheetIdA, rolling[0].tabKey, 801, 20, {
+            text: "6000000",
+            bgColor: SHEET_COLORS.WHITE,
+        });
+
+        // Run background periodic poll job
+        const job = makeRecord(jobsStore, "jobId", {
+            jobId: 9919,
+            hostUserId: 101,
+            jobType: "periodic_poll",
+            priority: 80,
+            status: "pending",
+            attempts: 0,
+            maxAttempts: 3,
+            availableAt: new Date(),
+        });
+        const claimed = await hostSheetSyncWorker.claimNextPendingSheetSyncJob("worker-1");
+        assert.equal(claimed.jobId, job.jobId);
+        const outcome = await hostSheetSyncWorker.processClaimedSheetSyncJob(claimed);
+        assert.equal(outcome.status, "succeeded");
+
+        // DB was NOT modified because checkbox was unchecked
+        const calDay20Draft = calendarStore.find(
+            (c) => Number(c.listingId) === 801 && c.date === dDay20,
+        );
+        assert.ok(!calDay20Draft || calDay20Draft.priceOverride !== 6000000);
+
+        // Sheet cell was NOT wiped out by Phase B
+        const col801 = fakeSheets.findListingColIndex(tab, 801);
+        const rDay20 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 19;
+        const cellDay20OnSheet = tab.rows.get(rDay20)?.[col801];
+        assert.equal(cellDay20OnSheet?.userEnteredValue?.stringValue, "6000000");
+
+        // 3. Host now checks the box in A1 on Google Sheets!
+        tab.rows.get(0)![0] = {
+            userEnteredValue: { boolValue: true },
+        };
+
+        // Run background periodic poll job again
+        const job2 = makeRecord(jobsStore, "jobId", {
+            jobId: 9920,
+            hostUserId: 101,
+            jobType: "periodic_poll",
+            priority: 80,
+            status: "pending",
+            attempts: 0,
+            maxAttempts: 3,
+            availableAt: new Date(),
+        });
+        const claimed2 = await hostSheetSyncWorker.claimNextPendingSheetSyncJob("worker-1");
+        assert.equal(claimed2.jobId, job2.jobId);
+        const outcome2 = await hostSheetSyncWorker.processClaimedSheetSyncJob(claimed2);
+        assert.equal(outcome2.status, "succeeded");
+
+        // DB IS now updated with the confirmed price!
+        const calDay20Confirmed = calendarStore.find(
+            (c) => Number(c.listingId) === 801 && c.date === dDay20,
+        );
+        assert.ok(calDay20Confirmed);
+        assert.equal(calDay20Confirmed.priceOverride, 6000000);
+
+        // Checkbox A1 was AUTOMATICALLY RESET back to false!
+        const cellA1AfterSync = tab.rows.get(0)?.[0];
+        assert.equal(cellA1AfterSync?.userEnteredValue?.boolValue, false);
     });
 });

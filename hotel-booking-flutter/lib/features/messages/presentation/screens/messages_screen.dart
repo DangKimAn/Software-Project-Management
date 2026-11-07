@@ -27,6 +27,7 @@ import '../../services/chat_media_upload_service.dart';
 import '../../services/chat_voice_recorder_service.dart';
 import '../widgets/chat_audio_bubble.dart';
 import '../widgets/chat_image_bubble.dart';
+import '../widgets/chat_time_divider.dart';
 import '../widgets/messenger_voice_recorder_bar.dart';
 
 enum _ChatPortalRole { guest, host, admin }
@@ -965,7 +966,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
           );
           if (!mounted) return;
           await _sendDirectContent(
-            '🎤 Tin nhắn thoại (00:${recordedSeconds.toString().padLeft(2, '0')})',
+            '🎤 ${_currentL10n.chatVoiceMessage} (00:${recordedSeconds.toString().padLeft(2, '0')})',
             messageType: 'file',
             attachments: [
               {
@@ -1815,10 +1816,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                 final hasDraft = savedDraft.isNotEmpty && !isSelected;
                 final previewText = hasDraft
                     ? '${loc.chatDraftPrefix}$savedDraft'
-                    : (conv.lastMessage != null &&
-                            conv.lastMessage!.trim().isNotEmpty)
-                        ? conv.lastMessage!.trim()
-                        : loc.chatNoMessagesYet;
+                    : localizeChatPreview(conv.lastMessage, loc: loc);
 
                 return InkWell(
                   key: ValueKey<String>('conv_tile_${conv.id}'),
@@ -2273,7 +2271,29 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                         final isLastMessage =
                                             msgIndex == messages.length - 1;
 
-                                        return _buildMessageBubble(
+                                        final currentDt =
+                                            DateTime.tryParse(msg.createdAt);
+                                        DateTime? prevDt;
+                                        if (msgIndex > 0) {
+                                          prevDt = DateTime.tryParse(
+                                            messages[msgIndex - 1].createdAt,
+                                          );
+                                        }
+
+                                        final showTimeDivider = currentDt != null &&
+                                            shouldShowChatTimeDivider(
+                                              currentDt,
+                                              prevDt,
+                                            );
+                                        final timeDividerLabel = currentDt != null
+                                            ? formatChatTimeDivider(
+                                                currentDt,
+                                                localeCode:
+                                                    ref.watch(localeProvider),
+                                              )
+                                            : '';
+
+                                        final bubble = _buildMessageBubble(
                                           msg,
                                           currentUserId: currentUserId,
                                           counterpartName: counterpart,
@@ -2284,6 +2304,21 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                           isLastMessage: isLastMessage,
                                           l10n: loc,
                                         );
+
+                                        if (showTimeDivider) {
+                                          return Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              ChatTimeDivider(
+                                                label: timeDividerLabel,
+                                              ),
+                                              bubble,
+                                            ],
+                                          );
+                                        }
+                                        return bubble;
                                       },
                                     ),
                                     if (unreadBelow > 0)
@@ -2719,7 +2754,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
         trimmed.startsWith('📷 [Ảnh chụp trực tiếp') ||
         trimmed.startsWith('🖼️ [Đã gửi 1 hình ảnh') ||
         trimmed == '📷 [Ảnh chụp trực tiếp từ villa]' ||
-        trimmed.startsWith('🎤 Tin nhắn thoại')) {
+        trimmed.startsWith('🎤')) {
       return null;
     }
     return trimmed;
@@ -3088,57 +3123,32 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
               ),
             ),
             if (isMe && msg.status == MessageDeliveryStatus.sending)
-              Padding(
-                padding: const EdgeInsets.only(top: 3, right: 4),
-                child: Text(
-                  loc.chatSending,
-                  key: ValueKey<String>('msg_status_$stableKey'),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textMuted,
-                  ),
-                ),
+              MessengerStatusIndicator(
+                state: MessengerDeliveryState.sending,
+                customLabel: loc.chatSending,
+                statusKey: ValueKey<String>('msg_status_$stableKey'),
               ),
             if (isMe && msg.status == MessageDeliveryStatus.failed)
-              Padding(
-                padding: const EdgeInsets.only(top: 3, right: 4),
-                child: Text(
-                  loc.chatFailed,
-                  key: ValueKey<String>('msg_status_$stableKey'),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.error,
-                  ),
-                ),
+              MessengerStatusIndicator(
+                state: MessengerDeliveryState.failed,
+                customLabel: loc.chatFailed,
+                statusKey: ValueKey<String>('msg_status_$stableKey'),
               ),
             if (isMe &&
                 isLastMessage &&
                 msg.status == MessageDeliveryStatus.sent)
-              Padding(
-                padding: const EdgeInsets.only(top: 3, right: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    const Icon(
-                      LucideIcons.checkCheck,
-                      size: 13,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      loc.chatSent,
-                      key: ValueKey<String>('msg_status_$stableKey'),
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
+              MessengerStatusIndicator(
+                state: (msg.isRead || msg.readAt != null)
+                    ? MessengerDeliveryState.seen
+                    : MessengerDeliveryState.sent,
+                recipientName: counterpartName,
+                recipientAvatar: counterpartAvatar,
+                customLabel: (msg.isRead || msg.readAt != null)
+                    ? (loc.chatSeen.trim().startsWith('•')
+                        ? loc.chatSeen.replaceFirst('•', '').trim()
+                        : loc.chatSeen.trim())
+                    : loc.chatSent,
+                statusKey: ValueKey<String>('msg_status_$stableKey'),
               ),
           ],
         ),

@@ -10,6 +10,7 @@ import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_loading.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../../villas/domain/entities/villa.dart';
 import '../../../villas/presentation/widgets/property_card.dart';
@@ -202,8 +203,8 @@ class FavoritesScreen extends ConsumerWidget {
                     ],
                   );
                 },
-                loading: () => const AppLoading(
-                    message: 'Đang tải danh sách yêu thích...'),
+                loading: () => AppLoading(
+                    message: context.l10n.loadingFavorites),
                 error: (err, _) => AppErrorView(
                   message: err.toString(),
                   onRetry: () => ref.invalidate(villaListProvider),

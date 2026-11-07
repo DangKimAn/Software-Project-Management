@@ -23,6 +23,8 @@ class ChatMessageItem {
   final MessageDeliveryStatus status;
   final String? localId;
   final String? errorMessage;
+  final bool isRead;
+  final String? readAt;
 
   const ChatMessageItem({
     required this.id,
@@ -37,6 +39,8 @@ class ChatMessageItem {
     this.status = MessageDeliveryStatus.sent,
     this.localId,
     this.errorMessage,
+    this.isRead = false,
+    this.readAt,
   });
 
   bool get isPending => status == MessageDeliveryStatus.sending;
@@ -59,6 +63,8 @@ class ChatMessageItem {
     String? localId,
     String? errorMessage,
     bool clearError = false,
+    bool? isRead,
+    String? readAt,
   }) {
     return ChatMessageItem(
       id: id ?? this.id,
@@ -73,6 +79,8 @@ class ChatMessageItem {
       status: status ?? this.status,
       localId: localId ?? this.localId,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      isRead: isRead ?? this.isRead,
+      readAt: readAt ?? this.readAt,
     );
   }
 
@@ -144,6 +152,11 @@ class ChatMessageItem {
       createdAt: (msgMap['createdAt'] ?? '').toString(),
       updatedAt: msgMap['updatedAt']?.toString(),
       status: MessageDeliveryStatus.sent,
+      isRead: msgMap['isRead'] == true ||
+          msgMap['readAt'] != null ||
+          msgMap['status'] == 'read' ||
+          msgMap['isSeen'] == true,
+      readAt: msgMap['readAt']?.toString(),
     );
   }
 

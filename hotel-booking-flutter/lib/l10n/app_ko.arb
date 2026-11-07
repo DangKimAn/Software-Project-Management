@@ -230,6 +230,11 @@
   "loadingVillas": "숙소 정보를 불러오는 중...",
   "loadingVillaDetail": "빌라 상세 정보를 불러오는 중...",
   "loadingFavorites": "위시리스트를 불러오는 중...",
+  "loadingTrips": "여행 일정을 불러오는 중...",
+  "loadingPaymentInfo": "예약 결제 정보를 불러오는 중...",
+  "guestPaymentConnectingGateway": "결제 게이트웨이에 연결 중...",
+  "guestPaymentBookingNotFoundTitle": "예약을 찾을 수 없습니다",
+  "guestPaymentBookingNotFoundMessage": "예약이 존재하지 않거나 만료되었습니다.",
   "emptyList": "일치하는 빌라가 없습니다",
   "emptyListDesc": "검색 조건이나 숙박 일정을 변경해 보세요.",
   "errorOccurred": "오류가 발생했습니다",
@@ -733,5 +738,53 @@
   "spaceExterior": "외관",
   "spaceView": "전망",
   "spaceDining": "식당",
-  "spaceOther": "기타 공간"
+  "spaceOther": "기타 공간",
+  "blogAllArticles": "모든 글",
+  "blogShareTooltip": "글 공유",
+  "blogShareInvalidLink": "공유할 글 링크가 유효하지 않습니다.",
+  "blogShareSuccess": "글 링크가 클립보드에 복사되었습니다",
+  "blogShareFailure": "이 기기에서 글 링크를 복사할 수 없습니다.",
+  "blogNotFoundTitle": "글을 찾을 수 없습니다",
+  "blogNotFoundDescription": "글이 삭제되었거나 경로가 올바르지 않습니다.",
+  "blogBackToBlog": "여행 가이드로 돌아가기",
+  "blogLoadingArticle": "글을 불러오는 중...",
+  "blogRelatedArticlesBadge": "관련 글",
+  "blogRelatedArticlesTitle": "추천 글",
+  "blogViewAllArticles": "모든 글 보기",
+  "blogReadMinutes": "{minutes}분 읽기",
+  "@blogReadMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "blogDefaultAuthor": "The Palm 편집팀",
+  "blogListBadge": "붕따우 숙박 가이드",
+  "blogListHeroTitle": "숙박 노하우, 여행 일정 & 붕따우 오션뷰 빌라 예약 비법",
+  "blogSearchHint": "붕따우 여행 가이드 검색...",
+  "blogClearSearchTooltip": "검색어 지우기",
+  "blogCategoryAll": "전체",
+  "blogCategoryTravelGuide": "여행 가이드",
+  "blogCategoryReviews": "빌라 & 홈스테이 리뷰",
+  "blogCategoryTripGuide": "여행 가이드북",
+  "blogCategoryBookingTips": "예약 꿀팁",
+  "blogCategoryLocalDiscovery": "로컬 명소 탐방",
+  "blogCategoryStayTips": "숙박 팁",
+  "blogCategoryNearBeach": "해변 근처 빌라",
+  "blogCategoryBookingChecklist": "예약 체크리스트",
+  "blogEmptyTitle": "조건에 맞는 글이 없습니다",
+  "blogEmptyDescription": "다른 카테고리나 검색어를 선택해보세요.",
+  "blogClearFilters": "필터 초기화",
+  "blogLoadingList": "글 목록 불러오는 중...",
+  "blogPaginationPrev": "이전 페이지",
+  "blogPaginationNext": "다음 페이지",
+  "blogPaginationPage": "{page}페이지",
+  "@blogPaginationPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  }
 }

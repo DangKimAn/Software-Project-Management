@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:hotel_booking_flutter/features/host/data/host_repository.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/screens/host_portal_screens.dart';
 
@@ -287,6 +288,82 @@ void main() {
       );
       expect(find.text('👍'), findsOneWidget);
       expect(find.text('2'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Host chat replaces sync button with "Xem chỗ nghỉ" (Xem villa) button like guest interface',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(400, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final client = _FakeDioClient();
+      client.dio.httpClientAdapter = _ChatRecordingAdapter(
+        responder: (options) {
+          if (options.path == '/api/conversations') {
+            return _jsonResponse({
+              'items': [
+                {
+                  'id': 'conv-101',
+                  'conversationId': 'conv-101',
+                  'listingId': '101',
+                  'listingTitle': 'The Palm Villa Vũng Tàu',
+                  'guestName': 'Lê Hoàng Long',
+                  'otherParticipant': {
+                    'fullName': 'Lê Hoàng Long',
+                  },
+                },
+              ],
+            });
+          }
+          if (options.path.contains('/api/conversations/conv-101/messages')) {
+            return _jsonResponse({
+              'items': [
+                {
+                  'messageId': 'm1',
+                  'content': 'What are the check-in and check-out times?',
+                  'senderRole': 'guest',
+                  'senderName': 'Lê Hoàng Long',
+                  'isMe': false,
+                  'createdAt': '2026-11-05T08:00:00.000Z',
+                },
+              ],
+            });
+          }
+          return _jsonResponse({'items': <dynamic>[]});
+        },
+      );
+
+      final repo = HostRepository(
+        client as dynamic,
+        roleResolver: () => 'host',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
+          ],
+          child: const MaterialApp(
+            home: HostPortalScreen(
+              initialSection: HostPortalSection.messages,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap to open conversation detail
+      await tester.tap(find.text('Lê Hoàng Long'));
+      await tester.pumpAndSettle();
+
+      // 1. Sync button (refreshCw) must NOT be present in chat header
+      expect(find.byIcon(LucideIcons.refreshCw), findsNothing);
+
+      // 2. "Xem villa" / "Xem chỗ nghỉ" button with externalLink icon must be present
+      expect(find.byKey(const Key('view_listing_button')), findsOneWidget);
+      expect(find.byIcon(LucideIcons.externalLink), findsOneWidget);
     },
   );
 }

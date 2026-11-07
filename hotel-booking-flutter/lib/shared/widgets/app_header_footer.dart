@@ -11,6 +11,7 @@ import '../../core/network/dio_client.dart';
 import '../../core/network/socket_service.dart';
 import '../../features/auth/presentation/view_models/auth_notifier.dart';
 import '../../features/search/presentation/widgets/source_search_bar.dart';
+import '../../features/trips/presentation/view_models/trips_view_model.dart';
 import '../../features/trips/presentation/widgets/global_pending_booking_banner.dart';
 import '../../l10n/l10n.dart';
 import 'app_semantic_icons.dart';
@@ -891,7 +892,12 @@ class NotificationBell extends ConsumerWidget {
 
 /// Top header variant equipped with the pill search bar ("Bạn muốn đi đâu?"),
 /// notification bell, and popup menu across main tabs (Tin nhắn, Chuyến đi, Tài khoản).
-class AppSearchHeader extends StatelessWidget {
+///
+/// Alternates between the pending booking countdown banner ([GlobalPendingBookingBanner])
+/// and the top search bar header ([AppTopHeader]):
+/// - When user has an active booking awaiting payment, displays ONLY the pending booking banner.
+/// - When there is no pending payment booking, displays the search header.
+class AppSearchHeader extends ConsumerWidget {
   final String currentPath;
   final bool hidePendingBanner;
 
@@ -902,10 +908,24 @@ class AppSearchHeader extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activeBooking = ref.watch(activePendingBookingProvider);
+    final isExcludedPath =
+        currentPath.contains('/thanh-toan') || currentPath.contains('/pay');
+
+    if (activeBooking != null && !hidePendingBanner && !isExcludedPath) {
+      return Container(
+        color: AppColors.surfaceBase,
+        child: SafeArea(
+          bottom: false,
+          child: GlobalPendingBookingBanner(booking: activeBooking),
+        ),
+      );
+    }
+
     return AppTopHeader(
       currentPath: currentPath,
-      hidePendingBanner: hidePendingBanner,
+      hidePendingBanner: true,
       centerSearchTrigger: SourceSearchBar(
         isCompact: true,
         isInHeader: true,

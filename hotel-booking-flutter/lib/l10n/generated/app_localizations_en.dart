@@ -444,6 +444,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get loadingFavorites => 'Loading your wishlist...';
 
   @override
+  String get loadingTrips => 'Loading trips...';
+
+  @override
+  String get loadingPaymentInfo => 'Loading booking payment details...';
+
+  @override
+  String get guestPaymentConnectingGateway =>
+      'Connecting to payment gateway...';
+
+  @override
+  String get guestPaymentBookingNotFoundTitle => 'Booking not found';
+
+  @override
+  String get guestPaymentBookingNotFoundMessage =>
+      'This booking does not exist or has expired.';
+
+  @override
   String get emptyList => 'No matching villas found';
 
   @override
@@ -1801,4 +1818,119 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get spaceOther => 'Other space';
+
+  @override
+  String get blogAllArticles => 'All articles';
+
+  @override
+  String get blogShareTooltip => 'Share article';
+
+  @override
+  String get blogShareInvalidLink => 'Invalid article link to share.';
+
+  @override
+  String get blogShareSuccess => 'Article link copied to clipboard';
+
+  @override
+  String get blogShareFailure => 'Unable to copy article link on this device.';
+
+  @override
+  String get blogNotFoundTitle => 'Article not found';
+
+  @override
+  String get blogNotFoundDescription =>
+      'This article may have been removed or the link is incorrect.';
+
+  @override
+  String get blogBackToBlog => 'Back to Travel Guides';
+
+  @override
+  String get blogLoadingArticle => 'Loading article...';
+
+  @override
+  String get blogRelatedArticlesBadge => 'RELATED ARTICLES';
+
+  @override
+  String get blogRelatedArticlesTitle => 'Recommended reading';
+
+  @override
+  String get blogViewAllArticles => 'View all articles';
+
+  @override
+  String blogReadMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes mins read',
+      one: '1 min read',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get blogDefaultAuthor => 'The Palm Editorial Team';
+
+  @override
+  String get blogListBadge => 'VUNG TAU TRAVEL GUIDE';
+
+  @override
+  String get blogListHeroTitle =>
+      'Stay guides, itineraries & secrets to booking Vung Tau beach villas';
+
+  @override
+  String get blogSearchHint => 'Search Vung Tau travel guides...';
+
+  @override
+  String get blogClearSearchTooltip => 'Clear search query';
+
+  @override
+  String get blogCategoryAll => 'All';
+
+  @override
+  String get blogCategoryTravelGuide => 'Travel Guide';
+
+  @override
+  String get blogCategoryReviews => 'Villa & Homestay Reviews';
+
+  @override
+  String get blogCategoryTripGuide => 'Trip Guide';
+
+  @override
+  String get blogCategoryBookingTips => 'Booking Tips';
+
+  @override
+  String get blogCategoryLocalDiscovery => 'Local Discovery';
+
+  @override
+  String get blogCategoryStayTips => 'Stay Tips';
+
+  @override
+  String get blogCategoryNearBeach => 'Near Beach Villas';
+
+  @override
+  String get blogCategoryBookingChecklist => 'Booking Checklist';
+
+  @override
+  String get blogEmptyTitle => 'No articles found';
+
+  @override
+  String get blogEmptyDescription =>
+      'Try choosing another category or keyword.';
+
+  @override
+  String get blogClearFilters => 'Reset filters';
+
+  @override
+  String get blogLoadingList => 'Loading articles...';
+
+  @override
+  String get blogPaginationPrev => 'Previous page';
+
+  @override
+  String get blogPaginationNext => 'Next page';
+
+  @override
+  String blogPaginationPage(int page) {
+    return 'Page $page';
+  }
 }

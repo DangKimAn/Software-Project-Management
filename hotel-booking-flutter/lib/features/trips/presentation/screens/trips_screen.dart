@@ -16,6 +16,7 @@ import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_loading.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../../reviews/presentation/widgets/review_list_widget.dart';
 import '../../domain/entities/booking.dart';
@@ -559,127 +560,21 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
     final isEn = locale.startsWith('en');
     final isKo = locale.startsWith('ko');
 
-    int selectedRating = 5;
-    final commentCtrl = TextEditingController();
-
-    final submitted = await showDialog<bool>(
+    final reviewResult = await showDialog<({int rating, String comment})>(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return AlertDialog(
-              title: Text(isEn
-                  ? 'Review your stay at ${booking.propertyName}'
-                  : (isKo
-                      ? '${booking.propertyName} 숙박 후기 작성'
-                      : 'Đánh giá kỳ nghỉ tại ${booking.propertyName}')),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isEn
-                          ? 'Your rating:'
-                          : (isKo ? '만족도 평가:' : 'Mức độ hài lòng của bạn:'),
-                      style:
-                          const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: 4,
-                      children: List.generate(5, (index) {
-                        final starVal = index + 1;
-                        final isSelected = starVal <= selectedRating;
-                        return InkWell(
-                          onTap: () =>
-                              setModalState(() => selectedRating = starVal),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              minWidth: 48,
-                              minHeight: 48,
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 4,
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    LucideIcons.star,
-                                    size: 22,
-                                    color: isSelected
-                                        ? AppColors.iconStrong
-                                        : AppColors.textMuted,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '$starVal★',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: isSelected
-                                          ? FontWeight.w800
-                                          : FontWeight.w400,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: commentCtrl,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: isEn
-                            ? 'Share your experience *'
-                            : (isKo
-                                ? '실제 이용 후기를 공유해 주세요 *'
-                                : 'Chia sẻ trải nghiệm thực tế của bạn *'),
-                        hintText: isEn
-                            ? 'Villa space, swimming pool, host support...'
-                            : (isKo
-                                ? '숙소 공간, 수영장, 호스트의 응대 등...'
-                                : 'Không gian biệt thự, hồ bơi, sự hỗ trợ của chủ nhà...'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(false),
-                  child: Text(isEn ? 'Close' : (isKo ? '닫기' : 'Đóng')),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    if (commentCtrl.text.trim().length < 5) return;
-                    Navigator.of(ctx).pop(true);
-                  },
-                  child: Text(isEn
-                      ? 'Submit review'
-                      : (isKo ? '후기 등록' : 'Gửi đánh giá')),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (ctx) => _ReviewModalDialog(
+        booking: booking,
+        isEn: isEn,
+        isKo: isKo,
+      ),
     );
 
-    if (submitted == true && mounted) {
+    if (reviewResult != null && mounted) {
       try {
         await ref.read(reviewRepositoryProvider).createReview(
               bookingId: booking.id,
-              rating: selectedRating,
-              comment: commentCtrl.text.trim(),
+              rating: reviewResult.rating,
+              comment: reviewResult.comment,
             );
         ref.invalidate(myBookingsProvider);
         if (booking.listingId.isNotEmpty) {
@@ -719,9 +614,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
         backgroundColor: AppColors.surfaceBase,
         body: Column(
           children: [
-            const AppSearchHeader(
-              currentPath: '/account/trips',
-            ),
+            const AppSearchHeader(currentPath: '/account/trips'),
             Expanded(
               child: SafeArea(
                 top: false,
@@ -779,9 +672,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
       backgroundColor: AppColors.surfaceBase,
       body: Column(
         children: [
-          const AppSearchHeader(
-            currentPath: '/account/trips',
-          ),
+          const AppSearchHeader(currentPath: '/account/trips'),
           Material(
             color: AppColors.surfaceBase,
             child: TabBar(
@@ -806,11 +697,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
               child: bookingsAsync.when(
                 loading: () => Center(
                     child: AppLoading(
-                        message: isEn
-                            ? 'Loading trips...'
-                            : (isKo
-                                ? '여행 일정을 불러오는 중...'
-                                : 'Đang tải lịch trình...'))),
+                        message: context.l10n.loadingTrips)),
                 error: (err, _) => Center(
                   child: AppErrorView(
                     message: err.toString().replaceFirst('Exception: ', ''),
@@ -1467,10 +1354,218 @@ class _DetailItemRow extends StatelessWidget {
   }
 }
 
+
+class _ReviewModalDialog extends StatefulWidget {
+  final Booking booking;
+  final bool isEn;
+  final bool isKo;
+
+  const _ReviewModalDialog({
+    required this.booking,
+    required this.isEn,
+    required this.isKo,
+  });
+
+  @override
+  State<_ReviewModalDialog> createState() => _ReviewModalDialogState();
+}
+
+class _ReviewModalDialogState extends State<_ReviewModalDialog> {
+  int _selectedRating = 5;
+  late final TextEditingController _commentCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _commentCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _commentCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
+      title: Text(
+        widget.isEn
+            ? 'Review your stay at ${widget.booking.propertyName}'
+            : (widget.isKo
+                ? '${widget.booking.propertyName} 숙박 후기 작성'
+                : 'Đánh giá kỳ nghỉ tại ${widget.booking.propertyName}'),
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.isEn
+                  ? 'Your rating:'
+                  : (widget.isKo ? '만족도 평가:' : 'Mức độ hài lòng của bạn:'),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (index) {
+                final starVal = index + 1;
+                final isSelected = starVal <= _selectedRating;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => setState(() => _selectedRating = starVal),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          isSelected
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
+                          size: 28,
+                          color: isSelected
+                              ? const Color(0xFFFFB800)
+                              : const Color(0xFFD1D5DB),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$starVal★',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.w400,
+                            color: isSelected
+                                ? const Color(0xFFD97706)
+                                : AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _commentCtrl,
+              minLines: 1,
+              maxLines: 5,
+              scrollPadding: const EdgeInsets.only(bottom: 60),
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                labelText: widget.isEn
+                    ? 'Share your experience *'
+                    : (widget.isKo
+                        ? '실제 이용 후기를 공유해 주세요 *'
+                        : 'Chia sẻ trải nghiệm thực tế của bạn *'),
+                labelStyle: const TextStyle(fontSize: 13),
+                hintText: widget.isEn
+                    ? 'Villa space, swimming pool, host support...'
+                    : (widget.isKo
+                        ? '숙소 공간, 수영장, 호스트의 응대 등...'
+                        : 'Không gian biệt thự, hồ bơi, sự hỗ trợ của chủ nhà...'),
+                hintStyle: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textMuted,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                widget.isEn ? 'Close' : (widget.isKo ? '닫기' : 'Đóng'),
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
+                ),
+              ),
+              onPressed: () {
+                if (_commentCtrl.text.trim().length < 5) return;
+                Navigator.of(context).pop((
+                  rating: _selectedRating,
+                  comment: _commentCtrl.text.trim(),
+                ));
+              },
+              child: Text(
+                widget.isEn
+                    ? 'Submit review'
+                    : (widget.isKo ? '후기 등록' : 'Gửi đánh giá'),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 /// Compact widget that renders a bank logo with high reliability:
-/// 1. Tries bundled local asset `assets/images/banks/{code}.png` (instant, offline)
+/// 1. Tries bundled local asset  (instant, offline)
 /// 2. Falls back to VietQR CDN network URL with custom headers
-/// 3. Falls back to vector `LucideIcons.building2` if unavailable
+/// 3. Falls back to vector  if unavailable
 class _BankLogoWidget extends StatelessWidget {
   final VietnamBank bank;
   final double size;

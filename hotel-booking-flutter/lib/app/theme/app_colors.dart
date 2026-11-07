@@ -64,9 +64,9 @@ abstract final class AppColors {
 
   // Google Sheets Calendar Legend Swatches (Agency Mode)
   static const sheetCellAvailable = Color(0xFFFFFFFF);
-  static const sheetCellPendingHold = Color(0xFFFFE6CC);
-  static const sheetCellBooked = Color(0xFFD9EAD3);
-  static const sheetCellHostBlocked = Color(0xFFF4CCCC);
+  static const sheetCellPendingHold = Color(0xFFFF9900);
+  static const sheetCellBooked = Color(0xFF00FF00);
+  static const sheetCellHostBlocked = Color(0xFFFF0000);
 
   // Icons (Strictly neutral monochrome per Section 2 Icon Rules)
   static const iconStrong = Color(0xFF222222);

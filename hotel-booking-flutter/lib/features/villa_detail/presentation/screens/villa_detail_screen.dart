@@ -12,7 +12,6 @@ import '../../../../l10n/l10n.dart';
 import '../../../../shared/animations/animated_heart_button.dart';
 import '../../../../shared/animations/fade_slide_in.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_loading.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
@@ -634,7 +633,6 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                   ),
                 ),
               ),
-              const SliverToBoxAdapter(child: AppFooter()),
             ],
           ),
 
@@ -652,8 +650,8 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
       },
       loading: () => Scaffold(
         appBar: AppBar(),
-        body: const AppLoading(
-            message: 'Đang tải thông tin chi tiết biệt thự...'),
+        body: AppLoading(
+            message: context.l10n.loadingVillaDetail),
       ),
       error: (err, stack) => Scaffold(
         appBar: AppBar(),

@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/app/di/providers.dart';
+import 'package:hotel_booking_flutter/l10n/l10n.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
 import 'package:hotel_booking_flutter/features/auth/presentation/view_models/auth_notifier.dart';
 import 'package:hotel_booking_flutter/features/trips/domain/entities/booking.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/screens/trips_screen.dart';
+import 'package:hotel_booking_flutter/features/trips/presentation/screens/guest_payment_screen.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/view_models/trips_view_model.dart';
 
 class _FakeAuthNotifier extends StateNotifier<AsyncValue<User?>>
@@ -305,6 +308,81 @@ void main() {
       expect(find.text('≈ \$300.00'), findsOneWidget);
       expect(find.text('≈ \$20.00'), findsOneWidget);
       expect(find.text('≈ \$12.00'), findsOneWidget);
+    });
+  });
+
+  group('Trips and Payment Loading Localization Tests', () {
+    testWidgets('TripsScreen shows localized loading message for en, ko, vi',
+        (tester) async {
+      for (final (localeCode, expectedMessage) in [
+        ('en', 'Loading trips...'),
+        ('ko', '여행 일정을 불러오는 중...'),
+        ('vi', 'Đang tải lịch trình...'),
+      ]) {
+        await tester.pumpWidget(
+          ProviderScope(
+            key: ValueKey('trips_loading_$localeCode'),
+            overrides: [
+              authNotifierProvider
+                  .overrideWith((ref) => _FakeAuthNotifier(testUser)),
+              localeProvider
+                  .overrideWith((ref) => _FakeLocaleNotifier(localeCode)),
+              myBookingsProvider
+                  .overrideWith((ref) => Completer<List<Booking>>().future),
+              activePendingBookingProvider.overrideWithValue(null),
+            ],
+            child: MaterialApp(
+              locale: Locale(localeCode),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const TripsScreen(),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text(expectedMessage), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    });
+
+    testWidgets(
+        'GuestPaymentScreen shows localized loading message for en, ko, vi',
+        (tester) async {
+      for (final (localeCode, expectedMessage) in [
+        ('en', 'Loading booking payment details...'),
+        ('ko', '예약 결제 정보를 불러오는 중...'),
+        ('vi', 'Đang tải thông tin thanh toán đặt phòng...'),
+      ]) {
+        await tester.pumpWidget(
+          ProviderScope(
+            key: ValueKey('payment_loading_$localeCode'),
+            overrides: [
+              authNotifierProvider
+                  .overrideWith((ref) => _FakeAuthNotifier(testUser)),
+              localeProvider
+                  .overrideWith((ref) => _FakeLocaleNotifier(localeCode)),
+              moneyFormatterProvider.overrideWithValue(MoneyFormatter(
+                localeCode: localeCode,
+                effectiveCurrency: AppCurrency.vnd,
+              )),
+              bookingDetailProvider('booking-101')
+                  .overrideWith((ref) => Completer<Booking?>().future),
+              paymentMethodsProvider.overrideWith((ref) => Future.value([])),
+            ],
+            child: MaterialApp(
+              locale: Locale(localeCode),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const GuestPaymentScreen(bookingId: 'booking-101'),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text(expectedMessage), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
     });
   });
 }

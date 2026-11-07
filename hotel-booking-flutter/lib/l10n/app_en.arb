@@ -230,6 +230,11 @@
   "loadingVillas": "Loading properties...",
   "loadingVillaDetail": "Loading villa details...",
   "loadingFavorites": "Loading your wishlist...",
+  "loadingTrips": "Loading trips...",
+  "loadingPaymentInfo": "Loading booking payment details...",
+  "guestPaymentConnectingGateway": "Connecting to payment gateway...",
+  "guestPaymentBookingNotFoundTitle": "Booking not found",
+  "guestPaymentBookingNotFoundMessage": "This booking does not exist or has expired.",
   "emptyList": "No matching villas found",
   "emptyListDesc": "Try adjusting your search filters or stay dates.",
   "errorOccurred": "Something went wrong",
@@ -733,5 +738,53 @@
   "spaceExterior": "Exterior",
   "spaceView": "View",
   "spaceDining": "Dining room",
-  "spaceOther": "Other space"
+  "spaceOther": "Other space",
+  "blogAllArticles": "All articles",
+  "blogShareTooltip": "Share article",
+  "blogShareInvalidLink": "Invalid article link to share.",
+  "blogShareSuccess": "Article link copied to clipboard",
+  "blogShareFailure": "Unable to copy article link on this device.",
+  "blogNotFoundTitle": "Article not found",
+  "blogNotFoundDescription": "This article may have been removed or the link is incorrect.",
+  "blogBackToBlog": "Back to Travel Guides",
+  "blogLoadingArticle": "Loading article...",
+  "blogRelatedArticlesBadge": "RELATED ARTICLES",
+  "blogRelatedArticlesTitle": "Recommended reading",
+  "blogViewAllArticles": "View all articles",
+  "blogReadMinutes": "{minutes, plural, =1{1 min read} other{{minutes} mins read}}",
+  "@blogReadMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "blogDefaultAuthor": "The Palm Editorial Team",
+  "blogListBadge": "VUNG TAU TRAVEL GUIDE",
+  "blogListHeroTitle": "Stay guides, itineraries & secrets to booking Vung Tau beach villas",
+  "blogSearchHint": "Search Vung Tau travel guides...",
+  "blogClearSearchTooltip": "Clear search query",
+  "blogCategoryAll": "All",
+  "blogCategoryTravelGuide": "Travel Guide",
+  "blogCategoryReviews": "Villa & Homestay Reviews",
+  "blogCategoryTripGuide": "Trip Guide",
+  "blogCategoryBookingTips": "Booking Tips",
+  "blogCategoryLocalDiscovery": "Local Discovery",
+  "blogCategoryStayTips": "Stay Tips",
+  "blogCategoryNearBeach": "Near Beach Villas",
+  "blogCategoryBookingChecklist": "Booking Checklist",
+  "blogEmptyTitle": "No articles found",
+  "blogEmptyDescription": "Try choosing another category or keyword.",
+  "blogClearFilters": "Reset filters",
+  "blogLoadingList": "Loading articles...",
+  "blogPaginationPrev": "Previous page",
+  "blogPaginationNext": "Next page",
+  "blogPaginationPage": "Page {page}",
+  "@blogPaginationPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  }
 }

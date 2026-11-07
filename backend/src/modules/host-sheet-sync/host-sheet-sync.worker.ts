@@ -94,7 +94,14 @@ export const processClaimedSheetSyncJob = async (
                 ? "initialize"
                 : "bidirectional";
 
-        const result = await runHostSheetSyncCycle(job.hostUserId, { mode });
+        const forceConfirm =
+            job.jobType === "manual_sync" || mode === "initialize";
+
+        const result = await runHostSheetSyncCycle(job.hostUserId, {
+            mode,
+            trigger: job.jobType,
+            forceConfirm,
+        });
 
         if (result.skippedBecauseLocked) {
             // Another worker instance is currently syncing this Host; defer without counting as failure
