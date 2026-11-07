@@ -8696,8 +8696,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
               ),
             ),
             const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 const Text(
                   'Lịch sử chi trả',
