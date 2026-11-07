@@ -13,6 +13,7 @@ const { executeDisbursement } = require("../dist/modules/disbursement/disburseme
 const { disburseHostPayout, requestHostPayout } = require("../dist/modules/payouts/payouts.service");
 const { approveAndDisburseRefund, rejectRefund } = require("../dist/modules/refunds/refunds.service");
 const HostPayoutBatch = require("../dist/models/host-payout-batch").default;
+const HostPayoutBookingItem = require("../dist/models/host-payout-booking-item").default;
 const PayoutAccount = require("../dist/models/payout-account").default;
 const Refund = require("../dist/models/refund").default;
 const sequelize = require("../dist/config/database").default || require("../dist/config/database").sequelize;
@@ -64,10 +65,12 @@ describe("Disbursement & Refund Mock Engine Unit Tests", () => {
 
         const origFindByPk = HostPayoutBatch.findByPk;
         const origFindOne = PayoutAccount.findOne;
+        const origBookingItemFindAll = HostPayoutBookingItem.findAll;
         const origTransaction = sequelize.transaction;
 
         HostPayoutBatch.findByPk = async (id: number) => (id === 101 ? mockPayout : null);
         PayoutAccount.findOne = async () => mockAccount;
+        HostPayoutBookingItem.findAll = async () => [];
         sequelize.transaction = async (cb: any) => cb({});
 
         try {
@@ -84,6 +87,68 @@ describe("Disbursement & Refund Mock Engine Unit Tests", () => {
         } finally {
             HostPayoutBatch.findByPk = origFindByPk;
             PayoutAccount.findOne = origFindOne;
+            HostPayoutBookingItem.findAll = origBookingItemFindAll;
+            sequelize.transaction = origTransaction;
+        }
+    });
+
+    it("disburseHostPayout fails safe if booking items amount does not match payout amount", async () => {
+        const mockPayout = {
+            payoutId: 102,
+            hostId: 202,
+            payoutAccountId: 303,
+            amount: 5000000,
+            currency: "VND",
+            status: "approved",
+            approvedByUserId: 1,
+            approvedAt: new Date(),
+            paidAt: null,
+            paidByUserId: null,
+            transferReference: null,
+            save: async () => {},
+        };
+
+        const mockAccount = {
+            payoutAccountId: 303,
+            userId: 202,
+            bankName: "Techcombank",
+            bankCode: "TCB",
+            accountNumber: "1903456789",
+            accountName: "TRAN VAN B",
+        };
+
+        const mockItems = [
+            { payoutId: 102, bookingDetailId: 888, hostAmount: 3000000 },
+        ];
+
+        const origFindByPk = HostPayoutBatch.findByPk;
+        const origFindOne = PayoutAccount.findOne;
+        const origBookingItemFindAll = HostPayoutBookingItem.findAll;
+        const origTransaction = sequelize.transaction;
+
+        HostPayoutBatch.findByPk = async (id: number) => (id === 102 ? mockPayout : null);
+        PayoutAccount.findOne = async () => mockAccount;
+        HostPayoutBookingItem.findAll = async () => mockItems;
+        sequelize.transaction = async (cb: any) => cb({});
+
+        try {
+            await assert.rejects(
+                async () => {
+                    await disburseHostPayout({
+                        payoutId: 102,
+                        actorUserId: 2,
+                    });
+                },
+                (err: any) => {
+                    assert.equal(err.statusCode, 422);
+                    assert.ok(err.message.includes("không khớp"));
+                    return true;
+                },
+            );
+        } finally {
+            HostPayoutBatch.findByPk = origFindByPk;
+            PayoutAccount.findOne = origFindOne;
+            HostPayoutBookingItem.findAll = origBookingItemFindAll;
             sequelize.transaction = origTransaction;
         }
     });
