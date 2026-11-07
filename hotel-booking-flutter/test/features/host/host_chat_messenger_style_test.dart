@@ -122,34 +122,20 @@ void main() {
       expect(find.text('xin chao'), findsOneWidget);
       expect(find.text('xin chao, ban can ho tro gi nhi'), findsOneWidget);
 
-      // 2. Sender name should NOT be rendered above each message bubble (Messenger style)
-      // The header title has "ĐẶNG KIM AN" exactly once, NOT duplicated above the bubble
-      expect(find.text('ĐẶNG KIM AN'), findsOneWidget);
+      // 2. Centered date header is shown above the conversation group
+      expect(find.text('31 thg 10'), findsOneWidget);
 
-      // 3. Small Avatar should appear on the left of the guest message ('Đ')
+      // 3. Sender name, role and timestamp are displayed cleanly above guest message bubble
+      expect(find.text('ĐẶNG KIM AN · Người đặt 18:26'), findsOneWidget);
+
+      // 4. Small Avatar appears on the left of the guest message ('Đ')
       expect(find.text('Đ'), findsOneWidget);
 
-      // 4. Timestamps 18:26 and 18:27 should initially NOT be visible in the tree (progress = 0)
-      expect(find.text('18:26'), findsNothing);
-      expect(find.text('18:27'), findsNothing);
-
-      // 5. Tap the clock toggle button to reveal timestamps
-      final toggleBtn = find.byKey(const Key('host_chat_toggle_timestamps_btn'));
-      expect(toggleBtn, findsOneWidget);
-      await tester.tap(toggleBtn);
-      await tester.pumpAndSettle();
-
-      // All timestamps in the conversation are now revealed simultaneously
-      expect(find.text('18:26'), findsOneWidget);
+      // 5. Host message timestamp and read receipt are displayed cleanly
       expect(find.text('18:27'), findsOneWidget);
+      expect(find.text('ĐẶNG KIM AN đã đọc'), findsOneWidget);
 
-      // 6. Tap again to hide timestamps
-      await tester.tap(toggleBtn);
-      await tester.pumpAndSettle();
-      expect(find.text('18:26'), findsNothing);
-      expect(find.text('18:27'), findsNothing);
-
-      // 7. Long press (đè vào tin nhắn) to reveal 6 basic reaction icons
+      // 6. Long press (đè vào tin nhắn) to reveal 6 basic reaction icons
       await tester.longPress(find.text('xin chao'));
       await tester.pumpAndSettle();
 

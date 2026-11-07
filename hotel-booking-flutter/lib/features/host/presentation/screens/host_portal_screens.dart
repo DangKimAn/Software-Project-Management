@@ -7023,17 +7023,50 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                     final reaction = _messageReactions[msgKey];
                     final isReactionOpen = _reactionActiveMsgKey == msgKey;
 
-                    // Format time nếu có
+                    // Format time & ngày tháng nếu có
                     String? msgTime;
+                    DateTime? msgDate;
                     final rawCreatedAt = m['createdAt'];
                     if (rawCreatedAt != null) {
                       final dt = DateTime.tryParse(rawCreatedAt.toString());
                       if (dt != null) {
+                        msgDate = dt;
                         msgTime = DateFormat('HH:mm').format(dt);
                       }
                     }
 
-                    // Render bong bóng tin nhắn tinh gọn kiểu Messenger kèm reaction & avatar bên trái
+                    bool showDateHeader = false;
+                    if (msgDate != null) {
+                      if (i == 0) {
+                        showDateHeader = true;
+                      } else {
+                        final prevRaw = _conversationMessages[i - 1]['createdAt'];
+                        final prevDt = prevRaw != null
+                            ? DateTime.tryParse(prevRaw.toString())
+                            : null;
+                        if (prevDt == null ||
+                            prevDt.year != msgDate.year ||
+                            prevDt.month != msgDate.month ||
+                            prevDt.day != msgDate.day) {
+                          showDateHeader = true;
+                        }
+                      }
+                    }
+
+                    final senderDisplayName = isMsgAdmin
+                        ? (participantName.isNotEmpty
+                            ? participantName
+                            : 'Quản trị viên')
+                        : (rawSenderName.isNotEmpty
+                            ? rawSenderName
+                            : (participantName.isNotEmpty
+                                ? participantName
+                                : 'Khách hàng'));
+                    final roleLabel = isMsgAdmin ? 'Hỗ trợ' : 'Người đặt';
+                    final guestHeaderText =
+                        '$senderDisplayName · $roleLabel${msgTime != null ? ' $msgTime' : ''}';
+
+                    // Render bong bóng tin nhắn kèm tên người gửi và thời gian rõ đẹp
                     return AnimatedBuilder(
                       animation: _chatDragAnimCtrl,
                       builder: (ctx, _) {
@@ -7043,16 +7076,61 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
                         return Padding(
                           padding: EdgeInsets.only(
-                            bottom: reaction != null ? 10 : 6,
+                            bottom: reaction != null ? 14 : 10,
                           ),
                           child: Column(
                             crossAxisAlignment: isMe
                                 ? CrossAxisAlignment.end
                                 : CrossAxisAlignment.start,
                             children: [
+                              // Nhãn ngày tháng căn giữa (ví dụ: 23 thg 7)
+                              if (showDateHeader && msgDate != null)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(top: 6, bottom: 14),
+                                  child: Center(
+                                    child: Text(
+                                      '${msgDate.day} thg ${msgDate.month}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF374151),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+
                               // Thanh chọn cảm xúc nổi khi đè vào tin nhắn
                               if (isReactionOpen)
                                 _buildReactionPicker(msgKey),
+
+                              // Tên người gửi + Vai trò + Thời gian phía trên bong bóng tin nhắn
+                              if (!isMe)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(left: 36, bottom: 4),
+                                  child: Text(
+                                    guestHeaderText,
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: Color(0xFF6B7280),
+                                    ),
+                                  ),
+                                )
+                              else if (msgTime != null)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(right: 4, bottom: 4),
+                                  child: Text(
+                                    msgTime,
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: Color(0xFF6B7280),
+                                    ),
+                                  ),
+                                ),
 
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -7227,29 +7305,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                 ],
                               ),
 
-                              // Trạng thái đã gửi / đã xem ở tin nhắn cuối cùng của Host
+                              // Trạng thái đã đọc ở tin nhắn cuối cùng của Host
                               if (i == _conversationMessages.length - 1 && isMe) ...[
-                                const SizedBox(height: 6),
-                                const Padding(
-                                  padding: EdgeInsets.only(right: 4),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        LucideIcons.checkCheck,
-                                        size: 13,
-                                        color: AppColors.primary,
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'Đã gửi • Đã xem',
-                                        style: TextStyle(
-                                          fontSize: 10.5,
-                                          fontWeight: FontWeight.w500,
-                                          color: AppColors.textSecondary,
-                                        ),
-                                      ),
-                                    ],
+                                const SizedBox(height: 5),
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: Text(
+                                    '${participantName.isNotEmpty ? participantName : 'Khách'} đã đọc',
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: Color(0xFF6B7280),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -7425,7 +7492,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       width: 28,
       height: 28,
       decoration: const BoxDecoration(
-        color: Color(0xFFE0E7FF),
+        color: Color(0xFFFCE7F3),
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
@@ -7434,7 +7501,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         style: const TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w700,
-          color: Color(0xFF4338CA),
+          color: Color(0xFF9D174D),
         ),
       ),
     );
