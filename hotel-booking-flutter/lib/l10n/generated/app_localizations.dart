@@ -853,7 +853,7 @@ abstract class AppLocalizations {
   /// No description provided for @calendarNextMonth.
   ///
   /// In vi, this message translates to:
-  /// **'Tháng tiếp theo'**
+  /// **'Tháng sau'**
   String get calendarNextMonth;
 
   /// No description provided for @calendarDay.

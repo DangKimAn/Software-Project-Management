@@ -83,6 +83,24 @@ export const createBulkBookingBodySchema = z.object({
 
 export const cancelBookingBodySchema = z.object({
     reason: z.string().trim().max(2000).optional(),
+    bankName: z.string().trim().max(150).optional(),
+    accountNumber: z
+        .string()
+        .trim()
+        .refine((val) => !val || /^\d{10,12}$/.test(val), {
+            message: "Account number must be 10 to 12 digits",
+        })
+        .optional()
+        .or(z.literal("")),
+    accountName: z
+        .string()
+        .trim()
+        .refine((val) => !val || !/[0-9]/.test(val), {
+            message: "Account owner name cannot contain digits",
+        })
+        .max(255)
+        .optional()
+        .or(z.literal("")),
 });
 
 export const bookingsQuerySchema = z.object({

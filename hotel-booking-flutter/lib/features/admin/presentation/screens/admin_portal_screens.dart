@@ -17,6 +17,7 @@ import 'package:hotel_booking_flutter/shared/widgets/app_dialog.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_image.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
+import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -87,6 +88,15 @@ const List<AdminNavItem> kAdminNavItems = [
     title: 'Quản lý phí nền tảng',
     subtitle:
         'Áp dụng phí toàn sàn, thời gian thông báo 7 ngày và quản lý lịch sử.',
+  ),
+  AdminNavItem(
+    id: 'chi-tra',
+    label: 'Duyệt chi trả',
+    route: '/admin/chi-tra',
+    icon: LucideIcons.wallet,
+    title: 'Duyệt chi trả & Hoàn tiền',
+    subtitle:
+        'Phê duyệt giải ngân Napas 24/7 cho Host rút tiền và Khách hoàn tiền.',
   ),
   AdminNavItem(
     id: 'tin-nhan',
@@ -838,6 +848,7 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
   Widget _buildBottomNavBar(BuildContext context) {
     final isMenuTabActive = _currentTab == 'phan-quyen' ||
         _currentTab == 'phi-nen-tang' ||
+        _currentTab == 'chi-tra' ||
         _currentTab == 'tin-nhan';
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final showCompactCircleOnly = textScale > 1.45;
@@ -964,6 +975,8 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
         return const _AdminRolesTab();
       case 'phi-nen-tang':
         return const _AdminPlatformFeeTab();
+      case 'chi-tra':
+        return const _AdminDisbursementsTab();
       case 'tin-nhan':
         return _AdminMessagesTab(
           initialConversationId: widget.initialConversationId,
@@ -6221,6 +6234,1181 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── 8. DUYỆT CHI TRẢ & HOÀN TIỀN (/admin/chi-tra) ──
+class _AdminDisbursementsTab extends ConsumerStatefulWidget {
+  const _AdminDisbursementsTab();
+
+  @override
+  ConsumerState<_AdminDisbursementsTab> createState() =>
+      _AdminDisbursementsTabState();
+}
+
+class _AdminDisbursementsTabState
+    extends ConsumerState<_AdminDisbursementsTab> {
+  String _activeSubTab = 'payouts'; // 'payouts' or 'refunds'
+  String _payoutFilter = 'all';
+  String _refundFilter = 'all';
+
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _payouts = const [];
+  List<Map<String, dynamic>> _refunds = const [];
+  final Set<String> _processingIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final repo = ref.read(adminRepositoryProvider);
+      final results = await Future.wait([
+        repo.getAdminHostPayouts(limit: 100),
+        repo.getAdminRefunds(limit: 100),
+      ]);
+
+      if (!mounted) return;
+      setState(() {
+        _payouts = results[0];
+        _refunds = results[1];
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Không thể tải dữ liệu chi trả & hoàn tiền: $e';
+      });
+    }
+  }
+
+  Future<void> _disburseHostPayout(Map<String, dynamic> payout) async {
+    final payoutId = '${payout['payoutId'] ?? payout['id'] ?? ''}';
+    final amount = double.tryParse('${payout['amount'] ?? 0}') ?? 0;
+    final bankName = (payout['bankName'] ?? 'Ngân hàng').toString();
+    final accName = (payout['accountName'] ?? '').toString();
+    final accNumber = (payout['accountNumberMasked'] ??
+            payout['accountNumber'] ??
+            '')
+        .toString();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceBase,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(LucideIcons.arrowUpRight, color: AppColors.primary, size: 20),
+            SizedBox(width: 8),
+            Text(
+              'Xác nhận duyệt & chi tiền',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Bạn có chắc chắn muốn duyệt và giải ngân cho đơn rút tiền Payout #$payoutId?',
+              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceBase,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Số tiền: ${CurrencyFormatter.formatVnd(amount.round())}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Ngân hàng: $bankName',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                  ),
+                  if (accName.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Chủ TK: $accName',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                    ),
+                  ],
+                  const SizedBox(height: 2),
+                  Text(
+                    'STK: $accNumber',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Row(
+              children: [
+                Icon(LucideIcons.shieldCheck, size: 14, color: AppColors.textSecondary),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Giao dịch được xử lý tự động qua Napas 24/7.',
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.textInverse,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Duyệt & Chi tiền ngay'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _processingIds.add(payoutId));
+    try {
+      final repo = ref.read(adminRepositoryProvider);
+      final result = await repo.disburseHostPayout(payoutId);
+      if (!mounted) return;
+
+      final transferRef = (result['disbursement']?['transferReference'] ??
+              result['transferReference'] ??
+              'Thành công')
+          .toString();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Duyệt chi trả thành công qua Napas 24/7! (Mã FT: $transferRef)',
+          ),
+          backgroundColor: AppColors.successGreen,
+        ),
+      );
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi duyệt chi trả: $e'),
+          backgroundColor: AppColors.errorRed,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingIds.remove(payoutId));
+      }
+    }
+  }
+
+  Future<void> _rejectHostPayout(Map<String, dynamic> payout) async {
+    final payoutId = '${payout['payoutId'] ?? payout['id'] ?? ''}';
+    final reasonController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceBase,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Text(
+          'Từ chối yêu cầu rút tiền',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Nhập lý do từ chối yêu cầu rút tiền Payout #$payoutId để thông báo cho Host:',
+              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                hintText: 'Lý do từ chối (bắt buộc)...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (reasonController.text.trim().isEmpty) return;
+              Navigator.of(ctx).pop(true);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.textStrong,
+              foregroundColor: AppColors.textInverse,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Xác nhận từ chối'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _processingIds.add(payoutId));
+    try {
+      final repo = ref.read(adminRepositoryProvider);
+      await repo.rejectHostPayout(payoutId, reasonController.text.trim());
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đã từ chối đơn rút tiền thành công.'),
+        ),
+      );
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi từ chối đơn: $e'),
+          backgroundColor: AppColors.errorRed,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingIds.remove(payoutId));
+      }
+    }
+  }
+
+  Future<void> _approveRefund(Map<String, dynamic> refund) async {
+    final refundId = '${refund['refundId'] ?? refund['id'] ?? ''}';
+    final amount = double.tryParse('${refund['amount'] ?? 0}') ?? 0;
+    final bankName = (refund['bankName'] ?? 'Ngân hàng').toString();
+    final accName = (refund['accountName'] ?? '').toString();
+    final accNumber = (refund['accountNumber'] ?? '').toString();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceBase,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(LucideIcons.arrowUpRight, color: AppColors.primary, size: 20),
+            SizedBox(width: 8),
+            Text(
+              'Xác nhận duyệt & hoàn tiền',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Duyệt hoàn tiền cho đơn Refund #$refundId? Tiền sẽ được chuyển ngay vào tài khoản của khách.',
+              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceBase,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Số tiền hoàn: ${CurrencyFormatter.formatVnd(amount.round())}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Ngân hàng: $bankName',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                  ),
+                  if (accName.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Chủ TK: $accName',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                    ),
+                  ],
+                  if (accNumber.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'STK: $accNumber',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Row(
+              children: [
+                Icon(LucideIcons.shieldCheck, size: 14, color: AppColors.textSecondary),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Chuyển tiền tự động Napas 24/7 tức thì.',
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.textInverse,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Duyệt & Hoàn tiền ngay'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _processingIds.add(refundId));
+    try {
+      final repo = ref.read(adminRepositoryProvider);
+      final result = await repo.approveRefund(refundId);
+      if (!mounted) return;
+
+      final transferRef = (result['refund']?['transferReference'] ??
+              result['transferReference'] ??
+              'Thành công')
+          .toString();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đã duyệt hoàn tiền qua Napas 24/7 thành công! (Mã FT: $transferRef)',
+          ),
+          backgroundColor: AppColors.successGreen,
+        ),
+      );
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi duyệt hoàn tiền: $e'),
+          backgroundColor: AppColors.errorRed,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingIds.remove(refundId));
+      }
+    }
+  }
+
+  Future<void> _rejectRefund(Map<String, dynamic> refund) async {
+    final refundId = '${refund['refundId'] ?? refund['id'] ?? ''}';
+    final reasonController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceBase,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Text(
+          'Từ chối hoàn tiền',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Nhập lý do từ chối yêu cầu hoàn tiền Refund #$refundId:',
+              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                hintText: 'Lý do từ chối (bắt buộc)...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (reasonController.text.trim().isEmpty) return;
+              Navigator.of(ctx).pop(true);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.textStrong,
+              foregroundColor: AppColors.textInverse,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Xác nhận từ chối'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _processingIds.add(refundId));
+    try {
+      final repo = ref.read(adminRepositoryProvider);
+      await repo.rejectRefund(refundId, reasonController.text.trim());
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đã từ chối yêu cầu hoàn tiền.'),
+        ),
+      );
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi từ chối hoàn tiền: $e'),
+          backgroundColor: AppColors.errorRed,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingIds.remove(refundId));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pendingPayouts = _payouts.where((p) => '${p['status']}'.toLowerCase() == 'pending' || '${p['status']}'.toLowerCase() == 'approved').toList();
+    final pendingRefunds = _refunds.where((r) => '${r['status']}'.toLowerCase() == 'pending').toList();
+
+    double totalPendingPayoutAmount = 0;
+    for (final p in pendingPayouts) {
+      totalPendingPayoutAmount += (double.tryParse('${p['amount'] ?? 0}') ?? 0);
+    }
+
+    double totalPendingRefundAmount = 0;
+    for (final r in pendingRefunds) {
+      totalPendingRefundAmount += (double.tryParse('${r['amount'] ?? 0}') ?? 0);
+    }
+
+    final filteredPayouts = _payouts.where((p) {
+      if (_payoutFilter == 'all') return true;
+      return '${p['status']}'.toLowerCase() == _payoutFilter;
+    }).toList();
+
+    final filteredRefunds = _refunds.where((r) {
+      if (_refundFilter == 'all') return true;
+      final st = '${r['status']}'.toLowerCase();
+      if (_refundFilter == 'completed' || _refundFilter == 'succeeded') {
+        return st == 'completed' || st == 'succeeded';
+      }
+      if (_refundFilter == 'cancelled' || _refundFilter == 'rejected') {
+        return st == 'cancelled' || st == 'rejected' || st == 'failed';
+      }
+      return st == _refundFilter;
+    }).toList();
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Duyệt chi trả & Hoàn tiền',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Phê duyệt và chuyển tiền tự động Napas 24/7',
+                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // SUB-TAB SWITCHER
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surfaceBase,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              padding: const EdgeInsets.all(4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildSubTabButton(
+                      id: 'payouts',
+                      label: 'Rút tiền Host (${pendingPayouts.length})',
+                      icon: LucideIcons.wallet,
+                      isActive: _activeSubTab == 'payouts',
+                      onTap: () => setState(() => _activeSubTab = 'payouts'),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: _buildSubTabButton(
+                      id: 'refunds',
+                      label: 'Hoàn tiền Khách (${pendingRefunds.length})',
+                      icon: LucideIcons.rotateCcw,
+                      isActive: _activeSubTab == 'refunds',
+                      onTap: () => setState(() => _activeSubTab = 'refunds'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // KPI CARDS
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceBase,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _activeSubTab == 'payouts' ? 'Đơn rút chờ duyệt' : 'Đơn hoàn chờ duyệt',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _activeSubTab == 'payouts'
+                              ? '${pendingPayouts.length} đơn'
+                              : '${pendingRefunds.length} đơn',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceBase,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _activeSubTab == 'payouts' ? 'Tổng tiền cần chi' : 'Tổng tiền cần hoàn',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _activeSubTab == 'payouts'
+                              ? (totalPendingPayoutAmount > 0 ? CurrencyFormatter.formatVnd(totalPendingPayoutAmount.round()) : '0 đ')
+                              : (totalPendingRefundAmount > 0 ? CurrencyFormatter.formatVnd(totalPendingRefundAmount.round()) : '0 đ'),
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.primary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            if (_loading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (_error != null)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceBase,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  children: [
+                    Text(_error!, style: const TextStyle(color: AppColors.errorRed)),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: _loadData,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: const Text('Thử lại'),
+                    ),
+                  ],
+                ),
+              )
+            else if (_activeSubTab == 'payouts') ...[
+              // PAYOUTS VIEW
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildFilterChip('Tất cả', 'all', _payoutFilter, (val) => setState(() => _payoutFilter = val)),
+                  _buildFilterChip('Chờ duyệt', 'pending', _payoutFilter, (val) => setState(() => _payoutFilter = val)),
+                  _buildFilterChip('Đã chi tiền', 'paid', _payoutFilter, (val) => setState(() => _payoutFilter = val)),
+                  _buildFilterChip('Từ chối', 'rejected', _payoutFilter, (val) => setState(() => _payoutFilter = val)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (filteredPayouts.isEmpty)
+                _buildEmptyState('Không có yêu cầu rút tiền nào trong mục này.')
+              else
+                ...filteredPayouts.map((p) => _buildPayoutCard(p)),
+            ] else ...[
+              // REFUNDS VIEW
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildFilterChip('Tất cả', 'all', _refundFilter, (val) => setState(() => _refundFilter = val)),
+                  _buildFilterChip('Chờ duyệt', 'pending', _refundFilter, (val) => setState(() => _refundFilter = val)),
+                  _buildFilterChip('Đã hoàn tiền', 'completed', _refundFilter, (val) => setState(() => _refundFilter = val)),
+                  _buildFilterChip('Từ chối', 'cancelled', _refundFilter, (val) => setState(() => _refundFilter = val)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (filteredRefunds.isEmpty)
+                _buildEmptyState('Không có yêu cầu hoàn tiền nào trong mục này.')
+              else
+                ...filteredRefunds.map((r) => _buildRefundCard(r)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubTabButton({
+    required String id,
+    required String label,
+    required IconData icon,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primary : AppColors.surfaceBase,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isActive ? AppColors.textInverse : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                color: isActive ? AppColors.textInverse : AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(
+    String label,
+    String value,
+    String current,
+    ValueChanged<String> onSelected,
+  ) {
+    final isSelected = value == current;
+    return InkWell(
+      onTap: () => onSelected(value),
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.textStrong : AppColors.surfaceBase,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: isSelected ? AppColors.textStrong : AppColors.border),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? AppColors.textInverse : AppColors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String msg) {
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(LucideIcons.inbox, size: 28, color: AppColors.textMuted),
+            const SizedBox(height: 8),
+            Text(msg, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPayoutCard(Map<String, dynamic> payout) {
+    final payoutId = '${payout['payoutId'] ?? payout['id'] ?? ''}';
+    final amount = double.tryParse('${payout['amount'] ?? 0}') ?? 0;
+    final status = '${payout['status'] ?? 'pending'}'.toLowerCase();
+    final bankName = (payout['bankName'] ?? 'Ngân hàng').toString();
+    final accName = (payout['accountName'] ?? '').toString();
+    final accNumber = (payout['accountNumberMasked'] ??
+            payout['accountNumber'] ??
+            '')
+        .toString();
+    final hostName = (payout['hostName'] ?? payout['host']?['fullName'] ?? 'Host #${payout['hostId']}').toString();
+    final transferRef = (payout['transferReference'] ?? '').toString();
+    final isProcessing = _processingIds.contains(payoutId);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Payout #$payoutId',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+              ),
+              _buildStatusBadge(status),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            CurrencyFormatter.formatVnd(amount.round()),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.primary),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceBase,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.textStrong,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    bankName.length > 6 ? bankName.substring(0, 6).toUpperCase() : bankName.toUpperCase(),
+                    style: const TextStyle(color: AppColors.textInverse, fontSize: 9, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        accName.isNotEmpty ? '$accName ($hostName)' : hostName,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                      ),
+                      Text(
+                        accNumber.isNotEmpty ? 'STK: $accNumber' : bankName,
+                        style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (transferRef.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Mã chuyển khoản Napas: $transferRef',
+              style: const TextStyle(fontSize: 11, color: AppColors.successGreen, fontWeight: FontWeight.w600),
+            ),
+          ],
+          if (status == 'pending' || status == 'approved') ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton(
+                  onPressed: isProcessing ? null : () => _rejectHostPayout(payout),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textStrong,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: const Size(0, 36),
+                  ),
+                  child: const Text('Từ chối'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: isProcessing ? null : () => _disburseHostPayout(payout),
+                  icon: const Icon(LucideIcons.arrowUpRight, size: 14),
+                  label: isProcessing
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textInverse))
+                      : const Text('Duyệt & Chi tiền'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.textInverse,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: const Size(0, 36),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRefundCard(Map<String, dynamic> refund) {
+    final refundId = '${refund['refundId'] ?? refund['id'] ?? ''}';
+    final bookingId = '${refund['bookingId'] ?? ''}';
+    final amount = double.tryParse('${refund['amount'] ?? 0}') ?? 0;
+    final status = '${refund['status'] ?? 'pending'}'.toLowerCase();
+    final bankName = (refund['bankName'] ?? 'Ngân hàng').toString();
+    final accName = (refund['accountName'] ?? '').toString();
+    final accNumber = (refund['accountNumber'] ?? '').toString();
+    final reason = (refund['reason'] ?? 'Khách hủy đặt phòng').toString();
+    final transferRef = (refund['providerRef'] ??
+            refund['provider_ref'] ??
+            refund['transferReference'] ??
+            '')
+        .toString();
+    final isProcessing = _processingIds.contains(refundId);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Refund #$refundId · Đơn #$bookingId',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+              ),
+              _buildStatusBadge(status),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            CurrencyFormatter.formatVnd(amount.round()),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.primary),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Lý do: $reason',
+            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceBase,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.textStrong,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    bankName.length > 6 ? bankName.substring(0, 6).toUpperCase() : bankName.toUpperCase(),
+                    style: const TextStyle(color: AppColors.textInverse, fontSize: 9, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        accName.isNotEmpty ? accName : 'Khách hàng',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                      ),
+                      Text(
+                        accNumber.isNotEmpty ? 'STK: $accNumber' : bankName,
+                        style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (transferRef.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Mã chuyển khoản Napas: $transferRef',
+              style: const TextStyle(fontSize: 11, color: AppColors.successGreen, fontWeight: FontWeight.w600),
+            ),
+          ],
+          if (status == 'pending') ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton(
+                  onPressed: isProcessing ? null : () => _rejectRefund(refund),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textStrong,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: const Size(0, 36),
+                  ),
+                  child: const Text('Từ chối'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: isProcessing ? null : () => _approveRefund(refund),
+                  icon: const Icon(LucideIcons.arrowUpRight, size: 14),
+                  label: isProcessing
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textInverse))
+                      : const Text('Duyệt & Hoàn tiền'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.textInverse,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: const Size(0, 36),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color textColor;
+    String label;
+    IconData icon;
+
+    switch (status) {
+      case 'paid':
+      case 'succeeded':
+      case 'completed':
+      case 'refunded':
+        textColor = AppColors.successGreen;
+        label = status == 'paid' ? 'Đã chi tiền' : 'Đã hoàn tiền';
+        icon = LucideIcons.check;
+        break;
+      case 'rejected':
+      case 'cancelled':
+      case 'failed':
+        textColor = AppColors.errorRed;
+        label = status == 'failed' ? 'Thất bại' : 'Đã từ chối';
+        icon = LucideIcons.x;
+        break;
+      case 'processing':
+        textColor = AppColors.primary;
+        label = 'Đang xử lý';
+        icon = LucideIcons.refreshCw;
+        break;
+      case 'approved':
+        textColor = AppColors.primary;
+        label = 'Đã duyệt';
+        icon = LucideIcons.clock;
+        break;
+      case 'pending':
+      default:
+        textColor = AppColors.warningAmber;
+        label = 'Chờ duyệt';
+        icon = LucideIcons.clock;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: textColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: textColor),
+          ),
+        ],
       ),
     );
   }

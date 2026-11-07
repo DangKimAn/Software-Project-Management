@@ -74,7 +74,9 @@ class AppNotificationItem {
       payload?['forAdmin'] == true ||
       payload?['isAdminNotification'] == true ||
       payload?['targetRole'] == 'admin' ||
-      title.startsWith('[Admin]');
+      title.startsWith('[Admin]') ||
+      title.toLowerCase().contains('cần xử lý') ||
+      title.toLowerCase().contains('cần duyệt');
 
   String titleDisplayFor(String? localeCode, [MoneyFormatter? formatter]) {
     final localized = localizeNotificationTitle(title, eventType, localeCode);
@@ -155,11 +157,14 @@ class AppNotificationItem {
         eType == 'BOOKING_CANCELLED') {
       return isEn ? 'Booking cancelled' : '예약 취소';
     }
+    if (lower == 'có refund mới cần xử lý' || lower.contains('refund mới cần xử lý')) {
+      return isEn ? 'New refund request pending review' : '새 환불 요청 대기 중';
+    }
+    if (lower == 'có yêu cầu rút tiền host cần duyệt') {
+      return isEn ? 'Host payout request pending review' : '호스트 정산 승인 대기 중';
+    }
     if (lower == 'yêu cầu hoàn tiền đã được tạo' || eType == 'REFUND_CREATED') {
       return isEn ? 'Refund request created' : '환불 요청 생성';
-    }
-    if (lower == 'có refund mới cần xử lý') {
-      return isEn ? 'New refund request pending review' : '새 환불 요청 대기 중';
     }
     if (lower == 'hoàn tiền thành công' || eType == 'REFUND_SUCCESS') {
       return isEn ? 'Refund successful' : '환불 완료';
@@ -480,12 +485,48 @@ class AppNotificationItem {
   /// blocking any untrusted external URL (`http://`, `https://`, `//`, `javascript:`, etc.).
   String? resolveInternalRoute() {
     final candidate = actionUrl?.trim() ?? '';
+    final tType = (targetType ?? '').toLowerCase();
+    final eType = eventType.toLowerCase();
+
+    // 1. REFUND & DISBURSEMENT NOTIFICATIONS
+    if (tType == 'refund' ||
+        eType == 'refund_created' ||
+        eType == 'refund_success' ||
+        eType == 'refund_rejected' ||
+        eType.contains('refund') ||
+        title.toLowerCase().contains('refund') ||
+        title.toLowerCase().contains('hoàn tiền')) {
+      if (forAdmin ||
+          candidate == '/admin' ||
+          candidate == '/admin/chi-tra' ||
+          candidate.startsWith('/admin') ||
+          title.toLowerCase().contains('cần xử lý')) {
+        return '/admin/chi-tra';
+      }
+      return '/account/trips';
+    }
+
+    // 2. HOST PAYOUT NOTIFICATIONS
+    if (tType == 'payout' ||
+        eType == 'payout_created' ||
+        eType == 'payout_paid' ||
+        eType == 'payout_rejected' ||
+        eType.contains('payout') ||
+        title.toLowerCase().contains('payout') ||
+        title.toLowerCase().contains('rút tiền')) {
+      if (forAdmin ||
+          candidate == '/admin' ||
+          candidate == '/admin/chi-tra' ||
+          candidate.startsWith('/admin') ||
+          title.toLowerCase().contains('cần duyệt')) {
+        return '/admin/chi-tra';
+      }
+      return '/chu-nha/thanh-toan';
+    }
+
     if (candidate.isNotEmpty && isSafeInternalRoute(candidate)) {
       return _normalizeInternalRoute(candidate);
     }
-
-    final tType = (targetType ?? '').toLowerCase();
-    final eType = eventType.toLowerCase();
 
     if (tType == 'booking' || eType.startsWith('booking.')) {
       if (eType == 'booking.created') {
@@ -572,6 +613,11 @@ class AppNotificationItem {
     if (route == '/admin/moderation') return '/admin/kiem-duyet';
     if (route == '/admin/host-applications') return '/admin/ho-so-host';
     if (route == '/admin/messages') return '/admin/tin-nhan';
+    if (route == '/admin/payouts' ||
+        route == '/admin/refunds' ||
+        route == '/admin/disbursements') {
+      return '/admin/chi-tra';
+    }
     return route;
   }
 

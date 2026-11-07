@@ -30,6 +30,10 @@ export type AppEnv = {
     momoRequestType: string;
     momoLang: string;
     momoOrderExpireTimeMinutes?: number;
+    disbursementMode: "mock" | "payos";
+    payosClientId?: string;
+    payosApiKey?: string;
+    payosChecksumKey?: string;
     accessTokenTtlMinutes: number;
     refreshTokenTtlDays: number;
     refreshTokenTtlMs: number;
@@ -591,6 +595,10 @@ export const getEnv = (): AppEnv => {
             "MOMO_ORDER_EXPIRE_TIME_MINUTES",
             process.env.MOMO_ORDER_EXPIRE_TIME_MINUTES,
         ),
+        disbursementMode: (process.env.DISBURSEMENT_MODE === "payos" ? "payos" : "mock") as "mock" | "payos",
+        payosClientId: process.env.PAYOS_CLIENT_ID,
+        payosApiKey: process.env.PAYOS_API_KEY,
+        payosChecksumKey: process.env.PAYOS_CHECKSUM_KEY,
         openaiApiKey: assertResolvedEnv("OPENAI_API_KEY", process.env.OPENAI_API_KEY),
         openaiVisionModel: assertResolvedEnv("OPENAI_VISION_MODEL", process.env.OPENAI_VISION_MODEL) ?? "gpt-4.1-mini",
         firebaseServiceAccountPath: assertResolvedEnv(

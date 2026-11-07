@@ -290,13 +290,27 @@ class BookingRepositoryImpl implements BookingRepository {
   Future<void> cancelBooking({
     required String bookingId,
     required String reason,
+    String? bankName,
+    String? accountNumber,
+    String? accountName,
   }) async {
     try {
+      final data = <String, dynamic>{
+        'reason': reason.trim(),
+      };
+      if (bankName != null && bankName.trim().isNotEmpty) {
+        data['bankName'] = bankName.trim();
+      }
+      if (accountNumber != null && accountNumber.trim().isNotEmpty) {
+        data['accountNumber'] = accountNumber.trim();
+      }
+      if (accountName != null && accountName.trim().isNotEmpty) {
+        data['accountName'] = accountName.trim();
+      }
+
       await _dio.post<Map<String, dynamic>>(
         '/api/bookings/$bookingId/cancel',
-        data: {
-          'reason': reason.trim(),
-        },
+        data: data,
       );
     } catch (e) {
       throw _handleError(e);

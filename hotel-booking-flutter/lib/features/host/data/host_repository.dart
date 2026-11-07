@@ -1134,6 +1134,30 @@ class HostRepository {
     return raw.map(maskSensitivePayoutMap).toList();
   }
 
+  /// `POST /api/host/payouts/request`
+  Future<Map<String, dynamic>> requestPayout({
+    required double amount,
+    int? payoutAccountId,
+    String? notes,
+  }) async {
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/payouts/request',
+      data: {
+        'amount': amount,
+        if (payoutAccountId != null) 'payoutAccountId': payoutAccountId,
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+      },
+    );
+    if (response.data is Map<String, dynamic>) {
+      final resMap = response.data as Map<String, dynamic>;
+      if (resMap['data'] is Map<String, dynamic>) {
+        return resMap['data'] as Map<String, dynamic>;
+      }
+      return resMap;
+    }
+    return <String, dynamic>{};
+  }
+
   // ===========================================================================
   // BUG-13: Revenue Reports (`GET /api/host/reports/revenue`)
   // ===========================================================================

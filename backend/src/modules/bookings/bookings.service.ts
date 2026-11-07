@@ -84,6 +84,9 @@ export type ListBookingsQuery = {
 
 export type CancelBookingInput = {
     reason?: string;
+    bankName?: string;
+    accountNumber?: string;
+    accountName?: string;
 };
 
 export type ApiBookingStatus =
@@ -1032,6 +1035,11 @@ const createRefundForPaidPaymentIfNeeded = async (
     requestedByUserId: number,
     reason: string | null,
     transaction: Transaction,
+    bankInfo?: {
+        bankName?: string;
+        accountNumber?: string;
+        accountName?: string;
+    },
 ) => {
     const paidPayment = await Payment.findOne({
         where: {
@@ -1059,6 +1067,9 @@ const createRefundForPaidPaymentIfNeeded = async (
             amount: refundAmount,
             currency: booking.currency,
             reason,
+            bankName: bankInfo?.bankName ? String(bankInfo.bankName).trim() : null,
+            accountNumber: bankInfo?.accountNumber ? String(bankInfo.accountNumber).trim() : null,
+            accountName: bankInfo?.accountName ? String(bankInfo.accountName).trim() : null,
             status: "pending",
             providerRef: null,
             requestedByUserId,
@@ -1162,6 +1173,11 @@ const cancelBooking = async (
             Number(user.id),
             reasonCode,
             transaction,
+            {
+                bankName: input.bankName,
+                accountNumber: input.accountNumber,
+                accountName: input.accountName,
+            },
         );
 
         const oldStatus = existingBooking.status;

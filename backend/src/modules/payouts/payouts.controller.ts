@@ -15,6 +15,7 @@ import {
     createPayoutAccount,
     CreatePayoutAccountInput,
     deletePayoutAccount,
+    disburseHostPayout,
     getAdminHostPayouts,
     AdminPayoutListQuery,
     getHostPayoutAccounts,
@@ -22,6 +23,8 @@ import {
     markHostPayoutPaid,
     PayoutListQuery,
     rejectHostPayout,
+    requestHostPayout,
+    RequestHostPayoutInput,
     updatePayoutAccount,
     UpdatePayoutAccountInput,
 } from "./payouts.service";
@@ -152,5 +155,33 @@ export const markHostPayoutPaidHandler: RequestHandler = asyncHandler(async (req
 
     return sendSuccess(res, {
         data: payout,
+    });
+});
+
+export const disburseHostPayoutHandler: RequestHandler = asyncHandler(async (req, res) => {
+    assertValidRequest(req);
+
+    const params = getValidatedParams<{ payoutId: number }>(req);
+    const result = await disburseHostPayout({
+        payoutId: params.payoutId,
+        actorUserId: Number(req.user!.id),
+    });
+
+    return sendSuccess(res, {
+        message: "Chi trả tiền cho Host thành công",
+        data: result,
+    });
+});
+
+export const requestHostPayoutHandler: RequestHandler = asyncHandler(async (req, res) => {
+    assertValidRequest(req);
+
+    const body = getValidatedBody<RequestHostPayoutInput>(req);
+    const result = await requestHostPayout(req.user!, body, auditContextFromRequest(req));
+
+    return sendSuccess(res, {
+        statusCode: 201,
+        message: "Yêu cầu rút tiền đã được gửi thành công, vui lòng chờ Admin kiểm duyệt",
+        data: result,
     });
 });
