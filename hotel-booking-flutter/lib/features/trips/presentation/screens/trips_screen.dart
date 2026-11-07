@@ -1440,10 +1440,8 @@ class _ReviewModalDialogState extends State<_ReviewModalDialog> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          isSelected
-                              ? Icons.star_rounded
-                              : Icons.star_outline_rounded,
-                          size: 28,
+                          LucideIcons.star,
+                          size: 24,
                           color: isSelected
                               ? const Color(0xFFFFB800)
                               : const Color(0xFFD1D5DB),
