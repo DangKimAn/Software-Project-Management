@@ -180,17 +180,17 @@ void main() {
       // When text is non-empty, send button appears
       expect(find.byKey(const Key('host_message_send_btn')), findsOneWidget);
 
-      // 9. Verify Messenger toolbar buttons (Plus, Camera, Gallery, Mic, Quick Emoji 😤)
+      // 9. Verify simplified toolbar buttons (only Camera & Gallery kept; +, Mic, and emoji icons removed)
       inputWidget.controller?.clear();
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('chat_more_features_btn')), findsOneWidget);
       expect(find.byKey(const Key('chat_camera_btn')), findsOneWidget);
       expect(find.byKey(const Key('chat_gallery_btn')), findsOneWidget);
-      expect(find.byKey(const Key('chat_mic_btn')), findsOneWidget);
-      expect(find.byKey(const Key('chat_input_smile_btn')), findsOneWidget);
-      expect(find.byKey(const Key('chat_quick_emoji_btn')), findsOneWidget);
-      expect(find.text('😤'), findsOneWidget);
+      expect(find.byKey(const Key('chat_more_features_btn')), findsNothing);
+      expect(find.byKey(const Key('chat_mic_btn')), findsNothing);
+      expect(find.byKey(const Key('chat_input_smile_btn')), findsNothing);
+      expect(find.byKey(const Key('chat_quick_emoji_btn')), findsNothing);
+      expect(find.text('😤'), findsNothing);
       expect(find.text('Nhắn tin'), findsOneWidget);
     },
   );
