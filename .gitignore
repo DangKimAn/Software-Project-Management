@@ -1,4 +1,4 @@
-# OS generated files
+﻿# OS generated files
 .DS_Store
 .DS_Store?
 ._*
@@ -43,6 +43,8 @@ docs/ai-fix/
 **/*.txt
 *.pdf
 **/*.pdf
+*.docx
+**/*.docx
 
 # Node.js (Source goc/backend, Source goc/frontend)
 **/node_modules/
