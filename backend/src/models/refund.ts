@@ -18,6 +18,9 @@ class RefundModel extends Model<InferAttributes<RefundModel>, InferCreationAttri
     declare amount: number;
     declare currency: CreationOptional<string>;
     declare reason: CreationOptional<string | null>;
+    declare bankName: CreationOptional<string | null>;
+    declare accountNumber: CreationOptional<string | null>;
+    declare accountName: CreationOptional<string | null>;
     declare status: CreationOptional<RefundStatus>;
     declare providerRef: CreationOptional<string | null>;
     declare requestedByUserId: CreationOptional<number | null>;
@@ -57,6 +60,21 @@ RefundModel.init(
         reason: {
             type: DataTypes.TEXT,
             allowNull: true,
+        },
+        bankName: {
+            type: DataTypes.STRING(150),
+            allowNull: true,
+            field: "bank_name",
+        },
+        accountNumber: {
+            type: DataTypes.STRING(64),
+            allowNull: true,
+            field: "account_number",
+        },
+        accountName: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+            field: "account_name",
         },
         status: {
             type: DataTypes.ENUM(...refundStatusValues),

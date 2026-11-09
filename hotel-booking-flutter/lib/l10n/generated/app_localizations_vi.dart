@@ -443,6 +443,22 @@ class AppLocalizationsVi extends AppLocalizations {
   String get loadingFavorites => 'Đang tải danh sách yêu thích...';
 
   @override
+  String get loadingTrips => 'Đang tải lịch trình...';
+
+  @override
+  String get loadingPaymentInfo => 'Đang tải thông tin thanh toán đặt phòng...';
+
+  @override
+  String get guestPaymentConnectingGateway => 'Đang kết nối cổng thanh toán...';
+
+  @override
+  String get guestPaymentBookingNotFoundTitle => 'Không tìm thấy đơn đặt phòng';
+
+  @override
+  String get guestPaymentBookingNotFoundMessage =>
+      'Đơn đặt phòng không tồn tại hoặc đã hết hạn.';
+
+  @override
   String get emptyList => 'Không tìm thấy villa nào phù hợp';
 
   @override
@@ -1798,4 +1814,115 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get spaceOther => 'Không gian khác';
+
+  @override
+  String get blogAllArticles => 'Tất cả bài viết';
+
+  @override
+  String get blogShareTooltip => 'Chia sẻ bài viết';
+
+  @override
+  String get blogShareInvalidLink =>
+      'Liên kết bài viết không hợp lệ để chia sẻ.';
+
+  @override
+  String get blogShareSuccess => 'Đã sao chép liên kết bài viết vào bộ nhớ tạm';
+
+  @override
+  String get blogShareFailure =>
+      'Không thể sao chép liên kết bài viết trên thiết bị này.';
+
+  @override
+  String get blogNotFoundTitle => 'Không tìm thấy bài viết';
+
+  @override
+  String get blogNotFoundDescription =>
+      'Bài viết có thể đã được gỡ hoặc đường dẫn không chính xác.';
+
+  @override
+  String get blogBackToBlog => 'Quay lại Cẩm nang';
+
+  @override
+  String get blogLoadingArticle => 'Đang tải bài viết...';
+
+  @override
+  String get blogRelatedArticlesBadge => 'BÀI VIẾT LIÊN QUAN';
+
+  @override
+  String get blogRelatedArticlesTitle => 'Gợi ý đọc tiếp';
+
+  @override
+  String get blogViewAllArticles => 'Xem tất cả bài viết';
+
+  @override
+  String blogReadMinutes(int minutes) {
+    return '$minutes phút đọc';
+  }
+
+  @override
+  String get blogDefaultAuthor => 'Ban biên tập The Palm';
+
+  @override
+  String get blogListBadge => 'CẨM NANG LƯU TRÚ VŨNG TÀU';
+
+  @override
+  String get blogListHeroTitle =>
+      'Kinh nghiệm lưu trú, lịch trình & bí quyết đặt Villa biển Vũng Tàu';
+
+  @override
+  String get blogSearchHint => 'Tìm bài viết cẩm nang Vũng Tàu...';
+
+  @override
+  String get blogClearSearchTooltip => 'Xóa từ khóa tìm kiếm';
+
+  @override
+  String get blogCategoryAll => 'Tất cả';
+
+  @override
+  String get blogCategoryTravelGuide => 'Cẩm nang du lịch';
+
+  @override
+  String get blogCategoryReviews => 'Đánh giá Villa & Homestay';
+
+  @override
+  String get blogCategoryTripGuide => 'Cẩm nang chuyến đi';
+
+  @override
+  String get blogCategoryBookingTips => 'Kinh nghiệm đặt phòng';
+
+  @override
+  String get blogCategoryLocalDiscovery => 'Khám phá địa phương';
+
+  @override
+  String get blogCategoryStayTips => 'Mẹo lưu trú';
+
+  @override
+  String get blogCategoryNearBeach => 'Villa gần biển';
+
+  @override
+  String get blogCategoryBookingChecklist => 'Checklist đặt phòng';
+
+  @override
+  String get blogEmptyTitle => 'Chưa có bài viết phù hợp';
+
+  @override
+  String get blogEmptyDescription =>
+      'Hãy thử chọn chuyên mục khác hoặc từ khóa khác.';
+
+  @override
+  String get blogClearFilters => 'Xóa bộ lọc';
+
+  @override
+  String get blogLoadingList => 'Đang tải danh sách bài viết...';
+
+  @override
+  String get blogPaginationPrev => 'Trang trước';
+
+  @override
+  String get blogPaginationNext => 'Trang sau';
+
+  @override
+  String blogPaginationPage(int page) {
+    return 'Trang $page';
+  }
 }

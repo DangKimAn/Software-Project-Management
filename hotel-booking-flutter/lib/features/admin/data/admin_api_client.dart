@@ -1111,4 +1111,84 @@ class AdminRepository {
     }
     return <String, dynamic>{};
   }
+
+  // ===========================================================================
+  // Payouts & Refunds Disbursement Management (Napas 24/7 Engine)
+  // ===========================================================================
+
+  Future<List<Map<String, dynamic>>> getAdminHostPayouts({
+    String? status,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    final response = await _dio.get<dynamic>(
+      '/api/admin/host-payouts',
+      queryParameters: {
+        if (status != null && status.isNotEmpty && status != 'all')
+          'status': status,
+        'page': page,
+        'limit': limit,
+      },
+    );
+    final raw = _extractItems(response.data);
+    return raw;
+  }
+
+  Future<Map<String, dynamic>> disburseHostPayout(String payoutId) async {
+    final response = await _dio.post<dynamic>(
+      '/api/admin/host-payouts/$payoutId/disburse',
+    );
+    final map = _unwrapMap(response.data);
+    return map;
+  }
+
+  Future<Map<String, dynamic>> rejectHostPayout(
+    String payoutId,
+    String reason,
+  ) async {
+    final response = await _dio.post<dynamic>(
+      '/api/admin/host-payouts/$payoutId/reject',
+      data: {'reason': reason},
+    );
+    final map = _unwrapMap(response.data);
+    return map;
+  }
+
+  Future<List<Map<String, dynamic>>> getAdminRefunds({
+    String? status,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    final response = await _dio.get<dynamic>(
+      '/api/admin/refunds',
+      queryParameters: {
+        if (status != null && status.isNotEmpty && status != 'all')
+          'status': status,
+        'page': page,
+        'limit': limit,
+      },
+    );
+    final raw = _extractItems(response.data);
+    return raw;
+  }
+
+  Future<Map<String, dynamic>> approveRefund(String refundId) async {
+    final response = await _dio.post<dynamic>(
+      '/api/admin/refunds/$refundId/approve',
+    );
+    final map = _unwrapMap(response.data);
+    return map;
+  }
+
+  Future<Map<String, dynamic>> rejectRefund(
+    String refundId,
+    String reason,
+  ) async {
+    final response = await _dio.post<dynamic>(
+      '/api/admin/refunds/$refundId/reject',
+      data: {'reason': reason},
+    );
+    final map = _unwrapMap(response.data);
+    return map;
+  }
 }

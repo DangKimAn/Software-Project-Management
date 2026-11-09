@@ -89,6 +89,7 @@ class FakeTestFilePickerService implements HostFilePickerService {
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = '',
+    HostKycFileSource source = HostKycFileSource.deviceFile,
   }) async =>
       nextKycFile;
 

@@ -418,8 +418,8 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
             ),
             Expanded(
               child: bookingAsync.when(
-                loading: () => const AppLoading(
-                  message: 'Đang tải thông tin thanh toán đặt phòng...',
+                loading: () => AppLoading(
+                  message: l10n.loadingPaymentInfo,
                 ),
                 error: (err, _) => AppErrorView(
                   message: err.toString().replaceFirst('Exception: ', ''),
@@ -428,9 +428,9 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                 ),
                 data: (booking) {
                   if (booking == null) {
-                    return const AppErrorView(
-                      title: 'Không tìm thấy đơn đặt phòng',
-                      message: 'Đơn đặt phòng không tồn tại hoặc đã hết hạn.',
+                    return AppErrorView(
+                      title: l10n.guestPaymentBookingNotFoundTitle,
+                      message: l10n.guestPaymentBookingNotFoundMessage,
                     );
                   }
 
@@ -1225,7 +1225,7 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                         ),
                                         label: Text(
                                           _isProcessing
-                                              ? 'Đang kết nối cổng thanh toán...'
+                                              ? l10n.guestPaymentConnectingGateway
                                               : (isHoldExpired
                                                   ? 'Đã hết thời gian giữ chỗ'
                                                   : l10n.fxPayButtonVnd(
@@ -1263,7 +1263,6 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                             ),
                           ),
                         ),
-                        const AppFooter(),
                       ],
                     ),
                   );

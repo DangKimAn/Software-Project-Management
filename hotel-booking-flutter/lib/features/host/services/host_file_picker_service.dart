@@ -7,8 +7,11 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../core/logging/app_logger.dart';
 import '../../../core/security/url_security_validator.dart';
 import '../domain/host_models.dart';
+import '../onboarding/host_onboarding_services.dart';
+export '../onboarding/host_onboarding_services.dart' show HostKycFileSource;
 import 'host_file_picker_web_stub.dart'
     if (dart.library.js_interop) 'host_file_picker_web.dart';
 
@@ -71,6 +74,7 @@ abstract class HostFilePickerService {
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = 'Chọn tài liệu xác minh',
+    HostKycFileSource source = HostKycFileSource.deviceFile,
   });
 
   /// Picks one or more listing images (`JPG`, `PNG`, `WebP`, `GIF`, max 5MB each).
@@ -423,7 +427,62 @@ if (\$dlg.ShowDialog(\$topForm) -eq [System.Windows.Forms.DialogResult]::OK) {
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = 'Chọn tài liệu xác minh',
+    HostKycFileSource source = HostKycFileSource.deviceFile,
   }) async {
+    if (source == HostKycFileSource.cameraScan) {
+      try {
+        final imagePicker = ImagePicker();
+        final xf = await imagePicker.pickImage(
+          source: ImageSource.camera,
+          imageQuality: 95,
+        );
+        if (xf == null) return null;
+        final bytes = await xf.readAsBytes();
+        if (bytes.isEmpty) return null;
+        final name = xf.name.trim().isNotEmpty
+            ? xf.name.trim()
+            : 'kyc_camera_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        return HostPickedFile(
+          name: name,
+          mimeType: resolveHostFileMimeType(name, headerBytes: bytes),
+          sizeBytes: bytes.length,
+          bytes: bytes,
+          path: kIsWeb ? null : xf.path,
+        );
+      } catch (e) {
+        AppLogger.e('Failed to capture photo from camera',
+            tag: 'HostFilePicker', error: e);
+        rethrow;
+      }
+    }
+
+    if (source == HostKycFileSource.photoLibrary) {
+      try {
+        final imagePicker = ImagePicker();
+        final xf = await imagePicker.pickImage(
+          source: ImageSource.gallery,
+          imageQuality: 95,
+        );
+        if (xf == null) return null;
+        final bytes = await xf.readAsBytes();
+        if (bytes.isEmpty) return null;
+        final name = xf.name.trim().isNotEmpty
+            ? xf.name.trim()
+            : 'kyc_gallery_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        return HostPickedFile(
+          name: name,
+          mimeType: resolveHostFileMimeType(name, headerBytes: bytes),
+          sizeBytes: bytes.length,
+          bytes: bytes,
+          path: kIsWeb ? null : xf.path,
+        );
+      } catch (e) {
+        AppLogger.e('Failed to pick photo from gallery',
+            tag: 'HostFilePicker', error: e);
+        rethrow;
+      }
+    }
+
     const extensions = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
     final pluginFiles = await _tryPickWithFilePickerPlugin(
       allowMultiple: false,

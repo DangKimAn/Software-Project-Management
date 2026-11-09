@@ -1403,60 +1403,16 @@ class _BlogPostCardWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentLocale = ref.watch(localeProvider);
-    final isNonVi = currentLocale != 'vi';
-    final isKo = currentLocale == 'ko';
-
-    // Localized readTime
-    final mins = post.readTimeMinutes > 0 ? post.readTimeMinutes : 5;
-    final displayReadTime = !isNonVi
-        ? post.readTime
-        : (isKo ? '$mins분 읽기' : '$mins min read');
-
-    // Localized category
-    final String displayCategory;
-    if (!isNonVi) {
-      displayCategory = post.category;
-    } else if (post.category.toLowerCase().contains('review')) {
-      displayCategory = isKo ? '빌라 & 홈스테이 리뷰' : 'Villa & Homestay Reviews';
-    } else if (post.category.toLowerCase().contains('cẩm nang') ||
-        post.category.toLowerCase().contains('du lịch')) {
-      displayCategory = isKo ? '여행 가이드' : 'Travel Guide';
-    } else if (post.category.toLowerCase().contains('kinh nghiệm') ||
-        post.category.toLowerCase().contains('mẹo')) {
-      displayCategory = isKo ? '여행 팁 & 경험' : 'Tips & Experiences';
-    } else {
-      displayCategory = post.category;
-    }
-
-    // Localized title & excerpt for seeded articles
-    String displayTitle = post.title;
-    String displayExcerpt = post.excerpt;
-
-    if (isNonVi) {
-      if (post.slug.contains('thue-villa-vung-tau-gia-dinh') ||
-          post.title.contains('Kinh nghiệm chọn thuê')) {
-        displayTitle = isKo
-            ? '가족 및 단체 여행을 위한 붕따우 휴양 빌라 렌트 팁'
-            : 'Tips for renting vacation villas in Vung Tau for families and friend groups';
-        displayExcerpt = isKo
-            ? '빌라 예약 시 핵심 기준: 프라이빗 수영장, BBQ 시설, 해변 인접성 및 호스트 신뢰도.'
-            : 'Key criteria when booking villas: private pool, BBQ amenities, beachfront location, and host reputation.';
-      } else if (post.slug.contains('top-5-bai-bien') ||
-          post.title.contains('Top 5 bãi biển')) {
-        displayTitle = isKo
-            ? '붕따우에서 꼭 방문해야 할 가장 아름답고 평화로운 해변 Top 5'
-            : 'Top 5 most beautiful and peaceful beaches in Vung Tau to explore';
-        displayExcerpt = isKo
-            ? '바이저우, 바이두아의 원시적인 아름다움과 붕따우의 그림 같은 해안 명소를 만나보세요.'
-            : 'Discover the pristine beauty of Bai Dau, Bai Dua and scenic coastal check-in spots in Vung Tau.';
-      }
-    }
-
-    // Localized location
-    final displayLocation = isNonVi &&
-            (post.location == 'Vũng Tàu' || post.location.isEmpty)
-        ? (isKo ? '붕따우' : 'Vung Tau')
-        : post.location;
+    final localizedPost = LocaleFormatters.localizeBlogPost(
+      post,
+      localeCode: currentLocale,
+      l10n: context.l10n,
+    );
+    final displayReadTime = localizedPost.readTime;
+    final displayCategory = localizedPost.category;
+    final displayTitle = localizedPost.title;
+    final displayExcerpt = localizedPost.excerpt;
+    final displayLocation = localizedPost.location;
 
     return InkWell(
       onTap: onTap,

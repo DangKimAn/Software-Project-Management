@@ -1158,9 +1158,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       backgroundColor: AppColors.surfaceBase,
       body: Column(
         children: [
-          const AppSearchHeader(
-            currentPath: '/account/profile',
-          ),
+          const AppSearchHeader(currentPath: '/account/profile'),
           Expanded(
             child: SafeArea(
               top: false,

@@ -748,6 +748,36 @@ abstract class AppLocalizations {
   /// **'Đang tải danh sách yêu thích...'**
   String get loadingFavorites;
 
+  /// No description provided for @loadingTrips.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đang tải lịch trình...'**
+  String get loadingTrips;
+
+  /// No description provided for @loadingPaymentInfo.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đang tải thông tin thanh toán đặt phòng...'**
+  String get loadingPaymentInfo;
+
+  /// No description provided for @guestPaymentConnectingGateway.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đang kết nối cổng thanh toán...'**
+  String get guestPaymentConnectingGateway;
+
+  /// No description provided for @guestPaymentBookingNotFoundTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không tìm thấy đơn đặt phòng'**
+  String get guestPaymentBookingNotFoundTitle;
+
+  /// No description provided for @guestPaymentBookingNotFoundMessage.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đơn đặt phòng không tồn tại hoặc đã hết hạn.'**
+  String get guestPaymentBookingNotFoundMessage;
+
   /// No description provided for @emptyList.
   ///
   /// In vi, this message translates to:
@@ -853,7 +883,7 @@ abstract class AppLocalizations {
   /// No description provided for @calendarNextMonth.
   ///
   /// In vi, this message translates to:
-  /// **'Tháng tiếp theo'**
+  /// **'Tháng sau'**
   String get calendarNextMonth;
 
   /// No description provided for @calendarDay.
@@ -3129,6 +3159,210 @@ abstract class AppLocalizations {
   /// In vi, this message translates to:
   /// **'Không gian khác'**
   String get spaceOther;
+
+  /// No description provided for @blogAllArticles.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tất cả bài viết'**
+  String get blogAllArticles;
+
+  /// No description provided for @blogShareTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chia sẻ bài viết'**
+  String get blogShareTooltip;
+
+  /// No description provided for @blogShareInvalidLink.
+  ///
+  /// In vi, this message translates to:
+  /// **'Liên kết bài viết không hợp lệ để chia sẻ.'**
+  String get blogShareInvalidLink;
+
+  /// No description provided for @blogShareSuccess.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã sao chép liên kết bài viết vào bộ nhớ tạm'**
+  String get blogShareSuccess;
+
+  /// No description provided for @blogShareFailure.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không thể sao chép liên kết bài viết trên thiết bị này.'**
+  String get blogShareFailure;
+
+  /// No description provided for @blogNotFoundTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không tìm thấy bài viết'**
+  String get blogNotFoundTitle;
+
+  /// No description provided for @blogNotFoundDescription.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bài viết có thể đã được gỡ hoặc đường dẫn không chính xác.'**
+  String get blogNotFoundDescription;
+
+  /// No description provided for @blogBackToBlog.
+  ///
+  /// In vi, this message translates to:
+  /// **'Quay lại Cẩm nang'**
+  String get blogBackToBlog;
+
+  /// No description provided for @blogLoadingArticle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đang tải bài viết...'**
+  String get blogLoadingArticle;
+
+  /// No description provided for @blogRelatedArticlesBadge.
+  ///
+  /// In vi, this message translates to:
+  /// **'BÀI VIẾT LIÊN QUAN'**
+  String get blogRelatedArticlesBadge;
+
+  /// No description provided for @blogRelatedArticlesTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gợi ý đọc tiếp'**
+  String get blogRelatedArticlesTitle;
+
+  /// No description provided for @blogViewAllArticles.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xem tất cả bài viết'**
+  String get blogViewAllArticles;
+
+  /// No description provided for @blogReadMinutes.
+  ///
+  /// In vi, this message translates to:
+  /// **'{minutes} phút đọc'**
+  String blogReadMinutes(int minutes);
+
+  /// No description provided for @blogDefaultAuthor.
+  ///
+  /// In vi, this message translates to:
+  /// **'Ban biên tập The Palm'**
+  String get blogDefaultAuthor;
+
+  /// No description provided for @blogListBadge.
+  ///
+  /// In vi, this message translates to:
+  /// **'CẨM NANG LƯU TRÚ VŨNG TÀU'**
+  String get blogListBadge;
+
+  /// No description provided for @blogListHeroTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Kinh nghiệm lưu trú, lịch trình & bí quyết đặt Villa biển Vũng Tàu'**
+  String get blogListHeroTitle;
+
+  /// No description provided for @blogSearchHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tìm bài viết cẩm nang Vũng Tàu...'**
+  String get blogSearchHint;
+
+  /// No description provided for @blogClearSearchTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xóa từ khóa tìm kiếm'**
+  String get blogClearSearchTooltip;
+
+  /// No description provided for @blogCategoryAll.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tất cả'**
+  String get blogCategoryAll;
+
+  /// No description provided for @blogCategoryTravelGuide.
+  ///
+  /// In vi, this message translates to:
+  /// **'Cẩm nang du lịch'**
+  String get blogCategoryTravelGuide;
+
+  /// No description provided for @blogCategoryReviews.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đánh giá Villa & Homestay'**
+  String get blogCategoryReviews;
+
+  /// No description provided for @blogCategoryTripGuide.
+  ///
+  /// In vi, this message translates to:
+  /// **'Cẩm nang chuyến đi'**
+  String get blogCategoryTripGuide;
+
+  /// No description provided for @blogCategoryBookingTips.
+  ///
+  /// In vi, this message translates to:
+  /// **'Kinh nghiệm đặt phòng'**
+  String get blogCategoryBookingTips;
+
+  /// No description provided for @blogCategoryLocalDiscovery.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khám phá địa phương'**
+  String get blogCategoryLocalDiscovery;
+
+  /// No description provided for @blogCategoryStayTips.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mẹo lưu trú'**
+  String get blogCategoryStayTips;
+
+  /// No description provided for @blogCategoryNearBeach.
+  ///
+  /// In vi, this message translates to:
+  /// **'Villa gần biển'**
+  String get blogCategoryNearBeach;
+
+  /// No description provided for @blogCategoryBookingChecklist.
+  ///
+  /// In vi, this message translates to:
+  /// **'Checklist đặt phòng'**
+  String get blogCategoryBookingChecklist;
+
+  /// No description provided for @blogEmptyTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chưa có bài viết phù hợp'**
+  String get blogEmptyTitle;
+
+  /// No description provided for @blogEmptyDescription.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hãy thử chọn chuyên mục khác hoặc từ khóa khác.'**
+  String get blogEmptyDescription;
+
+  /// No description provided for @blogClearFilters.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xóa bộ lọc'**
+  String get blogClearFilters;
+
+  /// No description provided for @blogLoadingList.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đang tải danh sách bài viết...'**
+  String get blogLoadingList;
+
+  /// No description provided for @blogPaginationPrev.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trang trước'**
+  String get blogPaginationPrev;
+
+  /// No description provided for @blogPaginationNext.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trang sau'**
+  String get blogPaginationNext;
+
+  /// No description provided for @blogPaginationPage.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trang {page}'**
+  String blogPaginationPage(int page);
 }
 
 class _AppLocalizationsDelegate

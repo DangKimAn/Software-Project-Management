@@ -130,7 +130,9 @@ class FakeCalendarAdapter implements HttpClientAdapter {
 class FakeFilePickerService implements HostFilePickerService {
   @override
   Future<HostPickedFile?> pickKycDocument(
-          {BuildContext? context, String title = ''}) async =>
+          {BuildContext? context,
+          String title = '',
+          HostKycFileSource source = HostKycFileSource.deviceFile}) async =>
       null;
   @override
   Future<List<HostPickedFile>> pickListingImages(

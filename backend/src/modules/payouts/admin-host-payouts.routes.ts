@@ -5,6 +5,7 @@ import { isValidIsoDate } from "../../common/validation";
 import {
     approveHostPayoutHandler,
     createAdminHostPayout,
+    disburseHostPayoutHandler,
     listAdminHostPayouts,
     markHostPayoutPaidHandler,
     rejectHostPayoutHandler,
@@ -23,7 +24,7 @@ const payoutIdParamValidator = param("payoutId")
 router.use(authenticate, requireRole("admin"));
 
 router.get(
-    "/",
+    ["/", "/payouts"],
     [
         query("status").optional().isIn(hostPayoutStatusValues).withMessage("status is invalid"),
         query("hostId").optional().isInt({ min: 1 }).withMessage("hostId must be a positive integer").toInt(),
@@ -44,7 +45,7 @@ router.get(
 );
 
 router.post(
-    "/",
+    ["/", "/payouts"],
     [
         body("hostId").isInt({ min: 1 }).withMessage("hostId must be a positive integer").toInt(),
         body("bookingIds").isArray({ min: 1 }).withMessage("bookingIds must be a non-empty array"),
@@ -60,10 +61,21 @@ router.post(
     createAdminHostPayout,
 );
 
-router.patch("/:payoutId/approve", [payoutIdParamValidator], approveHostPayoutHandler);
+router.patch(["/:payoutId/approve", "/payouts/:payoutId/approve"], [payoutIdParamValidator], approveHostPayoutHandler);
+
+router.post(["/:payoutId/disburse", "/payouts/:payoutId/disburse"], [payoutIdParamValidator], disburseHostPayoutHandler);
 
 router.patch(
-    "/:payoutId/reject",
+    ["/:payoutId/reject", "/payouts/:payoutId/reject"],
+    [
+        payoutIdParamValidator,
+        body("reason").isString().trim().notEmpty().withMessage("reason is required").isLength({ max: 2000 }),
+    ],
+    rejectHostPayoutHandler,
+);
+
+router.post(
+    ["/:payoutId/reject", "/payouts/:payoutId/reject"],
     [
         payoutIdParamValidator,
         body("reason").isString().trim().notEmpty().withMessage("reason is required").isLength({ max: 2000 }),

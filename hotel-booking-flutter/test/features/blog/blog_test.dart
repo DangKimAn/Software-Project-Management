@@ -12,6 +12,7 @@ import 'package:hotel_booking_flutter/features/blog/data/blog_repository.dart';
 import 'package:hotel_booking_flutter/features/blog/presentation/screens/blog_detail_screen.dart';
 import 'package:hotel_booking_flutter/features/blog/presentation/screens/blog_screen.dart';
 import 'package:hotel_booking_flutter/features/booking_inquiry/domain/services/contact_service.dart';
+import 'package:hotel_booking_flutter/l10n/l10n.dart';
 
 class _FakeSecureStorage extends SecureStorageService {
   String? token;
@@ -28,6 +29,19 @@ class _FakeSecureStorage extends SecureStorageService {
   Future<void> deleteAuthToken() async {
     token = null;
   }
+}
+
+class _FakeLocaleNotifier extends StateNotifier<String>
+    implements LocaleNotifier {
+  _FakeLocaleNotifier([super.state = 'vi']);
+
+  @override
+  Future<void> setLocale(String languageCode) async {
+    state = languageCode;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 Dio _buildMockDio(
@@ -325,6 +339,7 @@ void main() {
       List<Override> overrides = const [],
       double textScale = 1.0,
       Size? surfaceSize,
+      String localeCode = 'vi',
     }) {
       final fakeStorage = _FakeSecureStorage();
       final dio = _buildMockDio((options) async {
@@ -369,10 +384,14 @@ void main() {
           dioClientProvider.overrideWithValue(
             DioClient(dio: dio, secureStorage: fakeStorage),
           ),
+          localeProvider.overrideWith((ref) => _FakeLocaleNotifier(localeCode)),
           ...overrides,
         ],
         child: MaterialApp.router(
           theme: AppTheme.lightTheme,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: Locale(localeCode),
           routerConfig: router,
         ),
       );
@@ -568,6 +587,106 @@ void main() {
         );
 
         await tester.binding.setSurfaceSize(null);
+      },
+    );
+
+    testWidgets(
+      'BlogDetailScreen and LocaleFormatters properly localize date, readTime, category, author, and UI across vi, en, ko',
+      (tester) async {
+        const testPost = BlogPost(
+          id: 'test-seed-1',
+          slug: 'kinh-nghiem-thue-villa-vung-tau-gia-dinh',
+          title: 'Kinh nghiệm chọn thuê biệt thự nghỉ dưỡng Vũng Tàu cho gia đình và nhóm bạn',
+          excerpt: 'Những tiêu chí quan trọng khi đặt villa: hồ bơi riêng, tiện ích BBQ...',
+          content: 'Nội dung chi tiết về villa...',
+          coverImage: '',
+          category: 'Review Villa & Homestay',
+          location: 'Vũng Tàu',
+          readTime: '7 phút đọc',
+          readTimeMinutes: 7,
+          authorName: 'Ban biên tập The Palm',
+          publishedAt: '2026-10-27',
+        );
+
+        // 1. Vietnamese locale
+        await tester.pumpWidget(
+          wrapWithScope(
+            localeCode: 'vi',
+            child: const BlogDetailScreen(
+              slug: 'kinh-nghiem-thue-villa-vung-tau-gia-dinh',
+            ),
+            overrides: [
+              blogDetailProvider('kinh-nghiem-thue-villa-vung-tau-gia-dinh')
+                  .overrideWith((ref) async => testPost),
+              blogListProvider(null)
+                  .overrideWith((ref) async => const [testPost]),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Tất cả bài viết'), findsOneWidget);
+        expect(find.text('ĐÁNH GIÁ VILLA & HOMESTAY'), findsOneWidget);
+        expect(find.text('27/10/2026'), findsOneWidget);
+        expect(find.text('7 phút đọc'), findsOneWidget);
+        expect(find.text('Vũng Tàu'), findsOneWidget);
+        expect(find.text('Ban biên tập The Palm'), findsOneWidget);
+
+        // 2. English locale
+        await tester.pumpWidget(
+          wrapWithScope(
+            localeCode: 'en',
+            child: const BlogDetailScreen(
+              slug: 'kinh-nghiem-thue-villa-vung-tau-gia-dinh',
+            ),
+            overrides: [
+              blogDetailProvider('kinh-nghiem-thue-villa-vung-tau-gia-dinh')
+                  .overrideWith((ref) async => testPost),
+              blogListProvider(null)
+                  .overrideWith((ref) async => const [testPost]),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('All articles'), findsOneWidget);
+        expect(find.text('VILLA & HOMESTAY REVIEWS'), findsOneWidget);
+        expect(find.text('Oct 27, 2026'), findsOneWidget);
+        expect(find.text('7 mins read'), findsOneWidget);
+        expect(find.text('Vung Tau'), findsOneWidget);
+        expect(find.text('The Palm Editorial Team'), findsOneWidget);
+        expect(
+          find.text('Tips for renting vacation villas in Vung Tau for families and friend groups'),
+          findsOneWidget,
+        );
+
+        // 3. Korean locale
+        await tester.pumpWidget(
+          wrapWithScope(
+            localeCode: 'ko',
+            child: const BlogDetailScreen(
+              slug: 'kinh-nghiem-thue-villa-vung-tau-gia-dinh',
+            ),
+            overrides: [
+              blogDetailProvider('kinh-nghiem-thue-villa-vung-tau-gia-dinh')
+                  .overrideWith((ref) async => testPost),
+              blogListProvider(null)
+                  .overrideWith((ref) async => const [testPost]),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('모든 글'), findsOneWidget);
+        expect(find.text('빌라 & 홈스테이 리뷰'), findsOneWidget);
+        expect(find.text('2026. 10. 27.'), findsOneWidget);
+        expect(find.text('7분 읽기'), findsOneWidget);
+        expect(find.text('붕따우'), findsOneWidget);
+        expect(find.text('The Palm 편집팀'), findsOneWidget);
+        expect(
+          find.text('가족 및 단체 여행을 위한 붕따우 휴양 빌라 렌트 팁'),
+          findsOneWidget,
+        );
       },
     );
   });

@@ -65,6 +65,7 @@ class _FakeFilePickerService implements HostFilePickerService {
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = 'Chọn tài liệu',
+    HostKycFileSource source = HostKycFileSource.deviceFile,
   }) async =>
       nextFile;
 
@@ -86,7 +87,9 @@ class _FakeFilePickerService implements HostFilePickerService {
 class _FakePermissionService implements HostOnboardingPermissionService {
   @override
   Future<HostKycPermissionResult> requestPermission(
-          HostKycFileSource source) async =>
+    HostKycFileSource source, {
+    BuildContext? context,
+  }) async =>
       const HostKycPermissionResult(status: HostKycPermissionStatus.granted);
 }
 
@@ -547,6 +550,20 @@ void main() {
       );
     }
 
+    Future<void> pickSlotFile(WidgetTester tester, String slotKey) async {
+      final pickBtn = find.byKey(Key('kyc_pick_btn_$slotKey'));
+      await tester.ensureVisible(pickBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(pickBtn);
+      await tester.pumpAndSettle();
+
+      final fileOption = find.byKey(Key('kyc_source_file_$slotKey'));
+      if (fileOption.evaluate().isNotEmpty) {
+        await tester.tap(fileOption);
+        await tester.pumpAndSettle();
+      }
+    }
+
     testWidgets('shows AI scan button after picking CCCD front image',
         (tester) async {
       final fakeRepo = _FakeHostRepository(Dio());
@@ -567,11 +584,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Scroll to pick button and tap
-      final pickBtn = find.byKey(const Key('kyc_pick_btn_identityFront'));
-      await tester.ensureVisible(pickBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityFront');
 
       // Verify "Quét AI CCCD" button appears
       final aiScanBtn = find.byKey(const Key('kyc_ai_scan_btn_identityFront'));
@@ -615,11 +628,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 1. Pick file
-      final pickBtn = find.byKey(const Key('kyc_pick_btn_identityFront'));
-      await tester.ensureVisible(pickBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityFront');
 
       // 2. Click AI scan button
       final aiScanBtn = find.byKey(const Key('kyc_ai_scan_btn_identityFront'));
@@ -678,11 +687,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 1. Pick file
-      final pickBtn = find.byKey(const Key('kyc_pick_btn_identityFront'));
-      await tester.ensureVisible(pickBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityFront');
 
       // 2. Click AI scan button
       final aiScanBtn = find.byKey(const Key('kyc_ai_scan_btn_identityFront'));
@@ -737,11 +742,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 1. Pick file and scan AI
-      final pickBtn = find.byKey(const Key('kyc_pick_btn_identityFront'));
-      await tester.ensureVisible(pickBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityFront');
 
       final aiScanBtn = find.byKey(const Key('kyc_ai_scan_btn_identityFront'));
       await tester.ensureVisible(aiScanBtn);
@@ -807,11 +808,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 1. Pick file
-      final pickBtn = find.byKey(const Key('kyc_pick_btn_identityFront'));
-      await tester.ensureVisible(pickBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityFront');
 
       // 2. Banner warns that AI scan is needed before submission
       expect(
@@ -898,11 +895,7 @@ void main() {
         confidence: 0.98,
       );
 
-      final pickFrontBtn = find.byKey(const Key('kyc_pick_btn_identityFront'));
-      await tester.ensureVisible(pickFrontBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickFrontBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityFront');
 
       final aiScanFrontBtn =
           find.byKey(const Key('kyc_ai_scan_btn_identityFront'));
@@ -922,11 +915,7 @@ void main() {
         mrz: 'IDVNM012345678901<<<<<<<<<<<<<',
       );
 
-      final pickBackBtn = find.byKey(const Key('kyc_pick_btn_identityBack'));
-      await tester.ensureVisible(pickBackBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickBackBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityBack');
 
       final aiScanBackBtn =
           find.byKey(const Key('kyc_ai_scan_btn_identityBack'));

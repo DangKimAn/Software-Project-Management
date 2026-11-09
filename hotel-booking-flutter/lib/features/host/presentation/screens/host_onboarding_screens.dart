@@ -1347,7 +1347,10 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
     // 1. Check appropriate device/camera/media permission
     try {
       final permissionService = ref.read(hostOnboardingPermissionProvider);
-      final permResult = await permissionService.requestPermission(source);
+      final permResult = await permissionService.requestPermission(
+        source,
+        context: context,
+      );
       if (!mounted) return;
       if (!permResult.isGranted) {
         final msg = permResult.messageVi ??
@@ -1374,6 +1377,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
       final file = await picker.pickKycDocument(
         context: context,
         title: slotLabel,
+        source: source,
       );
       if (file == null || !mounted) return;
 
@@ -2801,7 +2805,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
         borderRadius: BorderRadius.circular(16),
         onTap: (_submitting || isLocked || pickedFile != null)
             ? null
-            : () => _pickFileForSlot(
+            : () => _openFileSourceBottomSheet(
                   slotKey: slotKey,
                   slotLabel: title,
                 ),
@@ -2991,7 +2995,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                           label: 'Chọn lại',
                           onPressed: _submitting
                               ? null
-                              : () => _pickFileForSlot(
+                              : () => _openFileSourceBottomSheet(
                                     slotKey: slotKey,
                                     slotLabel: title,
                                   ),

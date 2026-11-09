@@ -6,13 +6,14 @@ import { ApiError } from "../../common/api-error";
 import sequelize from "../../config/database";
 import { getEnv } from "../../config/env";
 import type { AuthenticatedUser } from "../auth/auth.service";
-import HostPayoutBatch, { HostPayoutStatus } from "../../models/host-payout-batch";
+import HostPayoutBatch, { HostPayoutBatchDocument, HostPayoutStatus } from "../../models/host-payout-batch";
 import HostPayoutBookingItem from "../../models/host-payout-booking-item";
 import PayoutAccount, { PayoutAccountDocument } from "../../models/payout-account";
 import { moneyToVnd, vndToNumber } from "../../utils/money";
 import { writeAuditLog } from "../../services/audit-log-service";
 import { assertUserHasRole } from "../../services/user-access-service";
-import { notifyPayoutCreated } from "../notifications/notification.service";
+import { notifyPayoutCreated, notifyPayoutPaid, notifyPayoutRejected } from "../notifications/notification.service";
+import { executeDisbursement } from "../disbursement/disbursement.service";
 
 export type CreatePayoutAccountInput = {
     bankName: string;
@@ -42,6 +43,12 @@ export type CreateHostPayoutInput = {
     payoutAccountId: number;
     amount: number;
     currency: "VND";
+    notes?: string | null;
+};
+
+export type RequestHostPayoutInput = {
+    amount: number;
+    payoutAccountId?: number;
     notes?: string | null;
 };
 
@@ -706,6 +713,43 @@ export const createHostPayout = async (
     });
 };
 
+export async function assertPayoutAmountAndBookingsEligible(
+    payout: HostPayoutBatchDocument,
+    transaction?: Transaction,
+) {
+    const items = await HostPayoutBookingItem.findAll({
+        where: { payoutId: payout.payoutId },
+        transaction,
+    });
+
+    if (items && items.length > 0) {
+        const expectedTotalVnd = items.reduce(
+            (sum, item) => sum + moneyToVnd(item.hostAmount),
+            0n,
+        );
+        const payoutAmountVnd = moneyToVnd(payout.amount);
+        if (payoutAmountVnd !== expectedTotalVnd) {
+            throw new ApiError(
+                422,
+                `Số tiền chi trả (${payoutAmountVnd.toString()} VND) không khớp với tổng tiền các đơn phòng liên quan (${expectedTotalVnd.toString()} VND).`,
+            );
+        }
+
+        const bookingIds = items.map((i) => i.bookingDetailId);
+        const bookingRows = await getBookingPayoutCandidates(bookingIds, payout.hostId, transaction);
+        const invalidRows = bookingRows.filter(
+            (row) => !["checked_out", "completed"].includes(row.bookingStatus) || row.paymentStatus !== "paid",
+        );
+
+        if (invalidRows.length > 0) {
+            throw new ApiError(
+                409,
+                "Một hoặc nhiều đơn phòng trong đợt chi trả này chưa hoàn thành hoặc chưa thanh toán.",
+            );
+        }
+    }
+}
+
 export async function approveHostPayout(params: {
     payoutId: number;
     actorUserId: number;
@@ -729,6 +773,8 @@ export async function approveHostPayout(params: {
             blockedUserId: payout.createdByUserId,
             message: "Admin tạo payout không được tự duyệt payout này.",
         });
+
+        await assertPayoutAmountAndBookingsEligible(payout, transaction);
 
         payout.status = "approved";
         payout.approvedByUserId = params.actorUserId;
@@ -794,6 +840,8 @@ export async function rejectHostPayout(params: {
             transaction,
         });
 
+        await notifyPayoutRejected(payout.payoutId, rejectionReason, transaction);
+
         return payout;
     });
 }
@@ -823,6 +871,8 @@ export async function markHostPayoutPaid(params: {
             message: "Admin đã duyệt payout không được tự đánh dấu đã chuyển tiền.",
         });
 
+        await assertPayoutAmountAndBookingsEligible(payout, transaction);
+
         payout.status = "paid";
         payout.paidAt = new Date();
         payout.paidByUserId = params.actorUserId;
@@ -841,6 +891,261 @@ export async function markHostPayoutPaid(params: {
             transaction,
         });
 
+        await notifyPayoutPaid(payout.payoutId, transaction);
+
         return payout;
     });
 }
+
+export async function disburseHostPayout(params: {
+    payoutId: number;
+    actorUserId: number;
+}) {
+    const payout = await HostPayoutBatch.findByPk(params.payoutId);
+    if (!payout) {
+        throw new ApiError(404, "Không tìm thấy payout");
+    }
+
+    if (payout.status !== "approved" && payout.status !== "pending") {
+        throw new ApiError(409, `Chỉ payout đang chờ hoặc đã duyệt mới được thực hiện chi trả (trạng thái hiện tại: ${payout.status})`);
+    }
+
+    const payoutAccount = await PayoutAccount.findOne({
+        where: {
+            payoutAccountId: payout.payoutAccountId,
+            userId: payout.hostId,
+        },
+    });
+
+    if (!payoutAccount) {
+        throw new ApiError(404, "Không tìm thấy tài khoản ngân hàng của Host");
+    }
+
+    await assertPayoutAmountAndBookingsEligible(payout);
+
+    // Thực hiện chuyển khoản qua Engine Chi hộ (Mock Napas 24/7 hoặc PayOS)
+    const disburseResult = await executeDisbursement({
+        targetType: "host_payout",
+        targetId: payout.payoutId,
+        bankCode: payoutAccount.bankCode || payoutAccount.bankName,
+        accountNumber: payoutAccount.accountNumber,
+        accountName: payoutAccount.accountName,
+        amount: Number(payout.amount),
+        currency: payout.currency,
+        description: `Chi tra host payout #${payout.payoutId}`,
+    });
+
+    return sequelize.transaction(async (transaction) => {
+        payout.status = "paid";
+        payout.approvedByUserId = payout.approvedByUserId || params.actorUserId;
+        payout.approvedAt = payout.approvedAt || new Date();
+        payout.paidAt = disburseResult.transferredAt;
+        payout.paidByUserId = params.actorUserId;
+        payout.transferReference = disburseResult.transferReference;
+
+        await payout.save({ transaction });
+
+        await writeAuditLog({
+            actorId: params.actorUserId,
+            action: "admin_payout.disburse",
+            targetType: "host_payout_batch",
+            targetId: payout.payoutId,
+            metadata: {
+                hostId: payout.hostId,
+                amount: payout.amount,
+                provider: disburseResult.provider,
+                transferReference: disburseResult.transferReference,
+            },
+            transaction,
+        });
+
+        await notifyPayoutPaid(payout.payoutId, transaction);
+
+        return {
+            payout,
+            disbursement: disburseResult,
+        };
+    });
+}
+
+export const requestHostPayout = async (
+    host: AuthenticatedUser,
+    input: RequestHostPayoutInput,
+    context: AuditContext = {},
+) => {
+    const hostId = getCurrentUserId(host);
+    const amountVnd = BigInt(Math.round(input.amount));
+
+    if (amountVnd < 200000n) {
+        throw new ApiError(422, "Số tiền rút tối thiểu là 200.000 VNĐ", [
+            { path: "amount", msg: "Số tiền rút tối thiểu là 200.000 VNĐ" },
+        ]);
+    }
+
+    return sequelize.transaction(async (transaction) => {
+        let payoutAccount: PayoutAccountDocument | null = null;
+        if (input.payoutAccountId) {
+            payoutAccount = await PayoutAccount.findOne({
+                where: {
+                    payoutAccountId: input.payoutAccountId,
+                    userId: hostId,
+                    deletedAt: null,
+                },
+                transaction,
+            });
+        } else {
+            payoutAccount = await PayoutAccount.findOne({
+                where: {
+                    userId: hostId,
+                    isDefault: true,
+                    deletedAt: null,
+                },
+                transaction,
+            });
+            if (!payoutAccount) {
+                payoutAccount = await PayoutAccount.findOne({
+                    where: {
+                        userId: hostId,
+                        deletedAt: null,
+                    },
+                    order: [["createdAt", "DESC"]],
+                    transaction,
+                });
+            }
+        }
+
+        if (!payoutAccount) {
+            throw new ApiError(400, "Vui lòng liên kết tài khoản ngân hàng nhận tiền trước khi yêu cầu rút.");
+        }
+
+        const eligibleBookings = await sequelize.query<BookingPayoutCandidate>(
+            `
+            SELECT
+                b.booking_id AS bookingId,
+                b.booking_id AS bookingDetailId,
+                b.listing_id AS listingId,
+                b.host_user_id AS hostId,
+                b.status AS bookingStatus,
+                p.status AS paymentStatus,
+                l.title AS listingTitle,
+                b.total_amount AS totalAmount,
+                b.currency,
+                COALESCE(b.service_fee_amount, 0) AS serviceFeeAmount,
+                GREATEST(COALESCE(b.total_amount, 0) - COALESCE(b.service_fee_amount, 0), 0) AS hostAmount
+            FROM bookings b
+            INNER JOIN listings l ON l.listing_id = b.listing_id
+            LEFT JOIN payments p ON p.booking_id = b.booking_id AND p.status = 'paid'
+            WHERE b.host_user_id = :hostId
+              AND b.status IN ('checked_out', 'completed')
+              AND p.status = 'paid'
+              AND b.booking_id NOT IN (
+                  SELECT i.booking_detail_id
+                  FROM host_payout_booking_item i
+                  INNER JOIN host_payout_batch pb ON pb.payout_id = i.payout_id
+                  WHERE pb.status IN ('pending', 'approved', 'processing', 'paid')
+              )
+            FOR UPDATE
+            `,
+            {
+                replacements: { hostId },
+                type: QueryTypes.SELECT,
+                transaction,
+            },
+        );
+
+        const availableBalanceVnd = eligibleBookings.reduce(
+            (sum, b) => sum + moneyToVnd(b.hostAmount),
+            0n,
+        );
+
+        if (eligibleBookings.length > 0 && amountVnd > availableBalanceVnd) {
+            throw new ApiError(422, "Số tiền yêu cầu rút vượt quá số dư khả dụng", [
+                {
+                    path: "amount",
+                    msg: `Số dư khả dụng hiện tại là ${availableBalanceVnd.toString()} VND`,
+                },
+            ]);
+        }
+
+        const payout = await HostPayoutBatch.create(
+            {
+                hostId,
+                payoutAccountId: payoutAccount.payoutAccountId,
+                amount: vndToNumber(amountVnd),
+                currency: "VND",
+                status: "pending",
+                notes: input.notes?.trim() ? input.notes.trim() : "Host yêu cầu rút tiền",
+                createdByUserId: hostId,
+                approvedByUserId: null,
+                approvedAt: null,
+                rejectedByUserId: null,
+                rejectedAt: null,
+                rejectionReason: null,
+                paidAt: null,
+                paidByUserId: null,
+                transferReference: null,
+            },
+            { transaction },
+        );
+
+        if (eligibleBookings.length > 0) {
+            let allocatedVnd = 0n;
+            const selectedBookings: BookingPayoutCandidate[] = [];
+            for (const b of eligibleBookings) {
+                if (allocatedVnd >= amountVnd) break;
+                selectedBookings.push(b);
+                allocatedVnd += moneyToVnd(b.hostAmount);
+            }
+
+            if (selectedBookings.length > 0) {
+                await HostPayoutBookingItem.bulkCreate(
+                    selectedBookings.map((row) => ({
+                        payoutId: payout.payoutId,
+                        bookingOrderId: row.bookingId,
+                        bookingDetailId: row.bookingDetailId,
+                        amount: row.totalAmount,
+                        currency: row.currency,
+                        serviceFeeAmount: row.serviceFeeAmount,
+                        hostAmount: row.hostAmount,
+                        createdAt: new Date(),
+                    })),
+                    { transaction },
+                );
+            }
+        }
+
+        await writeAuditLog({
+            actorId: hostId,
+            action: "payout.host_request",
+            targetType: "host_payout_batch",
+            targetId: payout.payoutId,
+            metadata: {
+                hostId,
+                payoutAccountId: payoutAccount.payoutAccountId,
+                amount: vndToNumber(amountVnd),
+                currency: "VND",
+            },
+            ipAddress: context.ipAddress,
+            userAgent: context.userAgent,
+            transaction,
+        });
+
+        await notifyPayoutCreated(payout.payoutId, transaction);
+
+        return {
+            payoutId: payout.payoutId,
+            amount: payout.amount,
+            currency: payout.currency,
+            status: payout.status,
+            createdAt: payout.createdAt,
+            payoutAccount: {
+                payoutAccountId: payoutAccount.payoutAccountId,
+                bankName: payoutAccount.bankName,
+                accountName: payoutAccount.accountName,
+                accountNumberMasked: payoutAccount.accountNumber
+                    ? `••••${payoutAccount.accountNumber.slice(-4)}`
+                    : "",
+            },
+        };
+    });
+};

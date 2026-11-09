@@ -10,6 +10,7 @@ import adminVerificationsRoutes from "../verifications/admin-verifications.route
 import { adminCouponsRoutes } from "../coupons/coupons.routes";
 import { adminReportsRouter } from "../reports/reports.routes";
 import adminFeesRoutes from "./admin-fees.routes";
+import adminRefundsRoutes from "../refunds/admin-refunds.routes";
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ router.use("/verifications", adminVerificationsRoutes);
 router.use("/listings", adminListingsRoutes);
 router.use("/users", adminUsersRoutes);
 router.use("/host-payouts", adminHostPayoutsRoutes);
+router.use("/refunds", adminRefundsRoutes);
 router.use("/coupons", adminCouponsRoutes);
 router.use("/reports", adminReportsRouter);
 router.use("/fees", adminFeesRoutes);

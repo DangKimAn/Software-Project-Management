@@ -41,6 +41,8 @@ docs/ai-fix/
 **/*.md
 *.txt
 **/*.txt
+*.pdf
+**/*.pdf
 
 # Node.js (Source goc/backend, Source goc/frontend)
 **/node_modules/

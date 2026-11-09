@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/errors/app_failure.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
@@ -98,20 +100,20 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
     ref.invalidate(blogListProvider(_selectedCategory));
   }
 
-  (String, String) _resolveErrorTitleAndMessage(Object err) {
-    if (err is NetworkFailure) {
-      return ('Không có kết nối mạng', err.message);
+  (String, String) _resolveErrorTitleAndMessage(
+    Object err,
+    BuildContext context,
+    String localeCode,
+  ) {
+    final errorCopy = LocaleFormatters.localizeFailure(
+      err,
+      localeCode: localeCode,
+      l10n: context.l10n,
+    );
+    if (err is AppFailure && err.message.trim().isNotEmpty) {
+      return (errorCopy.title, err.message);
     }
-    if (err is ServerFailure) {
-      return ('Lỗi máy chủ', err.message);
-    }
-    if (err is RateLimitFailure) {
-      return ('Tạm thời quá tải', err.message);
-    }
-    if (err is AppFailure) {
-      return ('Không thể tải danh sách bài viết', err.message);
-    }
-    return ('Không thể tải danh sách bài viết', err.toString());
+    return (errorCopy.title, errorCopy.message);
   }
 
   List<String> _buildCategoryList(List<BlogPost> loadedPosts) {
@@ -134,6 +136,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
   @override
   Widget build(BuildContext context) {
     final paginatedAsync = ref.watch(blogPaginatedProvider(_activeFilter));
+    final localeCode = ref.watch(localeProvider);
     final loadedPosts = paginatedAsync.valueOrNull?.items ?? const <BlogPost>[];
     final categories = _buildCategoryList(loadedPosts);
     final screenWidth = MediaQuery.sizeOf(context).width;
@@ -170,7 +173,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'CẨM NANG LƯU TRÚ VŨNG TÀU',
+                                context.l10n.blogListBadge,
                                 style: AppTypography.caption.copyWith(
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 1.6,
@@ -179,7 +182,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                               ),
                               const SizedBox(height: AppSpacing.xs),
                               Text(
-                                'Kinh nghiệm lưu trú, lịch trình & bí quyết đặt Villa biển Vũng Tàu',
+                                context.l10n.blogListHeroTitle,
                                 style: AppTypography.displayMedium.copyWith(
                                   fontSize: screenWidth < 360 ? 22 : 28,
                                   color: AppColors.textStrong,
@@ -192,7 +195,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                 controller: _searchCtrl,
                                 textInputAction: TextInputAction.search,
                                 decoration: InputDecoration(
-                                  hintText: 'Tìm bài viết cẩm nang Vũng Tàu...',
+                                  hintText: context.l10n.blogSearchHint,
                                   filled: true,
                                   fillColor: AppColors.surfaceBase,
                                   contentPadding: const EdgeInsets.symmetric(
@@ -212,7 +215,8 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                   ),
                                   suffixIcon: _searchCtrl.text.isNotEmpty
                                       ? AppIconButton(
-                                          tooltip: 'Xóa từ khóa tìm kiếm',
+                                          tooltip: context
+                                              .l10n.blogClearSearchTooltip,
                                           icon: const Icon(
                                             LucideIcons.x,
                                             size: 18,
@@ -253,6 +257,12 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                 child: Row(
                                   children: categories.map((cat) {
                                     final selected = _selectedCategory == cat;
+                                    final displayCat =
+                                        LocaleFormatters.localizeBlogCategory(
+                                      cat,
+                                      localeCode: localeCode,
+                                      l10n: context.l10n,
+                                    );
                                     return Padding(
                                       padding: const EdgeInsets.only(
                                         right: AppSpacing.xs,
@@ -260,7 +270,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                       child: Semantics(
                                         button: true,
                                         selected: selected,
-                                        label: 'Chuyên mục $cat',
+                                        label: 'Chuyên mục $displayCat',
                                         child: InkWell(
                                           key: ValueKey('blog-category-$cat'),
                                           onTap: () => _selectCategory(cat),
@@ -289,7 +299,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                                 ),
                                               ),
                                               child: Text(
-                                                cat,
+                                                displayCat,
                                                 style: AppTypography.bodyMedium
                                                     .copyWith(
                                                   fontSize: 13,
@@ -341,10 +351,12 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                               vertical: AppSpacing.xxl,
                             ),
                             child: AppEmptyView(
-                              title: 'Chưa có bài viết phù hợp',
+                              title: context.l10n.blogEmptyTitle,
                               description:
-                                  'Hãy thử chọn chuyên mục khác hoặc từ khóa khác.',
-                              actionText: hasActiveFilter ? 'Xóa bộ lọc' : null,
+                                  context.l10n.blogEmptyDescription,
+                              actionText: hasActiveFilter
+                                  ? context.l10n.blogClearFilters
+                                  : null,
                               onAction: hasActiveFilter ? _resetFilters : null,
                             ),
                           ),
@@ -407,7 +419,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                         padding: const EdgeInsets.all(48),
                         child: Center(
                           child: Semantics(
-                            label: 'Đang tải danh sách bài viết',
+                            label: context.l10n.blogLoadingList,
                             child: const CircularProgressIndicator(
                               color: AppColors.primary,
                             ),
@@ -418,6 +430,8 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                     error: (err, _) {
                       final (title, message) = _resolveErrorTitleAndMessage(
                         err,
+                        context,
+                        localeCode,
                       );
                       return SliverToBoxAdapter(
                         child: AppErrorView(
@@ -485,7 +499,7 @@ class BlogCoverImage extends StatelessWidget {
 /// - Card radius 24dp (`AppRadii.roundedCard`), no heavy shadow.
 /// - Fixed aspect ratio image (16:10) with placeholder fallback (zero layout jump).
 /// - Flexible text layout supporting 320dp width and text scaling 1.0/1.3/1.6 without overflow.
-class BlogPostCard extends StatelessWidget {
+class BlogPostCard extends ConsumerWidget {
   final BlogPost post;
   final VoidCallback onTap;
 
@@ -496,12 +510,19 @@ class BlogPostCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final locale = ref.watch(localeProvider);
+    final localizedPost = LocaleFormatters.localizeBlogPost(
+      post,
+      localeCode: locale,
+      l10n: context.l10n,
+    );
+
     return Semantics(
       button: true,
-      label: '${post.title}, chuyên mục ${post.category}',
+      label: '${localizedPost.title}, ${localizedPost.category}',
       child: InkWell(
-        key: ValueKey('blog-card-${post.slug}'),
+        key: ValueKey('blog-card-${localizedPost.slug}'),
         onTap: onTap,
         borderRadius: AppRadii.roundedCard,
         child: Container(
@@ -515,7 +536,7 @@ class BlogPostCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               BlogCoverImage(
-                rawUrl: post.coverImage,
+                rawUrl: localizedPost.coverImage,
                 aspectRatio: 16 / 10,
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(AppRadii.card),
@@ -541,16 +562,16 @@ class BlogPostCard extends StatelessWidget {
                             borderRadius: AppRadii.roundedPill,
                           ),
                           child: Text(
-                            post.category,
+                            localizedPost.category,
                             style: AppTypography.caption.copyWith(
                               fontWeight: FontWeight.w700,
                               color: AppColors.textStrong,
                             ),
                           ),
                         ),
-                        if (post.readTime.isNotEmpty)
+                        if (localizedPost.readTime.isNotEmpty)
                           Text(
-                            post.readTime,
+                            localizedPost.readTime,
                             style: AppTypography.caption.copyWith(
                               color: AppColors.textMuted,
                             ),
@@ -559,7 +580,7 @@ class BlogPostCard extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      post.title,
+                      localizedPost.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.cardTitle.copyWith(
@@ -569,10 +590,10 @@ class BlogPostCard extends StatelessWidget {
                         color: AppColors.textStrong,
                       ),
                     ),
-                    if (post.excerpt.isNotEmpty) ...[
+                    if (localizedPost.excerpt.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        post.excerpt,
+                        localizedPost.excerpt,
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.bodyMuted.copyWith(
@@ -592,7 +613,7 @@ class BlogPostCard extends StatelessWidget {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            post.location,
+                            localizedPost.location,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: AppTypography.bodyMedium.copyWith(
@@ -650,7 +671,7 @@ class _BlogPaginationBar extends StatelessWidget {
         Semantics(
           button: true,
           enabled: pagination.hasPreviousPage,
-          label: 'Trang trước',
+          label: context.l10n.blogPaginationPrev,
           child: OutlinedButton(
             key: const ValueKey('blog-page-prev'),
             onPressed: pagination.hasPreviousPage
@@ -673,7 +694,7 @@ class _BlogPaginationBar extends StatelessWidget {
           Semantics(
             button: true,
             selected: p == currentPage,
-            label: 'Trang $p',
+            label: context.l10n.blogPaginationPage(p),
             child: InkWell(
               key: ValueKey('blog-page-$p'),
               onTap: p == currentPage ? null : () => onPageSelected(p),
@@ -688,8 +709,8 @@ class _BlogPaginationBar extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: p == currentPage
-                        ? AppColors.primary
-                        : AppColors.surfaceBase,
+                      ? AppColors.primary
+                      : AppColors.surfaceBase,
                     borderRadius: AppRadii.roundedPill,
                     border: Border.all(
                       color: p == currentPage
@@ -713,7 +734,7 @@ class _BlogPaginationBar extends StatelessWidget {
         Semantics(
           button: true,
           enabled: pagination.hasNextPage,
-          label: 'Trang sau',
+          label: context.l10n.blogPaginationNext,
           child: OutlinedButton(
             key: const ValueKey('blog-page-next'),
             onPressed: pagination.hasNextPage

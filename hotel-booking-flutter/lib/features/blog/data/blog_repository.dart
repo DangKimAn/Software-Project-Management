@@ -676,6 +676,42 @@ class BlogPost {
     this.status = 'published',
   });
 
+  BlogPost copyWith({
+    String? id,
+    String? slug,
+    String? title,
+    String? excerpt,
+    String? content,
+    String? coverImage,
+    String? category,
+    String? location,
+    String? readTime,
+    String? authorName,
+    String? publishedAt,
+    int? readTimeMinutes,
+    List<String>? tags,
+    List<BlogContentBlock>? contentBlocks,
+    String? status,
+  }) {
+    return BlogPost(
+      id: id ?? this.id,
+      slug: slug ?? this.slug,
+      title: title ?? this.title,
+      excerpt: excerpt ?? this.excerpt,
+      content: content ?? this.content,
+      coverImage: coverImage ?? this.coverImage,
+      category: category ?? this.category,
+      location: location ?? this.location,
+      readTime: readTime ?? this.readTime,
+      authorName: authorName ?? this.authorName,
+      publishedAt: publishedAt ?? this.publishedAt,
+      readTimeMinutes: readTimeMinutes ?? this.readTimeMinutes,
+      tags: tags ?? this.tags,
+      contentBlocks: contentBlocks ?? this.contentBlocks,
+      status: status ?? this.status,
+    );
+  }
+
   /// Returns sanitized rich content blocks, parsing [content] on the fly if [contentBlocks] was not pre-populated.
   List<BlogContentBlock> get resolvedBlocks {
     if (contentBlocks.isNotEmpty) return contentBlocks;

@@ -6,6 +6,7 @@ import {
     deleteExistingPayoutAccount,
     listHostPayouts,
     listPayoutAccounts,
+    requestHostPayoutHandler,
     updateExistingPayoutAccount,
 } from "./payouts.controller";
 import { isValidIsoDate } from "../../common/validation";
@@ -88,5 +89,24 @@ router.delete(
 );
 
 router.get("/payouts", payoutListValidators, listHostPayouts);
+
+router.post(
+    "/payouts/request",
+    [
+        body("amount")
+            .isFloat({ min: 200000 })
+            .withMessage("Số tiền rút tối thiểu là 200.000 VNĐ"),
+        body("payoutAccountId")
+            .optional({ nullable: true })
+            .isInt({ min: 1 })
+            .withMessage("payoutAccountId must be a positive integer"),
+        body("notes")
+            .optional({ nullable: true })
+            .isString()
+            .trim()
+            .isLength({ max: 500 }),
+    ],
+    requestHostPayoutHandler,
+);
 
 export default router;

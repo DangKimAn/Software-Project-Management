@@ -368,6 +368,9 @@ class _FakeBookingRepository implements BookingRepository {
   Future<void> cancelBooking({
     required String bookingId,
     required String reason,
+    String? bankName,
+    String? accountNumber,
+    String? accountName,
   }) async {}
 
   @override

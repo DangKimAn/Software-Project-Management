@@ -47,14 +47,20 @@ export const SHEET_FONT_FAMILY = "Times New Roman";
 
 export const SHEET_COLORS = {
     WHITE: { red: 1, green: 1, blue: 1 } satisfies SheetRgbColor,
-    PENDING_HOLD_ORANGE: { red: 1, green: 0.902, blue: 0.8 } satisfies SheetRgbColor, // #FFE6CC
-    BOOKED_GREEN: { red: 0.851, green: 0.918, blue: 0.827 } satisfies SheetRgbColor, // #D9EAD3
+    PENDING_HOLD_ORANGE: { red: 1, green: 0.6, blue: 0 } satisfies SheetRgbColor, // #FF9900 (Orange)
+    BOOKED_GREEN: { red: 0, green: 1, blue: 0 } satisfies SheetRgbColor, // #00FF00 (Green)
     BOOKED_BLUE: { red: 0.812, green: 0.886, blue: 0.953 } satisfies SheetRgbColor, // #CFE2F3
-    HOST_BLOCKED_RED: { red: 0.957, green: 0.8, blue: 0.8 } satisfies SheetRgbColor, // #F4CCCC
+    HOST_BLOCKED_RED: { red: 1, green: 0, blue: 0 } satisfies SheetRgbColor, // #FF0000 (Red)
     INVALID_DAY_GRAY: { red: 0.918, green: 0.918, blue: 0.918 } satisfies SheetRgbColor, // #EAEAEA
     HEADER_BG: { red: 0.953, green: 0.957, blue: 0.965 } satisfies SheetRgbColor, // #F3F4F6
     SUBHEADER_BG: { red: 0.976, green: 0.98, blue: 0.984 } satisfies SheetRgbColor, // #F9FAFB
     ARCHIVED_BG: { red: 0.961, green: 0.961, blue: 0.961 } satisfies SheetRgbColor, // #F5F5F5
+} as const;
+
+export const LEGACY_PASTEL_COLORS = {
+    PENDING_HOLD_ORANGE: { red: 1, green: 0.902, blue: 0.8 } satisfies SheetRgbColor, // #FFE6CC
+    BOOKED_GREEN: { red: 0.851, green: 0.918, blue: 0.827 } satisfies SheetRgbColor, // #D9EAD3
+    HOST_BLOCKED_RED: { red: 0.957, green: 0.8, blue: 0.8 } satisfies SheetRgbColor, // #F4CCCC
 } as const;
 
 export type RawSheetCell = {
@@ -371,7 +377,46 @@ const SYSTEM_BOOKED_MARKER_REGEX = /^(?:Đ|D)\s*#(\d+)$/i;
 export const isPriceOrNumericText = (text: string): boolean => {
     const cleaned = text.trim().replace(/\s+/g, "").toLowerCase();
     if (!cleaned) return false;
+    if (/^(\d{1,4}(?:[.,]\d{1,3})?)\s*k$/i.test(cleaned)) return true;
+    if (/^(\d{1,3}(?:[.,]\d{1,3})?)\s*(?:tr|trieu|triệu)$/i.test(cleaned)) return true;
     return /^(\d{1,3}([.,]\d{3})*|\d+)(\s*(?:đ|vnd|vnđ|k))?$/i.test(cleaned);
+};
+
+export const parsePriceFromSheetText = (text?: string | null): number | null => {
+    if (!text) return null;
+    const cleaned = text.trim().replace(/\s+/g, "").toLowerCase();
+    if (!cleaned) return null;
+
+    // e.g. "4500k", "4200k"
+    const kMatch = /^(\d{1,4}(?:[.,]\d{1,3})?)\s*k$/i.exec(cleaned);
+    if (kMatch) {
+        const val = parseFloat(kMatch[1].replace(/,/g, "."));
+        const price = Math.round(val * 1000);
+        return price >= 50_000 && price <= 500_000_000 ? price : null;
+    }
+
+    // e.g. "4.5tr", "5tr"
+    const trMatch = /^(\d{1,3}(?:[.,]\d{1,3})?)\s*(?:tr|trieu|triệu)$/i.exec(cleaned);
+    if (trMatch) {
+        const val = parseFloat(trMatch[1].replace(/,/g, "."));
+        const price = Math.round(val * 1_000_000);
+        return price >= 50_000 && price <= 500_000_000 ? price : null;
+    }
+
+    // Strip currency symbols (đ, vnd, vnđ)
+    const numOnly = cleaned.replace(/(?:đ|vnd|vnđ)$/i, "").trim();
+    let parsedStr = numOnly;
+    if (/^\d{1,3}(?:[.,]\d{3})+$/.test(parsedStr)) {
+        parsedStr = parsedStr.replace(/[.,]/g, "");
+    } else if (/^\d+[.,]\d{1,2}$/.test(parsedStr)) {
+        parsedStr = parsedStr.replace(/,/g, ".");
+    }
+
+    const num = Number(parsedStr);
+    if (Number.isFinite(num) && num >= 50_000 && num <= 500_000_000) {
+        return Math.round(num);
+    }
+    return null;
 };
 
 export const classifySheetCalendarCell = (cell?: RawSheetCell | null): ParsedCellClassification => {
@@ -392,39 +437,68 @@ export const classifySheetCalendarCell = (cell?: RawSheetCell | null): ParsedCel
         !rgb || (rgb.red >= 0.965 && rgb.green >= 0.965 && rgb.blue >= 0.965);
 
     const holdMatch = SYSTEM_HOLD_MARKER_REGEX.exec(rawValue);
-    if (holdMatch) {
-        const isHoldColor =
-            !rgb ||
-            isWhiteOrUnset ||
-            colorDistance(rgb, SHEET_COLORS.PENDING_HOLD_ORANGE) <= 0.18;
-        if (isHoldColor) {
-            return {
-                state: "pending_hold",
-                rawValue,
-                bgHex,
-                bookingIdFromMarker: Number(holdMatch[1]),
-            };
-        }
-    }
-
     const bookedMatch = SYSTEM_BOOKED_MARKER_REGEX.exec(rawValue);
-    if (bookedMatch) {
-        const isBookedColor =
-            !rgb ||
-            isWhiteOrUnset ||
-            colorDistance(rgb, SHEET_COLORS.BOOKED_GREEN) <= 0.2 ||
-            colorDistance(rgb, SHEET_COLORS.BOOKED_BLUE) <= 0.2;
-        if (isBookedColor) {
-            return {
-                state: "booked",
-                rawValue,
-                bgHex,
-                bookingIdFromMarker: Number(bookedMatch[1]),
-            };
-        }
+
+    const isHoldColor =
+        Boolean(rgb) &&
+        !isWhiteOrUnset &&
+        (colorDistance(rgb!, SHEET_COLORS.PENDING_HOLD_ORANGE) <= 0.25 ||
+            colorDistance(rgb!, LEGACY_PASTEL_COLORS.PENDING_HOLD_ORANGE) <= 0.25);
+
+    const isBookedColor =
+        Boolean(rgb) &&
+        !isWhiteOrUnset &&
+        (colorDistance(rgb!, SHEET_COLORS.BOOKED_GREEN) <= 0.25 ||
+            colorDistance(rgb!, LEGACY_PASTEL_COLORS.BOOKED_GREEN) <= 0.25 ||
+            colorDistance(rgb!, SHEET_COLORS.BOOKED_BLUE) <= 0.2);
+
+    const isRedColor =
+        Boolean(rgb) &&
+        !isWhiteOrUnset &&
+        (colorDistance(rgb!, SHEET_COLORS.HOST_BLOCKED_RED) <= 0.25 ||
+            colorDistance(rgb!, LEGACY_PASTEL_COLORS.HOST_BLOCKED_RED) <= 0.25);
+
+    // If cell is Hold (Orange), Booked (Green/Blue), or Blocked (Red),
+    // retain state even if the cell contains the daily room price!
+    if (isHoldColor) {
+        return {
+            state: "pending_hold",
+            rawValue,
+            bgHex,
+            bookingIdFromMarker: holdMatch ? Number(holdMatch[1]) : null,
+        };
     }
 
-    if (isWhiteOrUnset && (rawValue === "" || isPriceOrNumericText(rawValue))) {
+    if (isBookedColor) {
+        return {
+            state: "booked",
+            rawValue,
+            bgHex,
+            bookingIdFromMarker: bookedMatch ? Number(bookedMatch[1]) : null,
+        };
+    }
+
+    if (isRedColor) {
+        return {
+            state: "host_blocked",
+            rawValue,
+            bgHex,
+            bookingIdFromMarker: null,
+        };
+    }
+
+    // If cell explicitly contains price / numeric text (e.g. "4200000", "4,200,000", "4200k")
+    // and is NOT red, the day is OPEN and available.
+    if (isPriceOrNumericText(rawValue)) {
+        return {
+            state: "empty",
+            rawValue,
+            bgHex,
+            bookingIdFromMarker: null,
+        };
+    }
+
+    if (isWhiteOrUnset && rawValue === "") {
         return {
             state: "empty",
             rawValue,
@@ -436,7 +510,10 @@ export const classifySheetCalendarCell = (cell?: RawSheetCell | null): ParsedCel
     // If cell has system Orange/Green color WITHOUT text (e.g. system displays hold/booked purely by color),
     // accurately classify as pending_hold or booked!
     if (rawValue === "" && rgb) {
-        if (colorDistance(rgb, SHEET_COLORS.PENDING_HOLD_ORANGE) <= 0.15) {
+        if (
+            colorDistance(rgb, SHEET_COLORS.PENDING_HOLD_ORANGE) <= 0.2 ||
+            colorDistance(rgb, LEGACY_PASTEL_COLORS.PENDING_HOLD_ORANGE) <= 0.2
+        ) {
             return {
                 state: "pending_hold",
                 rawValue: "",
@@ -445,7 +522,8 @@ export const classifySheetCalendarCell = (cell?: RawSheetCell | null): ParsedCel
             };
         }
         if (
-            colorDistance(rgb, SHEET_COLORS.BOOKED_GREEN) <= 0.15 ||
+            colorDistance(rgb, SHEET_COLORS.BOOKED_GREEN) <= 0.2 ||
+            colorDistance(rgb, LEGACY_PASTEL_COLORS.BOOKED_GREEN) <= 0.2 ||
             colorDistance(rgb, SHEET_COLORS.BOOKED_BLUE) <= 0.15
         ) {
             return {

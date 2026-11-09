@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
 import '../core/date/booking_date.dart';
+import '../features/blog/data/blog_repository.dart';
 import '../features/villas/domain/entities/villa.dart';
 import 'generated/app_localizations.dart';
 
@@ -573,5 +574,229 @@ abstract final class LocaleFormatters {
       default:
         return rawStatus;
     }
+  }
+
+  /// Formats raw date string (e.g. `2026-10-27` or ISO8601) according to locale:
+  /// - `vi`: `27/10/2026`
+  /// - `en`: `Oct 27, 2026`
+  /// - `ko`: `2026. 10. 27.`
+  static String formatBlogDate(
+    String rawDate, {
+    String localeCode = 'vi',
+  }) {
+    final trimmed = rawDate.trim();
+    if (trimmed.isEmpty) return '';
+    final match = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})').firstMatch(trimmed);
+    if (match != null) {
+      final y = int.tryParse(match.group(1) ?? '') ?? 2026;
+      final m = int.tryParse(match.group(2) ?? '') ?? 1;
+      final d = int.tryParse(match.group(3) ?? '') ?? 1;
+      return formatBookingDate(
+        BookingDate(year: y, month: m, day: d),
+        localeCode: localeCode,
+      );
+    }
+    final parsed = DateTime.tryParse(trimmed);
+    if (parsed != null) {
+      return formatBookingDate(
+        BookingDate(year: parsed.year, month: parsed.month, day: parsed.day),
+        localeCode: localeCode,
+      );
+    }
+    return trimmed;
+  }
+
+  /// Formats read time in minutes according to locale:
+  /// - `vi`: `7 phút đọc`
+  /// - `en`: `7 mins read` (or `1 min read`)
+  /// - `ko`: `7분 읽기`
+  static String formatBlogReadTime(
+    int minutes, {
+    String rawReadTime = '',
+    String localeCode = 'vi',
+    AppLocalizations? l10n,
+  }) {
+    final effectiveL10n = l10n ?? resolveL10n(localeCode);
+    var mins = minutes;
+    if (mins <= 0 && rawReadTime.isNotEmpty) {
+      final match = RegExp(r'(\d+)').firstMatch(rawReadTime);
+      if (match != null) {
+        mins = int.tryParse(match.group(1) ?? '') ?? 0;
+      }
+    }
+    if (mins <= 0) mins = 5;
+    return effectiveL10n.blogReadMinutes(mins);
+  }
+
+  /// Localizes blog category name according to active locale.
+  static String localizeBlogCategory(
+    String category, {
+    String localeCode = 'vi',
+    AppLocalizations? l10n,
+  }) {
+    final effectiveL10n = l10n ?? resolveL10n(localeCode);
+    final trimmed = category.trim();
+    final lower = trimmed.toLowerCase();
+
+    if (lower == 'tất cả' || lower == 'all' || lower == '전체') {
+      return effectiveL10n.blogCategoryAll;
+    }
+    if (lower.contains('review') || lower.contains('đánh giá')) {
+      return effectiveL10n.blogCategoryReviews;
+    }
+    if (lower.contains('cẩm nang du lịch') ||
+        lower.contains('travel guide') ||
+        lower.contains('여행 가이드')) {
+      return effectiveL10n.blogCategoryTravelGuide;
+    }
+    if (lower.contains('chuyến đi') || lower.contains('trip guide')) {
+      return effectiveL10n.blogCategoryTripGuide;
+    }
+    if (lower.contains('kinh nghiệm đặt phòng') ||
+        lower.contains('booking tips')) {
+      return effectiveL10n.blogCategoryBookingTips;
+    }
+    if (lower.contains('khám phá địa phương') ||
+        lower.contains('khám phá') ||
+        lower.contains('local discovery')) {
+      return effectiveL10n.blogCategoryLocalDiscovery;
+    }
+    if (lower.contains('mẹo lưu trú') ||
+        lower.contains('mẹo') ||
+        lower.contains('stay tips')) {
+      return effectiveL10n.blogCategoryStayTips;
+    }
+    if (lower.contains('gần biển') || lower.contains('near beach')) {
+      return effectiveL10n.blogCategoryNearBeach;
+    }
+    if (lower.contains('checklist')) {
+      return effectiveL10n.blogCategoryBookingChecklist;
+    }
+    return trimmed;
+  }
+
+  /// Localizes blog author attribution.
+  static String localizeBlogAuthor(
+    String author, {
+    String localeCode = 'vi',
+    AppLocalizations? l10n,
+  }) {
+    final effectiveL10n = l10n ?? resolveL10n(localeCode);
+    final trimmed = author.trim();
+    if (trimmed.isEmpty ||
+        trimmed.contains('Ban biên tập') ||
+        trimmed.contains('The Palm') ||
+        trimmed.contains('Editorial')) {
+      return effectiveL10n.blogDefaultAuthor;
+    }
+    return trimmed;
+  }
+
+  /// Localizes blog destination / location name.
+  static String localizeBlogLocation(
+    String location, {
+    String localeCode = 'vi',
+  }) {
+    final lang = normalizeLanguageCode(localeCode);
+    final trimmed = location.trim();
+    final lower = trimmed.toLowerCase();
+    if (trimmed.isEmpty || lower.contains('vũng tàu') || lower.contains('vung tau')) {
+      if (lang == 'ko') return '붕따우';
+      if (lang == 'en') return 'Vung Tau';
+      return 'Vũng Tàu';
+    }
+    return trimmed;
+  }
+
+  /// Localizes blog post title for seeded & standard articles.
+  static String localizeBlogTitle(
+    BlogPost post, {
+    String localeCode = 'vi',
+  }) {
+    final lang = normalizeLanguageCode(localeCode);
+    if (lang == 'vi') return post.title;
+
+    if (post.slug.contains('thue-villa-vung-tau-gia-dinh') ||
+        post.title.contains('Kinh nghiệm chọn thuê')) {
+      return lang == 'ko'
+          ? '가족 및 단체 여행을 위한 붕따우 휴양 빌라 렌트 팁'
+          : 'Tips for renting vacation villas in Vung Tau for families and friend groups';
+    }
+    if (post.slug.contains('top-5-bai-bien') ||
+        post.title.contains('Top 5 bãi biển')) {
+      return lang == 'ko'
+          ? '붕따우에서 꼭 방문해야 할 가장 아름답고 평화로운 해변 Top 5'
+          : 'Top 5 most beautiful and peaceful beaches in Vung Tau to explore';
+    }
+    return post.title;
+  }
+
+  /// Localizes blog post excerpt for seeded & standard articles.
+  static String localizeBlogExcerpt(
+    BlogPost post, {
+    String localeCode = 'vi',
+  }) {
+    final lang = normalizeLanguageCode(localeCode);
+    if (lang == 'vi') return post.excerpt;
+
+    if (post.slug.contains('thue-villa-vung-tau-gia-dinh') ||
+        post.title.contains('Kinh nghiệm chọn thuê')) {
+      return lang == 'ko'
+          ? '빌라 예약 시 핵심 기준: 프라이빗 수영장, BBQ 시설, 해변 인접성 및 호스트 신뢰도.'
+          : 'Key criteria when booking villas: private pool, BBQ amenities, beachfront location, and host reputation.';
+    }
+    if (post.slug.contains('top-5-bai-bien') ||
+        post.title.contains('Top 5 bãi biển')) {
+      return lang == 'ko'
+          ? '바이저우, 바이두아의 원시적인 아름다움과 붕따우의 그림 같은 해안 명소를 만나보세요.'
+          : 'Discover the pristine beauty of Bai Dau, Bai Dua and scenic coastal check-in spots in Vung Tau.';
+    }
+    return post.excerpt;
+  }
+
+  /// Localizes an entire [BlogPost] model (title, excerpt, category, location, readTime, date, author).
+  static BlogPost localizeBlogPost(
+    BlogPost post, {
+    String localeCode = 'vi',
+    AppLocalizations? l10n,
+  }) {
+    final effectiveL10n = l10n ?? resolveL10n(localeCode);
+    final activeLang = normalizeLanguageCode(effectiveL10n.localeName);
+    final localizedTitle = localizeBlogTitle(post, localeCode: activeLang);
+    final localizedExcerpt = localizeBlogExcerpt(post, localeCode: activeLang);
+    final localizedCat = localizeBlogCategory(
+      post.category,
+      localeCode: activeLang,
+      l10n: effectiveL10n,
+    );
+    final localizedLoc = localizeBlogLocation(
+      post.location,
+      localeCode: activeLang,
+    );
+    final localizedRead = formatBlogReadTime(
+      post.readTimeMinutes,
+      rawReadTime: post.readTime,
+      localeCode: activeLang,
+      l10n: effectiveL10n,
+    );
+    final localizedDate = formatBlogDate(
+      post.publishedAt,
+      localeCode: activeLang,
+    );
+    final localizedAuthor = localizeBlogAuthor(
+      post.authorName,
+      localeCode: activeLang,
+      l10n: effectiveL10n,
+    );
+
+    return post.copyWith(
+      title: localizedTitle,
+      excerpt: localizedExcerpt,
+      category: localizedCat,
+      location: localizedLoc,
+      readTime: localizedRead,
+      publishedAt: localizedDate,
+      authorName: localizedAuthor,
+    );
   }
 }

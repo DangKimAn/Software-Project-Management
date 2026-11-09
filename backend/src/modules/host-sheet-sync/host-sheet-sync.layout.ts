@@ -661,14 +661,26 @@ export const buildMonthTabHeaderRequests = (
         },
     });
 
-    // Build Rows 0 to 7: HƯỚNG DẪN & NOTE GHI CHÚ MÀU SẮC (Gộp dòng & gộp cột chuyên nghiệp, xác nhận hold/booked thuần màu không chữ)
+    // Build Rows 0 to 8: HƯỚNG DẪN, CHECKBOX XÁC NHẬN & NOTE GHI CHÚ MÀU SẮC
     const rows: Array<{ values: RawSheetCell[] }> = [
-        // Row 0: Header Hướng dẫn (Col A: HƯỚNG DẪN, Col B..end: Tiêu đề banner)
+        // Row 0: Checkbox xác nhận (Col A: [ ]) & Tiêu đề banner hướng dẫn (Col B..end)
         {
             values: [
-                makeStyledHeaderCell("HƯỚNG DẪN", SHEET_COLORS.HEADER_BG, { bold: true, align: "CENTER", valign: "MIDDLE" }),
+                {
+                    userEnteredValue: { boolValue: false },
+                    userEnteredFormat: {
+                        backgroundColorStyle: { rgbColor: SHEET_COLORS.SUBHEADER_BG },
+                        horizontalAlignment: "CENTER",
+                        verticalAlignment: "MIDDLE",
+                        wrapStrategy: "OVERFLOW_CELL",
+                        textFormat: {
+                            bold: true,
+                            fontFamily: SHEET_FONT_FAMILY,
+                        },
+                    },
+                },
                 makeStyledHeaderCell(
-                    `QUY TẮC MÀU SẮC & ĐỒNG BỘ LỊCH TỰ ĐỘNG (THÁNG ${monthSpec.tabKey})`,
+                    `👉 TÍCH VÀO Ô BÊN TRÁI ĐỂ XÁC NHẬN LƯU THAY ĐỔI VÀO APP (Đổi giá, Đóng/Mở lịch) — THÁNG ${monthSpec.tabKey} (Tự động bỏ tích khi hoàn tất)`,
                     SHEET_COLORS.HEADER_BG,
                     { bold: true, align: "LEFT", valign: "MIDDLE" },
                 ),
@@ -692,12 +704,12 @@ export const buildMonthTabHeaderRequests = (
                 makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
             ],
         },
-        // Row 3: Ví dụ 2 - CAM: Giữ chỗ (Gộp dòng với Row 4) — Xác nhận thuần màu cam, không ghi chữ
+        // Row 3: Ví dụ 2 - CAM: Giữ chỗ (Gộp dòng với Row 4)
         {
             values: [
                 makeStyledHeaderCell("", SHEET_COLORS.PENDING_HOLD_ORANGE, { valign: "MIDDLE" }),
                 makeStyledHeaderCell(
-                    "Màu cam: Đang giữ chỗ (Hold) — Tự động thể hiện bằng màu cam (không ghi chữ). Đơn tạm giữ 10 phút khi khách đang thanh toán.",
+                    "Màu cam: Đang giữ chỗ (Hold) — Tự động đổi màu cam và giữ nguyên giá phòng. Đơn tạm giữ 10 phút khi khách đang thanh toán.",
                     SHEET_COLORS.WHITE,
                     { bold: false, align: "LEFT", valign: "MIDDLE", wrap: true },
                 ),
@@ -710,12 +722,12 @@ export const buildMonthTabHeaderRequests = (
                 makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
             ],
         },
-        // Row 5: Ví dụ 3 - XANH LÁ: Đã đặt (Gộp dòng với Row 6) — Xác nhận thuần màu xanh, không ghi chữ
+        // Row 5: Ví dụ 3 - XANH LÁ: Đã đặt (Gộp dòng với Row 6)
         {
             values: [
                 makeStyledHeaderCell("", SHEET_COLORS.BOOKED_GREEN, { valign: "MIDDLE" }),
                 makeStyledHeaderCell(
-                    "Màu xanh lá: Đã đặt phòng (Booked) — Tự động thể hiện bằng màu xanh lá (không ghi chữ). Đơn đặt thành công (vui lòng không tự ý mở trống).",
+                    "Màu xanh lá: Đã đặt phòng (Booked) — Tự động đổi màu xanh lá và giữ nguyên giá phòng. Đơn đặt thành công (vui lòng không tự ý mở trống).",
                     SHEET_COLORS.WHITE,
                     { bold: false, align: "LEFT", valign: "MIDDLE", wrap: true },
                 ),
@@ -728,12 +740,12 @@ export const buildMonthTabHeaderRequests = (
                 makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
             ],
         },
-        // Row 7: Ví dụ 4 - ĐỎ: Host khóa (Gộp dòng với Row 8) — Xác nhận thuần màu đỏ, không ghi chữ
+        // Row 7: Ví dụ 4 - ĐỎ: Host khóa (Gộp dòng với Row 8)
         {
             values: [
                 makeStyledHeaderCell("", SHEET_COLORS.HOST_BLOCKED_RED, { valign: "MIDDLE" }),
                 makeStyledHeaderCell(
-                    "Màu đỏ: Host khóa phòng — Chủ nhà chủ động đóng lịch (Điền chữ K hoặc tô màu đỏ tại ô ngày tương ứng).",
+                    "Màu đỏ: Host khóa phòng — Chủ nhà chủ động đóng lịch (Tô màu đỏ tại ô ngày tương ứng, nội dung giá phòng vẫn được giữ nguyên).",
                     SHEET_COLORS.WHITE,
                     { bold: false, align: "LEFT", valign: "MIDDLE", wrap: true },
                 ),
@@ -942,6 +954,26 @@ export const buildMonthTabHeaderRequests = (
         },
     });
 
+    // Native Checkbox validation for Cell A1 (Xác nhận lưu thay đổi vào App)
+    requests.push({
+        setDataValidation: {
+            range: {
+                sheetId,
+                startRowIndex: 0,
+                endRowIndex: 1,
+                startColumnIndex: 0,
+                endColumnIndex: 1,
+            },
+            rule: {
+                condition: {
+                    type: "BOOLEAN",
+                },
+                showCustomUi: true,
+                strict: true,
+            },
+        },
+    });
+
     const hasProtection = (tab.protectedRanges ?? []).some(
         (range) => range.description === `agy_protect_col_a_${monthSpec.tabKey}`,
     );
@@ -981,6 +1013,19 @@ export const buildMonthTabHeaderRequests = (
     }
 
     return requests;
+};
+
+export const isMonthTabCheckboxConfirmed = (tab: RawSheetTab): boolean => {
+    const row0 = tab.data?.[0]?.rowData?.[0];
+    const cellA1 = row0?.values?.[0];
+    if (!cellA1) {
+        return false;
+    }
+    if (cellA1.userEnteredValue?.boolValue !== undefined) {
+        return cellA1.userEnteredValue.boolValue === true;
+    }
+    const raw = String(cellA1.userEnteredValue?.stringValue ?? "").trim().toUpperCase();
+    return raw === "TRUE" || raw === "1";
 };
 
 export type DirectoryListingEntry = {

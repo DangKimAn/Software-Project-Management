@@ -714,6 +714,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/admin/chi-tra',
+        pageBuilder: (context, state) => _buildProtectedSlidePage(
+          state: state,
+          accessLevel: RouteAccessLevel.adminOnly,
+          child: const AdminPortalScreen(activeTab: 'chi-tra'),
+        ),
+      ),
+      GoRoute(
         path: '/admin/tin-nhan',
         pageBuilder: (context, state) {
           final convId = state.uri.queryParameters['conversationId'];
