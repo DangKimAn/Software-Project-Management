@@ -32,7 +32,7 @@ export const createPaymentRequest: RequestHandler = asyncHandler(async (req, res
     assertValidRequest(req);
 
     const payload = getValidatedBody<CreatePaymentInput>(req);
-    const result = await createPayment(req.user!, payload, req.header("x-forwarded-for") ?? req.ip);
+    const result = await createPayment(req.user!, payload, req.ip);
 
     return sendSuccess(res, {
         statusCode: 201,

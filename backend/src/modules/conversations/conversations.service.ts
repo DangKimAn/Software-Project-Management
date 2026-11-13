@@ -6,6 +6,7 @@ import Conversation from "../../models/conversation";
 import ConversationParticipant from "../../models/conversation-participant";
 import Message, { MessageAttachment, MessageDocument, MessageType } from "../../models/message";
 import { emitMessageNew } from "../../socket/socket";
+import { sendPushToUser } from "../../services/fcm-push.service";
 import { sanitizeAndModerateText, sanitizeUserText } from "../../services/trust-safety-service";
 import { assertBasicUserExists } from "../../services/user-access-service";
 import type { AuthenticatedUser } from "../auth/auth.service";
@@ -165,11 +166,12 @@ const normalizeAttachments = (attachments: MessageAttachment[], messageType: Mes
     });
 
 const getListingOrThrow = async (listingId: number, transaction?: Transaction) => {
-    const rows = await sequelize.query<ListingAccessRow>(
+    const rows = await sequelize.query<ListingAccessRow & { status?: string }>(
         `
         SELECT
             listing_id AS listingId,
             host_id AS hostId,
+            status,
             title
         FROM listings
         WHERE listing_id = ?
@@ -364,58 +366,72 @@ const getConversationRowsForUser = async (
                 c.guest_user_id AS guestUserId,
                 c.host_user_id AS hostUserId,
                 c.booking_order_id AS bookingOrderId,
-                COALESCE(c.last_message, latest_message.content) AS lastMessage,
-                COALESCE(c.last_message_at, latest_message.created_at, c.updated_at) AS lastMessageAt,
-                COUNT(unread_message.message_id) AS unreadCount,
+                COALESCE(
+                    c.last_message,
+                    (
+                        SELECT m2.content
+                        FROM message m2
+                        WHERE m2.conversation_id = c.conversation_id
+                        ORDER BY m2.created_at DESC, m2.message_id DESC
+                        LIMIT 1
+                    )
+                ) AS lastMessage,
+                COALESCE(
+                    c.last_message_at,
+                    (
+                        SELECT m2.created_at
+                        FROM message m2
+                        WHERE m2.conversation_id = c.conversation_id
+                        ORDER BY m2.created_at DESC, m2.message_id DESC
+                        LIMIT 1
+                    ),
+                    c.updated_at
+                ) AS lastMessageAt,
+                (
+                    SELECT COUNT(*)
+                    FROM message unread_message
+                    WHERE unread_message.conversation_id = c.conversation_id
+                      AND unread_message.sender_id <> :userId
+                      AND (
+                          current_participant.last_read_at IS NULL
+                          OR unread_message.created_at > current_participant.last_read_at
+                      )
+                ) AS unreadCount,
                 c.created_at AS createdAt,
                 c.updated_at AS updatedAt,
                 l.title AS listingTitle,
-                listing_cover.url AS listingCoverImageUrl,
-                other_user.user_id AS otherUserId,
-                other_user.full_name AS otherFullName,
-                other_user.avatar_url AS otherAvatarUrl,
-                COALESCE(c.last_message_at, latest_message.created_at, c.updated_at) AS sortAt
-            FROM conversation c
-            LEFT JOIN conversation_participant current_participant
-                ON current_participant.conversation_id = c.conversation_id
-               AND current_participant.user_id = :userId
-            LEFT JOIN message latest_message
-                ON latest_message.message_id = (
-                    SELECT m2.message_id
-                    FROM message m2
-                    WHERE m2.conversation_id = c.conversation_id
-                    ORDER BY m2.created_at DESC, m2.message_id DESC
-                    LIMIT 1
-                )
-            LEFT JOIN message unread_message
-                ON unread_message.conversation_id = c.conversation_id
-               AND unread_message.sender_id <> :userId
-               AND (
-                    current_participant.last_read_at IS NULL
-                    OR unread_message.created_at > current_participant.last_read_at
-               )
-            LEFT JOIN listings l
-                ON l.listing_id = c.listing_id
-            LEFT JOIN listing_images listing_cover
-                ON listing_cover.id = (
-                    SELECT li.id
+                (
+                    SELECT li.url
                     FROM listing_images li
                     WHERE li.listing_id = c.listing_id
                     ORDER BY li.is_cover DESC, li.sort_order ASC, li.id ASC
                     LIMIT 1
-                )
+                ) AS listingCoverImageUrl,
+                other_user.user_id AS otherUserId,
+                other_user.full_name AS otherFullName,
+                other_user.avatar_url AS otherAvatarUrl,
+                COALESCE(
+                    c.last_message_at,
+                    (
+                        SELECT m2.created_at
+                        FROM message m2
+                        WHERE m2.conversation_id = c.conversation_id
+                        ORDER BY m2.created_at DESC, m2.message_id DESC
+                        LIMIT 1
+                    ),
+                    c.updated_at
+                ) AS sortAt
+            FROM conversation c
+            LEFT JOIN conversation_participant current_participant
+                ON current_participant.conversation_id = c.conversation_id
+               AND current_participant.user_id = :userId
+            LEFT JOIN listings l
+                ON l.listing_id = c.listing_id
             LEFT JOIN users other_user
                 ON other_user.user_id = CASE
                     WHEN c.guest_user_id = :userId THEN c.host_user_id
                     WHEN c.host_user_id = :userId THEN c.guest_user_id
-                    ELSE (
-                        SELECT fallback_participant.user_id
-                        FROM conversation_participant fallback_participant
-                        WHERE fallback_participant.conversation_id = c.conversation_id
-                          AND fallback_participant.user_id <> :userId
-                        ORDER BY FIELD(fallback_participant.role, 'host', 'guest', 'admin'), fallback_participant.user_id
-                        LIMIT 1
-                    )
+                    ELSE COALESCE(c.guest_user_id, c.host_user_id)
                 END
             WHERE (
                     c.guest_user_id = :userId
@@ -424,26 +440,36 @@ const getConversationRowsForUser = async (
               )
               ${scopeClause}
               ${conversationClause}
-            GROUP BY
-                c.conversation_id,
-                c.created_by_user_id,
-                c.listing_id,
-                c.guest_user_id,
-                c.host_user_id,
-                c.booking_order_id,
-                c.last_message,
-                c.last_message_at,
-                c.created_at,
-                c.updated_at,
-                latest_message.content,
-                latest_message.created_at,
-                l.title,
-                listing_cover.url,
-                other_user.user_id,
-                other_user.full_name,
-                other_user.avatar_url
         ) conversation_rows
         ${unreadOnlyClause}
+    `;
+    const countSql = `
+        SELECT COUNT(*) AS totalItems
+        FROM conversation c
+        LEFT JOIN conversation_participant current_participant
+            ON current_participant.conversation_id = c.conversation_id
+           AND current_participant.user_id = :userId
+        WHERE (
+                c.guest_user_id = :userId
+             OR c.host_user_id = :userId
+             OR current_participant.user_id = :userId
+          )
+          ${scopeClause}
+          ${conversationClause}
+          ${
+              query.unreadOnly === true
+                  ? `AND EXISTS (
+                        SELECT 1
+                        FROM message unread_message
+                        WHERE unread_message.conversation_id = c.conversation_id
+                          AND unread_message.sender_id <> :userId
+                          AND (
+                              current_participant.last_read_at IS NULL
+                              OR unread_message.created_at > current_participant.last_read_at
+                          )
+                    )`
+                  : ""
+          }
     `;
     const replacements = { userId, conversationId, limit, offset };
 
@@ -460,10 +486,7 @@ const getConversationRowsForUser = async (
             },
         ),
         sequelize.query<{ totalItems: number }>(
-            `
-            SELECT COUNT(*) AS totalItems
-            FROM (${baseSql}) counted_rows
-            `,
+            countSql,
             {
                 replacements,
                 type: QueryTypes.SELECT,
@@ -506,7 +529,7 @@ const createMessageInTransaction = async (
         {
             conversationId,
             senderId,
-            content: content || (messageType === "image" ? "[image]" : "[file]"),
+            content: content || "",
             messageType,
             attachments,
             createdAt: now,
@@ -517,7 +540,7 @@ const createMessageInTransaction = async (
 
     await Conversation.update(
         {
-            lastMessage: message.content,
+            lastMessage: content || (messageType === "image" ? "📷 [Hình ảnh]" : "[Tệp đính kèm]"),
             lastMessageAt: now,
         },
         {
@@ -599,6 +622,10 @@ export const createConversation = async (user: AuthenticatedUser, input: CreateC
         if (listingId && !bookingId) {
             const listing = await getListingOrThrow(listingId, transaction);
 
+            if (listing.status && listing.status !== "active" && listing.status !== "published") {
+                throw new ApiError(403, "Chỗ nghỉ này hiện không khả dụng để liên hệ.");
+            }
+
             hostUserId = listing.hostId;
             guestUserId = currentUserId;
 
@@ -622,7 +649,7 @@ export const createConversation = async (user: AuthenticatedUser, input: CreateC
 
         const participants = ensureTwoPartyConversation(guestUserId, hostUserId);
 
-        if (currentUserId === hostUserId) {
+        if (!bookingId && currentUserId === hostUserId) {
             throw new ApiError(403, "Bạn không thể nhắn tin cho chính chỗ nghỉ của mình.");
         }
 
@@ -831,11 +858,11 @@ export const sendConversationMessage = async (
     input: SendMessageInput,
 ) => {
     const userId = getCurrentUserId(user);
-    const messageType = input.messageType ?? "text";
+    const messageType = input.messageType ?? (input.attachments && input.attachments.length > 0 ? "image" : "text");
     const content = normalizeMessageContent(input.content, true);
     const attachments = normalizeAttachments(input.attachments ?? [], messageType);
 
-    if (messageType === "text" && !content) {
+    if (messageType === "text" && !content && attachments.length === 0) {
         throw new ApiError(422, "Validation error", [
             {
                 path: "content",
@@ -924,6 +951,32 @@ export const sendConversationMessage = async (
             hostUserId: result.hostUserId,
         },
         receiverUserId: result.receiverUserId,
+    });
+
+    const senderDisplayName = user.name?.trim() || "Tin nhắn mới";
+    const listingSuffix = conversation.listing?.title ? ` • ${conversation.listing.title}` : "";
+    const previewBody =
+        message.messageType === "image"
+            ? "Đã gửi một hình ảnh"
+            : message.messageType === "file"
+              ? "Đã gửi một tệp đính kèm"
+              : message.content;
+
+    void sendPushToUser(result.receiverUserId, {
+        title: `${senderDisplayName}${listingSuffix}`,
+        body: previewBody,
+        actionUrl:
+            result.receiverUserId === result.hostUserId
+                ? "/host/tin-nhan"
+                : `/tin-nhan?conversationId=${conversationId}`,
+        eventType: "MESSAGE_NEW",
+        targetType: "conversation",
+        targetId: conversationId,
+        data: {
+            conversationId,
+            messageId: message.messageId,
+            senderUserId: userId,
+        },
     });
 
     return {

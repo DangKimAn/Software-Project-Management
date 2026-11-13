@@ -1,9 +1,11 @@
-import type { Transaction } from "sequelize";
+import { Op, type Transaction } from "sequelize";
 
 import { ApiError } from "../../common/api-error";
+import Booking from "../../models/booking";
 import Coupon from "../../models/coupon";
 import CouponRedemption from "../../models/coupon-redemption";
 import type { ListingDocument } from "../../models/listing";
+import { syncEffectivePlatformFee } from "../admin/admin-fees.service";
 
 export type NightlyPriceSource = "basePrice" | "weekendPrice" | "calendar";
 
@@ -170,7 +172,26 @@ const getCouponDiscount = async (
             transaction,
         });
 
-        if (redemptionCount >= coupon.limitPerUser) {
+        let pendingHoldCount = 0;
+        const canQueryBookingCount =
+            Boolean((transaction as { commit?: unknown })?.commit) ||
+            Object.prototype.hasOwnProperty.call(Booking, "count");
+
+        if (canQueryBookingCount) {
+            pendingHoldCount = await Booking.count({
+                where: {
+                    guestUserId: userId,
+                    couponId: coupon.couponId,
+                    status: "pending_payment",
+                    lockedUntil: {
+                        [Op.gt]: now,
+                    },
+                },
+                transaction,
+            });
+        }
+
+        if (redemptionCount + pendingHoldCount >= coupon.limitPerUser) {
             throw new ApiError(422, "Coupon usage limit has been reached");
         }
     }
@@ -221,7 +242,17 @@ export const calculateBookingPricing = async (params: {
         (listing as ListingWithExtraGuestPricing).includedGuests ?? listing.maxGuests,
     )));
     const surchargeAmount = guestCount > surchargeIncludedGuests ? rawSurcharge : 0;
-    const serviceFeeAmount = Math.round(accommodationAmount * (toNumber(listing.serviceFeePct) / 100));
+    let effectiveServiceFeePct = 10;
+    if (listing.serviceFeePct != null && listing.serviceFeePct !== undefined) {
+        effectiveServiceFeePct = toNumber(listing.serviceFeePct);
+    } else {
+        try {
+            effectiveServiceFeePct = await syncEffectivePlatformFee();
+        } catch {
+            effectiveServiceFeePct = 10;
+        }
+    }
+    const serviceFeeAmount = Math.round(accommodationAmount * (effectiveServiceFeePct / 100));
     const preDiscountTotal = accommodationAmount + cleaningFeeAmount + surchargeAmount + serviceFeeAmount;
     const normalizedCouponCode = normalizeCouponCode(couponCode);
     const { coupon, discountAmount } = await getCouponDiscount(

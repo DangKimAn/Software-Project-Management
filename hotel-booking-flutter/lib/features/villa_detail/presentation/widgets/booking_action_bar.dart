@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/price_display.dart';
 import '../../../booking_inquiry/domain/services/contact_service.dart';
 import '../../../villas/domain/entities/villa.dart';
@@ -12,8 +14,8 @@ class BookingActionBar extends StatelessWidget {
   final int? totalCalculatedVnd;
   final int? selectedNights;
   final VoidCallback? onBookNow;
-  final VoidCallback? onAddToQueue;
   final VoidCallback? onInquireZalo;
+  final VoidCallback? onMessageHost;
   final VoidCallback? onCallHotline;
 
   const BookingActionBar({
@@ -22,8 +24,8 @@ class BookingActionBar extends StatelessWidget {
     this.totalCalculatedVnd,
     this.selectedNights,
     this.onBookNow,
-    this.onAddToQueue,
     this.onInquireZalo,
+    this.onMessageHost,
     this.onCallHotline,
   });
 
@@ -57,10 +59,10 @@ class BookingActionBar extends StatelessWidget {
                     ),
                     Text(
                       selectedNights != null && selectedNights! > 0
-                          ? 'Tổng $selectedNights đêm • Đã gồm phí'
+                          ? context.l10n.totalNightsWithFee(selectedNights!)
                           : (villa.instantBook
-                              ? 'Đặt phòng xác nhận ngay'
-                              : 'Tư vấn & Đặt phòng 24/7'),
+                              ? context.l10n.bookingInstantConfirm
+                              : context.l10n.bookingSupport247),
                       style: AppTypography.caption
                           .copyWith(color: AppColors.textMuted),
                       maxLines: 1,
@@ -72,21 +74,14 @@ class BookingActionBar extends StatelessWidget {
 
               const SizedBox(width: 8),
 
-              // Add to Queue (MultiBooking) button
-              if (onAddToQueue != null)
-                AppIconButton(
-                  icon: const Icon(LucideIcons.shoppingBag, size: 18),
-                  iconColor: AppColors.iconStrong,
-                  tooltip: 'Thêm vào giỏ chờ đặt',
-                  onPressed: onAddToQueue,
-                ),
-
-              // Hotline icon button (monochrome, no background circle)
+              // Message host icon button (replaces phone hotline icon)
               AppIconButton(
-                icon: const Icon(LucideIcons.phone, size: 18),
+                icon: const Icon(AppSemanticIcons.messageHost, size: 18),
                 iconColor: AppColors.iconStrong,
-                tooltip: 'Gọi hotline tư vấn',
-                onPressed: onCallHotline ?? () => ContactService.callHotline(),
+                tooltip: context.l10n.villaDetailMessageHostTooltip,
+                onPressed: onMessageHost ??
+                    onCallHotline ??
+                    () => context.push('/villa/${villa.id}/nhan-tin-host'),
               ),
 
               const SizedBox(width: 8),
@@ -97,16 +92,9 @@ class BookingActionBar extends StatelessWidget {
                 child: AppButton(
                   text: onBookNow != null
                       ? (villa.instantBook
-                          ? 'Đặt phòng ngay'
-                          : 'Gửi yêu cầu đặt')
-                      : 'Tư vấn Zalo',
-                  icon: Icon(
-                    onBookNow != null
-                        ? LucideIcons.calendarCheck
-                        : LucideIcons.messageCircle,
-                    size: 18,
-                    color: Colors.white,
-                  ),
+                          ? context.l10n.ctaBookInstant
+                          : context.l10n.ctaRequestBooking)
+                      : context.l10n.ctaBookNow,
                   onPressed: onBookNow ??
                       onInquireZalo ??
                       () {
@@ -116,10 +104,9 @@ class BookingActionBar extends StatelessWidget {
                         );
                         ContactService.openZaloInquiry(messageText: msg);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content:
-                                Text('Đã sao chép nội dung tư vấn và mở Zalo'),
-                            duration: Duration(seconds: 2),
+                          SnackBar(
+                            content: Text(context.l10n.ctaZaloCopied),
+                            duration: const Duration(seconds: 2),
                           ),
                         );
                       },

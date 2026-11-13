@@ -17,7 +17,10 @@ import 'package:hotel_booking_flutter/features/settings/domain/account_profile_m
 import 'package:hotel_booking_flutter/features/settings/presentation/screens/settings_screen.dart';
 import 'package:hotel_booking_flutter/features/settings/presentation/view_models/account_settings_view_model.dart';
 import 'package:hotel_booking_flutter/features/settings/services/avatar_upload_service.dart';
+import 'package:hotel_booking_flutter/l10n/l10n.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FakeAuthRepository implements AuthRepository {
@@ -169,14 +172,23 @@ class FakeAuthRepository implements AuthRepository {
 }
 
 class ControlledAuthNotifier extends AuthNotifier {
+  bool _initialized = false;
+
   ControlledAuthNotifier(
     super.repository, {
     super.prefs,
     AsyncValue<User?>? initialState,
   }) {
+    _initialized = true;
     if (initialState != null) {
       state = initialState;
     }
+  }
+
+  @override
+  Future<void> checkCurrentUser() async {
+    if (!_initialized) return;
+    await super.checkCurrentUser();
   }
 
   void emitState(AsyncValue<User?> next) {
@@ -271,6 +283,7 @@ Widget _buildTestRouterApp({
   Size surfaceSize = const Size(390, 844),
   double textScale = 1.0,
   EdgeInsets viewInsets = EdgeInsets.zero,
+  Locale? locale,
 }) {
   final recorded = pushedLocations ?? <String>[];
   final router = GoRouter(
@@ -367,6 +380,9 @@ Widget _buildTestRouterApp({
     child: MaterialApp.router(
       theme: AppTheme.lightTheme,
       routerConfig: router,
+      locale: locale ?? const Locale('vi'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       builder: (context, child) {
         final mq = MediaQuery.of(context);
         return MediaQuery(
@@ -390,6 +406,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     sharedPrefs = await SharedPreferences.getInstance();
     preferencesService = PreferencesService(sharedPrefs);
+    await preferencesService.setLocale('vi');
   });
 
   group('Domain & Service Validation Tests', () {
@@ -717,9 +734,38 @@ void main() {
 
       // Unverified guest
       expect(find.text('Khách lưu trú'), findsOneWidget);
-      expect(find.textContaining('Chưa xác minh'), findsOneWidget);
+      expect(find.byKey(const Key('settings_verification_status')), findsNothing);
+      expect(find.textContaining('Xác minh danh tính'), findsNothing);
       expect(find.byKey(const Key('menu_become_host')), findsOneWidget);
       expect(find.byKey(const Key('menu_admin_portal')), findsNothing);
+
+      // Action buttons are icon-only (no visible 'Đổi ảnh' / 'Sửa hồ sơ' button text)
+      expect(find.text('Đổi ảnh'), findsNothing);
+      expect(find.text('Sửa hồ sơ'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('settings_change_avatar_button')),
+          matching: find.byIcon(AppSemanticIcons.changeAvatar),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('settings_edit_profile_button')),
+          matching: find.byIcon(LucideIcons.pencil),
+        ),
+        findsOneWidget,
+      );
+
+      // Refined typography hierarchy
+      final fullNameText = tester.widget<Text>(
+        find.byKey(const Key('settings_user_fullname')),
+      );
+      final tripsTitleText = tester.widget<Text>(
+        find.text('Chuyến đi của tôi'),
+      );
+      expect(fullNameText.style?.fontSize, 15.5);
+      expect(tripsTitleText.style?.fontSize, 14.5);
 
       // Switch to New Host (pending host application) with isVerified: true
       const pendingHost = User(
@@ -735,7 +781,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Hồ sơ Chủ nhà đang chờ duyệt'), findsOneWidget);
-      expect(find.textContaining('Đã xác minh'), findsOneWidget);
+      expect(find.byKey(const Key('settings_verification_status')), findsNothing);
+      expect(find.textContaining('Xác minh danh tính'), findsNothing);
       expect(find.byKey(const Key('menu_host_status')), findsOneWidget);
 
       // Switch to Approved Host
@@ -769,6 +816,8 @@ void main() {
 
       expect(find.text('Quản trị viên (Admin)'), findsOneWidget);
       expect(find.byKey(const Key('menu_admin_portal')), findsOneWidget);
+      expect(find.byKey(const Key('menu_become_host')), findsNothing);
+      expect(find.text('Dành cho chủ nhà'), findsNothing);
     });
   });
 
@@ -1051,6 +1100,102 @@ void main() {
         'avatars/new-avatar.jpg',
       );
     });
+
+    testWidgets(
+        'Avatar bottom sheet and edit profile localize correctly in English and Korean',
+        (tester) async {
+      const user = User(
+        id: 'user-multilingual',
+        email: 'multi@thepalm.vn',
+        firstName: 'Alex',
+        lastName: 'Smith',
+      );
+      final repo = FakeAuthRepository(currentUserResponse: user);
+      final authNotifier = ControlledAuthNotifier(
+        repo,
+        prefs: preferencesService,
+        initialState: const AsyncValue.data(user),
+      );
+      final fakePicker = FakeAvatarPickerService();
+      final fakeUploader = FakeAvatarUploadService();
+
+      // 1. English locale verification
+      await preferencesService.setLocale('en');
+      await tester.pumpWidget(
+        _buildTestRouterApp(
+          locale: const Locale('en'),
+          overrides: [
+            preferencesServiceProvider.overrideWithValue(preferencesService),
+            authRepositoryProvider.overrideWithValue(repo),
+            authNotifierProvider.overrideWith((ref) => authNotifier),
+            avatarPickerServiceProvider.overrideWithValue(fakePicker),
+            avatarUploadServiceProvider.overrideWithValue(fakeUploader),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify menu items in English
+      expect(find.text('My trips'), findsOneWidget);
+      expect(find.text('My wishlist'), findsOneWidget);
+
+      // Open Avatar Modal in English
+      await tester.tap(find.byKey(const Key('settings_change_avatar_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Update profile photo'), findsOneWidget);
+      expect(
+        find.text(
+          'Select a JPG, PNG, WebP, or GIF image from your device (maximum 5MB).',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Choose photo from device (Max 5MB)'),
+        findsOneWidget,
+      );
+      expect(find.text('Cập nhật ảnh đại diện'), findsNothing);
+
+      // Close modal
+      await tester.tap(find.byKey(const Key('avatar_modal_close_button')));
+      await tester.pumpAndSettle();
+
+      // 2. Switch to Korean via Settings Language Selector
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('settings_language_selector')),
+        100,
+      );
+      await tester.tap(find.byKey(const Key('settings_language_selector')));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('lang_tile_ko')),
+        100,
+      );
+      await tester.tap(find.byKey(const Key('lang_tile_ko')));
+      await tester.pumpAndSettle();
+
+      // Scroll back up to avatar button
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('settings_change_avatar_button')),
+        -100,
+      );
+      await tester.tap(find.byKey(const Key('settings_change_avatar_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('프로필 사진 업데이트'), findsOneWidget);
+      expect(
+        find.text(
+          '기기에서 JPG, PNG, WebP 또는 GIF 이미지를 선택하세요 (최대 5MB).',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('기기에서 사진 선택 (최대 5MB)'),
+        findsOneWidget,
+      );
+      expect(find.text('Cập nhật ảnh đại diện'), findsNothing);
+    });
   });
 
   group('Logout Confirmation Dialog & Responsive Layout', () {
@@ -1080,8 +1225,22 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final logoutBtn = find.byKey(const Key('settings_logout_button'));
+      final logoutBtn = find.byKey(const Key('settings_bottom_logout_button'));
       await tester.ensureVisible(logoutBtn);
+      expect(
+        find.descendant(
+          of: logoutBtn,
+          matching: find.byIcon(AppSemanticIcons.logout),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: logoutBtn,
+          matching: find.byIcon(LucideIcons.doorOpen),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(logoutBtn);
       await tester.pumpAndSettle();
 

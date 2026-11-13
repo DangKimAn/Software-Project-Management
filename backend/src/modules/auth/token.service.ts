@@ -65,6 +65,7 @@ export const verifyAuthToken = (token: string) => {
         return {
             userId: subject,
             role: role as UserRole,
+            ...(typeof decoded.exp === "number" ? { exp: decoded.exp } : {}),
         };
     } catch {
         throw new ApiError(401, "Unauthorized");

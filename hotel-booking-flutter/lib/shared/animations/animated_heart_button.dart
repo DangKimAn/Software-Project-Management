@@ -38,7 +38,7 @@ class _AnimatedHeartButtonState extends State<AnimatedHeartButton>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 280),
+      duration: const Duration(milliseconds: 220),
     );
 
     _scaleAnimation = TweenSequence<double>([
@@ -58,6 +58,15 @@ class _AnimatedHeartButtonState extends State<AnimatedHeartButton>
         weight: 30,
       ),
     ]).animate(_controller);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+      _controller.value = 1;
+    }
   }
 
   @override
@@ -95,7 +104,7 @@ class _AnimatedHeartButtonState extends State<AnimatedHeartButton>
           LucideIcons.heart,
           key: ValueKey<bool>(widget.isFavorite),
           size: widget.size,
-          color: AppColors.iconStrong,
+          color: widget.isFavorite ? widget.activeColor : widget.inactiveColor,
         ),
         const SizedBox(height: 2),
         AnimatedContainer(
@@ -113,24 +122,18 @@ class _AnimatedHeartButtonState extends State<AnimatedHeartButton>
     );
 
     return Semantics(
-      button: true,
       selected: widget.isFavorite,
-      label: widget.isFavorite ? 'Bỏ lưu khỏi yêu thích' : 'Lưu vào yêu thích',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _handleTap,
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Center(
-            child: disableAnimations
-                ? content
-                : ScaleTransition(
-                    scale: _scaleAnimation,
-                    child: content,
-                  ),
-          ),
+      child: IconButton(
+        onPressed: widget.onToggle == null ? null : _handleTap,
+        tooltip:
+            widget.isFavorite ? 'Bỏ lưu khỏi yêu thích' : 'Lưu vào yêu thích',
+        style: const ButtonStyle(
+          minimumSize: WidgetStatePropertyAll(Size(48, 48)),
+          backgroundColor: WidgetStatePropertyAll(Colors.transparent),
         ),
+        icon: disableAnimations
+            ? content
+            : ScaleTransition(scale: _scaleAnimation, child: content),
       ),
     );
   }

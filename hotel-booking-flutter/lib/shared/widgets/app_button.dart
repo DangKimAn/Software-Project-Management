@@ -1,7 +1,5 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../../app/theme/app_colors.dart';
-import '../../app/theme/app_typography.dart';
-import '../animations/pressable_scale.dart';
 
 enum AppButtonVariant { primary, secondary, ghost }
 
@@ -12,186 +10,126 @@ class AppButton extends StatelessWidget {
   final bool isLoading;
   final Widget? icon;
   final double? width;
+
+  /// Minimum height; grows with text scaling and wrapped labels.
   final double height;
   final String? semanticLabel;
 
-  const AppButton({
-    super.key,
-    required this.text,
-    required this.onPressed,
-    this.variant = AppButtonVariant.primary,
-    this.isLoading = false,
-    this.icon,
-    this.width,
-    this.height = 50.0,
-    this.semanticLabel,
-  });
-
-  const AppButton.secondary({
-    super.key,
-    required this.text,
-    required this.onPressed,
-    this.isLoading = false,
-    this.icon,
-    this.width,
-    this.height = 50.0,
-    this.semanticLabel,
-  }) : variant = AppButtonVariant.secondary;
-
-  const AppButton.ghost({
-    super.key,
-    required this.text,
-    required this.onPressed,
-    this.isLoading = false,
-    this.icon,
-    this.width,
-    this.height = 48.0,
-    this.semanticLabel,
-  }) : variant = AppButtonVariant.ghost;
+  const AppButton(
+      {super.key,
+      required this.text,
+      required this.onPressed,
+      this.variant = AppButtonVariant.primary,
+      this.isLoading = false,
+      this.icon,
+      this.width,
+      this.height = 50,
+      this.semanticLabel});
+  const AppButton.secondary(
+      {super.key,
+      required this.text,
+      required this.onPressed,
+      this.isLoading = false,
+      this.icon,
+      this.width,
+      this.height = 50,
+      this.semanticLabel})
+      : variant = AppButtonVariant.secondary;
+  const AppButton.ghost(
+      {super.key,
+      required this.text,
+      required this.onPressed,
+      this.isLoading = false,
+      this.icon,
+      this.width,
+      this.height = 48,
+      this.semanticLabel})
+      : variant = AppButtonVariant.ghost;
 
   @override
   Widget build(BuildContext context) {
-    final isDisabled = onPressed == null || isLoading;
-
-    Color backgroundColor;
-    Color foregroundColor;
-    BorderSide borderSide;
-
-    switch (variant) {
-      case AppButtonVariant.primary:
-        backgroundColor = isDisabled
-            ? AppColors.primary.withValues(alpha: 0.5)
-            : AppColors.primary;
-        foregroundColor = Colors.white;
-        borderSide = BorderSide.none;
-        break;
-      case AppButtonVariant.secondary:
-        backgroundColor =
-            isDisabled ? AppColors.surfaceMuted : AppColors.surfaceBase;
-        foregroundColor =
-            isDisabled ? AppColors.textTertiary : AppColors.textStrong;
-        borderSide = BorderSide(
-          color: isDisabled ? AppColors.borderSoft : AppColors.borderStrong,
-        );
-        break;
-      case AppButtonVariant.ghost:
-        backgroundColor = Colors.transparent;
-        foregroundColor =
-            isDisabled ? AppColors.textTertiary : AppColors.textStrong;
-        borderSide = BorderSide.none;
-        break;
-    }
-
-    final buttonContent = SizedBox(
-      width: width ?? double.infinity,
-      height: height,
-      child: Material(
-        color: backgroundColor,
-        shape: StadiumBorder(side: borderSide),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: isDisabled ? null : onPressed,
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          hoverColor: Colors.transparent,
-          child: Center(
-            child: isLoading
-                ? SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.2,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(foregroundColor),
-                    ),
-                  )
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (icon != null) ...[
-                        IconTheme(
-                          data: IconThemeData(color: foregroundColor, size: 18),
-                          child: icon!,
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      Flexible(
-                        child: Text(
-                          text,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.buttonText.copyWith(
-                            color: foregroundColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ),
-      ),
-    );
-
-    return Semantics(
-      button: true,
-      enabled: !isDisabled,
+    final callback = isLoading ? null : onPressed;
+    final content = Semantics(
       label: semanticLabel ?? text,
-      child: isDisabled
-          ? buttonContent
-          : PressableScale(scaleDown: 0.98, child: buttonContent),
+      liveRegion: isLoading,
+      child: ExcludeSemantics(
+          child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Preserve label dimensions while loading so surrounding content stays still.
+          Opacity(
+              opacity: isLoading ? 0 : 1,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (icon != null) ...[icon!, const SizedBox(width: 8)],
+                  Flexible(child: Text(text, textAlign: TextAlign.center)),
+                ],
+              )),
+          if (isLoading)
+            SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  value: MediaQuery.disableAnimationsOf(context) ? .75 : null,
+                  strokeWidth: 2,
+                )),
+        ],
+      )),
     );
+    final button = switch (variant) {
+      AppButtonVariant.primary =>
+        FilledButton(onPressed: callback, child: content),
+      AppButtonVariant.secondary =>
+        OutlinedButton(onPressed: callback, child: content),
+      AppButtonVariant.ghost => TextButton(onPressed: callback, child: content),
+    };
+    return SizedBox(
+        width: width ?? double.infinity,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: math.max(48, height)),
+          child: button,
+        ));
   }
 }
 
-/// Transparent-touch-target Icon-only button (minimum 48x48) strictly adhering to Section 2 Icon Rules:
-/// - No circular/box/rounded background container.
-/// - Neutral monochrome icon color directly on UI.
-/// - No background/color change on active, hover, or splash.
+/// Bare icon with a transparent, keyboard accessible hit target of at least 48dp.
 class AppIconButton extends StatelessWidget {
   final Widget icon;
   final VoidCallback? onPressed;
   final String tooltip;
+
+  /// Retained for caller compatibility. Icon actions always have a transparent background.
   final Color? backgroundColor;
   final Color? iconColor;
   final double size;
-
-  const AppIconButton({
-    super.key,
-    required this.icon,
-    required this.onPressed,
-    required this.tooltip,
-    this.backgroundColor,
-    this.iconColor,
-    this.size = 48.0,
-  });
+  const AppIconButton(
+      {super.key,
+      required this.icon,
+      required this.onPressed,
+      required this.tooltip,
+      this.backgroundColor,
+      this.iconColor,
+      this.size = 48});
 
   @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Semantics(
-        button: true,
-        enabled: onPressed != null,
-        label: tooltip,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onPressed,
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: Center(
-              child: IconTheme(
-                data: IconThemeData(
-                  color: iconColor ?? AppColors.iconStrong,
-                  size: 20,
-                ),
-                child: icon,
-              ),
+  Widget build(BuildContext context) => SizedBox(
+        width: math.max(48, size),
+        height: math.max(48, size),
+        child: Tooltip(
+          message: tooltip,
+          excludeFromSemantics: true,
+          child: Semantics(
+            label: tooltip,
+            child: IconButton(
+              onPressed: onPressed,
+              style: const ButtonStyle(
+                  backgroundColor: WidgetStatePropertyAll(Colors.transparent)),
+              color: iconColor,
+              icon: icon,
             ),
           ),
         ),
-      ),
-    );
-  }
+      );
 }

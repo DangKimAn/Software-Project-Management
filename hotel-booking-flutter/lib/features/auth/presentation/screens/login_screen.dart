@@ -7,6 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../../data/services/google_auth_service.dart';
 import '../../domain/entities/user.dart';
@@ -66,12 +67,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _handleLogin() async {
     if (_isLoading) return;
-    _fieldErrors = {};
+    setState(() {
+      _errorMessage = null;
+      _fieldErrors = {};
+    });
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
     });
 
     try {
@@ -158,212 +161,145 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   color: AppColors.surfaceBase,
                   borderRadius: BorderRadius.circular(28),
                 ),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Chào mừng trở lại',
-                        style: AppTypography.display
-                            .copyWith(color: AppColors.textStrong),
-                      ),
-                      const SizedBox(height: AppSpacing.s8),
-                      Text(
-                        'Đăng nhập để xem kỳ nghỉ và quản lý chuyến đi của bạn tại The Palm Villa.',
-                        style: AppTypography.body
-                            .copyWith(color: AppColors.textMuted),
-                      ),
-                      const SizedBox(height: AppSpacing.s24),
-                      if (_errorMessage != null) ...[
-                        Semantics(
-                          liveRegion: true,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(AppSpacing.s12),
-                            margin:
-                                const EdgeInsets.only(bottom: AppSpacing.s16),
-                            decoration: BoxDecoration(
-                              color: AppColors.errorSoft,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  LucideIcons.circleAlert,
-                                  color: AppColors.iconStrong,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: AppSpacing.s8),
-                                Expanded(
-                                  child: Text(
-                                    _errorMessage!,
-                                    style: AppTypography.caption
-                                        .copyWith(color: AppColors.errorRed),
+                child: AutofillGroup(
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Chào mừng trở lại',
+                          style: AppTypography.display
+                              .copyWith(color: AppColors.textStrong),
+                        ),
+                        const SizedBox(height: AppSpacing.s8),
+                        Text(
+                          'Đăng nhập để xem kỳ nghỉ và quản lý chuyến đi của bạn tại The Palm Villa.',
+                          style: AppTypography.body
+                              .copyWith(color: AppColors.textMuted),
+                        ),
+                        const SizedBox(height: AppSpacing.s24),
+                        if (_errorMessage != null) ...[
+                          Semantics(
+                            liveRegion: true,
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(AppSpacing.s12),
+                              margin:
+                                  const EdgeInsets.only(bottom: AppSpacing.s16),
+                              decoration: BoxDecoration(
+                                color: AppColors.errorSoft,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    LucideIcons.circleAlert,
+                                    color: AppColors.iconStrong,
+                                    size: 20,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: AppSpacing.s8),
+                                  Expanded(
+                                    child: Text(
+                                      _errorMessage!,
+                                      style: AppTypography.caption
+                                          .copyWith(color: AppColors.errorRed),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                      AppTextField(
-                        controller: _identifierController,
-                        readOnly: _isLoading,
-                        labelText: 'Email hoặc số điện thoại',
-                        hintText: 'Nhập email hoặc số điện thoại',
-                        prefixIcon: const Icon(
-                          LucideIcons.userRound,
-                          size: 20,
-                          color: AppColors.iconMuted,
-                        ),
-                        keyboardType: TextInputType.emailAddress,
-                        onChanged: (_) {
-                          if (_fieldErrors.containsKey('identifier')) {
-                            setState(() {
-                              _fieldErrors.remove('identifier');
-                              _formKey.currentState?.validate();
-                            });
-                          }
-                        },
-                        validator: (value) =>
-                            _fieldErrors['identifier'] ??
-                            AuthValidation.identifier(value),
-                      ),
-                      const SizedBox(height: AppSpacing.s16),
-                      AppTextField(
-                        controller: _passwordController,
-                        readOnly: _isLoading,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => _handleLogin(),
-                        labelText: 'Mật khẩu',
-                        hintText: 'Nhập mật khẩu',
-                        obscureText: _obscurePassword,
-                        onChanged: (_) {
-                          if (_fieldErrors.containsKey('password')) {
-                            setState(() {
-                              _fieldErrors.remove('password');
-                              _formKey.currentState?.validate();
-                            });
-                          }
-                        },
-                        prefixIcon: const Icon(
-                          LucideIcons.lock,
-                          size: 20,
-                          color: AppColors.iconMuted,
-                        ),
-                        suffixIcon: IconButton(
-                          tooltip: _obscurePassword
-                              ? 'Hiện mật khẩu'
-                              : 'Ẩn mật khẩu',
-                          constraints:
-                              const BoxConstraints(minWidth: 48, minHeight: 48),
-                          icon: Icon(
-                            _obscurePassword
-                                ? LucideIcons.eyeOff
-                                : LucideIcons.eye,
+                        ],
+                        AppTextField(
+                          controller: _identifierController,
+                          readOnly: _isLoading,
+                          labelText: 'Email hoặc số điện thoại',
+                          hintText: 'Nhập email hoặc số điện thoại',
+                          prefixIcon: const Icon(
+                            LucideIcons.userRound,
                             size: 20,
-                            color: AppColors.iconStrong,
+                            color: AppColors.iconMuted,
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
+                          keyboardType: TextInputType.emailAddress,
+                          autofillHints: const [
+                            AutofillHints.username,
+                            AutofillHints.email,
+                            AutofillHints.telephoneNumber,
+                          ],
+                          onChanged: (_) {
+                            if (_errorMessage != null ||
+                                _fieldErrors.containsKey('identifier')) {
+                              setState(() {
+                                _errorMessage = null;
+                                _fieldErrors.remove('identifier');
+                                _formKey.currentState?.validate();
+                              });
+                            }
+                          },
+                          validator: (value) =>
+                              _fieldErrors['identifier'] ??
+                              AuthValidation.identifier(value),
+                        ),
+                        const SizedBox(height: AppSpacing.s16),
+                        AppTextField(
+                          controller: _passwordController,
+                          readOnly: _isLoading,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _handleLogin(),
+                          labelText: 'Mật khẩu',
+                          hintText: 'Nhập mật khẩu',
+                          obscureText: _obscurePassword,
+                          autofillHints: const [AutofillHints.password],
+                          onChanged: (_) {
+                            if (_errorMessage != null ||
+                                _fieldErrors.containsKey('password')) {
+                              setState(() {
+                                _errorMessage = null;
+                                _fieldErrors.remove('password');
+                                _formKey.currentState?.validate();
+                              });
+                            }
+                          },
+                          prefixIcon: const Icon(
+                            LucideIcons.lock,
+                            size: 20,
+                            color: AppColors.iconMuted,
+                          ),
+                          suffixIcon: IconButton(
+                            tooltip: _obscurePassword
+                                ? 'Hiện mật khẩu'
+                                : 'Ẩn mật khẩu',
+                            constraints: const BoxConstraints(
+                                minWidth: 48, minHeight: 48),
+                            icon: Icon(
+                              _obscurePassword
+                                  ? LucideIcons.eyeOff
+                                  : LucideIcons.eye,
+                              size: 20,
+                              color: AppColors.iconStrong,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
+                          ),
+                          validator: (value) {
+                            if (_fieldErrors['password'] != null) {
+                              return _fieldErrors['password'];
+                            }
+                            if (value == null || value.trim().length < 8) {
+                              return 'Mật khẩu cần ít nhất 8 ký tự';
+                            }
+                            return null;
                           },
                         ),
-                        validator: (value) {
-                          if (_fieldErrors['password'] != null) {
-                            return _fieldErrors['password'];
-                          }
-                          if (value == null || value.trim().length < 8) {
-                            return 'Mật khẩu cần ít nhất 8 ký tự';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: AppSpacing.s8),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () => context.push('/quen-mat-khau'),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.s8,
-                            ),
-                            minimumSize: const Size(48, 48),
-                          ),
-                          child: Text(
-                            'Quên mật khẩu?',
-                            style: AppTypography.caption.copyWith(
-                              color: AppColors.textStrong,
-                              fontWeight: FontWeight.w600,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s16),
-                      AppButton(
-                        text: _isLoading ? 'Đang đăng nhập...' : 'Đăng nhập',
-                        isLoading: _isLoading,
-                        icon: const Icon(
-                          LucideIcons.arrowRight,
-                          size: 18,
-                          color: Colors.white,
-                        ),
-                        onPressed: _handleLogin,
-                      ),
-                      const SizedBox(height: AppSpacing.s16),
-                      Row(
-                        children: [
-                          const Expanded(child: Divider()),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(
-                              'HOẶC',
-                              style: AppTypography.caption
-                                  .copyWith(color: AppColors.textMuted),
-                            ),
-                          ),
-                          const Expanded(child: Divider()),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.s16),
-                      AppButton.secondary(
-                        text: 'Đăng nhập với Google',
-                        icon: const Icon(
-                          LucideIcons.logIn,
-                          size: 18,
-                          color: AppColors.iconStrong,
-                        ),
-                        onPressed: _isLoading ? null : _handleGoogleLogin,
-                      ),
-                      const SizedBox(height: AppSpacing.s24),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        children: [
-                          Text(
-                            'Chưa có tài khoản? ',
-                            style: AppTypography.body
-                                .copyWith(color: AppColors.textMuted),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              final redirect = widget.redirectTo?.trim();
-                              if (redirect != null &&
-                                  AuthNotifier.isSafeRedirectPath(redirect)) {
-                                context.push(
-                                  Uri(
-                                    path: '/dang-ky',
-                                    queryParameters: <String, String>{
-                                      'redirectTo': redirect,
-                                    },
-                                  ).toString(),
-                                );
-                              } else {
-                                context.push('/dang-ky');
-                              }
-                            },
+                        const SizedBox(height: AppSpacing.s8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () => context.push('/quen-mat-khau'),
                             style: TextButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: AppSpacing.s8,
@@ -371,16 +307,98 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               minimumSize: const Size(48, 48),
                             ),
                             child: Text(
-                              'Đăng ký',
-                              style: AppTypography.body.copyWith(
-                                color: AppColors.primary,
+                              'Quên mật khẩu?',
+                              style: AppTypography.caption.copyWith(
+                                color: AppColors.textStrong,
                                 fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                        const SizedBox(height: AppSpacing.s16),
+                        AppButton(
+                          text: _isLoading ? 'Đang đăng nhập...' : 'Đăng nhập',
+                          isLoading: _isLoading,
+                          icon: const Icon(
+                            LucideIcons.arrowRight,
+                            size: 18,
+                            color: Colors.white,
+                          ),
+                          onPressed: _handleLogin,
+                        ),
+                        const SizedBox(height: AppSpacing.s16),
+                        Row(
+                          children: [
+                            const Expanded(child: Divider()),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
+                              child: Text(
+                                'HOẶC',
+                                style: AppTypography.caption
+                                    .copyWith(color: AppColors.textMuted),
+                              ),
+                            ),
+                            const Expanded(child: Divider()),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.s16),
+                        AppButton.secondary(
+                          text: 'Đăng nhập với Google',
+                          icon: const AppBrandIcon.googleLogo(size: 20),
+                          onPressed: _isLoading ? null : _handleGoogleLogin,
+                        ),
+                        const SizedBox(height: AppSpacing.s16),
+                        Center(
+                          child: Wrap(
+                            alignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                'Chưa có tài khoản?',
+                                style: AppTypography.body
+                                    .copyWith(color: AppColors.textMuted),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  final redirect = widget.redirectTo?.trim();
+                                  if (redirect != null &&
+                                      AuthNotifier.isSafeRedirectPath(
+                                          redirect)) {
+                                    context.push(
+                                      Uri(
+                                        path: '/dang-ky',
+                                        queryParameters: <String, String>{
+                                          'redirectTo': redirect,
+                                        },
+                                      ).toString(),
+                                    );
+                                  } else {
+                                    context.push('/dang-ky');
+                                  }
+                                },
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                  ),
+                                  minimumSize: const Size(48, 48),
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(
+                                  'Đăng ký',
+                                  style: AppTypography.body.copyWith(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

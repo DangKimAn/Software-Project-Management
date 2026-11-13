@@ -83,16 +83,17 @@ export const registerBodySchema = z.object({
     username: usernameSchema,
     firstName: z.string().trim().min(1, "firstName is required"),
     lastName: z.string().trim().min(1, "lastName is required"),
-    phone: z.preprocess(
-        (value) => (value === "" || value === null ? undefined : value),
-        phoneSchema.optional(),
-    ),
+    phone: phoneSchema,
     dob: dobSchema,
 });
 
 export const loginBodySchema = z.object({
     identifier: identifierSchema,
-    password: z.string().trim().min(8, "Mật khẩu phải có ít nhất 8 ký tự"),
+    password: z
+        .string()
+        .trim()
+        .min(8, "Mật khẩu phải có ít nhất 8 ký tự")
+        .max(128, "Mật khẩu tối đa 128 ký tự"),
 });
 
 export const forgotPasswordBodySchema = z.object({

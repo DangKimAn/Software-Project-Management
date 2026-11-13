@@ -8,7 +8,7 @@ import '../../l10n/l10n.dart';
 /// Core accessibility constants, reduced-motion detectors, and WCAG 2.1 contrast utilities
 /// compliant with FLUTTER_RULES.md Sections 4, 5, 6, 9.2, 11, and 13.
 abstract final class AppAccessibility {
-  /// Default minimum interactive touch target per Minh Thanh Villa design rules (48x48dp).
+  /// Default minimum interactive touch target per The Palm design rules (48x48dp).
   static const double minTouchTargetSize = 48.0;
 
   /// Absolute minimum interactive touch target floor per FLUTTER_RULES.md Section 13 (44x44dp).

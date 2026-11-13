@@ -78,10 +78,10 @@ void main() {
   tearDown(ContactService.resetTestOverrides);
 
   group(
-      'ContactScreen — Config Validation, Launcher Fallback & No Fake Success',
+      'ContactScreen — Config Validation, Launcher Fallback & Channel Actions',
       () {
     testWidgets(
-      'flags default sample hotline/Zalo config (0901234567) as unverified and does not claim it is real',
+      'does not mark default sample hotline/Zalo config (0901234567) as verified',
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(390, 900));
         addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -90,12 +90,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.byKey(const ValueKey('contact-config-warning-banner')),
-          findsOneWidget,
-        );
-        expect(
-          find.text('Cấu hình mẫu — Chưa xác minh'),
-          findsNWidgets(2),
+          find.text('Đã xác minh cấu hình'),
+          findsNothing,
         );
         expect(tester.takeException(), isNull);
       },
@@ -139,15 +135,10 @@ void main() {
     );
 
     testWidgets(
-      'consultation draft builder validates fields, requires consent, and copies draft without faking server submission',
+      'does not render removed consultation draft form section',
       (tester) async {
-        await tester.binding.setSurfaceSize(const Size(430, 1100));
+        await tester.binding.setSurfaceSize(const Size(430, 900));
         addTearDown(() => tester.binding.setSurfaceSize(null));
-
-        String? copiedDraft;
-        ContactService.clipboardSetDataOverride = (text) async {
-          copiedDraft = text;
-        };
 
         await tester.pumpWidget(
           _wrapContactScreen(
@@ -159,140 +150,16 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        final submitBtn = find.byKey(const ValueKey('contact-submit-button'));
-        await tester.ensureVisible(submitBtn);
-        await tester.tap(submitBtn);
-        await tester.pumpAndSettle();
-
-        // Missing required fields + consent not checked
-        expect(find.text('Vui lòng nhập họ và tên'), findsOneWidget);
-        expect(find.text('Vui lòng nhập số điện thoại'), findsOneWidget);
-        expect(find.text('Vui lòng nhập nội dung cần hỗ trợ'), findsOneWidget);
-        expect(copiedDraft, isNull);
-
-        // Enter invalid email
-        await tester.enterText(
-          find.byKey(const ValueKey('contact-name-input')),
-          'Nguyễn Minh Anh',
-        );
-        await tester.enterText(
-          find.byKey(const ValueKey('contact-phone-input')),
-          '0912345678',
-        );
-        await tester.enterText(
-          find.byKey(const ValueKey('contact-email-input')),
-          'email-sai-dinh-dang',
-        );
-        await tester.enterText(
-          find.byKey(const ValueKey('contact-message-input')),
-          'Cần tư vấn căn 4 phòng ngủ Bãi Sau cho 10 người lớn.',
-        );
-
-        await tester.ensureVisible(submitBtn);
-        await tester.tap(submitBtn);
-        await tester.pumpAndSettle();
-
-        expect(find.text('Email không đúng định dạng'), findsOneWidget);
-        expect(copiedDraft, isNull);
-
-        // Fix email and toggle consent checkbox
-        await tester.enterText(
-          find.byKey(const ValueKey('contact-email-input')),
-          'minhanh@example.com',
-        );
-        final consentBox =
-            find.byKey(const ValueKey('contact-consent-checkbox'));
-        await tester.ensureVisible(consentBox);
-        await tester.tap(consentBox);
-        await tester.pumpAndSettle();
-
-        await tester.ensureVisible(submitBtn);
-        await tester.tap(submitBtn);
-        await tester.pumpAndSettle();
-
-        expect(copiedDraft, isNotNull);
-        expect(copiedDraft, contains('Nguyễn Minh Anh'));
-        expect(copiedDraft, contains('0912345678'));
-        expect(copiedDraft, contains('minhanh@example.com'));
-        expect(find.byKey(const ValueKey('contact-draft-preview')),
-            findsOneWidget);
-      },
-    );
-
-    testWidgets(
-      'API mode validates required email and does not fake success when endpoint fails',
-      (tester) async {
-        await tester.binding.setSurfaceSize(const Size(430, 1100));
-        addTearDown(() => tester.binding.setSurfaceSize(null));
-
-        var shouldFail = true;
-        ContactInquiryPayload? submittedPayload;
-
-        await tester.pumpWidget(
-          _wrapContactScreen(
-            ContactScreen(
-              hotlineOverride: '0909888777',
-              zaloOaUrlOverride: 'https://zalo.me/0909888777',
-              onSubmitInquiryEndpoint: (submission) async {
-                if (shouldFail) {
-                  throw Exception('Máy chủ tạm thời quá tải');
-                }
-                submittedPayload = submission;
-              },
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        await tester.enterText(
-          find.byKey(const ValueKey('contact-name-input')),
-          'Trần Quốc Bảo',
-        );
-        await tester.enterText(
-          find.byKey(const ValueKey('contact-phone-input')),
-          '0987654321',
-        );
-        await tester.enterText(
-          find.byKey(const ValueKey('contact-message-input')),
-          'Báo giá villa 5 phòng ngủ cuối tuần.',
-        );
-
-        final consentBox =
-            find.byKey(const ValueKey('contact-consent-checkbox'));
-        await tester.ensureVisible(consentBox);
-        await tester.tap(consentBox);
-        await tester.pumpAndSettle();
-
-        final submitBtn = find.byKey(const ValueKey('contact-submit-button'));
-        await tester.ensureVisible(submitBtn);
-        await tester.tap(submitBtn);
-        await tester.pumpAndSettle();
-
-        // Email is required in API mode
+        expect(find.text('Soạn nội dung tư vấn'), findsNothing);
+        expect(find.text('Gửi yêu cầu tư vấn'), findsNothing);
         expect(
-            find.text('Vui lòng nhập email để nhận phản hồi'), findsOneWidget);
-
-        await tester.enterText(
-          find.byKey(const ValueKey('contact-email-input')),
-          'quocbao@example.com',
+          find.byKey(const ValueKey('contact-submit-button')),
+          findsNothing,
         );
-        await tester.ensureVisible(submitBtn);
-        await tester.tap(submitBtn);
-        await tester.pumpAndSettle();
-
-        // Endpoint threw error -> must NOT fake success and must keep user data
-        expect(submittedPayload, isNull);
-        expect(find.textContaining('Không thể gửi yêu cầu'), findsOneWidget);
-        expect(find.text('Trần Quốc Bảo'), findsOneWidget);
-
-        // Now allow endpoint to succeed
-        shouldFail = false;
-        await tester.ensureVisible(submitBtn);
-        await tester.tap(submitBtn);
-        await tester.pumpAndSettle();
-
-        expect(submittedPayload, isNotNull);
-        expect(submittedPayload!.email, 'quocbao@example.com');
+        expect(
+          find.byKey(const ValueKey('contact-name-input')),
+          findsNothing,
+        );
       },
     );
 

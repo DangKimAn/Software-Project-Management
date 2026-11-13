@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { afterEach, describe, it } = require("node:test");
+const { after, afterEach, describe, it } = require("node:test");
 import type { AuditLogRecord, PatchEntry, Rejectable, TransactionCallback } from "./helpers/types";
 
 process.env.NODE_ENV = "test";
@@ -29,6 +29,14 @@ afterEach(() => {
     while (originals.length > 0) {
         const [target, key, value] = originals.pop()!;
         target[key] = value;
+    }
+});
+
+after(async () => {
+    try {
+        await sequelize.close();
+    } catch {
+        // ignore
     }
 });
 

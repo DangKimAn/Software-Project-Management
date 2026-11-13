@@ -1,4 +1,4 @@
-import { Op, QueryTypes } from "sequelize";
+import { Op, QueryTypes, UniqueConstraintError } from "sequelize";
 
 import { ApiError } from "../../common/api-error";
 import { sanitizeNullableSingleLineText, sanitizeSingleLineText } from "../../common/sanitization";
@@ -137,21 +137,28 @@ export const createAmenity = async (actor: AuthenticatedUser, input: AmenityInpu
             return existing;
         }
 
-        const created = await Amenity.create(
-            {
-                amenityId: await getNextAmenityId(),
+        try {
+            const created = await Amenity.create(
+                {
+                    amenityId: await getNextAmenityId(),
+                    name,
+                    icon: normalizeIcon(input.icon),
+                    active: input.isActive ?? true,
+                    isActive: input.isActive ?? true,
+                    deletedAt: null,
+                },
+                { transaction },
+            );
+            await writeAmenityAudit(actor, "admin_amenity.create", created.amenityId, {
                 name,
-                icon: normalizeIcon(input.icon),
-                active: input.isActive ?? true,
-                isActive: input.isActive ?? true,
-                deletedAt: null,
-            },
-            { transaction },
-        );
-        await writeAmenityAudit(actor, "admin_amenity.create", created.amenityId, {
-            name,
-        });
-        return created;
+            });
+            return created;
+        } catch (error) {
+            if (error instanceof UniqueConstraintError) {
+                throw new ApiError(409, "Amenity already exists");
+            }
+            throw error;
+        }
     });
 
     return serializeAmenity(amenity);

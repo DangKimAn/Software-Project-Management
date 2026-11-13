@@ -3,6 +3,7 @@ import { body, param, query } from "express-validator";
 
 import {
     approveListing,
+    transferListingHostHandler,
     getAdminListingDetailHandler,
     listPendingListings,
     rejectListing,
@@ -18,11 +19,11 @@ const listingIdParamValidator = param("listingId")
     .withMessage("listingId must be a positive integer")
     .toInt();
 
-const requireModerator = [authenticate, requireRole("admin", "moderator")];
+const requireAdmin = [authenticate, requireRole("admin")];
 
 router.get(
     "/pending",
-    requireModerator,
+    requireAdmin,
     [
         query("page").optional().isInt({ min: 1 }).withMessage("page must be at least 1").toInt(),
         query("limit")
@@ -34,13 +35,13 @@ router.get(
     listPendingListings,
 );
 
-router.get("/:listingId", requireModerator, [listingIdParamValidator], getAdminListingDetailHandler);
+router.get("/:listingId", requireAdmin, [listingIdParamValidator], getAdminListingDetailHandler);
 
-router.patch("/:listingId/approve", requireModerator, [listingIdParamValidator], approveListing);
+router.patch("/:listingId/approve", requireAdmin, [listingIdParamValidator], approveListing);
 
 router.patch(
     "/:listingId/reject",
-    requireModerator,
+    requireAdmin,
     [
         listingIdParamValidator,
         body("reason")
@@ -51,6 +52,19 @@ router.patch(
             .isLength({ max: 2000 }),
     ],
     rejectListing,
+);
+
+router.patch(
+    "/:listingId/transfer-host",
+    [authenticate, requireRole("admin")],
+    [
+        listingIdParamValidator,
+        body("newHostId")
+            .isInt({ min: 1 })
+            .withMessage("newHostId must be a positive integer")
+            .toInt(),
+    ],
+    transferListingHostHandler,
 );
 
 export default router;

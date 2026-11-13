@@ -1,3 +1,5 @@
+import { UniqueConstraintError } from "sequelize";
+
 import { ApiError } from "../../common/api-error";
 import sequelize from "../../config/database";
 import type { AuthenticatedUser } from "../auth/auth.service";
@@ -111,7 +113,14 @@ export const createReview = async (user: AuthenticatedUser, input: CreateReviewI
             deletedAt: null,
         });
 
-        await review.save({ transaction });
+        try {
+            await review.save({ transaction });
+        } catch (error) {
+            if (error instanceof UniqueConstraintError) {
+                throw new ApiError(409, "Booking has already been reviewed");
+            }
+            throw error;
+        }
         await notifyReviewCreated(review.reviewId, transaction);
 
         return {

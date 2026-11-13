@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radii.dart';
@@ -20,16 +23,26 @@ import '../../../../shared/widgets/app_image.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../data/conversations_repository.dart';
+import '../../services/chat_media_upload_service.dart';
+import '../../services/chat_voice_recorder_service.dart';
+import '../widgets/chat_audio_bubble.dart';
+import '../widgets/chat_image_bubble.dart';
+import '../widgets/messenger_voice_recorder_bar.dart';
 
-/// Complete port of `Source goc/frontend/src/views/pages/Messages/MessagesPage.tsx` and `Host/TinNhan/index.tsx`.
+enum _ChatPortalRole { guest, host, admin }
+
+/// Unified Messenger-style chat screen shared across Guest (`/messages`, `/tin-nhan`),
+/// Host (`isHostPortal: true`), and Admin (`isAdminPortal: true` / `/admin/tin-nhan`).
 class MessagesScreen extends ConsumerStatefulWidget {
   final String? initialConversationId;
   final bool isHostPortal;
+  final bool isAdminPortal;
 
   const MessagesScreen({
     super.key,
     this.initialConversationId,
     this.isHostPortal = false,
+    this.isAdminPortal = false,
   });
 
   @override
@@ -37,7 +50,16 @@ class MessagesScreen extends ConsumerStatefulWidget {
 }
 
 class _MessagesScreenState extends ConsumerState<MessagesScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+  static const List<String> _messengerReactions = [
+    '❤️',
+    '😆',
+    '😮',
+    '😢',
+    '😡',
+    '👍',
+  ];
+
   String? _selectedConversationId;
   String? _activeUserId;
 
@@ -53,13 +75,29 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   final Map<String, Timer> _typingTimers = {};
   final Map<String, DateTime> _lastTypingSentAt = {};
   final Map<String, ConversationItem> _conversationOverrides = {};
+  final Map<String, String> _messageReactions = {};
+  final Set<String> _expandedTimestampKeys = {};
 
   final TextEditingController _inputCtrl = TextEditingController();
+  final FocusNode _inputFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
+  final ImagePicker _imagePicker = ImagePicker();
+
+  late final AnimationController _timestampDragCtrl;
+  double _horizontalDragOffset = 0.0;
+  bool _showTimestampsPinned = false;
+  String? _reactionActiveMsgKey;
+  bool _isRecordingVoice = false;
+  int _voiceRecordingSeconds = 0;
+  Timer? _voiceTimer;
+  final ChatVoiceRecorderService _voiceRecorder = ChatVoiceRecorderService();
+  String _chatQuickEmoji = '👍';
 
   bool _isSwitchingConversation = false;
   bool _isUserNearBottom = true;
   int _localMessageSequence = 0;
+
+  bool get _isEmbeddedPortal => widget.isHostPortal || widget.isAdminPortal;
 
   late final SocketService _socket;
   StreamSubscription<Map<String, dynamic>>? _socketMessageSub;
@@ -77,6 +115,10 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _timestampDragCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
     _selectedConversationId = widget.initialConversationId?.trim();
     _inputCtrl.addListener(_onInputChanged);
     _scrollController.addListener(_onScrollChanged);
@@ -93,6 +135,23 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _selectedConversationId != null) {
           _selectConversation(_selectedConversationId!);
+        }
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant MessagesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextConvId = widget.initialConversationId?.trim();
+    final prevConvId = oldWidget.initialConversationId?.trim();
+    if (nextConvId != prevConvId &&
+        nextConvId != null &&
+        nextConvId.isNotEmpty &&
+        _selectedConversationId != nextConvId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _selectConversation(nextConvId);
         }
       });
     }
@@ -224,6 +283,13 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     _scrollOffsetByConversation.clear();
     _unreadBelowByConversation.clear();
     _conversationOverrides.clear();
+    _messageReactions.clear();
+    _expandedTimestampKeys.clear();
+    _reactionActiveMsgKey = null;
+    _voiceTimer?.cancel();
+    unawaited(_voiceRecorder.cancel());
+    _isRecordingVoice = false;
+    _voiceRecordingSeconds = 0;
     _isSwitchingConversation = true;
     _inputCtrl.clear();
     _isSwitchingConversation = false;
@@ -659,9 +725,20 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   }
 
   Future<void> _sendMessage() async {
-    final convId = _selectedConversationId;
     final text = _inputCtrl.text.trim();
-    if (convId == null || convId.isEmpty || text.isEmpty) return;
+    if (text.isEmpty) return;
+    await _sendDirectContent(text, clearInput: true);
+  }
+
+  Future<void> _sendDirectContent(
+    String rawContent, {
+    bool clearInput = false,
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
+  }) async {
+    final convId = _selectedConversationId;
+    final text = rawContent.trim();
+    if (convId == null || convId.isEmpty || (text.isEmpty && (attachments == null || attachments.isEmpty))) return;
 
     final currentUserId = ref.read(authNotifierProvider).valueOrNull?.id ?? '';
     if (currentUserId.isEmpty) return;
@@ -684,14 +761,23 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       conversationId: convId,
       senderId: currentUserId,
       content: text,
+      messageType: messageType,
+      attachments: attachments != null
+          ? attachments
+              .map((a) => (a['url'] ?? '').toString())
+              .where((s) => s.isNotEmpty)
+              .toList()
+          : const [],
       createdAt: nowIso,
       status: MessageDeliveryStatus.sending,
     );
 
-    _isSwitchingConversation = true;
-    _inputCtrl.clear();
-    _isSwitchingConversation = false;
-    _draftsByConversation.remove(convId);
+    if (clearInput) {
+      _isSwitchingConversation = true;
+      _inputCtrl.clear();
+      _isSwitchingConversation = false;
+      _draftsByConversation.remove(convId);
+    }
 
     setState(() {
       final currentList = _messagesByConversation[convId] ?? const [];
@@ -707,6 +793,507 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       conversationId: convId,
       localId: localId,
       content: text,
+      messageType: messageType,
+      attachments: attachments,
+    );
+  }
+
+  _ChatPortalRole _resolveChatRole(User? user, ConversationItem conv) {
+    if (widget.isAdminPortal || (user?.isAdmin ?? false)) {
+      return _ChatPortalRole.admin;
+    }
+    if (widget.isHostPortal) {
+      return _ChatPortalRole.host;
+    }
+    final uid = user?.id.trim() ?? '';
+    if (uid.isNotEmpty && conv.hostId.trim().isNotEmpty) {
+      return conv.hostId.trim() == uid
+          ? _ChatPortalRole.host
+          : _ChatPortalRole.guest;
+    }
+    if (user?.isHost ?? false) {
+      return _ChatPortalRole.host;
+    }
+    return _ChatPortalRole.guest;
+  }
+
+  AppLocalizations get _currentL10n =>
+      lookupAppLocalizations(Locale(ref.read(localeProvider)));
+
+  List<String> _quickRepliesForRole(_ChatPortalRole role, [AppLocalizations? l10n]) {
+    final loc = l10n ?? _currentL10n;
+    switch (role) {
+      case _ChatPortalRole.admin:
+        return [
+          loc.chatQuickReplyAdmin1,
+          loc.chatQuickReplyAdmin2,
+          loc.chatQuickReplyAdmin3,
+          loc.chatQuickReplyAdmin4,
+        ];
+      case _ChatPortalRole.host:
+        return [
+          loc.chatQuickReplyHost1,
+          loc.chatQuickReplyHost2,
+          loc.chatQuickReplyHost3,
+          loc.chatQuickReplyHost4,
+        ];
+      case _ChatPortalRole.guest:
+        return [
+          loc.chatQuickReplyGuest1,
+          loc.chatQuickReplyGuest2,
+          loc.chatQuickReplyGuest3,
+          loc.chatQuickReplyGuest4,
+        ];
+    }
+  }
+
+  void _applyQuickReply(String text) {
+    _inputCtrl.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    _inputFocusNode.requestFocus();
+  }
+
+  Future<void> _openCameraChat() async {
+    final l10n = _currentL10n;
+    try {
+      final file = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 82,
+      );
+      if (!mounted || file == null) return;
+      AppToast.show(context, l10n.chatToastUploadingPhoto, type: AppToastType.info);
+      final bytes = await file.readAsBytes();
+      final uploadService = ref.read(chatMediaUploadServiceProvider);
+      final result = await uploadService.uploadMediaBytesToR2(
+        bytes: bytes,
+        filename: file.name.isNotEmpty ? file.name : 'camera_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        contentType: 'image/jpeg',
+      );
+      if (!mounted) return;
+      await _sendDirectContent(
+        '',
+        messageType: 'image',
+        attachments: [
+          {
+            'url': result.publicUrl,
+            'type': 'image/jpeg',
+            'name': file.name,
+          }
+        ],
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final failure = DioClient.handleError(e);
+      AppToast.show(context, failure.message, type: AppToastType.error);
+    }
+  }
+
+  Future<void> _pickAndSendChatImage() async {
+    final l10n = _currentL10n;
+    try {
+      final file = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (!mounted || file == null) return;
+      AppToast.show(context, l10n.chatToastUploadingPhoto, type: AppToastType.info);
+      final bytes = await file.readAsBytes();
+      final uploadService = ref.read(chatMediaUploadServiceProvider);
+      final result = await uploadService.uploadMediaBytesToR2(
+        bytes: bytes,
+        filename: file.name.isNotEmpty ? file.name : 'gallery_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        contentType: 'image/jpeg',
+      );
+      if (!mounted) return;
+      await _sendDirectContent(
+        '',
+        messageType: 'image',
+        attachments: [
+          {
+            'url': result.publicUrl,
+            'type': 'image/jpeg',
+            'name': file.name,
+          }
+        ],
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final failure = DioClient.handleError(e);
+      AppToast.show(context, failure.message, type: AppToastType.error);
+    }
+  }
+
+  Future<void> _toggleVoiceRecording() async {
+    final l10n = _currentL10n;
+    if (_isRecordingVoice) {
+      final sec = _voiceRecordingSeconds;
+      _voiceTimer?.cancel();
+      setState(() {
+        _isRecordingVoice = false;
+        _voiceRecordingSeconds = 0;
+      });
+      unawaited(() async {
+        try {
+          if (!mounted) return;
+          AppToast.show(context, l10n.chatToastUploadingVoice, type: AppToastType.info);
+
+          final recordedResult = await _voiceRecorder.stop();
+          if (recordedResult == null || recordedResult.bytes.isEmpty) {
+            if (!mounted) return;
+            AppToast.show(
+              context,
+              l10n.chatToastMicNoAudio,
+              type: AppToastType.warning,
+            );
+            return;
+          }
+
+          final Uint8List audioBytes = recordedResult.bytes;
+          final String filename = recordedResult.filename;
+          final String contentType = recordedResult.contentType;
+          final int recordedSeconds = recordedResult.durationSeconds > 0
+              ? recordedResult.durationSeconds
+              : (sec > 0 ? sec : 1);
+
+          final uploadService = ref.read(chatMediaUploadServiceProvider);
+          final result = await uploadService.uploadMediaBytesToR2(
+            bytes: audioBytes,
+            filename: filename,
+            contentType: contentType,
+          );
+          if (!mounted) return;
+          await _sendDirectContent(
+            '🎤 Tin nhắn thoại (00:${recordedSeconds.toString().padLeft(2, '0')})',
+            messageType: 'file',
+            attachments: [
+              {
+                'url': result.publicUrl,
+                'type': contentType,
+                'name': filename,
+              }
+            ],
+          );
+        } catch (e) {
+          if (!mounted) return;
+          final failure = DioClient.handleError(e);
+          AppToast.show(context, 'Tải âm thanh lên R2 thất bại: ${failure.message}', type: AppToastType.error);
+        }
+      }());
+    } else {
+      final started = await _voiceRecorder.start();
+      if (!started) {
+        if (!mounted) return;
+        AppToast.show(
+          context,
+          'Không thể truy cập Micro. Vui lòng cấp quyền Microphone trên trình duyệt / thiết bị.',
+          type: AppToastType.warning,
+        );
+        return;
+      }
+
+      setState(() {
+        _isRecordingVoice = true;
+        _voiceRecordingSeconds = 0;
+      });
+      _voiceTimer?.cancel();
+      _voiceTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        setState(() {
+          _voiceRecordingSeconds++;
+        });
+      });
+    }
+  }
+
+  void _showChatMoreOptions(_ChatPortalRole role, ConversationItem conv, [AppLocalizations? l10n]) {
+    final loc = l10n ?? _currentL10n;
+    final templates = <({IconData icon, String title, String subtitle, String content})>[
+      switch (role) {
+        _ChatPortalRole.admin => (
+            icon: LucideIcons.shieldCheck,
+            title: loc.chatTplAdminDocsTitle,
+            subtitle: loc.chatTplAdminDocsSubtitle,
+            content: loc.chatTplAdminDocsContent,
+          ),
+        _ChatPortalRole.host => (
+            icon: LucideIcons.mapPin,
+            title: loc.chatTplHostLocationTitle,
+            subtitle: loc.chatTplHostLocationSubtitle,
+            content: loc.chatTplHostLocationContent(conv.listingTitle),
+          ),
+        _ChatPortalRole.guest => (
+            icon: LucideIcons.calendarCheck,
+            title: loc.chatTplGuestInquiryTitle,
+            subtitle: loc.chatTplGuestInquirySubtitle,
+            content: loc.chatTplGuestInquiryContent,
+          ),
+      },
+      switch (role) {
+        _ChatPortalRole.admin => (
+            icon: LucideIcons.clipboardCheck,
+            title: loc.chatTplAdminReviewTitle,
+            subtitle: loc.chatTplAdminReviewSubtitle,
+            content: loc.chatTplAdminReviewContent,
+          ),
+        _ChatPortalRole.host => (
+            icon: LucideIcons.clock,
+            title: loc.chatTplHostCheckinTitle,
+            subtitle: loc.chatTplHostCheckinSubtitle,
+            content: loc.chatTplHostCheckinContent,
+          ),
+        _ChatPortalRole.guest => (
+            icon: LucideIcons.clock,
+            title: loc.chatTplGuestCheckinTitle,
+            subtitle: loc.chatTplGuestCheckinSubtitle,
+            content: loc.chatTplGuestCheckinContent,
+          ),
+      },
+      switch (role) {
+        _ChatPortalRole.admin => (
+            icon: LucideIcons.lifeBuoy,
+            title: loc.chatTplAdminPolicyTitle,
+            subtitle: loc.chatTplAdminPolicySubtitle,
+            content: loc.chatTplAdminPolicyContent,
+          ),
+        _ChatPortalRole.host => (
+            icon: LucideIcons.fileText,
+            title: loc.chatTplHostHouseRulesTitle,
+            subtitle: loc.chatTplHostHouseRulesSubtitle,
+            content: loc.chatTplHostHouseRulesContent,
+          ),
+        _ChatPortalRole.guest => (
+            icon: LucideIcons.flame,
+            title: loc.chatTplGuestAmenitiesTitle,
+            subtitle: loc.chatTplGuestAmenitiesSubtitle,
+            content: loc.chatTplGuestAmenitiesContent,
+          ),
+      },
+    ];
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceBase,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        LucideIcons.plus,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        loc.chatExtensionsAndTemplatesTitle,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        unawaited(_openCameraChat());
+                      },
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(48, 44),
+                        shape: const StadiumBorder(),
+                      ),
+                      icon: const Icon(LucideIcons.camera, size: 16),
+                      label: Text(loc.chatCamera),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        unawaited(_pickAndSendChatImage());
+                      },
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(48, 44),
+                        shape: const StadiumBorder(),
+                      ),
+                      icon: const Icon(LucideIcons.image, size: 16),
+                      label: Text(loc.chatGalleryLabel),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _toggleVoiceRecording();
+                      },
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(48, 44),
+                        shape: const StadiumBorder(),
+                      ),
+                      icon: const Icon(LucideIcons.mic, size: 16),
+                      label: Text(loc.chatVoiceMessage),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Divider(height: 1, color: AppColors.borderSoft),
+                const SizedBox(height: 6),
+                for (final tpl in templates)
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    leading: Icon(tpl.icon, color: AppColors.primary, size: 20),
+                    title: Text(
+                      tpl.title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textStrong,
+                      ),
+                    ),
+                    subtitle: Text(
+                      tpl.subtitle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      unawaited(_sendDirectContent(tpl.content));
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showEmojiSelector([AppLocalizations? l10n]) {
+    final loc = l10n ?? _currentL10n;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceBase,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        const emojis = [
+          '😊',
+          '🥰',
+          '😍',
+          '🌴',
+          '🏖️',
+          '✨',
+          '👍',
+          '🙏',
+          '❤️',
+          '🔥',
+          '🎉',
+          '💯',
+          '⭐',
+          '🌊',
+          '🏡',
+          '🔑',
+          '☕',
+          '🌟',
+        ];
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  loc.chatSelectEmojiTitle,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 10,
+                  children: emojis.map((e) {
+                    return InkWell(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        final current = _inputCtrl.text;
+                        final next = current.isEmpty ? e : '$current $e';
+                        _inputCtrl.value = TextEditingValue(
+                          text: next,
+                          selection:
+                              TextSelection.collapsed(offset: next.length),
+                        );
+                        _inputFocusNode.requestFocus();
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(e, style: const TextStyle(fontSize: 26)),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _chooseQuickEmoji([AppLocalizations? l10n]) {
+    final loc = l10n ?? _currentL10n;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        const quickOptions = ['👍', '❤️', '😤', '🌴', '🔥', '⭐'];
+        return AlertDialog(
+          title: Text(loc.chatSelectQuickEmojiTitle),
+          content: Wrap(
+            spacing: 14,
+            runSpacing: 12,
+            children: quickOptions.map((e) {
+              return InkWell(
+                onTap: () {
+                  setState(() => _chatQuickEmoji = e);
+                  Navigator.pop(ctx);
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(e, style: const TextStyle(fontSize: 30)),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 
@@ -731,6 +1318,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       conversationId: convId,
       localId: localId,
       content: failedMsg.content,
+      messageType: failedMsg.messageType,
+      attachments: failedMsg.attachments.map((u) => {'url': u}).toList(),
     );
   }
 
@@ -748,11 +1337,15 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     required String conversationId,
     required String localId,
     required String content,
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
   }) async {
     try {
       final sent = await ref.read(conversationsRepositoryProvider).sendMessage(
             conversationId: conversationId,
             content: content,
+            messageType: messageType,
+            attachments: attachments,
           );
       if (!mounted) return;
       final confirmed = sent.copyWith(
@@ -846,18 +1439,19 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     return merged;
   }
 
-  String _errorTitleFor(Object error) {
-    if (error is NetworkFailure) return 'Mất kết nối mạng';
+  String _errorTitleFor(Object error, [AppLocalizations? l10n]) {
+    final loc = l10n ?? _currentL10n;
+    if (error is NetworkFailure) return loc.chatErrorNetwork;
     if (error is AuthFailure) {
       return error.statusCode == 403
-          ? 'Không có quyền truy cập'
-          : 'Phiên đăng nhập hết hạn';
+          ? loc.chatErrorForbidden
+          : loc.chatErrorUnauthorized;
     }
-    if (error is NotFoundFailure) return 'Không tìm thấy cuộc trò chuyện';
-    if (error is RateLimitFailure) return 'Thao tác quá nhanh';
-    if (error is ServerFailure) return 'Lỗi máy chủ';
-    if (error is ValidationFailure) return 'Dữ liệu không hợp lệ';
-    return 'Đã có lỗi xảy ra';
+    if (error is NotFoundFailure) return loc.chatErrorNotFound;
+    if (error is RateLimitFailure) return loc.chatErrorRateLimit;
+    if (error is ServerFailure) return loc.chatErrorServer;
+    if (error is ValidationFailure) return loc.chatErrorValidation;
+    return loc.chatErrorGeneric;
   }
 
   String _formatTimestamp(String? raw) {
@@ -883,12 +1477,16 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       timer.cancel();
     }
     _typingTimers.clear();
+    _voiceTimer?.cancel();
+    _voiceRecorder.dispose();
     _socketMessageSub?.cancel();
     _socketErrorSub?.cancel();
     _socketTypingSub?.cancel();
     _reconnectSub?.cancel();
     _inputCtrl.removeListener(_onInputChanged);
     _scrollController.removeListener(_onScrollChanged);
+    _timestampDragCtrl.dispose();
+    _inputFocusNode.dispose();
     _inputCtrl.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -896,6 +1494,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = lookupAppLocalizations(Locale(ref.watch(localeProvider)));
     ref.listen<AsyncValue<User?>>(authNotifierProvider, (prev, next) {
       final prevUser = prev?.valueOrNull;
       final nextUser = next.valueOrNull;
@@ -911,15 +1510,14 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
         backgroundColor: AppColors.background,
         body: Column(
           children: [
-            if (!widget.isHostPortal)
-              const AppTopHeader(currentPath: '/messages'),
+            if (!_isEmbeddedPortal)
+              const AppSearchHeader(currentPath: '/messages'),
             Expanded(
               child: AppEmptyView(
                 icon: LucideIcons.messageSquare,
-                title: 'Đăng nhập để xem tin nhắn',
-                description:
-                    'Trao đổi trực tiếp với Chủ nhà Vũng Tàu về lịch phòng, tiện nghi và ưu đãi.',
-                actionText: 'Đăng nhập ngay',
+                title: l10n.chatLoginTitle,
+                description: l10n.chatLoginDescription,
+                actionText: l10n.chatLoginAction,
                 onAction: () => context.push('/dang-nhap'),
               ),
             ),
@@ -941,7 +1539,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       error: (err, _) {
         final failure = DioClient.handleError(err);
         return AppErrorView(
-          title: _errorTitleFor(failure),
+          title: _errorTitleFor(failure, l10n),
           message: failure.message,
           onRetry: () {
             ref.invalidate(conversationsListProvider);
@@ -1001,12 +1599,31 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                 activeConv == null &&
                 selectedError == null &&
                 !selectedLoading) {
+              if (widget.isAdminPortal || user.isAdmin) {
+                return AppEmptyView(
+                  icon: LucideIcons.messageSquare,
+                  title: l10n.chatEmptyAdminTitle,
+                  description: l10n.chatEmptyAdminDesc,
+                  actionText: GoRouter.maybeOf(context) != null
+                      ? l10n.chatEmptyAdminAction
+                      : null,
+                  onAction: GoRouter.maybeOf(context) != null
+                      ? () => context.go('/admin/nguoi-dung')
+                      : null,
+                );
+              }
+              if (widget.isHostPortal || user.isHost) {
+                return AppEmptyView(
+                  icon: LucideIcons.messageSquare,
+                  title: l10n.chatEmptyHostTitle,
+                  description: l10n.chatEmptyHostDesc,
+                );
+              }
               return AppEmptyView(
                 icon: LucideIcons.messageSquare,
-                title: 'Chưa có cuộc trò chuyện nào',
-                description:
-                    'Hãy chọn một biệt thự và bấm "Nhắn tin cho Chủ nhà" để bắt đầu trò chuyện.',
-                actionText: 'Khám phá biệt thự',
+                title: l10n.chatEmptyGuestTitle,
+                description: l10n.chatEmptyGuestDesc,
+                actionText: l10n.chatEmptyGuestAction,
                 onAction: () => context.push('/search'),
               );
             }
@@ -1026,7 +1643,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                 ? ConversationItem(
                     id: selectedId,
                     listingId: '',
-                    listingTitle: 'Trao đổi về chỗ nghỉ',
+                    listingTitle: l10n.chatAboutListing,
                     guestId: '',
                     guestName: '',
                     hostId: '',
@@ -1044,18 +1661,19 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                 children: [
                   SizedBox(
                     width: 340,
-                    child: _buildConversationList(conversations, user.id),
+                    child: _buildConversationList(conversations, user.id, l10n),
                   ),
                   const VerticalDivider(width: 1, color: AppColors.border),
                   Expanded(
                     child: effectiveActiveConv == null
-                        ? const Center(
-                            child: Text('Chọn một hội thoại để xem tin nhắn'),
+                        ? Center(
+                            child: Text(l10n.chatSelectConversationPrompt),
                           )
                         : _buildChatPane(
                             effectiveActiveConv,
                             user.id,
                             showBackButton: false,
+                            l10n: l10n,
                           ),
                   ),
                 ],
@@ -1068,17 +1686,18 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                 effectiveActiveConv,
                 user.id,
                 showBackButton: true,
+                l10n: l10n,
               );
             }
-            return _buildConversationList(conversations, user.id);
+            return _buildConversationList(conversations, user.id, l10n);
           },
         );
       },
     );
 
-    if (widget.isHostPortal) {
+    if (_isEmbeddedPortal) {
       return Material(
-        color: AppColors.background,
+        color: AppColors.surfaceBase,
         child: bodyContent,
       );
     }
@@ -1087,7 +1706,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          const AppTopHeader(currentPath: '/messages'),
+          const AppSearchHeader(currentPath: '/messages'),
           Expanded(child: bodyContent),
         ],
       ),
@@ -1128,8 +1747,10 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
 
   Widget _buildConversationList(
     List<ConversationItem> conversations,
-    String currentUserId,
-  ) {
+    String currentUserId, [
+    AppLocalizations? l10n,
+  ]) {
+    final loc = l10n ?? _currentL10n;
     final totalUnread = conversations.fold<int>(
       0,
       (sum, item) => sum + (item.unreadCount > 0 ? item.unreadCount : 0),
@@ -1140,27 +1761,15 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.s16,
-              vertical: AppSpacing.s12,
-            ),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Hộp thư tin nhắn',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textStrong,
-                    ),
-                  ),
-                ),
-                if (totalUnread > 0) ...[
-                  const SizedBox(width: AppSpacing.s8),
+          if (totalUnread > 0) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.s16,
+                vertical: AppSpacing.s8,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
                   Container(
                     key: const Key('inbox_total_unread_badge'),
                     padding: const EdgeInsets.symmetric(
@@ -1181,28 +1790,21 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                     ),
                   ),
                 ],
-                IconButton(
-                  onPressed: () => ref.invalidate(conversationsListProvider),
-                  tooltip: 'Làm mới hộp thư',
-                  constraints: const BoxConstraints(
-                    minWidth: 48,
-                    minHeight: 48,
-                  ),
-                  icon: const Icon(
-                    LucideIcons.refreshCw,
-                    size: 18,
-                    color: AppColors.iconStrong,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-          const Divider(height: 1, color: AppColors.borderSoft),
+            const Divider(height: 1, color: AppColors.borderSoft),
+          ],
           Expanded(
-            child: ListView.separated(
-              itemCount: conversations.length,
-              separatorBuilder: (_, __) =>
-                  const Divider(height: 1, color: AppColors.divider),
+            child: RefreshIndicator(
+              color: AppColors.primary,
+              onRefresh: () async {
+                ref.invalidate(conversationsListProvider);
+              },
+              child: ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: conversations.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, color: AppColors.divider),
               itemBuilder: (context, index) {
                 final conv = conversations[index];
                 final isSelected = conv.id == _selectedConversationId;
@@ -1212,19 +1814,17 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                 final savedDraft = _draftsByConversation[conv.id]?.trim() ?? '';
                 final hasDraft = savedDraft.isNotEmpty && !isSelected;
                 final previewText = hasDraft
-                    ? 'Nháp: $savedDraft'
+                    ? '${loc.chatDraftPrefix}$savedDraft'
                     : (conv.lastMessage != null &&
                             conv.lastMessage!.trim().isNotEmpty)
                         ? conv.lastMessage!.trim()
-                        : 'Chưa có tin nhắn.';
+                        : loc.chatNoMessagesYet;
 
                 return InkWell(
                   key: ValueKey<String>('conv_tile_${conv.id}'),
                   onTap: () => _selectConversation(conv.id),
                   child: Container(
-                    color: isSelected
-                        ? AppColors.surfaceWarmSand
-                        : AppColors.surfaceBase,
+                    color: AppColors.surfaceBase,
                     padding: const EdgeInsets.symmetric(
                       horizontal: AppSpacing.s16,
                       vertical: 14,
@@ -1345,8 +1945,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
               },
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    ),
     );
   }
 
@@ -1354,7 +1955,12 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     ConversationItem conv,
     String currentUserId, {
     required bool showBackButton,
+    AppLocalizations? l10n,
   }) {
+    final loc = l10n ?? _currentL10n;
+    final user = ref.watch(authNotifierProvider).valueOrNull;
+    final chatRole = _resolveChatRole(user, conv);
+    final quickReplies = _quickRepliesForRole(chatRole, loc);
     final counterpart = conv.displayNameFor(currentUserId);
     final convId = conv.id;
     final isLoading = _loadingMessagesByConversation[convId] ?? false;
@@ -1371,18 +1977,25 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       builder: (context, constraints) {
         final paneWidth =
             constraints.maxWidth.isFinite ? constraints.maxWidth : 360.0;
+        final paneHeight =
+            constraints.maxHeight.isFinite ? constraints.maxHeight : 720.0;
         final textScale = MediaQuery.textScalerOf(context).scale(1.0);
-        final isCompactHeader = paneWidth < 380 || textScale > 1.25;
+        final isCompactHeader = paneWidth < 400 || textScale > 1.25;
+        final isCompactComposer = paneWidth < 375 || textScale > 1.22;
         final bubbleMaxWidth =
-            math.min(420.0, math.max(200.0, (paneWidth - 32.0) * 0.84));
+            math.min(420.0, math.max(190.0, (paneWidth - 48.0) * 0.78));
         final keyboardInset =
-            widget.isHostPortal ? MediaQuery.viewInsetsOf(context).bottom : 0.0;
+            _isEmbeddedPortal ? MediaQuery.viewInsetsOf(context).bottom : 0.0;
+        final availableHeight = paneHeight - keyboardInset;
+        final showQuickReplies =
+            !isForbidden && quickReplies.isNotEmpty && availableHeight >= 380.0;
 
-        return Padding(
+        return Container(
+          color: AppColors.surfaceBase,
           padding: EdgeInsets.only(bottom: keyboardInset),
           child: Column(
             children: [
-              // ── Chat Header ──
+              // ── Messenger Chat Header ──
               Container(
                 color: AppColors.surfaceBase,
                 padding: EdgeInsets.symmetric(
@@ -1394,11 +2007,11 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                     if (showBackButton)
                       Semantics(
                         button: true,
-                        label: 'Quay lại danh sách',
+                        label: loc.chatBackToList,
                         child: IconButton(
                           key: const Key('chat_back_button'),
                           onPressed: _leaveActiveConversationToInbox,
-                          tooltip: 'Quay lại danh sách',
+                          tooltip: loc.chatBackToList,
                           constraints: const BoxConstraints(
                             minWidth: 48,
                             minHeight: 48,
@@ -1439,16 +2052,46 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                         ],
                       ),
                     ),
+                    if (!isCompactHeader)
+                      IconButton(
+                        key: const Key('chat_toggle_timestamps_btn'),
+                        onPressed: () {
+                          setState(() {
+                            _showTimestampsPinned = !_showTimestampsPinned;
+                            if (_showTimestampsPinned) {
+                              _timestampDragCtrl.forward();
+                            } else {
+                              _timestampDragCtrl.reverse();
+                            }
+                          });
+                        },
+                        tooltip: _showTimestampsPinned
+                            ? loc.chatHideTimestamps
+                            : loc.chatShowTimestamps,
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        icon: Icon(
+                          _showTimestampsPinned
+                              ? LucideIcons.clockCheck
+                              : LucideIcons.clock,
+                          size: 18,
+                          color: _showTimestampsPinned
+                              ? AppColors.primary
+                              : AppColors.iconMuted,
+                        ),
+                      ),
                     if (conv.listingId.isNotEmpty)
                       isCompactHeader
                           ? Semantics(
                               button: true,
-                              label: 'Xem chỗ nghỉ',
+                              label: loc.chatViewListing,
                               child: IconButton(
                                 key: const Key('view_listing_button'),
                                 onPressed: () =>
                                     context.push('/villa/${conv.listingId}'),
-                                tooltip: 'Xem chỗ nghỉ',
+                                tooltip: loc.chatViewListing,
                                 constraints: const BoxConstraints(
                                   minWidth: 48,
                                   minHeight: 48,
@@ -1463,27 +2106,27 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                           : TextButton(
                               key: const Key('view_listing_button'),
                               onPressed: () =>
-                                  context.push('/villa/${conv.listingId}'),
+                                    context.push('/villa/${conv.listingId}'),
                               style: TextButton.styleFrom(
                                 minimumSize: const Size(48, 48),
                                 shape: const StadiumBorder(),
                                 foregroundColor: AppColors.textStrong,
                               ),
-                              child: const Text('Xem chỗ nghỉ'),
+                              child: Text(loc.chatViewListing),
                             ),
                   ],
                 ),
               ),
               const Divider(height: 1, color: AppColors.borderSoft),
 
-              // ── Message Body (Loading / Error / Empty / List) ──
+              // ── Message Body (Messenger Bubbles + Reactions + Swipe Timestamps) ──
               Expanded(
                 child: isLoading && messages.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : error != null && messages.isEmpty
                         ? SingleChildScrollView(
                             child: AppErrorView(
-                              title: _errorTitleFor(error),
+                              title: _errorTitleFor(error, loc),
                               message: error.message,
                               onRetry: isForbidden
                                   ? null
@@ -1494,128 +2137,191 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                             ),
                           )
                         : messages.isEmpty
-                            ? const Center(
+                            ? Center(
                                 child: SingleChildScrollView(
-                                  padding: EdgeInsets.all(AppSpacing.s16),
+                                  padding: const EdgeInsets.all(AppSpacing.s16),
                                   child: Text(
-                                    'Hãy gửi tin nhắn đầu tiên để bắt đầu trao đổi.',
+                                    loc.chatEmptyPrompt,
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       color: AppColors.textSecondary,
                                     ),
                                   ),
                                 ),
                               )
-                            : Stack(
-                                children: [
-                                  ListView.builder(
-                                    key: ValueKey<String>(
-                                      'chat_message_list_$convId',
-                                    ),
-                                    controller: _scrollController,
-                                    padding: const EdgeInsets.all(
-                                      AppSpacing.s16,
-                                    ),
-                                    itemCount: messages.length +
-                                        (hasMoreHistory ? 1 : 0),
-                                    itemBuilder: (context, index) {
-                                      if (hasMoreHistory && index == 0) {
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                            bottom: AppSpacing.s12,
-                                          ),
-                                          child: Center(
-                                            child: OutlinedButton.icon(
-                                              key: const Key(
-                                                'load_more_history_button',
-                                              ),
-                                              onPressed: isLoadingHistory
-                                                  ? null
-                                                  : () =>
-                                                      _loadMoreHistory(convId),
-                                              style: OutlinedButton.styleFrom(
-                                                minimumSize: const Size(48, 48),
-                                                shape: const StadiumBorder(),
-                                                side: const BorderSide(
-                                                  color: AppColors.border,
+                            : GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onTap: () {
+                                  if (_reactionActiveMsgKey != null) {
+                                    setState(
+                                      () => _reactionActiveMsgKey = null,
+                                    );
+                                  }
+                                },
+                                onHorizontalDragStart: (_) {
+                                  _horizontalDragOffset = 0.0;
+                                },
+                                onHorizontalDragUpdate: (details) {
+                                  final dx = details.primaryDelta ?? 0.0;
+                                  _horizontalDragOffset += dx;
+                                  final progress = (_horizontalDragOffset.abs() /
+                                          55.0)
+                                      .clamp(0.0, 1.0);
+                                  _timestampDragCtrl.value = progress;
+                                },
+                                onHorizontalDragEnd: (_) {
+                                  if (!_showTimestampsPinned) {
+                                    _timestampDragCtrl.animateTo(
+                                      0.0,
+                                      duration:
+                                          const Duration(milliseconds: 220),
+                                      curve: Curves.easeOut,
+                                    );
+                                  }
+                                  _horizontalDragOffset = 0.0;
+                                },
+                                onHorizontalDragCancel: () {
+                                  if (!_showTimestampsPinned) {
+                                    _timestampDragCtrl.animateTo(
+                                      0.0,
+                                      duration:
+                                          const Duration(milliseconds: 220),
+                                      curve: Curves.easeOut,
+                                    );
+                                  }
+                                  _horizontalDragOffset = 0.0;
+                                },
+                                child: Stack(
+                                  children: [
+                                    ListView.builder(
+                                      key: ValueKey<String>(
+                                        'chat_message_list_$convId',
+                                      ),
+                                      controller: _scrollController,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 12,
+                                      ),
+                                      itemCount: messages.length +
+                                          (hasMoreHistory ? 1 : 0),
+                                      itemBuilder: (context, index) {
+                                        if (hasMoreHistory && index == 0) {
+                                          return Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: AppSpacing.s12,
+                                            ),
+                                            child: Center(
+                                              child: OutlinedButton.icon(
+                                                key: const Key(
+                                                  'load_more_history_button',
                                                 ),
-                                                foregroundColor:
-                                                    AppColors.textStrong,
-                                              ),
-                                              icon: isLoadingHistory
-                                                  ? const SizedBox(
-                                                      width: 14,
-                                                      height: 14,
-                                                      child:
-                                                          CircularProgressIndicator(
-                                                        strokeWidth: 2,
+                                                onPressed: isLoadingHistory
+                                                    ? null
+                                                    : () => _loadMoreHistory(
+                                                          convId,
+                                                        ),
+                                                style: OutlinedButton.styleFrom(
+                                                  minimumSize:
+                                                      const Size(48, 48),
+                                                  shape: const StadiumBorder(),
+                                                  side: const BorderSide(
+                                                    color: AppColors.border,
+                                                  ),
+                                                  foregroundColor:
+                                                      AppColors.textStrong,
+                                                ),
+                                                icon: isLoadingHistory
+                                                    ? const SizedBox(
+                                                        width: 14,
+                                                        height: 14,
+                                                        child:
+                                                            CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                        ),
+                                                      )
+                                                    : const Icon(
+                                                        LucideIcons.clock,
+                                                        size: 16,
+                                                        color: AppColors
+                                                            .iconStrong,
                                                       ),
-                                                    )
-                                                  : const Icon(
-                                                      LucideIcons.clock,
-                                                      size: 16,
-                                                      color:
-                                                          AppColors.iconStrong,
-                                                    ),
-                                              label: Text(
-                                                isLoadingHistory
-                                                    ? 'Đang tải lịch sử...'
-                                                    : 'Tải thêm tin nhắn cũ hơn',
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w600,
+                                                label: Text(
+                                                  isLoadingHistory
+                                                      ? loc.chatLoadingHistory
+                                                      : loc.chatLoadMoreHistory,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                        );
-                                      }
+                                          );
+                                        }
 
-                                      final msgIndex =
-                                          hasMoreHistory ? index - 1 : index;
-                                      final msg = messages[msgIndex];
-                                      return _buildMessageBubble(
-                                        msg,
-                                        currentUserId: currentUserId,
-                                        maxBubbleWidth: bubbleMaxWidth,
-                                      );
-                                    },
-                                  ),
-                                  if (unreadBelow > 0)
-                                    Positioned(
-                                      bottom: AppSpacing.s12,
-                                      left: 0,
-                                      right: 0,
-                                      child: Center(
-                                        child: FilledButton.icon(
-                                          key: const Key(
-                                            'jump_to_bottom_button',
-                                          ),
-                                          onPressed: () =>
-                                              _scrollToBottom(animate: true),
-                                          style: FilledButton.styleFrom(
-                                            backgroundColor:
-                                                AppColors.textStrong,
-                                            foregroundColor: Colors.white,
-                                            minimumSize: const Size(48, 44),
-                                            shape: const StadiumBorder(),
-                                          ),
-                                          icon: const Icon(
-                                            LucideIcons.chevronDown,
-                                            size: 16,
-                                            color: Colors.white,
-                                          ),
-                                          label: Text(
-                                            'Tin nhắn mới ($unreadBelow)',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
+                                        final msgIndex =
+                                            hasMoreHistory ? index - 1 : index;
+                                        final msg = messages[msgIndex];
+                                        final prevSameSender = msgIndex > 0 &&
+                                            messages[msgIndex - 1].senderId ==
+                                                msg.senderId;
+                                        final nextSameSender =
+                                            msgIndex < messages.length - 1 &&
+                                                messages[msgIndex + 1]
+                                                        .senderId ==
+                                                    msg.senderId;
+                                        final isLastMessage =
+                                            msgIndex == messages.length - 1;
+
+                                        return _buildMessageBubble(
+                                          msg,
+                                          currentUserId: currentUserId,
+                                          counterpartName: counterpart,
+                                          counterpartAvatar: conv.displayAvatar,
+                                          maxBubbleWidth: bubbleMaxWidth,
+                                          prevSameSender: prevSameSender,
+                                          nextSameSender: nextSameSender,
+                                          isLastMessage: isLastMessage,
+                                          l10n: loc,
+                                        );
+                                      },
+                                    ),
+                                    if (unreadBelow > 0)
+                                      Positioned(
+                                        bottom: AppSpacing.s12,
+                                        left: 0,
+                                        right: 0,
+                                        child: Center(
+                                          child: FilledButton.icon(
+                                            key: const Key(
+                                              'jump_to_bottom_button',
+                                            ),
+                                            onPressed: () =>
+                                                _scrollToBottom(animate: true),
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor:
+                                                  AppColors.primary,
+                                              foregroundColor: Colors.white,
+                                              minimumSize: const Size(48, 44),
+                                              shape: const StadiumBorder(),
+                                            ),
+                                            icon: const Icon(
+                                              LucideIcons.chevronDown,
+                                              size: 16,
+                                              color: Colors.white,
+                                            ),
+                                            label: Text(
+                                              loc.chatNewMessagesCount(unreadBelow),
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                              ),
                                             ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                ],
+                                  ],
+                                ),
                               ),
               ),
 
@@ -1630,7 +2336,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                     vertical: AppSpacing.s4,
                   ),
                   child: Text(
-                    '$typingUser đang nhập tin nhắn...',
+                    loc.chatUserTyping(typingUser),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -1641,95 +2347,248 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                   ),
                 ),
 
-              // ── Pill Input Composer (SafeArea + Keyboard Ready) ──
+              // ── Role-Aware Quick-Reply Chips ──
+              if (showQuickReplies)
+                Container(
+                  key: const Key('chat_quick_replies_bar'),
+                  color: AppColors.surfaceBase,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < quickReplies.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 8),
+                          _buildQuickReplyChip(quickReplies[i]),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+
+              // ── Unified Messenger Bottom Composer Bar ──
               if (!isForbidden)
                 Container(
                   decoration: const BoxDecoration(
                     color: AppColors.surfaceBase,
                     border: Border(
-                      top: BorderSide(color: AppColors.borderSoft),
+                      top: BorderSide(color: Color(0xFFF1F5F9)),
                     ),
                   ),
                   child: SafeArea(
                     top: false,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.s12,
-                        AppSpacing.s8,
-                        AppSpacing.s12,
-                        AppSpacing.s12,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
                       ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              key: const Key('chat_message_input'),
-                              controller: _inputCtrl,
-                              textInputAction: TextInputAction.send,
-                              minLines: 1,
-                              maxLines: 4,
-                              decoration: const InputDecoration(
-                                hintText: 'Nhập nội dung tin nhắn...',
-                                isDense: true,
-                                filled: true,
-                                fillColor: AppColors.surfaceBase,
-                                contentPadding: EdgeInsets.symmetric(
-                                  horizontal: AppSpacing.s16,
-                                  vertical: AppSpacing.s12,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: AppRadii.roundedPill,
-                                  borderSide: BorderSide(
-                                    color: AppColors.border,
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: AppRadii.roundedPill,
-                                  borderSide: BorderSide(
-                                    color: AppColors.border,
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: AppRadii.roundedPill,
-                                  borderSide: BorderSide(
-                                    color: AppColors.borderFocus,
-                                    width: 1.4,
-                                  ),
-                                ),
-                              ),
-                              onSubmitted: (_) => _sendMessage(),
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.s8),
+                      child: _isRecordingVoice
+                          ? MessengerVoiceRecorderBar(
+                              recordingSeconds: _voiceRecordingSeconds,
+                              onCancel: () {
+                                _voiceTimer?.cancel();
+    unawaited(_voiceRecorder.cancel());
+                                setState(() {
+                                  _isRecordingVoice = false;
+                                  _voiceRecordingSeconds = 0;
+                                });
+                              },
+                              onSend: _toggleVoiceRecording,
+                            )
+                          : Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                          // 1. Nút '+' tiện ích mở rộng tròn màu hồng
                           Semantics(
                             button: true,
-                            label: 'Gửi tin nhắn',
-                            child: ElevatedButton.icon(
-                              key: const Key('chat_send_button'),
-                              onPressed: _sendMessage,
-                              icon: const Icon(
-                                LucideIcons.send,
-                                size: 16,
-                                color: Colors.white,
-                              ),
-                              label: const Text(
-                                'Gửi',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                minimumSize: const Size(64, 48),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 10,
+                            label: loc.chatMoreOptions,
+                            child: Tooltip(
+                              message: loc.chatMoreOptions,
+                              child: InkWell(
+                                key: const Key('chat_more_features_btn'),
+                                onTap: () =>
+                                    _showChatMoreOptions(chatRole, conv, loc),
+                                borderRadius: BorderRadius.circular(24),
+                                child: SizedBox(
+                                  width: isCompactComposer ? 40 : 36,
+                                  height: 48,
+                                  child: Center(
+                                    child: Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: const BoxDecoration(
+                                        color: AppColors.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        LucideIcons.plus,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                                shape: const StadiumBorder(),
                               ),
                             ),
+                          ),
+                          if (!isCompactComposer) ...[
+                            const SizedBox(width: 2),
+                            // 2. Nút Máy ảnh (Camera)
+                            IconButton(
+                              key: const Key('chat_camera_btn'),
+                              onPressed: _openCameraChat,
+                              tooltip: loc.chatCamera,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 36,
+                                minHeight: 48,
+                              ),
+                              icon: const Icon(
+                                LucideIcons.camera,
+                                size: 21,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                            // 3. Nút Thư viện ảnh (Gallery)
+                            IconButton(
+                              key: const Key('chat_gallery_btn'),
+                              onPressed: _pickAndSendChatImage,
+                              tooltip: loc.chatGallery,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 36,
+                                minHeight: 48,
+                              ),
+                              icon: const Icon(
+                                LucideIcons.image,
+                                size: 21,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                            // 4. Nút Micro thu âm
+                            IconButton(
+                              key: const Key('chat_mic_btn'),
+                              onPressed: _toggleVoiceRecording,
+                              tooltip: _isRecordingVoice
+                                  ? loc.chatStopRecording
+                                  : loc.chatVoiceMessage,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 36,
+                                minHeight: 48,
+                              ),
+                              icon: Icon(
+                                _isRecordingVoice
+                                    ? LucideIcons.square
+                                    : LucideIcons.mic,
+                                size: 21,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(width: 6),
+
+                          // 5. Ô nhập tin nhắn Messenger bo tròn + nút mặt cười
+                          Expanded(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(22),
+                              ),
+                              child: TextField(
+                                key: const Key('chat_message_input'),
+                                controller: _inputCtrl,
+                                focusNode: _inputFocusNode,
+                                textInputAction: TextInputAction.send,
+                                minLines: 1,
+                                maxLines: 4,
+                                style: const TextStyle(
+                                  fontSize: 14.5,
+                                  color: AppColors.textStrong,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: loc.chatInputPlaceholder,
+                                  hintStyle: const TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontSize: 14.5,
+                                  ),
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 10,
+                                  ),
+                                  suffixIcon: IconButton(
+                                    key: const Key('chat_input_smile_btn'),
+                                    onPressed: () => _showEmojiSelector(loc),
+                                    tooltip: loc.chatEmojiTooltip,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 36,
+                                      minHeight: 36,
+                                    ),
+                                    icon: const Icon(
+                                      LucideIcons.smile,
+                                      size: 20,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                                onSubmitted: (_) => _sendMessage(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+
+                          // 6. Nút Gửi tin nhắn / Cảm xúc nhanh (luôn >= 48x48)
+                          ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _inputCtrl,
+                            builder: (context, value, _) {
+                              final hasText = value.text.trim().isNotEmpty;
+                              return Semantics(
+                                button: true,
+                                label: hasText
+                                    ? loc.chatSendMessage
+                                    : loc.chatSendQuickEmoji,
+                                child: Tooltip(
+                                  message: hasText
+                                      ? loc.chatSendMessage
+                                      : loc.chatSendQuickEmojiHint,
+                                  child: InkWell(
+                                    key: const Key('chat_send_button'),
+                                    onTap: () {
+                                      if (_inputCtrl.text.trim().isNotEmpty) {
+                                        _sendMessage();
+                                      } else {
+                                        _sendDirectContent(_chatQuickEmoji);
+                                      }
+                                    },
+                                    onLongPress:
+                                        hasText ? null : () => _chooseQuickEmoji(loc),
+                                    borderRadius: BorderRadius.circular(24),
+                                    child: SizedBox(
+                                      width: 48,
+                                      height: 48,
+                                      child: Center(
+                                        child: hasText
+                                            ? const Icon(
+                                                LucideIcons.send,
+                                                size: 21,
+                                                color: AppColors.primary,
+                                              )
+                                            : Text(
+                                                _chatQuickEmoji,
+                                                style: const TextStyle(
+                                                  fontSize: 24,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -1743,180 +2602,545 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     );
   }
 
+  Widget _buildChatSmallAvatar({
+    required String name,
+    String? avatarUrl,
+  }) {
+    final trimmedUrl = avatarUrl?.trim() ?? '';
+    if (trimmedUrl.isNotEmpty) {
+      return ClipOval(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: AppImage(url: trimmedUrl),
+        ),
+      );
+    }
+    final trimmed = name.trim();
+    final letter = trimmed.isNotEmpty ? trimmed[0].toUpperCase() : 'U';
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: const BoxDecoration(
+        color: Color(0xFFE0E7FF),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        letter,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF4338CA),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReactionPicker(String msgKey) {
+    return Container(
+      key: ValueKey<String>('reaction_picker_$msgKey'),
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: _messengerReactions.map((emoji) {
+          final isSelected = _messageReactions[msgKey] == emoji;
+          return InkWell(
+            key: ValueKey<String>('reaction_${emoji}_$msgKey'),
+            onTap: () {
+              setState(() {
+                if (isSelected) {
+                  _messageReactions.remove(msgKey);
+                } else {
+                  _messageReactions[msgKey] = emoji;
+                }
+                _reactionActiveMsgKey = null;
+              });
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+              child: Text(
+                emoji,
+                style: const TextStyle(fontSize: 22),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildQuickReplyChip(String text) {
+    return InkWell(
+      onTap: () => _applyQuickReply(text),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 12.5,
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String? _getDisplayCaption(String content) {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty ||
+        trimmed == '[image]' ||
+        trimmed == '[file]' ||
+        trimmed == 'image' ||
+        trimmed == 'file' ||
+        trimmed == '📷 [Hình ảnh]' ||
+        trimmed == '[Hình ảnh]' ||
+        trimmed.startsWith('📷 [Ảnh chụp trực tiếp') ||
+        trimmed.startsWith('🖼️ [Đã gửi 1 hình ảnh') ||
+        trimmed == '📷 [Ảnh chụp trực tiếp từ villa]' ||
+        trimmed.startsWith('🎤 Tin nhắn thoại')) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  void _openFullScreenImage(BuildContext context, String imageUrl) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: AppImage(url: imageUrl, fit: BoxFit.contain),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: IconButton(
+                  icon: const Icon(LucideIcons.x, color: Colors.white, size: 20),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool _isAudioUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.endsWith('.wav') ||
+        lower.endsWith('.m4a') ||
+        lower.endsWith('.mp3') ||
+        lower.endsWith('.aac') ||
+        lower.endsWith('.ogg') ||
+        lower.endsWith('.webm') ||
+        lower.contains('/audio/');
+  }
+
+  Widget _buildAudioBubble(String audioUrl, {required bool isMe}) {
+    return ChatAudioBubble(
+      audioUrl: audioUrl,
+      isMe: isMe,
+    );
+  }
+
   Widget _buildMessageBubble(
     ChatMessageItem msg, {
     required String currentUserId,
+    required String counterpartName,
+    String? counterpartAvatar,
     required double maxBubbleWidth,
+    bool prevSameSender = false,
+    bool nextSameSender = false,
+    bool isLastMessage = false,
+    AppLocalizations? l10n,
   }) {
+    final loc = l10n ?? _currentL10n;
     final isMe = msg.senderId == currentUserId;
     final timeLabel = _formatTimestamp(msg.createdAt);
     final stableKey = msg.localId ?? msg.id;
+    final selectedReaction = _messageReactions[stableKey];
+    final showReactionPicker = _reactionActiveMsgKey == stableKey;
+    final isTimestampExpanded = _expandedTimestampKeys.contains(stableKey);
+    final displayCaption = _getDisplayCaption(msg.content);
+    final hasAttachments = msg.attachments.isNotEmpty;
+    final isImageOnly = hasAttachments &&
+        displayCaption == null &&
+        msg.attachments.every((u) => !_isAudioUrl(u));
+    final isAudioOnly = hasAttachments &&
+        displayCaption == null &&
+        msg.attachments.length == 1 &&
+        _isAudioUrl(msg.attachments.first);
 
-    String? statusLabel;
-    if (isMe) {
-      switch (msg.status) {
-        case MessageDeliveryStatus.sending:
-          statusLabel = 'Đang gửi...';
-          break;
-        case MessageDeliveryStatus.sent:
-          statusLabel = 'Đã gửi';
-          break;
-        case MessageDeliveryStatus.failed:
-          statusLabel = 'Gửi thất bại';
-          break;
-      }
-    }
-
-    final bubbleRadius = BorderRadius.only(
-      topLeft: const Radius.circular(22),
-      topRight: const Radius.circular(22),
-      bottomLeft: Radius.circular(isMe ? 22 : 6),
-      bottomRight: Radius.circular(isMe ? 6 : 22),
-    );
+    final bubbleRadius = isMe
+        ? BorderRadius.only(
+            topLeft: const Radius.circular(18),
+            topRight: Radius.circular(prevSameSender ? 6 : 18),
+            bottomLeft: const Radius.circular(18),
+            bottomRight: Radius.circular(nextSameSender ? 6 : 4),
+          )
+        : BorderRadius.only(
+            topLeft: Radius.circular(prevSameSender ? 6 : 18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(nextSameSender ? 6 : 4),
+            bottomRight: const Radius.circular(18),
+          );
 
     final bgColor = msg.isFailed
         ? AppColors.errorSoft
-        : (isMe ? AppColors.textPrimary : AppColors.surfaceBase);
+        : (isMe ? AppColors.primary : const Color(0xFFF1F5F9));
     final textColor = msg.isFailed
         ? AppColors.textStrong
-        : (isMe ? Colors.white : AppColors.textPrimary);
-    final metaColor = msg.isFailed
-        ? AppColors.error
-        : (isMe ? Colors.white70 : AppColors.textMuted);
+        : (isMe ? Colors.white : AppColors.textStrong);
 
     return FadeSlideIn(
       key: ValueKey<String>('msg_$stableKey'),
-      duration: const Duration(milliseconds: 180),
-      beginOffset: const Offset(0, 8),
-      child: Align(
-        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 10,
-          ),
-          constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: bubbleRadius,
-            border: msg.isFailed
-                ? Border.all(color: AppColors.error)
-                : (isMe ? null : Border.all(color: AppColors.borderSoft)),
-          ),
-          child: Column(
-            crossAxisAlignment:
-                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (msg.attachments.isNotEmpty) ...[
-                for (final attachmentUrl in msg.attachments)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.s8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxHeight: 180,
-                          maxWidth: 260,
+      duration: const Duration(milliseconds: 160),
+      beginOffset: const Offset(0, 6),
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: selectedReaction != null
+              ? 16
+              : (nextSameSender ? 3 : 10),
+        ),
+        child: Column(
+          crossAxisAlignment:
+              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            if (showReactionPicker) _buildReactionPicker(stableKey),
+            AnimatedBuilder(
+              animation: _timestampDragCtrl,
+              builder: (context, child) {
+                final dragVal = _timestampDragCtrl.value;
+                final showTime =
+                    (dragVal > 0.08 || isTimestampExpanded) &&
+                        timeLabel.isNotEmpty;
+                return Column(
+                  crossAxisAlignment: isMe
+                      ? CrossAxisAlignment.end
+                      : CrossAxisAlignment.start,
+                  children: [
+                    if (showTime)
+                      Opacity(
+                        opacity: isTimestampExpanded
+                            ? 1.0
+                            : dragVal.clamp(0.0, 1.0),
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            bottom: 3,
+                            left: isMe ? 0 : 36,
+                            right: isMe ? 4 : 0,
+                          ),
+                          child: Text(
+                            timeLabel,
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              color: AppColors.textMuted,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ),
-                        child: AppImage(url: attachmentUrl),
+                      ),
+                    child!,
+                  ],
+                );
+              },
+              child: Row(
+                mainAxisAlignment:
+                    isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (!isMe) ...[
+                    if (!nextSameSender)
+                      _buildChatSmallAvatar(
+                        name: counterpartName,
+                        avatarUrl: counterpartAvatar,
+                      )
+                    else
+                      const SizedBox(width: 28),
+                    const SizedBox(width: 8),
+                  ],
+                  Flexible(
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (_reactionActiveMsgKey != null) {
+                            _reactionActiveMsgKey = null;
+                          } else if (_expandedTimestampKeys
+                              .contains(stableKey)) {
+                            _expandedTimestampKeys.remove(stableKey);
+                          } else {
+                            _expandedTimestampKeys.add(stableKey);
+                          }
+                        });
+                      },
+                      onLongPress: () {
+                        setState(() {
+                          _reactionActiveMsgKey =
+                              _reactionActiveMsgKey == stableKey
+                                  ? null
+                                  : stableKey;
+                        });
+                      },
+                      onSecondaryTap: () {
+                        setState(() {
+                          _reactionActiveMsgKey =
+                              _reactionActiveMsgKey == stableKey
+                                  ? null
+                                  : stableKey;
+                        });
+                      },
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            padding: (isImageOnly || isAudioOnly)
+                                ? EdgeInsets.zero
+                                : const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 10,
+                                  ),
+                            constraints:
+                                BoxConstraints(maxWidth: maxBubbleWidth),
+                            decoration: BoxDecoration(
+                              color: (isImageOnly || isAudioOnly)
+                                  ? Colors.transparent
+                                  : bgColor,
+                              borderRadius: bubbleRadius,
+                              border: msg.isFailed
+                                  ? Border.all(color: AppColors.error)
+                                  : null,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: isMe
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (hasAttachments) ...[
+                                  for (final attachmentUrl in msg.attachments)
+                                    Padding(
+                                      padding: EdgeInsets.only(
+                                        bottom: isImageOnly
+                                            ? 0
+                                            : (displayCaption != null ? AppSpacing.s8 : 0),
+                                      ),
+                                      child: _isAudioUrl(attachmentUrl)
+                                          ? _buildAudioBubble(attachmentUrl, isMe: isMe)
+                                          : ChatImageBubble(
+                                              imageUrl: attachmentUrl,
+                                              borderRadius: bubbleRadius,
+                                              maxWidth: maxBubbleWidth,
+                                              onTap: () => _openFullScreenImage(context, attachmentUrl),
+                                            ),
+                                    ),
+                                ],
+                                if (displayCaption != null && displayCaption.isNotEmpty)
+                                  Text(
+                                    displayCaption,
+                                    softWrap: true,
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      height: 1.38,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                if (msg.isFailed) ...[
+                                  const SizedBox(height: AppSpacing.s8),
+                                  Wrap(
+                                    spacing: AppSpacing.s8,
+                                    runSpacing: AppSpacing.s4,
+                                    alignment: WrapAlignment.end,
+                                    children: [
+                                      OutlinedButton.icon(
+                                        key: ValueKey<String>(
+                                          'retry_msg_$stableKey',
+                                        ),
+                                        onPressed: () =>
+                                            _retryFailedMessage(msg),
+                                        style: OutlinedButton.styleFrom(
+                                          minimumSize: const Size(48, 48),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          shape: const StadiumBorder(),
+                                          side: const BorderSide(
+                                            color: AppColors.textStrong,
+                                          ),
+                                          foregroundColor: AppColors.textStrong,
+                                        ),
+                                        icon: const Icon(
+                                          LucideIcons.refreshCw,
+                                          size: 14,
+                                          color: AppColors.iconStrong,
+                                        ),
+                                        label: Text(
+                                          loc.chatRetry,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        key: ValueKey<String>(
+                                          'delete_failed_msg_$stableKey',
+                                        ),
+                                        onPressed: () =>
+                                            _removeFailedMessage(msg),
+                                        tooltip: loc.chatDeleteFailedMessage,
+                                        constraints: const BoxConstraints(
+                                          minWidth: 48,
+                                          minHeight: 48,
+                                        ),
+                                        icon: const Icon(
+                                          LucideIcons.trash2,
+                                          size: 16,
+                                          color: AppColors.iconStrong,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          if (selectedReaction != null)
+                            Positioned(
+                              bottom: -11,
+                              right: isMe ? 8 : null,
+                              left: isMe ? null : 8,
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(
+                                    () => _messageReactions.remove(stableKey),
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: const Color(0xFFE2E8F0),
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.08),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    selectedReaction,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
-              ],
-              if (msg.content.isNotEmpty)
-                Text(
-                  msg.content,
-                  softWrap: true,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.4,
-                    color: textColor,
+                ],
+              ),
+            ),
+            if (isMe && msg.status == MessageDeliveryStatus.sending)
+              Padding(
+                padding: const EdgeInsets.only(top: 3, right: 4),
+                child: Text(
+                  loc.chatSending,
+                  key: ValueKey<String>('msg_status_$stableKey'),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textMuted,
                   ),
                 ),
-              if (timeLabel.isNotEmpty || statusLabel != null) ...[
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 2,
-                  alignment: isMe ? WrapAlignment.end : WrapAlignment.start,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (timeLabel.isNotEmpty)
-                      Text(
-                        timeLabel,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: metaColor,
-                        ),
-                      ),
-                    if (statusLabel != null)
-                      Text(
-                        statusLabel,
-                        key: ValueKey<String>('msg_status_$stableKey'),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight:
-                              msg.isFailed ? FontWeight.w700 : FontWeight.w500,
-                          color: metaColor,
-                        ),
-                      ),
-                  ],
+              ),
+            if (isMe && msg.status == MessageDeliveryStatus.failed)
+              Padding(
+                padding: const EdgeInsets.only(top: 3, right: 4),
+                child: Text(
+                  loc.chatFailed,
+                  key: ValueKey<String>('msg_status_$stableKey'),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.error,
+                  ),
                 ),
-              ],
-              if (msg.isFailed) ...[
-                const SizedBox(height: AppSpacing.s8),
-                Wrap(
-                  spacing: AppSpacing.s8,
-                  runSpacing: AppSpacing.s4,
-                  alignment: WrapAlignment.end,
+              ),
+            if (isMe &&
+                isLastMessage &&
+                msg.status == MessageDeliveryStatus.sent)
+              Padding(
+                padding: const EdgeInsets.only(top: 3, right: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    OutlinedButton.icon(
-                      key: ValueKey<String>('retry_msg_$stableKey'),
-                      onPressed: () => _retryFailedMessage(msg),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(48, 48),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        shape: const StadiumBorder(),
-                        side: const BorderSide(color: AppColors.textStrong),
-                        foregroundColor: AppColors.textStrong,
-                      ),
-                      icon: const Icon(
-                        LucideIcons.refreshCw,
-                        size: 14,
-                        color: AppColors.iconStrong,
-                      ),
-                      label: const Text(
-                        'Thử lại',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                    const Icon(
+                      LucideIcons.checkCheck,
+                      size: 13,
+                      color: AppColors.primary,
                     ),
-                    IconButton(
-                      key: ValueKey<String>('delete_failed_msg_$stableKey'),
-                      onPressed: () => _removeFailedMessage(msg),
-                      tooltip: 'Xóa tin nhắn lỗi',
-                      constraints: const BoxConstraints(
-                        minWidth: 48,
-                        minHeight: 48,
-                      ),
-                      icon: const Icon(
-                        LucideIcons.trash2,
-                        size: 16,
-                        color: AppColors.iconStrong,
+                    const SizedBox(width: 4),
+                    Text(
+                      loc.chatSent,
+                      key: ValueKey<String>('msg_status_$stableKey'),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textMuted,
                       ),
                     ),
                   ],
                 ),
-              ],
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
@@ -1940,11 +3164,11 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
   final TextEditingController _msgCtrl = TextEditingController();
   bool _isSending = false;
 
-  static const List<String> _quickQuestions = [
-    'Chào Chủ nhà, biệt thự còn trống lịch cuối tuần này không ạ?',
-    'Hồ bơi của biệt thự là nước ngọt hay nước mặn và có phao bơi không ạ?',
-    'Biệt thự có sẵn lò nướng BBQ, than và dụng cụ bếp đầy đủ không ạ?',
-    'Đoàn mình muốn nhận phòng sớm hơn 14:00 có được hỗ trợ không ạ?',
+  List<String> _quickQuestionsFor(AppLocalizations l10n) => [
+    l10n.hostMsgQuestion1,
+    l10n.hostMsgQuestion2,
+    l10n.hostMsgQuestion3,
+    l10n.hostMsgQuestion4,
   ];
 
   @override
@@ -1982,13 +3206,14 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = lookupAppLocalizations(Locale(ref.watch(localeProvider)));
     final villaAsync = ref.watch(villaDetailProvider(widget.villaId));
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          const AppTopHeader(currentPath: '/messages'),
+          const AppSearchHeader(currentPath: '/messages'),
           Expanded(
             child: villaAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -2004,9 +3229,12 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                 return SingleChildScrollView(
                   child: Center(
                     child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 720),
+                      constraints: const BoxConstraints(maxWidth: 640),
                       child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.s20),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.s16,
+                          vertical: AppSpacing.s12,
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -2014,7 +3242,11 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                               onPressed: () =>
                                   context.go('/villa/${widget.villaId}'),
                               style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.s8,
+                                ),
                                 minimumSize: const Size(48, 48),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                 shape: const StadiumBorder(),
                                 foregroundColor: AppColors.textStrong,
                               ),
@@ -2023,24 +3255,31 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 size: 16,
                                 color: AppColors.iconStrong,
                               ),
-                              label: const Text('Quay lại trang biệt thự'),
+                              label: Text(
+                                l10n.hostMsgBackToVilla,
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
-                            const SizedBox(height: AppSpacing.s12),
-                            const Text(
-                              'Liên hệ Chủ nhà',
-                              style: TextStyle(
-                                fontSize: 24,
+                            const SizedBox(height: AppSpacing.s8),
+                            Text(
+                              l10n.hostMsgContactTitle,
+                              style: const TextStyle(
+                                fontSize: 22,
                                 fontWeight: FontWeight.w800,
                                 color: AppColors.textStrong,
+                                letterSpacing: -0.4,
                               ),
                             ),
                             if (villa != null) ...[
                               const SizedBox(height: AppSpacing.s12),
                               Container(
-                                padding: const EdgeInsets.all(AppSpacing.s16),
+                                padding: const EdgeInsets.all(AppSpacing.s12),
                                 decoration: BoxDecoration(
                                   color: AppColors.surfaceBase,
-                                  borderRadius: AppRadii.roundedCard,
+                                  borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
                                     color: AppColors.borderSoft,
                                   ),
@@ -2048,10 +3287,10 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 child: Row(
                                   children: [
                                     ClipRRect(
-                                      borderRadius: BorderRadius.circular(16),
+                                      borderRadius: BorderRadius.circular(12),
                                       child: SizedBox(
-                                        width: 72,
-                                        height: 56,
+                                        width: 64,
+                                        height: 52,
                                         child: AppImage(
                                           url: villa.imageUrls.isNotEmpty
                                               ? villa.imageUrls.first
@@ -2067,20 +3306,21 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                         children: [
                                           Text(
                                             villa.name,
-                                            maxLines: 2,
+                                            maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
+                                              fontSize: 15,
                                               fontWeight: FontWeight.w700,
                                               color: AppColors.textStrong,
                                             ),
                                           ),
-                                          const SizedBox(height: 2),
+                                          const SizedBox(height: 3),
                                           Text(
-                                            'Chủ nhà: ${villa.host?.fullName ?? 'Chủ nhà VungTau Stay'}',
+                                            l10n.hostMsgHostLabel(villa.host?.fullName ?? l10n.hostMsgDefaultHost),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
-                                              fontSize: 12,
+                                              fontSize: 12.5,
                                               color: AppColors.textSecondary,
                                             ),
                                           ),
@@ -2091,54 +3331,84 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 ),
                               ),
                             ],
-                            const SizedBox(height: AppSpacing.s20),
-                            const Text(
-                              'Câu hỏi thường gặp cho Chủ nhà:',
-                              style: TextStyle(
-                                fontSize: 14,
+                            const SizedBox(height: AppSpacing.s16),
+                            Text(
+                              l10n.hostMsgFaqTitle,
+                              style: const TextStyle(
+                                fontSize: 13.5,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.textStrong,
                               ),
                             ),
                             const SizedBox(height: AppSpacing.s8),
-                            Wrap(
-                              spacing: AppSpacing.s8,
-                              runSpacing: AppSpacing.s8,
-                              children: _quickQuestions.map((q) {
-                                return InkWell(
-                                  borderRadius: AppRadii.roundedPill,
-                                  onTap: () {
-                                    setState(() {
-                                      _msgCtrl.value = TextEditingValue(
-                                        text: q,
-                                        selection: TextSelection.collapsed(
-                                          offset: q.length,
-                                        ),
-                                      );
-                                    });
-                                  },
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      minHeight: 48,
-                                    ),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: AppSpacing.s16,
-                                        vertical: 10,
+                            Column(
+                              children: _quickQuestionsFor(l10n).map((q) {
+                                final isSelected = _msgCtrl.text.trim() == q;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () {
+                                      setState(() {
+                                        _msgCtrl.value = TextEditingValue(
+                                          text: q,
+                                          selection: TextSelection.collapsed(
+                                            offset: q.length,
+                                          ),
+                                        );
+                                      });
+                                    },
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        minHeight: 48,
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.surfaceBase,
-                                        borderRadius: AppRadii.roundedPill,
-                                        border: Border.all(
-                                          color: AppColors.borderSoft,
+                                      child: Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 10,
                                         ),
-                                      ),
-                                      child: Text(
-                                        q,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                          color: AppColors.textStrong,
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? AppColors.primary
+                                              : AppColors.surfaceBase,
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? AppColors.primary
+                                                : AppColors.borderSoft,
+                                            width: isSelected ? 1.2 : 1.0,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              LucideIcons.messageSquare,
+                                              size: 15,
+                                              color: isSelected
+                                                  ? Colors.white
+                                                  : AppColors.iconStrong,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Text(
+                                                q,
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  height: 1.35,
+                                                  fontWeight: isSelected
+                                                      ? FontWeight.w600
+                                                      : FontWeight.w500,
+                                                  color: isSelected
+                                                      ? Colors.white
+                                                      : AppColors.textStrong,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -2146,28 +3416,61 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 );
                               }).toList(),
                             ),
-                            const SizedBox(height: AppSpacing.s16),
+                            const SizedBox(height: AppSpacing.s12),
+                            Text.rich(
+                              TextSpan(
+                                text: '${l10n.hostMsgInputLabel} ',
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textStrong,
+                                ),
+                                children: const [
+                                  TextSpan(
+                                    text: '*',
+                                    style: TextStyle(color: AppColors.primary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.s8),
                             TextField(
                               controller: _msgCtrl,
-                              maxLines: 4,
+                              minLines: 3,
+                              maxLines: 5,
+                              onChanged: (_) => setState(() {}),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                height: 1.45,
+                                color: AppColors.textStrong,
+                              ),
                               decoration: InputDecoration(
-                                labelText: 'Nội dung tin nhắn gửi Chủ nhà *',
-                                hintText:
-                                    'Nhập câu hỏi của bạn về lịch trống, tiện nghi hoặc yêu cầu đặc biệt...',
+                                hintText: l10n.hostMsgInputPlaceholder,
+                                hintStyle: const TextStyle(
+                                  fontSize: 13.5,
+                                  height: 1.45,
+                                  color: AppColors.textMuted,
+                                ),
+                                filled: true,
+                                fillColor: AppColors.surfaceBase,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.s16,
+                                  vertical: 14,
+                                ),
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(24),
+                                  borderRadius: BorderRadius.circular(16),
                                   borderSide: const BorderSide(
-                                    color: AppColors.border,
+                                    color: AppColors.borderSoft,
                                   ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(24),
+                                  borderRadius: BorderRadius.circular(16),
                                   borderSide: const BorderSide(
                                     color: AppColors.border,
                                   ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(24),
+                                  borderRadius: BorderRadius.circular(16),
                                   borderSide: const BorderSide(
                                     color: AppColors.borderFocus,
                                     width: 1.4,
@@ -2175,7 +3478,7 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: AppSpacing.s20),
+                            const SizedBox(height: AppSpacing.s16),
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton.icon(
@@ -2189,8 +3492,8 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                 ),
                                 label: Text(
                                   _isSending
-                                      ? 'Đang gửi tin nhắn...'
-                                      : 'Gửi tin nhắn & Mở phòng chat',
+                                      ? l10n.hostMsgSendingAction
+                                      : l10n.hostMsgSendAction,
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
@@ -2198,7 +3501,7 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                   minimumSize: const Size.fromHeight(48),
                                   shape: const StadiumBorder(),
                                   padding: const EdgeInsets.symmetric(
-                                    vertical: 15,
+                                    vertical: 14,
                                     horizontal: AppSpacing.s16,
                                   ),
                                 ),

@@ -104,5 +104,55 @@ void main() {
       expect(container.read(bookingQueueProvider), isEmpty);
       expect(prefs.isWishlistSynced, isFalse);
     });
+
+    test(
+        'resolveDefaultLocale detects device language and defaults to en if not vi, ko, or en',
+        () {
+      // Vietnamese
+      expect(PreferencesService.resolveDefaultLocale('vi'), 'vi');
+      expect(PreferencesService.resolveDefaultLocale('vi-VN'), 'vi');
+      expect(PreferencesService.resolveDefaultLocale('VI_vn'), 'vi');
+
+      // Korean
+      expect(PreferencesService.resolveDefaultLocale('ko'), 'ko');
+      expect(PreferencesService.resolveDefaultLocale('ko-KR'), 'ko');
+      expect(PreferencesService.resolveDefaultLocale('KO_kr'), 'ko');
+
+      // English
+      expect(PreferencesService.resolveDefaultLocale('en'), 'en');
+      expect(PreferencesService.resolveDefaultLocale('en-US'), 'en');
+      expect(PreferencesService.resolveDefaultLocale('en-GB'), 'en');
+
+      // Other languages default to English ('en')
+      expect(PreferencesService.resolveDefaultLocale('fr'), 'en'); // French
+      expect(PreferencesService.resolveDefaultLocale('ja'), 'en'); // Japanese
+      expect(PreferencesService.resolveDefaultLocale('zh'), 'en'); // Chinese
+      expect(PreferencesService.resolveDefaultLocale('es'), 'en'); // Spanish
+      expect(PreferencesService.resolveDefaultLocale('de'), 'en'); // German
+      expect(PreferencesService.resolveDefaultLocale(''), 'en');
+      expect(PreferencesService.resolveDefaultLocale(null), 'en');
+    });
+
+    test(
+        'getLocale uses device locale fallback on fresh install and preserves user manual preference',
+        () async {
+      final prefs = PreferencesService.inMemory();
+
+      // Fresh install: no saved key -> falls back to system locale or 'en'
+      final initialLocale = prefs.getLocale();
+      expect(['vi', 'ko', 'en'].contains(initialLocale), isTrue);
+
+      // User explicitly sets to Korean
+      await prefs.setLocale('ko');
+      expect(prefs.getLocale(), 'ko');
+
+      // User explicitly switches to Vietnamese
+      await prefs.setLocale('vi');
+      expect(prefs.getLocale(), 'vi');
+
+      // User explicitly switches to English
+      await prefs.setLocale('en');
+      expect(prefs.getLocale(), 'en');
+    });
   });
 }

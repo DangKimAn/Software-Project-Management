@@ -5,7 +5,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/date/booking_date.dart';
-import '../../../../core/utils/currency_formatter.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_header_footer.dart';
@@ -188,7 +187,12 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                 children: [
                   Container(
                     width: double.infinity,
-                    color: AppColors.surfaceWarmSand,
+                    decoration: const BoxDecoration(
+                      color: AppColors.surfaceBase,
+                      border: Border(
+                        bottom: BorderSide(color: AppColors.borderSoft),
+                      ),
+                    ),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
                       vertical: 36,
@@ -202,7 +206,7 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                             const Row(
                               children: [
                                 Icon(
-                                  LucideIcons.sparkles,
+                                  LucideIcons.search,
                                   size: 20,
                                   color: AppColors.iconStrong,
                                 ),
@@ -287,7 +291,19 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                                           ),
                                           for (final k in const [3, 6, 9, 12])
                                             ChoiceChip(
-                                              label: Text('$k'),
+                                              showCheckmark: false,
+                                              selectedColor: AppColors.primary,
+                                              label: Text(
+                                                '$k',
+                                                style: TextStyle(
+                                                  fontWeight: _topK == k
+                                                      ? FontWeight.w700
+                                                      : FontWeight.w500,
+                                                  color: _topK == k
+                                                      ? Colors.white
+                                                      : AppColors.textPrimary,
+                                                ),
+                                              ),
                                               selected: _topK == k,
                                               onSelected: (_) =>
                                                   setState(() => _topK = k),
@@ -299,7 +315,7 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                                             ? null
                                             : () => _runSearch(),
                                         icon: const Icon(
-                                          LucideIcons.sparkles,
+                                          LucideIcons.search,
                                           size: 16,
                                           color: Colors.white,
                                         ),
@@ -489,9 +505,9 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.surfaceWarmSand,
+                    color: AppColors.surfaceBase,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.borderWarm),
+                    border: Border.all(color: AppColors.borderSoft),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -528,15 +544,15 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
             margin: const EdgeInsets.only(bottom: 16),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.surfaceWarmSand,
+              color: AppColors.surfaceBase,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.borderWarm),
+              border: Border.all(color: AppColors.borderSoft),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(
-                  LucideIcons.sparkles,
+                  LucideIcons.bedDouble,
                   size: 16,
                   color: AppColors.iconStrong,
                 ),
@@ -848,15 +864,29 @@ class _AiSearchScreenState extends ConsumerState<AiSearchScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Flexible(
-                        child: Text(
-                          '${CurrencyFormatter.formatVnd(villa.basePriceVnd ?? 0)} / đêm',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
-                          ),
+                        child: Builder(
+                          builder: (context) {
+                            final formatter = ref.watch(moneyFormatterProvider);
+                            final priceText = formatter.formatPriceOrContact(
+                              villa.basePriceVnd,
+                              context: MoneyDisplayContext.villaCard,
+                            );
+                            final label =
+                                (villa.basePriceVnd != null &&
+                                        villa.basePriceVnd! > 0)
+                                    ? '$priceText ${formatter.l10n.pricePerNightUnit}'
+                                    : priceText;
+                            return Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primary,
+                              ),
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(width: 8),

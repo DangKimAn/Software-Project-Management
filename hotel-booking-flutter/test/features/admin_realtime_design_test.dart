@@ -10,6 +10,10 @@ import 'package:hotel_booking_flutter/core/network/socket_service.dart';
 import 'package:hotel_booking_flutter/core/security/secure_storage_service.dart';
 import 'package:hotel_booking_flutter/features/admin/data/admin_repository.dart';
 import 'package:hotel_booking_flutter/features/admin/presentation/screens/admin_portal_screens.dart';
+import 'package:hotel_booking_flutter/features/auth/domain/entities/auth_session.dart';
+import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
+import 'package:hotel_booking_flutter/features/auth/domain/repositories/auth_repository.dart';
+import 'package:hotel_booking_flutter/features/auth/presentation/view_models/auth_notifier.dart';
 import 'package:hotel_booking_flutter/features/blog/data/blog_repository.dart';
 import 'package:hotel_booking_flutter/features/blog/presentation/screens/blog_detail_screen.dart';
 import 'package:hotel_booking_flutter/features/messages/data/conversations_repository.dart';
@@ -33,6 +37,74 @@ class _FakeSecureStorage extends SecureStorageService {
   Future<void> deleteAuthToken() async {
     token = null;
   }
+}
+
+class _StubAdminAuthRepository implements AuthRepository {
+  const _StubAdminAuthRepository();
+
+  static const User adminUser = User(
+    id: '999',
+    email: 'admin@palm.vn',
+    firstName: 'Admin',
+    lastName: 'System',
+    role: 'admin',
+    roles: <String>['admin'],
+  );
+
+  @override
+  Future<User?> getCurrentUser() async => adminUser;
+
+  @override
+  Future<AuthSession> login({
+    required String identifier,
+    required String password,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<AuthSession> loginWithGoogle({required String idToken}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<AuthSession> register({
+    required String email,
+    required String password,
+    required String firstName,
+    required String lastName,
+    String? phone,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> forgotPassword({required String identifier}) async {}
+
+  @override
+  Future<void> resetPassword({
+    required String identifier,
+    required String otp,
+    required String newPassword,
+  }) async {}
+
+  @override
+  Future<User> updateProfile({
+    String? fullName,
+    String? phone,
+    String? bio,
+    String? location,
+    String? job,
+    String? dreamDestination,
+    String? school,
+    List<String>? languages,
+    String? avatarUrl,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<User> updateAvatar({required String url, String? key}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> logout() async {}
 }
 
 Dio _buildMockDio(
@@ -582,7 +654,7 @@ void main() {
     );
 
     testWidgets(
-      '14 & 15. Admin Host Applications & Legacy Verifications and Role Management (with moderator) render and mutate via real repository',
+      '14 & 15. Admin Host Applications & Legacy Verifications and Role Management (Guest, Host, Admin only) render and mutate via real repository',
       (tester) async {
         final updatedRoles = <String, dynamic>{};
         final approvedVerifications = <String>[];
@@ -679,10 +751,14 @@ void main() {
         addTearDown(() => tester.binding.setSurfaceSize(null));
 
         // 14. Host Applications + Legacy Verifications
+        const stubAdminAuth = _StubAdminAuthRepository();
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
               adminRepositoryProvider.overrideWithValue(AdminRepository(dio)),
+              authRepositoryProvider.overrideWithValue(stubAdminAuth),
+              authNotifierProvider
+                  .overrideWith((ref) => AuthNotifier(stubAdminAuth)),
             ],
             child: MaterialApp(
               theme: AppTheme.lightTheme,
@@ -700,11 +776,14 @@ void main() {
         await tester.pumpAndSettle();
         expect(approvedVerifications, contains('701'));
 
-        // 15. Role Management with 'moderator'
+        // 15. Role Management with Guest, Host, Admin only (no Moderator)
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
               adminRepositoryProvider.overrideWithValue(AdminRepository(dio)),
+              authRepositoryProvider.overrideWithValue(stubAdminAuth),
+              authNotifierProvider
+                  .overrideWith((ref) => AuthNotifier(stubAdminAuth)),
             ],
             child: MaterialApp(
               theme: AppTheme.lightTheme,
@@ -715,16 +794,18 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Lê Kiểm Duyệt'), findsOneWidget);
+        expect(find.text('Moderator'), findsNothing);
         await tester.tap(find.byType(DropdownButton<String>).first);
         await tester.pumpAndSettle();
-        expect(find.text('Moderator'), findsWidgets);
+        expect(find.text('Moderator'), findsNothing);
+        expect(find.text('Host'), findsWidgets);
 
-        await tester.tap(find.text('Moderator').last);
+        await tester.tap(find.text('Host').last);
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('Lưu'));
         await tester.pumpAndSettle();
-        expect(updatedRoles['role'], 'moderator');
+        expect(updatedRoles['role'], 'host');
       },
     );
   });

@@ -126,7 +126,7 @@ const matchesMagicBytes = (buffer: Buffer, mimeType: string) => {
     return false;
 };
 
-const assertValidPrivateIdentityFile = (file: Express.Multer.File) => {
+export const assertValidPrivateIdentityFile = (file: Express.Multer.File) => {
     if (!allowedMimeTypes.has(file.mimetype)) {
         throw new ApiError(422, "Validation error", [
             {
@@ -218,6 +218,22 @@ export const createPrivateSignedGetUrl = async (objectKey: string) => {
         {
             expiresIn: config.signedUrlExpiresSeconds,
         },
+    );
+};
+
+export const getPrivateIdentityDocumentStream = async (objectKey: string) => {
+    if (!objectKey?.trim()) {
+        throw new ApiError(404, "Identity document object not found");
+    }
+
+    const config = assertRequiredPrivateR2Env();
+    const client = createPrivateR2Client(config);
+
+    return client.send(
+        new GetObjectCommand({
+            Bucket: config.bucket,
+            Key: objectKey,
+        }),
     );
 };
 

@@ -48,7 +48,7 @@ try {
 
   if ($BuildApk) {
     Write-Host "=== [5/5] Building Debug/Staging Android APK ===" -ForegroundColor Cyan
-    flutter build apk --debug --dart-define=APP_ENV=staging --dart-define=API_BASE_URL=https://staging-api.minhthanhvilla.com
+    flutter build apk --debug --flavor staging --dart-define=APP_ENV=staging --dart-define=API_BASE_URL=https://staging-api.minhthanhvilla.com
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   }
   Write-Host "=== QUALITY GATE COMPLETED SUCCESSFULLY ===" -ForegroundColor Green

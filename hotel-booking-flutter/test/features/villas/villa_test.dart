@@ -70,5 +70,47 @@ void main() {
       );
       expect(villa4.primaryBadge, isNull);
     });
+
+    test('localizes villa description for Korean and English and supports original Vietnamese', () {
+      const specs = VillaSpecs(
+        bedrooms: 2,
+        beds: 2,
+        maxGuests: 4,
+        bathrooms: 2,
+      );
+
+      const homestay104 = Villa(
+        id: '104',
+        code: 'VILLA-104',
+        name: 'Seaside Sunset Homestay & Studio Hạ Long',
+        tagline: 'Homestay view biển',
+        address: '84 Hạ Long',
+        description:
+            'Căn hộ homestay view cung đường biển Hạ Long lãng mạn. Phù hợp cho cặp đôi hoặc nhóm bạn nhỏ 4 người thích sự yên tĩnh, ngắm tàu thuyền qua lại và đi dạo ngọn Hải Đăng.',
+        imageUrls: [],
+        specs: specs,
+      );
+
+      // Vietnamese (original)
+      expect(
+        homestay104.descriptionDisplayFor('vi'),
+        'Căn hộ homestay view cung đường biển Hạ Long lãng mạn. Phù hợp cho cặp đôi hoặc nhóm bạn nhỏ 4 người thích sự yên tĩnh, ngắm tàu thuyền qua lại và đi dạo ngọn Hải Đăng.',
+      );
+      expect(homestay104.hasTranslationFor('vi'), isFalse);
+
+      // Korean translation (requested by user)
+      expect(
+        homestay104.descriptionDisplayFor('ko'),
+        '낭만적인 하롱 해안 도로 전망을 갖춘 홈스테이 아파트입니다. 평화로운 분위기 속에서 오가는 선박을 감상하고 등대까지 산책을 즐기고자 하는 커플이나 4인 소규모 여행객에게 안성맞춤입니다.',
+      );
+      expect(homestay104.hasTranslationFor('ko'), isTrue);
+
+      // English translation
+      expect(
+        homestay104.descriptionDisplayFor('en'),
+        'Romantic homestay apartment overlooking the scenic Ha Long coastal road. Perfect for couples or small groups of up to 4 guests who love tranquility, watching passing boats, and taking walks to the Lighthouse.',
+      );
+      expect(homestay104.hasTranslationFor('en'), isTrue);
+    });
   });
 }

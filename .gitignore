@@ -1,4 +1,4 @@
-# OS generated files
+﻿# OS generated files
 .DS_Store
 .DS_Store?
 ._*
@@ -33,13 +33,14 @@ Source goc.zip
 *.rar
 *.7z
 *.tar.gz
-
-# Internal AI audit & fix reports
+pic
+# Internal plans, notes, AI audit & fix reports (DO NOT COMMIT .md / .txt)
 docs/ai-fix/
 **/docs/ai-fix/
 *.md
-!README.md
-!**/README.md
+**/*.md
+*.txt
+**/*.txt
 
 # Node.js (Source goc/backend, Source goc/frontend)
 **/node_modules/
@@ -60,6 +61,7 @@ docs/ai-fix/
 **/.env.production.local
 !**/.env.example
 !**/.env.*.example
+goldens
 
 # Certificates, keys and credentials
 certs/
@@ -68,6 +70,14 @@ secrets/
 **/secrets/
 private/
 **/private/
+Setup Notifications/
+"Setup Notifications/"
+**/google-services.json
+**/GoogleService-Info.plist
+**/firebase-adminsdk*.json
+**/*service-account*.json
+**/google-credentials*.json
+**/client_secret*.json
 *.pem
 **/*.pem
 *.key
@@ -112,7 +122,7 @@ app.*.map.txt
 *.hprof
 hs_err_pid*.log
 replay_pid*.log
-
+agent
 # iOS / macOS / Linux / Windows ephemeral and pods
 **/ios/Flutter/ephemeral/
 **/ios/Flutter/App.framework

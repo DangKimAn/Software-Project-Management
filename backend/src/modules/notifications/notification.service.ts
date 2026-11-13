@@ -12,12 +12,15 @@ import Refund from "../../models/refund";
 import Review from "../../models/review";
 import User, { type UserDocument } from "../../models/user";
 import { sendMail } from "../../services/mail.service";
+import { sendPushToUser } from "../../services/fcm-push.service";
 import { emitNotificationNew } from "../../socket/socket";
 import type { AuthenticatedUser } from "../auth/auth.service";
 
 export const notificationEventTypes = [
     "USER_REGISTERED",
     "HOST_APPLICATION_SUBMITTED",
+    "HOST_APPLICATION_APPROVED",
+    "HOST_APPLICATION_REJECTED",
     "LISTING_SUBMITTED",
     "LISTING_APPROVED",
     "LISTING_REJECTED",
@@ -30,6 +33,7 @@ export const notificationEventTypes = [
     "REFUND_CREATED",
     "PAYOUT_CREATED",
     "REVIEW_CREATED",
+    "PLATFORM_FEE_SCHEDULED",
 ] as const;
 
 export type NotificationEventType = (typeof notificationEventTypes)[number];
@@ -86,11 +90,29 @@ const escapeHtml = (value: unknown) =>
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
 
+export const normalizeNotificationBrandText = (value: string | null | undefined): string | null => {
+    if (value === null || value === undefined) {
+        return null;
+    }
+
+    return String(value)
+        .replace(/Minh\s*Th(?:ành|anh)\s+Villa/gi, "The Palm Villa")
+        .replace(/MinhThanh\s+Luxury/gi, "The Palm Luxury");
+};
+
 const buildEmailHtml = (title: string, lines: Array<string | null | undefined>) => `
-    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
-      <h2>${escapeHtml(title)}</h2>
-      ${lines.filter(Boolean).map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
-      <p>Minh Thành Villa</p>
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:600px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px;background-color:#ffffff;">
+      <div style="text-align:center;margin-bottom:20px;">
+        <img src="cid:the_palm_villa_logo" alt="The Palm Villa" width="56" height="56" style="width:56px;height:56px;object-fit:contain;border-radius:12px;display:inline-block;" />
+        <h3 style="margin:8px 0 0 0;color:#0F172A;font-size:18px;font-weight:700;">The Palm Villa</h3>
+      </div>
+      <h2 style="color:#0F172A;font-size:18px;font-weight:700;margin-bottom:16px;">${escapeHtml(title)}</h2>
+      ${lines.filter(Boolean).map((line) => `<p style="margin:8px 0;color:#334155;font-size:14px;">${escapeHtml(line)}</p>`).join("")}
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;" />
+      <div style="font-size:13px;color:#64748b;text-align:center;">
+        <p style="margin:0 0 4px 0;font-weight:600;">The Palm Villa</p>
+        <p style="margin:0;">Hệ thống đặt phòng biệt thự nghỉ dưỡng cao cấp</p>
+      </div>
     </div>
 `;
 
@@ -121,12 +143,17 @@ const serializeNotification = (notification: NotificationLog) => ({
     eventType: notification.eventType,
     targetType: notification.targetType,
     targetId: notification.targetId,
-    title: notification.title ?? null,
-    body: notification.body ?? null,
+    title: normalizeNotificationBrandText(notification.title),
+    body: normalizeNotificationBrandText(notification.body),
     actionUrl: notification.actionUrl ?? null,
     payload: notification.payload ?? null,
     isRead: Boolean(notification.readAt),
     readAt: notification.readAt ?? null,
+    forAdmin: Boolean(
+        notification.payload?.forAdmin ||
+        notification.payload?.isAdminNotification ||
+        notification.title?.startsWith("[Admin]")
+    ),
     createdAt: notification.createdAt,
     updatedAt: notification.updatedAt,
 });
@@ -169,8 +196,8 @@ const emitCreatedNotification = (userId: number, notification: NotificationLog) 
         eventType: notification.eventType,
         targetType: notification.targetType,
         targetId: notification.targetId,
-        title: notification.title ?? null,
-        body: notification.body ?? null,
+        title: normalizeNotificationBrandText(notification.title),
+        body: normalizeNotificationBrandText(notification.body),
         actionUrl: notification.actionUrl ?? null,
         payload: notification.payload ?? null,
         readAt: notification.readAt ?? null,
@@ -217,8 +244,8 @@ const createInAppNotificationOnce = async (
                 targetId: String(input.targetId),
                 recipient: `user:${recipient.userId}`,
                 recipientUserId: recipient.userId,
-                title: recipient.title,
-                body: recipient.body,
+                title: normalizeNotificationBrandText(recipient.title) ?? recipient.title,
+                body: normalizeNotificationBrandText(recipient.body) ?? recipient.body,
                 actionUrl: recipient.actionUrl ?? null,
                 payload: recipient.payload ?? null,
                 status: "sent",
@@ -233,6 +260,16 @@ const createInAppNotificationOnce = async (
 
         runAfterCommit(input.transaction, async () => {
             emitCreatedNotification(recipient.userId, notification);
+            await sendPushToUser(recipient.userId, {
+                title: normalizeNotificationBrandText(notification.title) ?? "The Palm Villa",
+                body: normalizeNotificationBrandText(notification.body) ?? "",
+                actionUrl: notification.actionUrl ?? null,
+                eventType: notification.eventType,
+                targetType: notification.targetType,
+                targetId: notification.targetId,
+                notificationLogId: Number(notification.notificationLogId),
+                data: notification.payload ?? null,
+            });
         });
     } catch (error) {
         if (error instanceof UniqueConstraintError) {
@@ -338,7 +375,7 @@ const getAdminRecipientIds = async (transaction?: Transaction) => {
             FROM users u
             INNER JOIN user_role ur ON ur.user_id = u.user_id
             INNER JOIN roles r ON r.role_id = ur.role_id
-            WHERE r.code IN ('admin', 'moderator')
+            WHERE r.code = 'admin'
               AND u.status = 'active'
             `,
             {
@@ -487,6 +524,14 @@ export const notifyUserRegistered = async (userId: number, transaction?: Transac
         return;
     }
 
+    const title = "Xin chào đến với The Palm Villa";
+    const body = "Chào mừng bạn đến với The Palm Villa! Tài khoản của bạn đã được tạo thành công.";
+    const lines = [
+        `Xin chào ${user.fullName || "bạn"},`,
+        "Chào mừng bạn đến với The Palm Villa!",
+        "Tài khoản của bạn đã được tạo thành công. Bạn có thể bắt đầu khám phá và đặt các biệt thự nghỉ dưỡng đẳng cấp ngay bây giờ.",
+    ];
+
     await notify({
         eventType: "USER_REGISTERED",
         targetType: "user",
@@ -495,12 +540,20 @@ export const notifyUserRegistered = async (userId: number, transaction?: Transac
         recipients: [
             {
                 userId: user.userId,
-                title: "Chào mừng đến Minh Thành Villa",
-                body: "Tài khoản của bạn đã được tạo thành công.",
+                title,
+                body,
                 actionUrl: "/account/profile",
                 payload: {
                     userId: user.userId,
                 },
+                email: user.email
+                    ? {
+                          to: user.email,
+                          subject: `${title} - The Palm Villa`,
+                          text: lines.filter(Boolean).join("\n"),
+                          html: buildEmailHtml(title, lines),
+                      }
+                    : null,
             },
         ],
     });
@@ -533,7 +586,7 @@ export const notifyHostApplicationSubmitted = async (
         transaction,
         recipients: adminIds.map((adminUserId) => ({
             userId: adminUserId,
-            title: "Có hồ sơ host mới chờ duyệt",
+            title: "[Admin] Có hồ sơ host mới chờ duyệt",
             body: `${userName} (${userEmail || userPhone}) đã gửi hồ sơ đăng ký trở thành host.`,
             actionUrl: "/admin/ho-so-host",
             payload: {
@@ -541,8 +594,101 @@ export const notifyHostApplicationSubmitted = async (
                 userId,
                 userName,
                 userEmail,
+                isAdminNotification: true,
+                forAdmin: true,
+                targetRole: "admin",
+                scope: "admin",
             },
         })),
+    });
+};
+
+export const notifyHostApplicationApproved = async (
+    applicationId: number,
+    userId: number,
+    transaction?: Transaction,
+) => {
+    const user = await getActiveUser(userId, transaction);
+    const title = "Hồ sơ đối tác đã được duyệt";
+    const body = "Chúc mừng bạn đã trở thành Host! Bạn có thể bắt đầu đăng chỗ nghỉ và quản lý đặt phòng ngay bây giờ.";
+    const lines = [
+        `Xin chào ${user?.fullName ?? ""},`,
+        "Chúc mừng bạn! Hồ sơ đăng ký trở thành Host của bạn đã được quản trị viên phê duyệt.",
+        "Bạn đã chính thức có quyền Chủ nhà và có thể đăng chỗ nghỉ, tạo ưu đãi và quản lý đặt phòng.",
+        `Mã hồ sơ: #${applicationId}`,
+    ];
+
+    await notify({
+        eventType: "HOST_APPLICATION_APPROVED",
+        targetType: "host_application",
+        targetId: applicationId,
+        transaction,
+        recipients: [
+            {
+                userId,
+                title,
+                body,
+                actionUrl: "/chu-nha/cho-nghi",
+                payload: {
+                    applicationId,
+                    status: "approved",
+                },
+                email: user?.email
+                    ? {
+                          to: user.email,
+                          subject: "Hồ sơ đăng ký Host đã được duyệt - The Palm Villa",
+                          text: lines.filter(Boolean).join("\n"),
+                          html: buildEmailHtml(title, lines),
+                      }
+                    : null,
+            },
+        ],
+    });
+};
+
+export const notifyHostApplicationRejected = async (
+    applicationId: number,
+    userId: number,
+    reason: string,
+    transaction?: Transaction,
+) => {
+    const user = await getActiveUser(userId, transaction);
+    const title = "Hồ sơ đăng ký Host bị từ chối";
+    const body = `Hồ sơ đăng ký Host của bạn chưa được duyệt. Lý do: ${reason}`;
+    const lines = [
+        `Xin chào ${user?.fullName ?? ""},`,
+        "Rất tiếc, hồ sơ đăng ký trở thành Host của bạn chưa được phê duyệt.",
+        `Lý do từ chối: ${reason}`,
+        "Vui lòng kiểm tra lại thông tin, giấy tờ tùy thân và gửi lại hồ sơ.",
+        `Mã hồ sơ: #${applicationId}`,
+    ];
+
+    await notify({
+        eventType: "HOST_APPLICATION_REJECTED",
+        targetType: "host_application",
+        targetId: applicationId,
+        transaction,
+        recipients: [
+            {
+                userId,
+                title,
+                body,
+                actionUrl: "/tro-thanh-host/dang-ky",
+                payload: {
+                    applicationId,
+                    status: "rejected",
+                    rejectionReason: reason,
+                },
+                email: user?.email
+                    ? {
+                          to: user.email,
+                          subject: "Thông báo về hồ sơ đăng ký Host - The Palm Villa",
+                          text: lines.filter(Boolean).join("\n"),
+                          html: buildEmailHtml(title, lines),
+                      }
+                    : null,
+            },
+        ],
     });
 };
 
@@ -572,14 +718,24 @@ export const notifyListingSubmitted = async (listingId: number, transaction?: Tr
                 title: "Tin đăng đã gửi kiểm duyệt",
                 body: `${listing.title} đang chờ đội ngũ kiểm duyệt.`,
                 actionUrl: "/chu-nha/cho-nghi",
-                payload,
+                payload: {
+                    ...payload,
+                    isAdminNotification: false,
+                    targetRole: "host",
+                },
             },
             ...adminIds.map((userId) => ({
                 userId,
-                title: "Có listing mới chờ duyệt",
+                title: "[Admin] Có listing mới chờ duyệt",
                 body: `${listing.title} cần được kiểm duyệt.`,
                 actionUrl: "/admin/kiem-duyet",
-                payload,
+                payload: {
+                    ...payload,
+                    isAdminNotification: true,
+                    forAdmin: true,
+                    targetRole: "admin",
+                    scope: "admin",
+                },
             })),
         ],
     });
@@ -620,7 +776,7 @@ export const notifyListingApproved = async (listingId: number, transaction?: Tra
                 email: host?.email
                     ? {
                           to: host.email,
-                          subject: "Listing đã được duyệt - Minh Thành Villa",
+                          subject: "Listing đã được duyệt - The Palm Villa",
                           text: lines.filter(Boolean).join("\n"),
                           html: buildEmailHtml(title, lines),
                       }
@@ -667,7 +823,7 @@ export const notifyListingRejected = async (listingId: number, transaction?: Tra
                 email: host?.email
                     ? {
                           to: host.email,
-                          subject: "Listing cần chỉnh sửa - Minh Thành Villa",
+                          subject: "Listing cần chỉnh sửa - The Palm Villa",
                           text: lines.filter(Boolean).join("\n"),
                           html: buildEmailHtml(title, lines),
                       }
@@ -775,7 +931,7 @@ export const notifyPaymentSuccess = async (paymentId: number, transaction?: Tran
                 email: context.guest?.email
                     ? {
                           to: context.guest.email,
-                          subject: "Thanh toán thành công - Minh Thành Villa",
+                          subject: "Thanh toán thành công - The Palm Villa",
                           text: lines.filter(Boolean).join("\n"),
                           html: buildEmailHtml(title, lines),
                       }
@@ -825,7 +981,7 @@ export const notifyPaymentExpired = async (bookingId: number, transaction?: Tran
         guestEmail: context.guest?.email
             ? {
                   to: context.guest.email,
-                  subject: "Phiên thanh toán đã hết hạn - Minh Thành Villa",
+                  subject: "Phiên thanh toán đã hết hạn - The Palm Villa",
                   text: lines.filter(Boolean).join("\n"),
                   html: buildEmailHtml(title, lines),
               }
@@ -859,7 +1015,7 @@ export const notifyBookingConfirmed = async (bookingId: number, transaction?: Tr
         guestEmail: context.guest?.email
             ? {
                   to: context.guest.email,
-                  subject: "Đặt phòng đã được xác nhận - Minh Thành Villa",
+                  subject: "Đặt phòng đã được xác nhận - The Palm Villa",
                   text: lines.filter(Boolean).join("\n"),
                   html: buildEmailHtml(title, lines),
               }
@@ -941,7 +1097,7 @@ export const notifyRefundCreated = async (refundId: number, transaction?: Transa
                 email: context.guest?.email
                     ? {
                           to: context.guest.email,
-                          subject: "Cập nhật hoàn tiền - Minh Thành Villa",
+                          subject: "Cập nhật hoàn tiền - The Palm Villa",
                           text: lines.filter(Boolean).join("\n"),
                           html: buildEmailHtml(title, lines),
                       }
@@ -996,7 +1152,7 @@ export const notifyPayoutCreated = async (payoutId: number, transaction?: Transa
                 email: host?.email
                     ? {
                           to: host.email,
-                          subject: "Cập nhật payout - Minh Thành Villa",
+                          subject: "Cập nhật payout - The Palm Villa",
                           text: lines.filter(Boolean).join("\n"),
                           html: buildEmailHtml(title, lines),
                       }
@@ -1042,6 +1198,67 @@ export const notifyReviewCreated = async (reviewId: number, transaction?: Transa
                 },
             },
         ],
+    });
+};
+
+export const notifyAllHostsPlatformFeeScheduled = async (
+    settingId: number,
+    oldFeePct: number,
+    newFeePct: number,
+    effectiveAt: Date,
+    reason?: string | null,
+    transaction?: Transaction,
+) => {
+    const hostRows = await sequelize.query<{ userId: number; email: string; name: string }>(
+        `
+        SELECT DISTINCT u.user_id AS userId, u.email, COALESCE(u.full_name, u.first_name, 'Chủ nhà') AS name
+        FROM users u
+        INNER JOIN user_role ur ON ur.user_id = u.user_id
+        INNER JOIN roles r ON r.role_id = ur.role_id
+        WHERE r.code = 'host' AND u.status = 'active'
+        `,
+        {
+            type: QueryTypes.SELECT,
+            transaction,
+        },
+    );
+
+    if (!hostRows || hostRows.length === 0) {
+        return;
+    }
+
+    const formattedDate = new Intl.DateTimeFormat("vi-VN", {
+        timeZone: "Asia/Ho_Chi_Minh",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+    }).format(effectiveAt);
+
+    const title = "Thông báo điều chỉnh mức phí nền tảng";
+    const body = `Mức phí nền tảng sẽ được điều chỉnh từ ${oldFeePct}% sang ${newFeePct}%, chính thức có hiệu lực vào lúc ${formattedDate} (sau 7 ngày).${reason ? ` Lý do: ${reason}` : ""}`;
+
+    const recipients: NotificationRecipient[] = hostRows.map((h) => ({
+        userId: Number(h.userId),
+        title,
+        body,
+        actionUrl: "/host/bao-cao",
+        email: h.email
+            ? {
+                  to: h.email,
+                  subject: `[The Palm Villa] ${title}`,
+                  text: `Xin chào ${h.name || "Chủ nhà"},\n\n${body}\n\nLưu ý: Các đơn đặt phòng tạo trước thời điểm hiệu lực vẫn áp dụng mức phí cũ. Vui lòng truy cập cổng Host Portal để xem chi tiết.\n\nTrân trọng,\nBan Quản trị The Palm Villa`,
+              }
+            : undefined,
+    }));
+
+    await notify({
+        eventType: "PLATFORM_FEE_SCHEDULED",
+        targetType: "platform_fee",
+        targetId: settingId,
+        transaction,
+        recipients,
     });
 };
 

@@ -33,7 +33,7 @@ import sequelize from "../../config/database";
 import Amenity from "../../models/amenity";
 import AvailabilityCalendar from "../../models/availability-calendar";
 import Booking from "../../models/booking";
-import { getNextSequence } from "../../models/counter";
+import Counter, { getNextSequence } from "../../models/counter";
 import Listing, {
     ListingAvailabilityDayRecord,
     ListingDocument,
@@ -48,6 +48,7 @@ import { writeAuditLog } from "../../services/audit-log-service";
 import { isHostVerifiedForPublishing } from "../../services/host-verification-status-service";
 import { notifyListingSubmitted } from "../notifications/notification.service";
 import { scheduleSemanticReindex } from "../semantic-search/semantic-search.indexer";
+import { enqueueHostSheetSyncJobSafe } from "../host-sheet-sync/host-sheet-sync.service";
 
 export type CreateListingInput = {
     title: string;
@@ -515,7 +516,9 @@ const normalizeCalendarRow = (row: ListingAvailabilityDayRecord) => {
     const trimmedNotes = row.notes?.trim();
     const normalizedRow: ListingAvailabilityDayRecord = {
         date: row.date,
-        isAvailable: row.isBlockedByHost ? false : row.isAvailable,
+        isAvailable: Boolean(row.isBlockedByAdmin) || row.isBlockedByHost ? false : row.isAvailable,
+        isBlockedByAdmin: Boolean(row.isBlockedByAdmin),
+        lockSource: row.lockSource ?? null,
         isBlockedByHost: row.isBlockedByHost,
         priceOverride: row.priceOverride ?? null,
         minNightsOverride: row.minNightsOverride ?? null,
@@ -734,8 +737,15 @@ export const createListing = async (
     const listing = await sequelize.transaction(async (transaction) => {
         await assertHostCanRequestReview(Number(userId), nextStatus, actor, transaction);
 
+        const maxListingId = Number(await Listing.max("listingId", { transaction })) || 100;
+        let nextListingId = await getNextSequence("listing", 101);
+        if (nextListingId <= maxListingId) {
+            nextListingId = maxListingId + 1;
+            await Counter.upsert({ key: "listing", value: nextListingId }, { transaction });
+        }
+
         const createdListing = new Listing({
-            listingId: await getNextSequence("listing", 101),
+            listingId: nextListingId,
             hostId: Number(userId),
             ...sanitizedInput,
             amenityIds,
@@ -778,6 +788,11 @@ export const createListing = async (
     });
 
     scheduleSemanticReindex(listing.listingId, "listing_create");
+    enqueueHostSheetSyncJobSafe({
+        hostUserId: Number(listing.hostId),
+        jobType: "listing_created",
+        listingId: listing.listingId,
+    });
 
     return {
         listingId: listing.listingId,
@@ -918,6 +933,11 @@ export const updateListing = async (listingId: number, actor: HostActor, input: 
     });
 
     scheduleSemanticReindex(updated.listingId, "listing_update");
+    enqueueHostSheetSyncJobSafe({
+        hostUserId: Number(updated.hostId),
+        jobType: "listing_updated",
+        listingId: updated.listingId,
+    });
 
     return {
         listingId: updated.listingId,
@@ -928,13 +948,92 @@ export const updateListing = async (listingId: number, actor: HostActor, input: 
 export const deleteListing = async (listingId: number, actor: HostActor) => {
     await sequelize.transaction(async (transaction) => {
         const listing = await getListingForHost(listingId, actor, transaction);
+        const todayVN = getTodayInVietnamDateString();
+        const activeObligations = await Booking.findAll({
+            where: {
+                listingId: listing.listingId,
+                ...buildActiveBookingStatusWhere(),
+                checkOutDate: {
+                    [Op.gte]: todayVN,
+                },
+            },
+            attributes: ["bookingId", "status", "checkInDate", "checkOutDate"],
+            transaction,
+        });
+
+        if (activeObligations.length > 0) {
+            throw new ApiError(
+                409,
+                "Không thể xóa căn đang có giữ chỗ hoặc đơn đặt phòng còn hiệu lực trong tương lai. Vui lòng chuyển sang Tạm ẩn căn.",
+            );
+        }
+
         listing.deletedAt = new Date();
         listing.status = "inactive";
         await listing.save({ transaction });
         await writeListingAudit(actor, "host_listing.delete", listing.listingId, undefined, transaction);
+        const targetHostId = Number(listing.hostId);
+        const txHook = transaction as unknown as { afterCommit?: (fn: () => void) => void };
+        const enqueueArchive = () =>
+            enqueueHostSheetSyncJobSafe({
+                hostUserId: targetHostId,
+                jobType: "listing_archived",
+                listingId: listing.listingId,
+            });
+        if (typeof txHook?.afterCommit === "function") {
+            txHook.afterCommit(enqueueArchive);
+        } else {
+            setImmediate(enqueueArchive);
+        }
     });
 
     scheduleSemanticReindex(listingId, "listing_delete");
+};
+
+export const restoreListing = async (listingId: number, actor: HostActor) => {
+    const restored = await sequelize.transaction(async (transaction) => {
+        const listing = await Listing.findOne({
+            where: {
+                listingId,
+            },
+            transaction,
+        });
+
+        if (!listing) {
+            throw new ApiError(404, "Listing not found");
+        }
+
+        checkListingOwner(listing, actor);
+
+        if (!listing.deletedAt) {
+            return listing;
+        }
+
+        listing.deletedAt = null;
+        listing.status = "inactive";
+        await listing.save({ transaction });
+        await writeListingAudit(
+            actor,
+            "host_listing.restore",
+            listing.listingId,
+            { status: toApiListingStatus(listing.status) },
+            transaction,
+        );
+
+        return listing;
+    });
+
+    scheduleSemanticReindex(restored.listingId, "listing_restore");
+    enqueueHostSheetSyncJobSafe({
+        hostUserId: Number(restored.hostId),
+        jobType: "listing_restored",
+        listingId: restored.listingId,
+    });
+
+    return {
+        listingId: restored.listingId,
+        status: toApiListingStatus(restored.status),
+    };
 };
 
 export const addListingImages = async (listingId: number, actor: HostActor, input: AddListingImagesInput) => {
@@ -1400,6 +1499,18 @@ export const bulkUpdateListingCalendar = async (
                 ...current,
             };
 
+            if (
+                current.isBlockedByAdmin &&
+                (input.isAvailable === true || input.isBlockedByHost === false)
+            ) {
+                throw new ApiError(409, "Cannot unlock calendar dates locked by administrator", [
+                    {
+                        path: "dates",
+                        msg: `Date ${date} is locked by administrator`,
+                    },
+                ]);
+            }
+
             if (input.isBlockedByHost !== undefined) {
                 nextRow.isBlockedByHost = input.isBlockedByHost;
 
@@ -1448,6 +1559,8 @@ export const bulkUpdateListingCalendar = async (
                     date,
                     isAvailable: normalizedRow.isAvailable,
                     isBlockedByHost: normalizedRow.isBlockedByHost,
+                    lockSource: normalizedRow.isBlockedByHost ? "app_manual" : null,
+                    syncRevision: Number(existing?.syncRevision ?? 0) + 1,
                     priceOverride: normalizedRow.priceOverride ?? null,
                     minNightsOverride: normalizedRow.minNightsOverride ?? null,
                     notes: normalizedRow.notes ?? null,
@@ -1465,6 +1578,20 @@ export const bulkUpdateListingCalendar = async (
             left.date.localeCompare(right.date),
         );
         await listing.save({ transaction });
+        const targetHostId = Number(listing.hostId);
+        const txHook = transaction as unknown as { afterCommit?: (fn: () => void) => void };
+        const enqueueCalUpdate = () =>
+            enqueueHostSheetSyncJobSafe({
+                hostUserId: targetHostId,
+                jobType: "app_calendar_updated",
+                listingId: listing.listingId,
+            });
+        if (typeof txHook?.afterCommit === "function") {
+            txHook.afterCommit(enqueueCalUpdate);
+        } else {
+            setImmediate(enqueueCalUpdate);
+        }
+
         await writeListingAudit(actor, "host_listing.calendar.bulk_update", listing.listingId, {
             updatedDates: uniqueDates,
         }, transaction);

@@ -14,7 +14,7 @@ class PressableScale extends StatefulWidget {
     required this.child,
     this.onTap,
     this.scaleDown = 0.97,
-    this.duration = const Duration(milliseconds: 120),
+    this.duration = const Duration(milliseconds: 180),
     this.curve = Curves.easeOutCubic,
   });
 
@@ -25,7 +25,7 @@ class PressableScale extends StatefulWidget {
 class _PressableScaleState extends State<PressableScale>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _scaleAnimation;
+  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
@@ -38,11 +38,25 @@ class _PressableScaleState extends State<PressableScale>
     _scaleAnimation = Tween<double>(
       begin: 1.0,
       end: widget.scaleDown,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: widget.curve,
-      reverseCurve: Curves.easeOutBack,
-    ));
+    ).chain(CurveTween(curve: widget.curve)).animate(_controller);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant PressableScale oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _controller.duration = widget.duration;
+    _scaleAnimation = _controller.drive(
+        Tween<double>(begin: 1, end: widget.scaleDown)
+            .chain(CurveTween(curve: widget.curve)));
   }
 
   @override

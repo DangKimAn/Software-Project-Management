@@ -10,7 +10,10 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../l10n/l10n.dart';
+import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
+import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../../booking_inquiry/domain/services/contact_service.dart';
@@ -25,7 +28,6 @@ import '../view_models/account_settings_view_model.dart';
 /// - Handles async states (`loading`, `success`, `empty`, `error`, `offline`, `401/403`) with real retry.
 /// - Synchronizes profile via `GET /api/auth/me` & `GET /api/users/me` and updates via `PATCH /api/users/me`.
 /// - Uploads avatar from device via `POST /api/uploads/presign` (`folder: 'avatars'`) + R2 `PUT` + `PATCH /api/users/me/avatar`.
-/// - Displays real `user.isVerified` status (never hardcoded).
 /// - Preserves unsaved draft per `userId` on 422/500/offline, prevents double-submit, never fakes local-only success,
 ///   and isolates PII across account switches.
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -36,6 +38,21 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  static final TextStyle _menuTitleStyle = AppTypography.bodyMedium.copyWith(
+    fontSize: 14.5,
+    fontWeight: FontWeight.w400,
+    color: AppColors.textStrong,
+    letterSpacing: -0.08,
+    height: 1.35,
+  );
+
+  static final TextStyle _menuTrailingStyle = AppTypography.caption.copyWith(
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+    color: AppColors.textMuted,
+    height: 1.35,
+  );
+
   ProfileDraftData? _unsavedDraft;
   String? _activeUserId;
 
@@ -49,66 +66,81 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  OutlineInputBorder _pillBorder(Color color, {double width = 1}) {
-    return OutlineInputBorder(
-      borderRadius: AppRadii.roundedPill,
-      borderSide: BorderSide(color: color, width: width),
-    );
-  }
-
-  OutlineInputBorder _multilineBorder(Color color, {double width = 1}) {
-    return OutlineInputBorder(
-      borderRadius: BorderRadius.circular(AppRadii.card),
-      borderSide: BorderSide(color: color, width: width),
-    );
-  }
-
-  InputDecoration _buildPillInputDecoration({
+  Widget _buildCleanProfileField({
+    required Key fieldKey,
+    required TextEditingController controller,
     required String labelText,
     String? hintText,
     String? errorText,
+    bool enabled = true,
+    TextInputType keyboardType = TextInputType.text,
+    TextInputAction textInputAction = TextInputAction.next,
+    int maxLines = 1,
+    int? minLines,
   }) {
-    return InputDecoration(
-      labelText: labelText,
-      hintText: hintText,
-      errorText: errorText,
-      errorMaxLines: 3,
-      filled: true,
-      fillColor: AppColors.surfaceBase,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.s20,
-        vertical: AppSpacing.s16,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.s16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            labelText,
+            style: AppTypography.caption.copyWith(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 2),
+          TextField(
+            key: fieldKey,
+            controller: controller,
+            enabled: enabled,
+            keyboardType: keyboardType,
+            textInputAction: textInputAction,
+            maxLines: maxLines,
+            minLines: minLines,
+            style: AppTypography.bodyMedium.copyWith(
+              fontSize: 14.5,
+              color: AppColors.textStrong,
+              fontWeight: FontWeight.w500,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: false,
+              hintText: hintText,
+              hintStyle: AppTypography.bodyMedium.copyWith(
+                color: AppColors.textTertiary,
+              ),
+              errorText: errorText,
+              errorMaxLines: 3,
+              contentPadding: const EdgeInsets.only(top: 6, bottom: 10),
+              border: const UnderlineInputBorder(
+                borderSide: BorderSide(color: AppColors.divider, width: 1),
+              ),
+              enabledBorder: const UnderlineInputBorder(
+                borderSide: BorderSide(color: AppColors.divider, width: 1),
+              ),
+              focusedBorder: const UnderlineInputBorder(
+                borderSide: BorderSide(
+                  color: AppColors.textStrong,
+                  width: 1.5,
+                ),
+              ),
+              errorBorder: const UnderlineInputBorder(
+                borderSide: BorderSide(color: AppColors.error, width: 1),
+              ),
+              focusedErrorBorder: const UnderlineInputBorder(
+                borderSide: BorderSide(color: AppColors.error, width: 1.5),
+              ),
+              disabledBorder: const UnderlineInputBorder(
+                borderSide: BorderSide(color: AppColors.borderSoft, width: 1),
+              ),
+            ),
+          ),
+        ],
       ),
-      border: _pillBorder(AppColors.borderSoft),
-      enabledBorder: _pillBorder(AppColors.borderSoft),
-      focusedBorder: _pillBorder(AppColors.borderFocus, width: 1.5),
-      errorBorder: _pillBorder(AppColors.error),
-      focusedErrorBorder: _pillBorder(AppColors.error, width: 1.5),
-    );
-  }
-
-  InputDecoration _buildMultilineInputDecoration({
-    required String labelText,
-    String? hintText,
-    String? errorText,
-  }) {
-    return InputDecoration(
-      labelText: labelText,
-      hintText: hintText,
-      errorText: errorText,
-      errorMaxLines: 3,
-      alignLabelWithHint: true,
-      filled: true,
-      fillColor: AppColors.surfaceBase,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.s20,
-        vertical: AppSpacing.s16,
-      ),
-      border: _multilineBorder(AppColors.borderSoft),
-      enabledBorder: _multilineBorder(AppColors.borderSoft),
-      focusedBorder: _multilineBorder(AppColors.borderFocus, width: 1.5),
-      errorBorder: _multilineBorder(AppColors.error),
-      focusedErrorBorder: _multilineBorder(AppColors.error, width: 1.5),
     );
   }
 
@@ -137,6 +169,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required String oldPhone,
     required String newPhone,
   }) async {
+    final currentLocale = ref.read(localeProvider);
+    final dialogL10n = lookupAppLocalizations(Locale(currentLocale));
     final confirmed = await showDialog<bool>(
       context: parentContext,
       builder: (dialogCtx) {
@@ -147,14 +181,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.modal),
           ),
-          title: const Text(
-            'Xác nhận thay đổi số điện thoại',
+          title: Text(
+            dialogL10n.settingsConfirmPhoneTitle,
             style: AppTypography.sectionHeading,
           ),
           content: Text(
             newPhone.isEmpty
-                ? 'Bạn sắp xóa số điện thoại liên hệ đã lưu ($oldPhone). Bạn có chắc chắn muốn tiếp tục?'
-                : 'Bạn sắp thay đổi số điện thoại liên hệ từ $oldPhone sang $newPhone. Bạn có chắc chắn muốn lưu thay đổi này?',
+                ? dialogL10n.settingsConfirmPhoneRemove(oldPhone)
+                : dialogL10n.settingsConfirmPhoneChange(oldPhone, newPhone),
             style: AppTypography.bodyMedium,
           ),
           actions: [
@@ -164,7 +198,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 key: const Key('sensitive_change_cancel_btn'),
                 style: OutlinedButton.styleFrom(shape: const StadiumBorder()),
                 onPressed: () => Navigator.of(dialogCtx).pop(false),
-                child: const Text('Kiểm tra lại'),
+                child: Text(dialogL10n.settingsConfirmPhoneReview),
               ),
             ),
             ConstrainedBox(
@@ -176,7 +210,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   shape: const StadiumBorder(),
                 ),
                 onPressed: () => Navigator.of(dialogCtx).pop(true),
-                child: const Text('Xác nhận lưu'),
+                child: Text(dialogL10n.settingsConfirmPhoneSave),
               ),
             ),
           ],
@@ -190,6 +224,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final hasUnsaved =
         _unsavedDraft != null && _unsavedDraft!.userId == user.id;
 
+    final currentLocale = ref.read(localeProvider);
+    final dialogL10n = lookupAppLocalizations(Locale(currentLocale));
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogCtx) {
@@ -200,14 +236,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.modal),
           ),
-          title: const Text(
-            'Xác nhận đăng xuất',
+          title: Text(
+            dialogL10n.settingsConfirmLogoutTitle,
             style: AppTypography.sectionHeading,
           ),
           content: Text(
             hasUnsaved
-                ? 'Bạn đang có bản nháp chỉnh sửa hồ sơ chưa lưu. Đăng xuất sẽ xóa dữ liệu nháp tạm thời trên phiên này. Bạn có chắc chắn muốn đăng xuất?'
-                : 'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này không?',
+                ? dialogL10n.settingsConfirmLogoutDraft
+                : dialogL10n.settingsConfirmLogout,
             style: AppTypography.bodyMedium,
           ),
           actions: [
@@ -217,7 +253,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 key: const Key('logout_cancel_btn'),
                 style: OutlinedButton.styleFrom(shape: const StadiumBorder()),
                 onPressed: () => Navigator.of(dialogCtx).pop(false),
-                child: const Text('Hủy'),
+                child: Text(dialogL10n.ctaCancel),
               ),
             ),
             ConstrainedBox(
@@ -229,7 +265,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   shape: const StadiumBorder(),
                 ),
                 onPressed: () => Navigator.of(dialogCtx).pop(true),
-                child: const Text('Đăng xuất'),
+                child: Text(dialogL10n.authLogout),
               ),
             ),
           ],
@@ -248,11 +284,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _openAvatarUpdateModal(User user) async {
-    final avatarCtrl = TextEditingController(
-      text: _unsavedDraft?.userId == user.id
-          ? _unsavedDraft!.avatarUrl
-          : (user.avatarUrl ?? ''),
-    );
+    final currentLocale = ref.read(localeProvider);
+    final modalL10n = lookupAppLocalizations(Locale(currentLocale));
     bool isSaving = false;
     String? modalError;
     AvatarPickedFile? selectedLocalFile;
@@ -287,7 +320,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (!ctx.mounted) return;
                 setModalState(() {
                   modalError =
-                      'Không thể chọn ảnh từ thiết bị. Vui lòng thử lại.';
+                      modalL10n.settingsAvatarPickError;
                 });
                 return;
               }
@@ -319,49 +352,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Navigator.of(ctx).pop();
                 if (mounted) {
                   ScaffoldMessenger.of(this.context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Đã cập nhật ảnh đại diện thành công.'),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (!ctx.mounted) return;
-                final failure = e is AppFailure ? e : DioClient.handleError(e);
-                setModalState(() {
-                  isSaving = false;
-                  modalError = failure.message;
-                });
-              }
-            }
-
-            Future<void> submitAvatarUrl() async {
-              if (isSaving) return;
-              final url = avatarCtrl.text.trim();
-              if (!isValidHttpUrl(url)) {
-                setModalState(() {
-                  modalError =
-                      'Vui lòng nhập URL ảnh đại diện hợp lệ (bắt đầu bằng http:// hoặc https://).';
-                });
-                return;
-              }
-              setModalState(() {
-                isSaving = true;
-                modalError = null;
-              });
-
-              try {
-                await ref
-                    .read(authNotifierProvider.notifier)
-                    .updateAvatar(url: url);
-                if (_unsavedDraft?.userId == user.id) {
-                  _unsavedDraft = _unsavedDraft!.copyWith(avatarUrl: url);
-                }
-                if (!ctx.mounted) return;
-                Navigator.of(ctx).pop();
-                if (mounted) {
-                  ScaffoldMessenger.of(this.context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Đã cập nhật ảnh đại diện thành công.'),
+                    SnackBar(
+                      content: Text(
+                        modalL10n.settingsAvatarUpdateSuccess,
+                      ),
                     ),
                   );
                 }
@@ -391,10 +385,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     children: [
                       Row(
                         children: [
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'Cập nhật ảnh đại diện',
-                              style: AppTypography.sectionHeading,
+                              modalL10n.settingsAvatarUpdateTitle,
+                              style: AppTypography.sectionHeading.copyWith(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                           ConstrainedBox(
@@ -404,7 +401,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             ),
                             child: IconButton(
                               key: const Key('avatar_modal_close_button'),
-                              tooltip: 'Đóng',
+                              tooltip: modalL10n.ctaClose,
                               onPressed: isSaving
                                   ? null
                                   : () => Navigator.of(ctx).pop(),
@@ -417,13 +414,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: AppSpacing.s12),
+                      const SizedBox(height: AppSpacing.s8),
+                      Text(
+                        modalL10n.settingsAvatarUpdateHint,
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.s16),
                       if (selectedLocalFile != null) ...[
                         Padding(
                           padding:
                               const EdgeInsets.only(bottom: AppSpacing.s12),
                           child: Text(
-                            'Đã chọn: ${selectedLocalFile!.name} (${(selectedLocalFile!.sizeBytes / 1024).toStringAsFixed(1)} KB)',
+                            modalL10n.settingsAvatarSelected(
+                              selectedLocalFile!.name,
+                              (selectedLocalFile!.sizeBytes / 1024)
+                                  .toStringAsFixed(1),
+                            ),
                             style: AppTypography.caption.copyWith(
                               color: AppColors.textSecondary,
                             ),
@@ -438,8 +446,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           margin: const EdgeInsets.only(bottom: AppSpacing.s16),
                           decoration: BoxDecoration(
                             color: AppColors.errorSoft,
-                            borderRadius: BorderRadius.circular(AppRadii.card),
-                            border: Border.all(color: AppColors.error),
+                            borderRadius: BorderRadius.circular(AppRadii.md),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -481,52 +488,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ),
                             ),
                             icon: const Icon(
-                              LucideIcons.imageUp,
+                              AppSemanticIcons.changeAvatar,
                               size: 18,
                               color: AppColors.textInverse,
                             ),
                             label: Text(
                               isSaving
-                                  ? 'Đang tải ảnh lên...'
-                                  : 'Chọn ảnh từ thiết bị (Tối đa 5MB)',
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s16),
-                      Text(
-                        'Hoặc nhập đường dẫn ảnh trực tiếp (HTTPS):',
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s8),
-                      TextField(
-                        key: const Key('avatar_url_input'),
-                        controller: avatarCtrl,
-                        enabled: !isSaving,
-                        keyboardType: TextInputType.url,
-                        decoration: _buildPillInputDecoration(
-                          labelText: 'URL ảnh đại diện (https://...)',
-                          hintText: 'https://example.com/avatar.jpg',
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: 48),
-                          child: OutlinedButton(
-                            key: const Key('avatar_save_url_button'),
-                            onPressed: isSaving ? null : submitAvatarUrl,
-                            style: OutlinedButton.styleFrom(
-                              shape: const StadiumBorder(),
-                              padding: const EdgeInsets.symmetric(
-                                vertical: AppSpacing.s12,
-                              ),
-                            ),
-                            child: Text(
-                              isSaving ? 'Đang lưu...' : 'Lưu ảnh đại diện',
+                                  ? modalL10n.settingsAvatarUploading
+                                  : modalL10n.settingsAvatarPickFromDevice,
                             ),
                           ),
                         ),
@@ -543,6 +512,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _openEditProfileModal(User user) async {
+    final currentLocale = ref.read(localeProvider);
+    final editL10n = lookupAppLocalizations(Locale(currentLocale));
     final draft = (_unsavedDraft != null && _unsavedDraft!.userId == user.id)
         ? _unsavedDraft
         : null;
@@ -577,6 +548,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
 
     bool isSubmitting = false;
+    bool isUploadingAvatar = false;
+    AvatarPickedFile? selectedLocalAvatar;
+    String? uploadedAvatarKey;
     String? errorMessage;
     Map<String, String> fieldErrors = <String, String>{};
 
@@ -612,9 +586,73 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            Future<void> handlePickAvatarFromDevice() async {
+              if (isSubmitting || isUploadingAvatar) return;
+              setModalState(() {
+                errorMessage = null;
+                fieldErrors = Map<String, String>.from(fieldErrors)
+                  ..remove('avatarUrl');
+              });
+
+              AvatarPickedFile? picked;
+              try {
+                final picker = ref.read(avatarPickerServiceProvider);
+                picked = await picker.pickAvatarFromDevice();
+              } on AvatarPickException catch (e) {
+                if (!ctx.mounted) return;
+                setModalState(() {
+                  errorMessage = e.message;
+                });
+                return;
+              } catch (_) {
+                if (!ctx.mounted) return;
+                setModalState(() {
+                  errorMessage =
+                      editL10n.settingsAvatarPickError;
+                });
+                return;
+              }
+
+              if (picked == null || !ctx.mounted) {
+                return;
+              }
+
+              setModalState(() {
+                selectedLocalAvatar = picked;
+                isUploadingAvatar = true;
+                errorMessage = null;
+              });
+
+              try {
+                final uploadService = ref.read(avatarUploadServiceProvider);
+                final presigned = await uploadService.uploadAvatarToR2(picked);
+                avatarUrlCtrl.text = presigned.publicUrl;
+                uploadedAvatarKey = presigned.key;
+                await ref.read(authNotifierProvider.notifier).updateAvatar(
+                      url: presigned.publicUrl,
+                      key: presigned.key,
+                    );
+                snapshotDraft();
+                if (!ctx.mounted) return;
+                setModalState(() {
+                  isUploadingAvatar = false;
+                });
+                if (mounted) {
+                  setState(() {});
+                }
+              } catch (e) {
+                if (!ctx.mounted) return;
+                final failure = e is AppFailure ? e : DioClient.handleError(e);
+                setModalState(() {
+                  isUploadingAvatar = false;
+                  errorMessage = failure.message;
+                });
+              }
+            }
+
             Future<void> handleSave() async {
               // Synchronous lock against double-submit
-              if (isSubmitting) return;
+              if (isSubmitting || isUploadingAvatar) return;
 
               final candidateDraft = buildCurrentDraft();
               final validation = validateProfileDraft(candidateDraft);
@@ -650,7 +688,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 final oldAvatarUrl = (user.avatarUrl ?? '').trim();
                 final parsedLanguages = candidateDraft.parsedLanguages;
 
-                if (newAvatarUrl.isNotEmpty && newAvatarUrl != oldAvatarUrl) {
+                if (newAvatarUrl.isNotEmpty &&
+                    newAvatarUrl != oldAvatarUrl &&
+                    uploadedAvatarKey == null) {
                   await ref
                       .read(authNotifierProvider.notifier)
                       .updateAvatar(url: newAvatarUrl);
@@ -692,8 +732,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (mounted) {
                   setState(() {});
                   ScaffoldMessenger.of(this.context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Đã cập nhật hồ sơ thành công.'),
+                    SnackBar(
+                      content: Text(
+                        editL10n.settingsProfileUpdateSuccess,
+                      ),
                     ),
                   );
                 }
@@ -721,210 +763,341 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               }
             }
 
+            final currentAvatarUrl = avatarUrlCtrl.text.trim();
+            final bool busy = isSubmitting || isUploadingAvatar;
+
             return SafeArea(
               top: false,
               child: Padding(
                 padding: EdgeInsets.only(
-                  left: AppSpacing.s24,
-                  right: AppSpacing.s24,
-                  top: AppSpacing.s20,
-                  bottom: MediaQuery.viewInsetsOf(ctx).bottom + AppSpacing.s24,
+                  bottom: MediaQuery.viewInsetsOf(ctx).bottom,
                 ),
-                child: SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(ctx).height * 0.88,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Chỉnh sửa hồ sơ cá nhân',
-                              style: AppTypography.sectionHeading,
-                            ),
-                          ),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              minWidth: 48,
-                              minHeight: 48,
-                            ),
-                            child: IconButton(
-                              key: const Key('edit_profile_close_button'),
-                              tooltip: 'Đóng',
-                              onPressed: isSubmitting
-                                  ? null
-                                  : () {
-                                      snapshotDraft();
-                                      Navigator.of(ctx).pop();
-                                      if (mounted) {
-                                        setState(() {});
-                                      }
-                                    },
-                              icon: const Icon(
-                                LucideIcons.x,
-                                size: 20,
-                                color: AppColors.iconStrong,
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.s24,
+                          AppSpacing.s16,
+                          AppSpacing.s16,
+                          AppSpacing.s8,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                editL10n.settingsEditProfileTitle,
+                                style: AppTypography.sectionHeading.copyWith(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minWidth: 48,
+                                minHeight: 48,
+                              ),
+                              child: IconButton(
+                                key: const Key('edit_profile_close_button'),
+                                tooltip: editL10n.ctaClose,
+                                onPressed: busy
+                                    ? null
+                                    : () {
+                                        snapshotDraft();
+                                        Navigator.of(ctx).pop();
+                                        if (mounted) {
+                                          setState(() {});
+                                        }
+                                      },
+                                icon: const Icon(
+                                  LucideIcons.x,
+                                  size: 20,
+                                  color: AppColors.iconStrong,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: AppSpacing.s12),
-                      if (errorMessage != null) ...[
-                        Container(
-                          key: const Key('edit_profile_error_banner'),
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(AppSpacing.s16),
-                          margin: const EdgeInsets.only(bottom: AppSpacing.s16),
-                          decoration: BoxDecoration(
-                            color: AppColors.errorSoft,
-                            borderRadius: BorderRadius.circular(AppRadii.card),
-                            border: Border.all(color: AppColors.error),
+                      const Divider(height: 1, color: AppColors.divider),
+                      Flexible(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.s24,
+                            AppSpacing.s16,
+                            AppSpacing.s24,
+                            AppSpacing.s24,
                           ),
-                          child: Row(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(
-                                LucideIcons.circleAlert,
-                                size: 18,
-                                color: AppColors.iconStrong,
+                              if (errorMessage != null) ...[
+                                Container(
+                                  key: const Key('edit_profile_error_banner'),
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(AppSpacing.s12),
+                                  margin: const EdgeInsets.only(
+                                    bottom: AppSpacing.s16,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.errorSoft,
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadii.md),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(
+                                        LucideIcons.circleAlert,
+                                        size: 18,
+                                        color: AppColors.iconStrong,
+                                      ),
+                                      const SizedBox(width: AppSpacing.s8),
+                                      Expanded(
+                                        child: Text(
+                                          errorMessage!,
+                                          style: AppTypography.caption.copyWith(
+                                            color: AppColors.error,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              // Avatar picker row (replaces raw URL text input)
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: AppSpacing.s16,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 56,
+                                      height: 56,
+                                      decoration: const BoxDecoration(
+                                        color: AppColors.surfaceElevated,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: ClipOval(
+                                        child: SizedBox(
+                                          width: 56,
+                                          height: 56,
+                                          child: selectedLocalAvatar != null
+                                              ? Image.memory(
+                                                  selectedLocalAvatar!.bytes,
+                                                  fit: BoxFit.cover,
+                                                )
+                                              : (currentAvatarUrl.isNotEmpty
+                                                  ? AppImage(
+                                                      url: currentAvatarUrl,
+                                                      fit: BoxFit.cover,
+                                                    )
+                                                  : Center(
+                                                      child: Text(
+                                                        user.firstName
+                                                                .isNotEmpty
+                                                            ? user.firstName[0]
+                                                                .toUpperCase()
+                                                            : 'U',
+                                                        style: AppTypography
+                                                            .cardTitle
+                                                            .copyWith(
+                                                          color: AppColors
+                                                              .textStrong,
+                                                        ),
+                                                      ),
+                                                    )),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: AppSpacing.s12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            editL10n.settingsAvatarSectionTitle,
+                                            style: AppTypography.bodyMedium
+                                                .copyWith(
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textStrong,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            isUploadingAvatar
+                                                ? editL10n.settingsAvatarUploading
+                                                : (selectedLocalAvatar != null
+                                                    ? editL10n.settingsAvatarSelectedShort(selectedLocalAvatar!.name)
+                                                    : editL10n.settingsAvatarPickHint),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style:
+                                                AppTypography.caption.copyWith(
+                                              color: AppColors.textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: AppSpacing.s8),
+                                    ConstrainedBox(
+                                      constraints:
+                                          const BoxConstraints(minHeight: 40),
+                                      child: TextButton.icon(
+                                        key: const Key(
+                                          'edit_profile_pick_avatar_button',
+                                        ),
+                                        onPressed: busy
+                                            ? null
+                                            : handlePickAvatarFromDevice,
+                                        style: TextButton.styleFrom(
+                                          backgroundColor:
+                                              AppColors.surfaceElevated,
+                                          foregroundColor: AppColors.textStrong,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: AppSpacing.s12,
+                                            vertical: AppSpacing.s8,
+                                          ),
+                                          shape: const StadiumBorder(),
+                                        ),
+                                        icon: const Icon(
+                                          AppSemanticIcons.changeAvatar,
+                                          size: 16,
+                                          color: AppColors.iconStrong,
+                                        ),
+                                        label: Text(
+                                          isUploadingAvatar
+                                              ? editL10n.settingsAvatarUploadingShort
+                                              : editL10n.settingsAvatarPickFromDeviceShort,
+                                          style: AppTypography.caption.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textStrong,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              const SizedBox(width: AppSpacing.s8),
-                              Expanded(
-                                child: Text(
-                                  errorMessage!,
-                                  style: AppTypography.caption.copyWith(
-                                    color: AppColors.error,
-                                    fontWeight: FontWeight.w600,
+                              const Divider(
+                                height: 1,
+                                color: AppColors.divider,
+                              ),
+                              const SizedBox(height: AppSpacing.s16),
+                              _buildCleanProfileField(
+                                fieldKey:
+                                    const Key('edit_profile_full_name_input'),
+                                controller: fullNameCtrl,
+                                enabled: !busy,
+                                labelText: editL10n.settingsFullNameLabel,
+                                hintText: editL10n.settingsFullNameHint,
+                                errorText: fieldErrors['fullName'],
+                              ),
+                              _buildCleanProfileField(
+                                fieldKey: const Key('edit_profile_phone_input'),
+                                controller: phoneCtrl,
+                                enabled: !busy,
+                                keyboardType: TextInputType.phone,
+                                labelText: editL10n.settingsPhoneLabel,
+                                hintText: editL10n.settingsPhoneHint,
+                                errorText: fieldErrors['phone'],
+                              ),
+                              _buildCleanProfileField(
+                                fieldKey:
+                                    const Key('edit_profile_location_input'),
+                                controller: locationCtrl,
+                                enabled: !busy,
+                                labelText: editL10n.settingsLocationLabel,
+                                hintText: editL10n.settingsLocationHint,
+                                errorText: fieldErrors['location'],
+                              ),
+                              _buildCleanProfileField(
+                                fieldKey: const Key(
+                                  'edit_profile_dream_destination_input',
+                                ),
+                                controller: dreamDestinationCtrl,
+                                enabled: !busy,
+                                labelText: editL10n.settingsDreamDestinationLabel,
+                                hintText: editL10n.settingsDreamDestinationHint,
+                                errorText: fieldErrors['dreamDestination'],
+                              ),
+                              _buildCleanProfileField(
+                                fieldKey: const Key('edit_profile_job_input'),
+                                controller: jobCtrl,
+                                enabled: !busy,
+                                labelText: editL10n.settingsJobLabel,
+                                hintText: editL10n.settingsJobHint,
+                                errorText: fieldErrors['job'],
+                              ),
+                              _buildCleanProfileField(
+                                fieldKey:
+                                    const Key('edit_profile_school_input'),
+                                controller: schoolCtrl,
+                                enabled: !busy,
+                                labelText: editL10n.settingsSchoolLabel,
+                                hintText: editL10n.settingsSchoolHint,
+                                errorText: fieldErrors['school'],
+                              ),
+                              _buildCleanProfileField(
+                                fieldKey:
+                                    const Key('edit_profile_languages_input'),
+                                controller: languagesCtrl,
+                                enabled: !busy,
+                                labelText: editL10n.settingsLanguagesLabel,
+                                hintText: editL10n.settingsLanguagesHint,
+                                errorText: fieldErrors['languages'],
+                              ),
+                              _buildCleanProfileField(
+                                fieldKey: const Key('edit_profile_bio_input'),
+                                controller: bioCtrl,
+                                enabled: !busy,
+                                maxLines: 3,
+                                minLines: 2,
+                                keyboardType: TextInputType.multiline,
+                                textInputAction: TextInputAction.newline,
+                                labelText: editL10n.settingsBioLabel,
+                                hintText: editL10n.settingsBioHint,
+                                errorText: fieldErrors['bio'],
+                              ),
+                              const SizedBox(height: AppSpacing.s8),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(minHeight: 48),
+                                  child: FilledButton(
+                                    key: const Key('edit_profile_save_button'),
+                                    onPressed: busy ? null : handleSave,
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: AppColors.primary,
+                                      foregroundColor: AppColors.textInverse,
+                                      shape: const StadiumBorder(),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: AppSpacing.s12,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      isSubmitting
+                                          ? editL10n.settingsSaving
+                                          : editL10n.ctaSave,
+                                    ),
                                   ),
                                 ),
                               ),
                             ],
-                          ),
-                        ),
-                      ],
-                      TextField(
-                        key: const Key('edit_profile_full_name_input'),
-                        controller: fullNameCtrl,
-                        enabled: !isSubmitting,
-                        textInputAction: TextInputAction.next,
-                        decoration: _buildPillInputDecoration(
-                          labelText: 'Họ và tên *',
-                          errorText: fieldErrors['fullName'],
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s12),
-                      TextField(
-                        key: const Key('edit_profile_phone_input'),
-                        controller: phoneCtrl,
-                        enabled: !isSubmitting,
-                        keyboardType: TextInputType.phone,
-                        textInputAction: TextInputAction.next,
-                        decoration: _buildPillInputDecoration(
-                          labelText: 'Số điện thoại',
-                          hintText: '0912345678 hoặc +84912345678',
-                          errorText: fieldErrors['phone'],
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s12),
-                      TextField(
-                        key: const Key('edit_profile_avatar_url_input'),
-                        controller: avatarUrlCtrl,
-                        enabled: !isSubmitting,
-                        keyboardType: TextInputType.url,
-                        textInputAction: TextInputAction.next,
-                        decoration: _buildPillInputDecoration(
-                          labelText: 'URL ảnh đại diện (Avatar URL)',
-                          hintText: 'https://...',
-                          errorText: fieldErrors['avatarUrl'],
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s12),
-                      TextField(
-                        key: const Key('edit_profile_location_input'),
-                        controller: locationCtrl,
-                        enabled: !isSubmitting,
-                        textInputAction: TextInputAction.next,
-                        decoration: _buildPillInputDecoration(
-                          labelText: 'Nơi sinh sống',
-                          errorText: fieldErrors['location'],
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s12),
-                      TextField(
-                        key: const Key('edit_profile_dream_destination_input'),
-                        controller: dreamDestinationCtrl,
-                        enabled: !isSubmitting,
-                        textInputAction: TextInputAction.next,
-                        decoration: _buildPillInputDecoration(
-                          labelText: 'Nơi tôi luôn muốn đến',
-                          errorText: fieldErrors['dreamDestination'],
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s12),
-                      TextField(
-                        key: const Key('edit_profile_job_input'),
-                        controller: jobCtrl,
-                        enabled: !isSubmitting,
-                        textInputAction: TextInputAction.next,
-                        decoration: _buildPillInputDecoration(
-                          labelText: 'Công việc / Nghề nghiệp',
-                          errorText: fieldErrors['job'],
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s12),
-                      TextField(
-                        key: const Key('edit_profile_school_input'),
-                        controller: schoolCtrl,
-                        enabled: !isSubmitting,
-                        textInputAction: TextInputAction.next,
-                        decoration: _buildPillInputDecoration(
-                          labelText: 'Trường học',
-                          errorText: fieldErrors['school'],
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s12),
-                      TextField(
-                        key: const Key('edit_profile_languages_input'),
-                        controller: languagesCtrl,
-                        enabled: !isSubmitting,
-                        textInputAction: TextInputAction.next,
-                        decoration: _buildPillInputDecoration(
-                          labelText:
-                              'Ngôn ngữ giao tiếp (phân cách bằng dấu phẩy)',
-                          errorText: fieldErrors['languages'],
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s12),
-                      TextField(
-                        key: const Key('edit_profile_bio_input'),
-                        controller: bioCtrl,
-                        enabled: !isSubmitting,
-                        maxLines: 3,
-                        decoration: _buildMultilineInputDecoration(
-                          labelText: 'Giới thiệu bản thân',
-                          errorText: fieldErrors['bio'],
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.s20),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: 48),
-                          child: FilledButton(
-                            key: const Key('edit_profile_save_button'),
-                            onPressed: isSubmitting ? null : handleSave,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.textStrong,
-                              foregroundColor: AppColors.textInverse,
-                              shape: const StadiumBorder(),
-                              padding: const EdgeInsets.symmetric(
-                                vertical: AppSpacing.s12,
-                              ),
-                            ),
-                            child: Text(
-                              isSubmitting ? 'Đang lưu...' : 'Lưu thay đổi',
-                            ),
                           ),
                         ),
                       ),
@@ -939,14 +1112,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  String _displayValue(String? primary, [String fallback = 'Chưa cập nhật']) {
-    if (primary != null && primary.trim().isNotEmpty) {
-      return primary.trim();
+  String _roleLabelForUser(User user, [AppLocalizations? l10n]) {
+    if (l10n != null) {
+      if (user.isAdmin) return l10n.settingsRoleAdmin;
+      if (user.isHost) return l10n.settingsRoleHost;
+      if (user.isNewHost) return l10n.settingsRoleHostPending;
+      return l10n.settingsRoleGuest;
     }
-    return fallback;
-  }
-
-  String _roleLabelForUser(User user) {
     if (user.isAdmin) return 'Quản trị viên (Admin)';
     if (user.isHost) return 'Chủ nhà (Host)';
     if (user.isNewHost) return 'Hồ sơ Chủ nhà đang chờ duyệt';
@@ -980,331 +1152,252 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         (authState.isLoading || activeSyncState.isLoading) &&
             effectiveUser == null;
 
+    final l10n = lookupAppLocalizations(Locale(currentLocale));
+
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Hồ sơ & Tài khoản'),
-        actions: [
-          if (effectiveUser != null)
-            ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-              child: IconButton(
-                key: const Key('settings_refresh_profile_button'),
-                tooltip: 'Đồng bộ hồ sơ từ máy chủ',
-                onPressed: activeSyncState.isLoading ? null : _handleRetrySync,
-                icon: const Icon(
-                  LucideIcons.refreshCw,
-                  size: 20,
-                  color: AppColors.iconStrong,
-                ),
-              ),
-            ),
-        ],
-      ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          color: AppColors.primary,
-          onRefresh: _handleRetrySync,
-          child: ListView(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.s16,
-              vertical: AppSpacing.s12,
-            ),
-            children: [
-              // Async Error / Offline / 401-403 Status Banner
-              if (activeSyncState.isOffline ||
-                  activeSyncState.isError ||
-                  activeSyncState.isUnauthorized) ...[
-                _buildAsyncStatusBanner(activeSyncState),
-                const SizedBox(height: AppSpacing.s16),
-              ],
+      backgroundColor: AppColors.surfaceBase,
+      body: Column(
+        children: [
+          const AppSearchHeader(
+            currentPath: '/account/profile',
+          ),
+          Expanded(
+            child: SafeArea(
+              top: false,
+              child: RefreshIndicator(
+                color: AppColors.primary,
+                onRefresh: _handleRetrySync,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenMargin,
+                    vertical: AppSpacing.s12,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Async Error / Offline / 401-403 Status Banner
+                      if (activeSyncState.isOffline ||
+                          activeSyncState.isError ||
+                          activeSyncState.isUnauthorized) ...[
+                        _buildAsyncStatusBanner(activeSyncState, l10n),
+                        const SizedBox(height: AppSpacing.s16),
+                      ],
 
-              // Group 1: Account Profile Section (`Hồ sơ cá nhân`)
-              _buildSectionHeader('Hồ sơ cá nhân'),
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.s20),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceBase,
-                  borderRadius: BorderRadius.circular(AppRadii.card),
-                  border: Border.all(color: AppColors.borderSoft),
-                ),
-                child: isInitialLoading
-                    ? _buildLoadingProfileCard()
-                    : (effectiveUser != null
-                        ? _buildSignedInProfileCard(effectiveUser)
-                        : _buildLoggedOutProfileCard()),
-              ),
-
-              const SizedBox(height: AppSpacing.s24),
-
-              // Group 2: Trips, Favorites & Messages (`Hoạt động lưu trú & Yêu thích`)
-              _buildSectionHeader('Hoạt động lưu trú & Yêu thích'),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceBase,
-                  borderRadius: BorderRadius.circular(AppRadii.card),
-                  border: Border.all(color: AppColors.borderSoft),
-                ),
-                child: Column(
-                  children: [
-                    if (effectiveUser != null) ...[
-                      _buildSettingsMenuTile(
-                        tileKey: const Key('menu_edit_profile'),
-                        icon: LucideIcons.userPen,
-                        title: 'Chỉnh sửa thông tin cá nhân',
-                        subtitle:
-                            'Họ tên, số điện thoại, nghề nghiệp, ngôn ngữ & giới thiệu',
-                        onTap: () => _openEditProfileModal(effectiveUser),
+                      // Group 1: Account Profile Section (`Hồ sơ cá nhân`)
+                      Padding(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: AppSpacing.s8),
+                        child: isInitialLoading
+                             ? _buildLoadingProfileCard(l10n)
+                             : (effectiveUser != null
+                                 ? _buildSignedInProfileCard(effectiveUser, l10n)
+                                 : _buildLoggedOutProfileCard(l10n)),
                       ),
-                      const Divider(height: 1, color: AppColors.borderSoft),
-                    ],
-                    _buildSettingsMenuTile(
-                      tileKey: const Key('menu_trips_history'),
-                      icon: LucideIcons.planeTakeoff,
-                      title: 'Chuyến đi của tôi',
-                      subtitle: 'Quản lý đặt phòng, thanh toán & đánh giá',
-                      onTap: () => _navigateProtectedRoute(
-                        context,
-                        '/account/trips',
-                        effectiveUser,
-                      ),
-                    ),
-                    const Divider(height: 1, color: AppColors.borderSoft),
-                    _buildSettingsMenuTile(
-                      tileKey: const Key('menu_favorites'),
-                      icon: LucideIcons.heart,
-                      title: 'Danh sách yêu thích',
-                      subtitle: 'Các căn biệt thự và chỗ nghỉ đã lưu',
-                      onTap: () => context.push('/yeu-thich'),
-                    ),
-                    const Divider(height: 1, color: AppColors.borderSoft),
-                    _buildSettingsMenuTile(
-                      tileKey: const Key('menu_multi_booking_cart'),
-                      icon: LucideIcons.shoppingBag,
-                      title: 'Giỏ chờ đặt nhiều căn',
-                      subtitle: 'Đặt cùng lúc tối đa 5 căn biệt thự',
-                      onTap: () => context.push('/gio-cho-dat'),
-                    ),
-                    const Divider(height: 1, color: AppColors.borderSoft),
-                    _buildSettingsMenuTile(
-                      tileKey: const Key('menu_messages'),
-                      icon: LucideIcons.messageSquare,
-                      title: 'Tin nhắn với Chủ nhà',
-                      subtitle: 'Trò chuyện thời gian thực (Socket.IO)',
-                      onTap: () => _navigateProtectedRoute(
-                        context,
-                        '/messages',
-                        effectiveUser,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
 
-              const SizedBox(height: AppSpacing.s24),
+                      _buildGroupDivider(),
 
-              // Group 3: Partner & Admin Portals (`Tiện ích & Cổng quản lý`)
-              _buildSectionHeader('Tiện ích & Cổng quản lý'),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceBase,
-                  borderRadius: BorderRadius.circular(AppRadii.card),
-                  border: Border.all(color: AppColors.borderSoft),
-                ),
-                child: Column(
-                  children: [
-                    if (effectiveUser != null && effectiveUser.isHost)
+                      // Group 2: Trips, Favorites & Messages
                       _buildSettingsMenuTile(
-                        tileKey: const Key('menu_host_portal'),
-                        icon: LucideIcons.house,
-                        title: 'Kênh Chủ nhà (Host Portal)',
-                        subtitle:
-                            'Quản lý chỗ nghỉ, lịch phòng, doanh thu & rút tiền',
-                        onTap: () => context.push('/chu-nha/cho-nghi'),
-                      )
-                    else if (effectiveUser != null && effectiveUser.isNewHost)
-                      _buildSettingsMenuTile(
-                        tileKey: const Key('menu_host_status'),
-                        icon: LucideIcons.clock,
-                        title: 'Trạng thái hồ sơ Chủ nhà',
-                        subtitle:
-                            'Theo dõi tiến độ xét duyệt đăng ký trở thành Chủ nhà',
-                        onTap: () => context.push('/tro-thanh-host/trang-thai'),
-                      )
-                    else
-                      _buildSettingsMenuTile(
-                        tileKey: const Key('menu_become_host'),
-                        icon: LucideIcons.housePlus,
-                        title: 'Đăng ký trở thành Chủ nhà (Host)',
-                        subtitle:
-                            'Quản lý chỗ nghỉ, lịch phòng, doanh thu & rút tiền',
-                        onTap: () => context.push('/tro-thanh-host'),
-                      ),
-                    if (effectiveUser != null && effectiveUser.isAdmin) ...[
-                      const Divider(height: 1, color: AppColors.borderSoft),
-                      _buildSettingsMenuTile(
-                        tileKey: const Key('menu_admin_portal'),
-                        icon: LucideIcons.shieldCheck,
-                        title: 'Quản trị hệ thống (Admin Portal)',
-                        subtitle:
-                            'Tổng quan, người dùng, kiểm duyệt bài đăng & hồ sơ Host',
-                        onTap: () => context.push('/admin'),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: AppSpacing.s24),
-
-              // Group 4: Language Switcher (`Ngôn ngữ / Language / 언어`)
-              _buildSectionHeader('Ngôn ngữ / Language / 언어'),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceBase,
-                  borderRadius: BorderRadius.circular(AppRadii.card),
-                  border: Border.all(color: AppColors.borderSoft),
-                ),
-                child: Column(
-                  children: [
-                    _buildLanguageTile(
-                      tileKey: const Key('lang_tile_vi'),
-                      title: 'Tiếng Việt',
-                      subtitle: 'Mặc định',
-                      isSelected: currentLocale == 'vi',
-                      onTap: () =>
-                          ref.read(localeProvider.notifier).setLocale('vi'),
-                    ),
-                    const Divider(height: 1, color: AppColors.borderSoft),
-                    _buildLanguageTile(
-                      tileKey: const Key('lang_tile_en'),
-                      title: 'English',
-                      subtitle: 'International',
-                      isSelected: currentLocale == 'en',
-                      onTap: () =>
-                          ref.read(localeProvider.notifier).setLocale('en'),
-                    ),
-                    const Divider(height: 1, color: AppColors.borderSoft),
-                    _buildLanguageTile(
-                      tileKey: const Key('lang_tile_ko'),
-                      title: '한국어',
-                      subtitle: 'Korean',
-                      isSelected: currentLocale == 'ko',
-                      onTap: () =>
-                          ref.read(localeProvider.notifier).setLocale('ko'),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: AppSpacing.s24),
-
-              // Group 5: Support & Contact (`Liên hệ & Hỗ trợ trực tiếp`)
-              _buildSectionHeader('Hỗ trợ trực tiếp'),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceBase,
-                  borderRadius: BorderRadius.circular(AppRadii.card),
-                  border: Border.all(color: AppColors.borderSoft),
-                ),
-                child: Column(
-                  children: [
-                    _buildSettingsMenuTile(
-                      tileKey: const Key('menu_contact_page'),
-                      icon: LucideIcons.lifeBuoy,
-                      title: 'Trung tâm Liên hệ & Hỗ trợ',
-                      subtitle:
-                          'Gửi yêu cầu hỗ trợ, địa chỉ & câu hỏi thường gặp',
-                      onTap: () => context.push('/lien-he'),
-                    ),
-                    const Divider(height: 1, color: AppColors.borderSoft),
-                    _buildSettingsMenuTile(
-                      tileKey: const Key('menu_call_hotline'),
-                      icon: LucideIcons.phone,
-                      title: 'Gọi tổng đài tư vấn',
-                      subtitle: AppConfig.hotlineNumber,
-                      onTap: () => ContactService.callHotline(),
-                    ),
-                    const Divider(height: 1, color: AppColors.borderSoft),
-                    _buildSettingsMenuTile(
-                      tileKey: const Key('menu_zalo_support'),
-                      icon: LucideIcons.messageCircle,
-                      title: 'Nhắn tin qua Zalo OA',
-                      subtitle: 'Hỗ trợ khách hàng 24/7',
-                      onTap: () {
-                        ContactService.openZaloInquiry(
-                          messageText:
-                              'Xin chào Minh Thanh Villa, tôi cần hỗ trợ thông tin ứng dụng.',
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: AppSpacing.s24),
-
-              // Group 6: Environment & Technical Info
-              _buildSectionHeader('Thông tin môi trường ứng dụng'),
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.s20),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceBase,
-                  borderRadius: BorderRadius.circular(AppRadii.card),
-                  border: Border.all(color: AppColors.borderSoft),
-                ),
-                child: Column(
-                  children: [
-                    _buildInfoRow(
-                      'Môi trường',
-                      AppConfig.environment.toUpperCase(),
-                    ),
-                    const SizedBox(height: AppSpacing.s12),
-                    _buildInfoRow('Phiên bản', '1.0.0 (Build 1)'),
-                    const SizedBox(height: AppSpacing.s12),
-                    _buildInfoRow('Hotline', AppConfig.hotlineNumber),
-                  ],
-                ),
-              ),
-
-              if (effectiveUser != null) ...[
-                const SizedBox(height: AppSpacing.s24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    child: OutlinedButton.icon(
-                      key: const Key('settings_bottom_logout_button'),
-                      onPressed: () => _confirmAndLogout(effectiveUser),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textStrong,
-                        side: const BorderSide(color: AppColors.borderStrong),
-                        shape: const StadiumBorder(),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: AppSpacing.s12,
-                          horizontal: AppSpacing.s20,
+                        tileKey: const Key('menu_trips_history'),
+                        icon: LucideIcons.calendarCheck,
+                        title: l10n.settingsMyTrips,
+                        onTap: () => _navigateProtectedRoute(
+                          context,
+                          '/account/trips',
+                          effectiveUser,
                         ),
                       ),
-                      icon: const Icon(
-                        LucideIcons.logOut,
-                        size: 18,
-                        color: AppColors.iconStrong,
+                      _buildSettingsMenuTile(
+                        tileKey: const Key('menu_favorites'),
+                        icon: LucideIcons.heart,
+                        title: l10n.settingsMyFavorites,
+                        onTap: () => context.push('/yeu-thich'),
                       ),
-                      label: const Text('Đăng xuất tài khoản'),
-                    ),
+                      _buildSettingsMenuTile(
+                        tileKey: const Key('menu_messages'),
+                        icon: AppSemanticIcons.messageHost,
+                        title: l10n.settingsMessagesWithHost,
+                        onTap: () => _navigateProtectedRoute(
+                          context,
+                          '/messages',
+                          effectiveUser,
+                        ),
+                      ),
+
+                      _buildGroupDivider(),
+
+                      // Group 3: Partner & Admin Portals + Language Preferences
+                      if (effectiveUser != null && effectiveUser.isAdmin)
+                        _buildSettingsMenuTile(
+                          tileKey: const Key('menu_admin_portal'),
+                          icon: AppSemanticIcons.adminPortal,
+                          title: l10n.navAdminPortal,
+                          onTap: () => context.push('/admin'),
+                        )
+                      else if (effectiveUser != null && effectiveUser.isHost)
+                        _buildSettingsMenuTile(
+                          tileKey: const Key('menu_host_portal'),
+                          icon: AppSemanticIcons.home,
+                          title: l10n.settingsManageProperties,
+                          onTap: () => context.push('/chu-nha/cho-nghi'),
+                        )
+                      else if (effectiveUser != null && effectiveUser.isNewHost)
+                        _buildSettingsMenuTile(
+                          tileKey: const Key('menu_host_status'),
+                          icon: AppSemanticIcons.hostApplications,
+                          title: l10n.hostKycStatusTitle,
+                          onTap: () =>
+                              context.push('/tro-thanh-host/trang-thai'),
+                        )
+                      else
+                        _buildSettingsMenuTile(
+                          tileKey: const Key('menu_become_host'),
+                          icon: AppSemanticIcons.becomeHost,
+                          title: l10n.navBecomeHost,
+                          onTap: () => context.push('/tro-thanh-host'),
+                        ),
+
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          dividerColor: Colors.transparent,
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                        ),
+                        child: ExpansionTile(
+                          key: const Key('settings_language_selector'),
+                          shape: const Border(),
+                          collapsedShape: const Border(),
+                          visualDensity: const VisualDensity(vertical: -2),
+                          tilePadding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.s4,
+                            vertical: 0,
+                          ),
+                          childrenPadding: const EdgeInsets.only(
+                            left: AppSpacing.s16,
+                            bottom: AppSpacing.s4,
+                          ),
+                          title: Row(
+                            children: [
+                              const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: Center(
+                                  child: Icon(
+                                    LucideIcons.globe,
+                                    size: 20,
+                                    color: AppColors.iconStrong,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.s12),
+                              Expanded(
+                                child: Text(
+                                  lookupAppLocalizations(Locale(currentLocale)).settingsLanguage,
+                                  style: _menuTitleStyle,
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.s8),
+                              Text(
+                                currentLocale == 'en'
+                                    ? 'English'
+                                    : currentLocale == 'ko'
+                                        ? '한국어'
+                                        : 'Tiếng Việt',
+                                style: _menuTrailingStyle,
+                              ),
+                            ],
+                          ),
+                          iconColor: AppColors.iconMuted,
+                          collapsedIconColor: AppColors.iconMuted,
+                          children: [
+                            _buildLanguageTile(
+                              tileKey: const Key('lang_tile_vi'),
+                              title: 'Tiếng Việt',
+                              subtitle: 'Mặc định • VND (₫)',
+                              isSelected: currentLocale == 'vi',
+                              onTap: () => ref
+                                  .read(localeProvider.notifier)
+                                  .setLocale('vi'),
+                            ),
+                            _buildLanguageTile(
+                              tileKey: const Key('lang_tile_en'),
+                              title: 'English',
+                              subtitle: r'International • USD ($)',
+                              isSelected: currentLocale == 'en',
+                              onTap: () => ref
+                                  .read(localeProvider.notifier)
+                                  .setLocale('en'),
+                            ),
+                            _buildLanguageTile(
+                              tileKey: const Key('lang_tile_ko'),
+                              title: '한국어',
+                              subtitle: '한국어 • KRW (₩)',
+                              isSelected: currentLocale == 'ko',
+                              onTap: () => ref
+                                  .read(localeProvider.notifier)
+                                  .setLocale('ko'),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      if (ref.watch(fxFeatureEnabledProvider))
+                        _buildCurrencyExpansionSection(currentLocale),
+
+                      _buildGroupDivider(),
+
+                      // Group 4: Support & Contact + Logout
+                      _buildSettingsMenuTile(
+                        tileKey: const Key('menu_contact_page'),
+                        icon: AppSemanticIcons.supportCenter,
+                        title: l10n.settingsContactSupportCenter,
+                        onTap: () => context.push('/lien-he'),
+                      ),
+                      _buildSettingsMenuTile(
+                        tileKey: const Key('menu_call_hotline'),
+                        icon: LucideIcons.phone,
+                        title: l10n.settingsCallHotline,
+                        trailingText: AppConfig.hotlineNumber,
+                        onTap: () => ContactService.callHotline(),
+                      ),
+                      _buildSettingsMenuTile(
+                        tileKey: const Key('menu_zalo_support'),
+                        icon: AppSemanticIcons.zaloSupport,
+                        title: l10n.settingsZaloSupport,
+                        onTap: () {
+                          ContactService.openZaloInquiry(
+                            messageText: l10n.settingsZaloInquiryDefaultMessage,
+                          );
+                        },
+                      ),
+
+                      if (effectiveUser != null)
+                        _buildSettingsMenuTile(
+                          tileKey: const Key('settings_bottom_logout_button'),
+                          icon: AppSemanticIcons.logout,
+                          title: l10n.authLogout,
+                          showChevron: false,
+                          onTap: () => _confirmAndLogout(effectiveUser),
+                        ),
+
+                      const SizedBox(height: AppSpacing.s32),
+                    ],
                   ),
                 ),
-              ],
-
-              const SizedBox(height: AppSpacing.s32),
-            ],
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildAsyncStatusBanner(AccountSyncState syncState) {
+  Widget _buildAsyncStatusBanner(
+    AccountSyncState syncState, [
+    AppLocalizations? l10n,
+  ]) {
+    final effectiveL10n = l10n ?? context.l10n;
     final bool isOffline = syncState.isOffline;
     final bool isUnauthorized = syncState.isUnauthorized;
 
@@ -1316,20 +1409,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     final IconData bannerIcon = isOffline
         ? LucideIcons.wifiOff
-        : (isUnauthorized ? LucideIcons.lock : LucideIcons.triangleAlert);
+        : (isUnauthorized ? LucideIcons.lock : AppSemanticIcons.errorAlert);
 
     final String bannerTitle = isOffline
-        ? 'Thiết bị đang ngoại tuyến'
+        ? effectiveL10n.settingsStatusOfflineTitle
         : (isUnauthorized
-            ? 'Phiên đăng nhập hết hạn hoặc bị từ chối'
-            : 'Không thể đồng bộ dữ liệu máy chủ');
+            ? effectiveL10n.settingsStatusUnauthorizedTitle
+            : effectiveL10n.settingsStatusServerErrorTitle);
 
     final String bannerMessage = syncState.message ??
         (isOffline
-            ? 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.'
+            ? effectiveL10n.settingsStatusOfflineMessage
             : (isUnauthorized
-                ? 'Phiên đăng nhập không hợp lệ hoặc bạn không có quyền truy cập (401/403).'
-                : 'Máy chủ đang gặp sự cố tạm thời. Vui lòng thử lại sau.'));
+                ? effectiveL10n.settingsStatusUnauthorizedMessage
+                : effectiveL10n.settingsStatusServerErrorMessage));
 
     return Container(
       key: bannerKey,
@@ -1381,11 +1474,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     shape: const StadiumBorder(),
                   ),
                   icon: const Icon(
-                    LucideIcons.refreshCw,
+                    AppSemanticIcons.retry,
                     size: 16,
                     color: AppColors.iconStrong,
                   ),
-                  label: const Text('Thử lại'),
+                  label: Text(effectiveL10n.ctaRetry),
                 ),
               ),
               if (isUnauthorized)
@@ -1403,7 +1496,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       size: 16,
                       color: AppColors.textInverse,
                     ),
-                    label: const Text('Đăng nhập lại'),
+                    label: Text(effectiveL10n.settingsReLogin),
                   ),
                 ),
             ],
@@ -1413,7 +1506,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildLoadingProfileCard() {
+  Widget _buildLoadingProfileCard([AppLocalizations? l10n]) {
+    final effectiveL10n = l10n ?? context.l10n;
     return Padding(
       key: const Key('settings_loading_state'),
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.s16),
@@ -1430,7 +1524,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(width: AppSpacing.s16),
           Expanded(
             child: Text(
-              'Đang tải thông tin tài khoản...',
+              effectiveL10n.settingsLoadingAccount,
               style: AppTypography.bodyMedium.copyWith(
                 color: AppColors.textSecondary,
               ),
@@ -1441,7 +1535,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildLoggedOutProfileCard() {
+  Widget _buildLoggedOutProfileCard([AppLocalizations? l10n]) {
+    final effectiveL10n = l10n ?? context.l10n;
     return Column(
       key: const Key('settings_logged_out_card'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1451,23 +1546,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Icon(
-              LucideIcons.userRound,
+              AppSemanticIcons.userProfile,
               color: AppColors.iconStrong,
-              size: 28,
+              size: 24,
             ),
             const SizedBox(width: AppSpacing.s12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Chưa đăng nhập',
-                    style: AppTypography.cardTitle,
+                  Text(
+                    effectiveL10n.settingsNotLoggedIn,
+                    style: AppTypography.cardTitle.copyWith(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.2,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.s4),
                   Text(
-                    'Đăng nhập để xem kỳ nghỉ, tin nhắn và đồng bộ yêu thích',
+                    effectiveL10n.settingsLoginPrompt,
                     style: AppTypography.caption.copyWith(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w400,
                       color: AppColors.textMuted,
                     ),
                   ),
@@ -1480,15 +1581,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         SizedBox(
           width: double.infinity,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48),
+            constraints: const BoxConstraints(minHeight: 46),
             child: FilledButton(
               key: const Key('settings_login_cta_button'),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 shape: const StadiumBorder(),
+                textStyle: AppTypography.buttonText.copyWith(fontSize: 14),
               ),
               onPressed: () => context.push('/dang-nhap'),
-              child: const Text('Đăng nhập / Đăng ký'),
+              child: Text(effectiveL10n.settingsSignInSignUp),
             ),
           ),
         ),
@@ -1496,136 +1598,215 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildSignedInProfileCard(User user) {
+  Widget _buildProfileActionIconButton({
+    required Key buttonKey,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: Tooltip(
+        message: tooltip,
+        child: GestureDetector(
+          key: buttonKey,
+          behavior: HitTestBehavior.opaque,
+          onTap: onPressed,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minWidth: 42,
+              minHeight: 42,
+            ),
+            child: Center(
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceBase,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Center(
+                  child: Icon(
+                    icon,
+                    size: 17,
+                    color: AppColors.iconStrong,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSignedInProfileCard(
+    User user, [
+    AppLocalizations? l10n,
+  ]) {
+    final effectiveL10n = l10n ?? context.l10n;
     final bool hasDraft =
         _unsavedDraft != null && _unsavedDraft!.userId == user.id;
+
+    final avatarBtn = _buildProfileActionIconButton(
+      buttonKey: const Key('settings_change_avatar_button'),
+      icon: AppSemanticIcons.changeAvatar,
+      tooltip: effectiveL10n.settingsChangeAvatarTooltip,
+      onPressed: () => _openAvatarUpdateModal(user),
+    );
+
+    final editProfileBtn = _buildProfileActionIconButton(
+      buttonKey: const Key('settings_edit_profile_button'),
+      icon: LucideIcons.pencil,
+      tooltip: effectiveL10n.settingsEditProfileTooltip,
+      onPressed: () => _openEditProfileModal(user),
+    );
+
+    final avatarWidget = Semantics(
+      button: true,
+      label: effectiveL10n.settingsAvatarUpdateTitle,
+      child: InkWell(
+        key: const Key('settings_avatar_tap_target'),
+        customBorder: const CircleBorder(),
+        onTap: () => _openAvatarUpdateModal(user),
+        child: Container(
+          width: 54,
+          height: 54,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceElevated,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.borderSoft),
+          ),
+          child: ClipOval(
+            child: SizedBox(
+              width: 54,
+              height: 54,
+              child: (user.avatarUrl != null &&
+                      user.avatarUrl!.trim().isNotEmpty)
+                  ? AppImage(
+                      url: user.avatarUrl!.trim(),
+                      fit: BoxFit.cover,
+                    )
+                  : Center(
+                      child: Text(
+                        user.firstName.isNotEmpty
+                            ? user.firstName[0].toUpperCase()
+                            : 'U',
+                        style: AppTypography.displayMedium.copyWith(
+                          color: AppColors.textStrong,
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final userInfoColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          user.fullName,
+          key: const Key('settings_user_fullname'),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.cardTitle.copyWith(
+            fontSize: 15.5,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.2,
+            height: 1.28,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          user.email,
+          key: const Key('settings_user_email'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.caption.copyWith(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w400,
+            color: AppColors.textMuted,
+            height: 1.32,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 2.5,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceElevated,
+            borderRadius: AppRadii.roundedPill,
+            border: Border.all(color: AppColors.borderSoft),
+          ),
+          child: Text(
+            _roleLabelForUser(user, effectiveL10n),
+            key: const Key('settings_role_label'),
+            style: AppTypography.caption.copyWith(
+              fontSize: 11,
+              color: AppColors.primary,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.05,
+            ),
+          ),
+        ),
+      ],
+    );
 
     return Column(
       key: const Key('settings_signed_in_card'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Semantics(
-              button: true,
-              label: 'Cập nhật ảnh đại diện',
-              child: InkWell(
-                key: const Key('settings_avatar_tap_target'),
-                customBorder: const CircleBorder(),
-                onTap: () => _openAvatarUpdateModal(user),
-                child: Container(
-                  width: 64,
-                  height: 64,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceElevated,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.borderSoft),
-                  ),
-                  child: ClipOval(
-                    child: SizedBox(
-                      width: 64,
-                      height: 64,
-                      child: (user.avatarUrl != null &&
-                              user.avatarUrl!.trim().isNotEmpty)
-                          ? AppImage(
-                              url: user.avatarUrl!.trim(),
-                              fit: BoxFit.cover,
-                            )
-                          : Center(
-                              child: Text(
-                                user.firstName.isNotEmpty
-                                    ? user.firstName[0].toUpperCase()
-                                    : 'U',
-                                style: AppTypography.displayMedium.copyWith(
-                                  color: AppColors.textStrong,
-                                  fontSize: 22,
-                                ),
-                              ),
-                            ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.s16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+            final bool showInlineActions =
+                constraints.maxWidth >= 310 && textScale < 1.35;
+
+            if (showInlineActions) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
-                    user.fullName,
-                    key: const Key('settings_user_fullname'),
-                    style: AppTypography.cardTitle,
-                  ),
-                  const SizedBox(height: AppSpacing.s4),
-                  Text(
-                    user.email,
-                    key: const Key('settings_user_email'),
-                    style: AppTypography.caption.copyWith(
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.s8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.s12,
-                      vertical: AppSpacing.s4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceElevated,
-                      borderRadius: AppRadii.roundedPill,
-                      border: Border.all(color: AppColors.borderSoft),
-                    ),
-                    child: Text(
-                      _roleLabelForUser(user),
-                      key: const Key('settings_role_label'),
-                      style: AppTypography.caption.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                  avatarWidget,
+                  const SizedBox(width: AppSpacing.s12),
+                  Expanded(child: userInfoColumn),
+                  const SizedBox(width: AppSpacing.s8),
+                  avatarBtn,
+                  const SizedBox(width: 4),
+                  editProfileBtn,
                 ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.s16),
-        Wrap(
-          spacing: AppSpacing.s8,
-          runSpacing: AppSpacing.s8,
-          children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48),
-              child: OutlinedButton.icon(
-                key: const Key('settings_change_avatar_button'),
-                style: OutlinedButton.styleFrom(shape: const StadiumBorder()),
-                onPressed: () => _openAvatarUpdateModal(user),
-                icon: const Icon(
-                  LucideIcons.camera,
-                  size: 16,
-                  color: AppColors.iconStrong,
+              );
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    avatarWidget,
+                    const SizedBox(width: AppSpacing.s12),
+                    Expanded(child: userInfoColumn),
+                  ],
                 ),
-                label: const Text('Đổi ảnh'),
-              ),
-            ),
-            ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48),
-              child: OutlinedButton.icon(
-                key: const Key('settings_edit_profile_button'),
-                style: OutlinedButton.styleFrom(shape: const StadiumBorder()),
-                onPressed: () => _openEditProfileModal(user),
-                icon: const Icon(
-                  LucideIcons.pencil,
-                  size: 16,
-                  color: AppColors.iconStrong,
+                const SizedBox(height: AppSpacing.s8),
+                Row(
+                  children: [
+                    avatarBtn,
+                    const SizedBox(width: AppSpacing.s8),
+                    editProfileBtn,
+                  ],
                 ),
-                label: const Text('Sửa hồ sơ'),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
         if (hasDraft) ...[
           const SizedBox(height: AppSpacing.s12),
@@ -1645,7 +1826,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(
-                  'Bạn có bản nháp hồ sơ chưa lưu thành công.',
+                  effectiveL10n.settingsUnsavedDraftBanner,
                   style: AppTypography.caption.copyWith(
                     color: AppColors.textStrong,
                     fontWeight: FontWeight.w600,
@@ -1661,97 +1842,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       size: 16,
                       color: AppColors.iconStrong,
                     ),
-                    label: const Text('Tiếp tục sửa'),
+                    label: Text(effectiveL10n.settingsResumeEditing),
                   ),
                 ),
               ],
             ),
           ),
         ],
-        const Divider(height: AppSpacing.s24, color: AppColors.divider),
-        _ProfileDetailRow(
-          icon: LucideIcons.phone,
-          label: 'Điện thoại',
-          value: _displayValue(user.phoneNumber),
-        ),
-        _ProfileDetailRow(
-          icon: LucideIcons.mapPin,
-          label: 'Nơi sinh sống',
-          value: _displayValue(user.location),
-        ),
-        _ProfileDetailRow(
-          icon: LucideIcons.briefcaseBusiness,
-          label: 'Công việc của tôi',
-          value: _displayValue(user.job),
-        ),
-        _ProfileDetailRow(
-          icon: LucideIcons.mapPinned,
-          label: 'Nơi tôi luôn muốn đến',
-          value: _displayValue(user.dreamDestination),
-        ),
-        _ProfileDetailRow(
-          icon: LucideIcons.graduationCap,
-          label: 'Nơi tôi từng theo học',
-          value: _displayValue(user.school),
-        ),
-        _ProfileDetailRow(
-          icon: LucideIcons.languages,
-          label: 'Ngôn ngữ của tôi',
-          value: user.languages.isNotEmpty
-              ? user.languages.join(', ')
-              : 'Chưa cập nhật',
-        ),
-        _ProfileDetailRow(
-          rowKey: const Key('settings_verification_status'),
-          icon: user.isVerified
-              ? LucideIcons.badgeCheck
-              : LucideIcons.shieldAlert,
-          label: 'Xác minh danh tính',
-          value: user.isVerified ? 'Đã xác minh' : 'Chưa xác minh',
-        ),
-        if (user.bio != null && user.bio!.trim().isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.s8),
-          Text(
-            user.bio!.trim(),
-            style: AppTypography.bodyMedium.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
-        const SizedBox(height: AppSpacing.s12),
-        Align(
-          alignment: Alignment.centerRight,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48),
-            child: TextButton.icon(
-              key: const Key('settings_logout_button'),
-              onPressed: () => _confirmAndLogout(user),
-              icon: const Icon(
-                LucideIcons.logOut,
-                size: 16,
-                color: AppColors.iconStrong,
-              ),
-              label: const Text('Đăng xuất tài khoản'),
-            ),
-          ),
-        ),
       ],
     );
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(
-        left: AppSpacing.s4,
-        bottom: AppSpacing.s8,
-      ),
-      child: Text(
-        title,
-        style: AppTypography.caption.copyWith(
-          fontWeight: FontWeight.w700,
-          color: AppColors.textMuted,
-        ),
-      ),
+  Widget _buildGroupDivider() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: AppSpacing.s8),
+      child: Divider(height: 1, thickness: 1, color: AppColors.borderSoft),
     );
   }
 
@@ -1759,51 +1864,168 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     Key? tileKey,
     required IconData icon,
     required String title,
-    required String subtitle,
+    String? trailingText,
+    bool showChevron = true,
     required VoidCallback onTap,
   }) {
-    return ListTile(
+    return InkWell(
       key: tileKey,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.s16,
-        vertical: AppSpacing.s4,
-      ),
-      leading: SizedBox(
-        width: 48,
-        height: 48,
-        child: Center(
-          child: Icon(
-            icon,
-            size: 20,
-            color: AppColors.iconStrong,
-          ),
-        ),
-      ),
-      title: Text(
-        title,
-        style: AppTypography.bodyLarge.copyWith(
-          fontWeight: FontWeight.w600,
-          color: AppColors.textStrong,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: AppTypography.caption.copyWith(
-          color: AppColors.textSecondary,
-        ),
-      ),
-      trailing: const SizedBox(
-        width: 48,
-        height: 48,
-        child: Center(
-          child: Icon(
-            LucideIcons.chevronRight,
-            size: 18,
-            color: AppColors.iconMuted,
-          ),
-        ),
-      ),
       onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.s4,
+            vertical: 11,
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: Center(
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: AppColors.iconStrong,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.s12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: _menuTitleStyle,
+                ),
+              ),
+              if (trailingText != null && trailingText.isNotEmpty) ...[
+                const SizedBox(width: AppSpacing.s8),
+                Flexible(
+                  flex: 0,
+                  child: Text(
+                    trailingText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _menuTrailingStyle,
+                  ),
+                ),
+              ],
+              if (showChevron) ...[
+                const SizedBox(width: AppSpacing.s8),
+                const Icon(
+                  LucideIcons.chevronRight,
+                  size: 18,
+                  color: AppColors.iconMuted,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrencyExpansionSection(String currentLocale) {
+    final preference = ref.watch(currencyPreferenceProvider);
+    final effectiveCurrency = ref.watch(effectiveCurrencyProvider);
+    final formatter = ref.watch(moneyFormatterProvider);
+    final l10n = formatter.l10n;
+
+    final trailingBadge = preference.isAutomatic
+        ? '${effectiveCurrency.code} (${effectiveCurrency.symbol})'
+        : '${effectiveCurrency.code} (${effectiveCurrency.symbol})';
+
+    return Theme(
+      data: Theme.of(context).copyWith(
+        dividerColor: Colors.transparent,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+      ),
+      child: ExpansionTile(
+        key: const Key('settings_currency_selector'),
+        shape: const Border(),
+        collapsedShape: const Border(),
+        visualDensity: const VisualDensity(vertical: -2),
+        tilePadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.s4,
+          vertical: 0,
+        ),
+        childrenPadding: const EdgeInsets.only(
+          left: AppSpacing.s16,
+          bottom: AppSpacing.s8,
+        ),
+        title: Row(
+          children: [
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: Center(
+                child: Icon(
+                  LucideIcons.coins,
+                  size: 20,
+                  color: AppColors.iconStrong,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.s12),
+            Expanded(
+              child: Text(
+                l10n.settingsCurrency,
+                style: _menuTitleStyle,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.s8),
+            Text(
+              trailingBadge,
+              style: _menuTrailingStyle,
+            ),
+          ],
+        ),
+        iconColor: AppColors.iconMuted,
+        collapsedIconColor: AppColors.iconMuted,
+        children: [
+          _buildLanguageTile(
+            tileKey: const Key('currency_tile_automatic'),
+            title: l10n.currencyFollowLanguage,
+            subtitle:
+                '${l10n.currencyFollowLanguageDesc} (${AppCurrency.defaultForLocale(currentLocale).code} ${AppCurrency.defaultForLocale(currentLocale).symbol})',
+            isSelected: preference.isAutomatic,
+            onTap: () =>
+                ref.read(currencyPreferenceProvider.notifier).setAutomatic(),
+          ),
+          _buildLanguageTile(
+            tileKey: const Key('currency_tile_vnd'),
+            title: 'VND (₫)',
+            subtitle: l10n.currencyNameVnd,
+            isSelected: preference.isManual &&
+                preference.manualCurrencyOverride == AppCurrency.vnd,
+            onTap: () => ref
+                .read(currencyPreferenceProvider.notifier)
+                .setManualCurrency(AppCurrency.vnd),
+          ),
+          _buildLanguageTile(
+            tileKey: const Key('currency_tile_usd'),
+            title: r'USD ($)',
+            subtitle: l10n.currencyNameUsd,
+            isSelected: preference.isManual &&
+                preference.manualCurrencyOverride == AppCurrency.usd,
+            onTap: () => ref
+                .read(currencyPreferenceProvider.notifier)
+                .setManualCurrency(AppCurrency.usd),
+          ),
+          _buildLanguageTile(
+            tileKey: const Key('currency_tile_krw'),
+            title: 'KRW (₩)',
+            subtitle: l10n.currencyNameKrw,
+            isSelected: preference.isManual &&
+                preference.manualCurrencyOverride == AppCurrency.krw,
+            onTap: () => ref
+                .read(currencyPreferenceProvider.notifier)
+                .setManualCurrency(AppCurrency.krw),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1814,115 +2036,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    return ListTile(
-      key: tileKey,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.s16,
-        vertical: AppSpacing.s4,
-      ),
-      title: Text(
-        title,
-        style: AppTypography.bodyLarge.copyWith(
-          fontWeight: FontWeight.w600,
-          color: AppColors.textStrong,
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        key: tileKey,
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.s16,
+          vertical: 2,
         ),
-      ),
-      subtitle: Text(subtitle, style: AppTypography.caption),
-      trailing: isSelected
-          ? const SizedBox(
-              width: 48,
-              height: 48,
-              child: Center(
-                child: Icon(
-                  LucideIcons.check,
-                  color: AppColors.iconStrong,
-                  size: 20,
+        title: Text(
+          title,
+          style: AppTypography.bodyMedium.copyWith(
+            fontSize: 13.5,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+            color: AppColors.textStrong,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: AppTypography.caption.copyWith(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w400,
+            color: AppColors.textMuted,
+          ),
+        ),
+        trailing: isSelected
+            ? const SizedBox(
+                width: 40,
+                height: 40,
+                child: Center(
+                  child: Icon(
+                    LucideIcons.check,
+                    color: AppColors.iconStrong,
+                    size: 18,
+                  ),
                 ),
-              ),
-            )
-          : null,
-      onTap: onTap,
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          flex: 2,
-          child: Text(
-            label,
-            style: AppTypography.bodyMedium.copyWith(
-              color: AppColors.textMuted,
-            ),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.s12),
-        Expanded(
-          flex: 3,
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: AppTypography.bodyMedium.copyWith(
-              fontWeight: FontWeight.w600,
-              color: AppColors.textStrong,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ProfileDetailRow extends StatelessWidget {
-  final Key? rowKey;
-  final IconData icon;
-  final String label;
-  final String value;
-
-  const _ProfileDetailRow({
-    this.rowKey,
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      key: rowKey,
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.s4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(icon, size: 16, color: AppColors.iconMuted),
-          ),
-          const SizedBox(width: AppSpacing.s12),
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: '$label: ',
-                    style: AppTypography.caption.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  TextSpan(
-                    text: value,
-                    style: AppTypography.caption.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textStrong,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+              )
+            : null,
+        onTap: onTap,
       ),
     );
   }

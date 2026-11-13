@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/date/booking_date.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/socket_service.dart';
+import '../../core/notifications/device_token_repository.dart';
+import '../../core/notifications/push_notification_service.dart';
 import '../../core/security/secure_storage_service.dart';
 import '../../core/storage/preferences_service.dart';
+export '../../core/currency/currency.dart';
 import '../../features/auth/presentation/view_models/auth_notifier.dart';
 import '../../features/favorites/data/repositories/wishlist_repository_impl.dart';
 import '../../features/favorites/domain/repositories/wishlist_repository.dart';
@@ -24,19 +27,41 @@ final dioClientProvider = Provider<DioClient>((ref) {
   final client = DioClient(secureStorage: secureStorage);
   ref.onDispose(() {
     client.abortSession(clearStorage: false);
+    client.dio.close(force: true);
   });
   return client;
 });
 
 final socketServiceProvider = Provider<SocketService>((ref) {
   final secureStorage = ref.watch(secureStorageProvider);
-  final service = SocketService(secureStorage: secureStorage);
+  final service = SocketService(
+    secureStorage: secureStorage,
+    onTokenRefreshRequested: () =>
+        ref.read(dioClientProvider).refreshAccessToken(),
+  );
   ref.onDispose(service.dispose);
   return service;
 });
 
 /// Overridden in bootstrap when initialized; falls back to active or in-memory
 /// PreferencesService in isolated widget/unit test containers.
+final deviceTokenRepositoryProvider = Provider<DeviceTokenRepository>((ref) {
+  final client = ref.watch(dioClientProvider);
+  return DeviceTokenRepositoryImpl(client);
+});
+
+final pushNotificationServiceProvider =
+    Provider<PushNotificationService>((ref) {
+  final repo = ref.watch(deviceTokenRepositoryProvider);
+  final socket = ref.watch(socketServiceProvider);
+  final service = PushNotificationService(
+    deviceTokenRepository: repo,
+    socketService: socket,
+  );
+  ref.onDispose(service.dispose);
+  return service;
+});
+
 final preferencesServiceProvider = Provider<PreferencesService>((ref) {
   return PreferencesService.activeInstance ?? PreferencesService.inMemory();
 });

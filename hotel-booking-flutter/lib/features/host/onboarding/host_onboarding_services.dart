@@ -5,10 +5,12 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../app/di/providers.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/security/secure_storage_service.dart';
+import '../../auth/presentation/view_models/auth_notifier.dart';
 import '../domain/host_models.dart';
 
 // =============================================================================
@@ -153,9 +155,62 @@ abstract final class HostOnboardingValidator {
     return null;
   }
 
+  /// Normalizes Vietnamese names: strips diacritics, replaces đ/Đ, converts to lowercase,
+  /// and trims redundant whitespace for robust KYC comparison.
+  static String normalizeVietnameseName(String text) {
+    if (text.isEmpty) return '';
+    var result = text.trim().toLowerCase();
+    result = result.replaceAll('đ', 'd').replaceAll('Đ', 'd');
+
+    const aChars = 'àáạảãâầấậẩẫăằắặẳẵ';
+    const eChars = 'èéẹẻẽêềếệểễ';
+    const iChars = 'ìíịỉĩ';
+    const oChars = 'òóọỏõôồốộổỗơờớợởỡ';
+    const uChars = 'ùúụủũưừứựửữ';
+    const yChars = 'ỳýỵỷỹ';
+
+    for (final c in aChars.split('')) {
+      result = result.replaceAll(c, 'a');
+    }
+    for (final c in eChars.split('')) {
+      result = result.replaceAll(c, 'e');
+    }
+    for (final c in iChars.split('')) {
+      result = result.replaceAll(c, 'i');
+    }
+    for (final c in oChars.split('')) {
+      result = result.replaceAll(c, 'o');
+    }
+    for (final c in uChars.split('')) {
+      result = result.replaceAll(c, 'u');
+    }
+    for (final c in yChars.split('')) {
+      result = result.replaceAll(c, 'y');
+    }
+
+    return result.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  /// Checks whether the user entered name matches the AI extracted identity card name.
+  /// Returns `true` if they match (ignoring case, spaces, and diacritics), or if either is empty.
+  static bool isNameMatching({
+    required String enteredName,
+    required String? aiExtractedName,
+  }) {
+    if (aiExtractedName == null || aiExtractedName.trim().isEmpty) {
+      return true;
+    }
+    final normEntered = normalizeVietnameseName(enteredName);
+    if (normEntered.isEmpty) {
+      return true;
+    }
+    final normAi = normalizeVietnameseName(aiExtractedName);
+    return normEntered == normAi;
+  }
+
   static String? validateContactEmail(String? raw) {
     final trimmed = (raw ?? '').trim();
-    if (trimmed.isEmpty) return null;
+    if (trimmed.isEmpty) return 'Vui lòng nhập email liên hệ.';
     if (trimmed.length > 255 || !_emailRegex.hasMatch(trimmed)) {
       return 'Email liên hệ không đúng định dạng (ví dụ: host@example.com).';
     }
@@ -192,21 +247,10 @@ abstract final class HostOnboardingValidator {
     return null;
   }
 
-  /// Checks whether a non-zero buffer matches one of the allowed KYC magic headers
-  /// (`JPEG`, `PNG`, `WebP`, `PDF`) or is a synthetic zero-filled test buffer.
+  /// Checks whether a buffer matches one of the allowed KYC magic headers
+  /// (`JPEG`, `PNG`, `WebP`, `PDF`). Zero-filled or spoofed files are rejected.
   static bool _hasValidOrSyntheticMagicBytes(Uint8List bytes) {
     if (bytes.isEmpty) return false;
-
-    // Allow synthetic all-zero buffers used in unit tests
-    bool allZero = true;
-    final sampleLen = bytes.length < 32 ? bytes.length : 32;
-    for (int i = 0; i < sampleLen; i++) {
-      if (bytes[i] != 0) {
-        allZero = false;
-        break;
-      }
-    }
-    if (allZero) return true;
 
     // JPEG: FF D8 FF
     if (bytes.length >= 3 &&
@@ -773,12 +817,23 @@ class DefaultHostOnboardingDraftService implements HostOnboardingDraftService {
 
   final SharedPreferences? _prefs;
   final Map<String, String> _fallbackMemoryStore;
+  final String? _userId;
 
   DefaultHostOnboardingDraftService({
     SharedPreferences? prefs,
     Map<String, String>? memoryStore,
+    String? userId,
   })  : _prefs = prefs,
-        _fallbackMemoryStore = memoryStore ?? <String, String>{};
+        _fallbackMemoryStore = memoryStore ?? <String, String>{},
+        _userId = userId?.trim();
+
+  String get effectiveStorageKey {
+    final uid = _userId;
+    if (uid != null && uid.isNotEmpty) {
+      return '${storageKey}_$uid';
+    }
+    return storageKey;
+  }
 
   /// Pre-populates raw JSON into the draft store (useful for testing tampered
   /// or legacy unconsented plaintext drafts).
@@ -786,26 +841,26 @@ class DefaultHostOnboardingDraftService implements HostOnboardingDraftService {
     final encoded = jsonEncode(rawMap);
     final prefs = _prefs;
     if (prefs != null) {
-      await prefs.setString(storageKey, encoded);
+      await prefs.setString(effectiveStorageKey, encoded);
     } else {
-      _fallbackMemoryStore[storageKey] = encoded;
+      _fallbackMemoryStore[effectiveStorageKey] = encoded;
     }
   }
 
   String? _readRawString() {
     final prefs = _prefs;
     if (prefs != null) {
-      return prefs.getString(storageKey);
+      return prefs.getString(effectiveStorageKey);
     }
-    return _fallbackMemoryStore[storageKey];
+    return _fallbackMemoryStore[effectiveStorageKey];
   }
 
   Future<void> _writeRawString(String value) async {
     final prefs = _prefs;
     if (prefs != null) {
-      await prefs.setString(storageKey, value);
+      await prefs.setString(effectiveStorageKey, value);
     } else {
-      _fallbackMemoryStore[storageKey] = value;
+      _fallbackMemoryStore[effectiveStorageKey] = value;
     }
   }
 
@@ -813,9 +868,9 @@ class DefaultHostOnboardingDraftService implements HostOnboardingDraftService {
   Future<void> clearDraft() async {
     final prefs = _prefs;
     if (prefs != null) {
-      await prefs.remove(storageKey);
+      await prefs.remove(effectiveStorageKey);
     } else {
-      _fallbackMemoryStore.remove(storageKey);
+      _fallbackMemoryStore.remove(effectiveStorageKey);
     }
   }
 
@@ -957,7 +1012,11 @@ class DefaultHostOnboardingDraftService implements HostOnboardingDraftService {
 
 final hostOnboardingDraftServiceProvider =
     Provider<HostOnboardingDraftService>((ref) {
-  return DefaultHostOnboardingDraftService();
+  String? userId;
+  try {
+    userId = ref.watch(authNotifierProvider.select((s) => s.valueOrNull?.id));
+  } catch (_) {}
+  return DefaultHostOnboardingDraftService(userId: userId);
 });
 
 /// Holds the latest submitted application record in memory during the current
@@ -965,7 +1024,12 @@ final hostOnboardingDraftServiceProvider =
 /// `/tro-thanh-host/trang-thai` can immediately reflect the non-approved status
 /// while re-fetching the canonical state from `GET /api/host/applications/me`.
 final hostLastSubmittedApplicationProvider =
-    StateProvider<HostApplicationRecord?>((ref) => null);
+    StateProvider<HostApplicationRecord?>((ref) {
+  try {
+    ref.watch(authNotifierProvider.select((s) => s.valueOrNull?.id));
+  } catch (_) {}
+  return null;
+});
 
 // =============================================================================
 // 6. DEDICATED HOST ONBOARDING API SERVICE (`/api/host/applications`)
@@ -1083,8 +1147,16 @@ class HostOnboardingApiService {
       documents: parsed.documents,
     );
   }
+
+  /// `POST /api/host/applications/cancel`
+  /// Cancels the current user's pending host application and deletes uploaded documents.
+  Future<bool> cancelApplication() async {
+    final response = await _dio.post<dynamic>('/api/host/applications/cancel');
+    return response.statusCode == 200;
+  }
 }
 
 final hostOnboardingApiProvider = Provider<HostOnboardingApiService>((ref) {
-  return HostOnboardingApiService();
+  final dioClient = ref.watch(dioClientProvider);
+  return HostOnboardingApiService(dio: dioClient.dio);
 });

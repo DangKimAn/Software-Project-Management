@@ -410,7 +410,7 @@ describe("semantic search fallback and scoring", () => {
 
         const unsupported = await service.semanticSearchListings({ query: "villa nha trang" });
         assert.equal(unsupported.reason, "UNSUPPORTED_LOCATION");
-        assert.equal(unsupported.message, "Minh Thành Villa hiện chỉ hỗ trợ khu vực Vũng Tàu.");
+        assert.equal(unsupported.message, "The Palm Villa hiện chỉ hỗ trợ khu vực Vũng Tàu.");
         assert.equal(unsupported.items.length, 0);
     });
 

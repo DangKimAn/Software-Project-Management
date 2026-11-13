@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { CookieOptions, Request } from "express";
 import { Op, QueryTypes, type Transaction } from "sequelize";
@@ -7,6 +7,8 @@ import { sendAuthOtpEmail } from "./auth-mail.service";
 import { ApiError } from "../../common/api-error";
 import sequelize from "../../config/database";
 import { getEnv } from "../../config/env";
+import { deactivateAllUserDeviceTokens } from "../../services/fcm-push.service";
+import { disconnectUserSockets } from "../../socket/socket";
 import { notifyUserRegistered } from "../notifications/notification.service";
 import AuthOtpToken, { AuthOtpPurpose } from "../../models/auth-otp-token";
 import RefreshSession from "../../models/refresh-session";
@@ -44,7 +46,7 @@ export const verifyRefreshToken = verifyRefreshTokenValue;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phonePattern = /^(0|\+84)[0-9]{9}$/;
 const repeatedLoginFailureThreshold = 5;
-const primaryRolePriority: UserRole[] = ["admin", "moderator", "host", "guest"];
+const primaryRolePriority: UserRole[] = ["admin", "host", "guest"];
 
 export type AuthenticatedUser = {
     id: string;
@@ -52,12 +54,14 @@ export type AuthenticatedUser = {
     phone: string;
     name: string;
     username: string | null;
+    avatarUrl?: string | null;
     status: UserStatus;
     roles: UserRole[];
 };
 
 export type AuthResponseUser = AuthenticatedUser & {
     userId: string;
+    avatarUrl: string | null;
     role: UserRole;
 };
 
@@ -323,7 +327,7 @@ export const getUserRoles = async (userId: string | number, transaction?: Transa
         FROM user_role ur
         INNER JOIN roles r ON r.role_id = ur.role_id
         WHERE ur.user_id = ?
-        ORDER BY FIELD(r.code, 'admin', 'moderator', 'host', 'guest')
+        ORDER BY FIELD(r.code, 'admin', 'host', 'guest')
         `,
         {
             replacements: [Number(userId)],
@@ -364,6 +368,7 @@ export const toAuthenticatedUser = async (user: UserDocument): Promise<Authentic
         phone: user.phone ?? "",
         name: user.fullName,
         username: user.username ?? null,
+        avatarUrl: user.avatarUrl ?? null,
         status: user.status,
         roles,
     };
@@ -382,6 +387,7 @@ export const toAuthResponseUser = async (
         phone: user.phone ?? "",
         name: user.fullName,
         username: user.username ?? null,
+        avatarUrl: user.avatarUrl ?? null,
         status: user.status,
         roles: resolvedRoles,
         role: selectPrimaryRole(resolvedRoles),
@@ -756,6 +762,22 @@ export const issueAuthOtp = async (
         return buildOtpResponse(normalizedIdentifier, null, expiresAt);
     }
 
+    if ((purpose === "verify_email" || purpose === "verify_phone") && !user) {
+        await createAuditLog({
+            actorId: null,
+            action: "auth.otp.issue",
+            targetType: "auth_otp",
+            metadata: {
+                purpose,
+                identifierHash,
+            },
+            ipAddress: context.ipAddress,
+            userAgent: context.userAgent,
+        });
+
+        return buildOtpResponse(normalizedIdentifier, null, expiresAt);
+    }
+
     /**
      * Tạo OTP thật.
      */
@@ -817,6 +839,15 @@ export const issueAuthOtp = async (
     return buildOtpResponse(normalizedIdentifier, otp, expiresAt);
 };
 
+const isConstantTimeEqualHash = (storedHash: string, candidateHash: string) => {
+    const storedBuf = Buffer.from(String(storedHash), "utf8");
+    const candidateBuf = Buffer.from(String(candidateHash), "utf8");
+    if (storedBuf.length !== candidateBuf.length) {
+        return false;
+    }
+    return timingSafeEqual(storedBuf, candidateBuf);
+};
+
 export const resetPasswordWithOtp = async (
     input: ResetPasswordInput,
     context: RequestContext = {},
@@ -859,7 +890,7 @@ export const resetPasswordWithOtp = async (
 
     otpToken.attemptCount += 1;
 
-    if (otpToken.tokenHash !== tokenHash) {
+    if (!isConstantTimeEqualHash(otpToken.tokenHash, tokenHash)) {
         await otpToken.save();
         throw new ApiError(400, "Invalid OTP");
     }
@@ -898,6 +929,9 @@ export const resetPasswordWithOtp = async (
             transaction,
         });
     });
+
+    await deactivateAllUserDeviceTokens(Number(user._id));
+    disconnectUserSockets(user._id);
 
     return {
         userId: String(user._id),
@@ -946,7 +980,7 @@ export const verifyPhoneWithOtp = async (
 
     otpToken.attemptCount += 1;
 
-    if (otpToken.tokenHash !== tokenHash) {
+    if (!isConstantTimeEqualHash(otpToken.tokenHash, tokenHash)) {
         await otpToken.save();
         throw new ApiError(400, "Invalid verification code");
     }
@@ -1025,7 +1059,7 @@ export const verifyEmailWithOtp = async (
 
     otpToken.attemptCount += 1;
 
-    if (otpToken.tokenHash !== tokenHash) {
+    if (!isConstantTimeEqualHash(otpToken.tokenHash, tokenHash)) {
         await otpToken.save();
         throw new ApiError(400, "Invalid verification code");
     }

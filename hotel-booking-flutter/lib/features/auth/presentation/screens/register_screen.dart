@@ -7,6 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../../data/services/google_auth_service.dart';
 import '../../domain/entities/user.dart';
@@ -273,7 +274,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       AppTextField(
                         controller: _phoneController,
                         readOnly: _isLoading,
-                        labelText: 'Số điện thoại',
+                        labelText: 'Số điện thoại *',
                         hintText: 'Nhập số điện thoại',
                         prefixIcon: const Icon(
                           LucideIcons.phone,
@@ -290,13 +291,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           }
                         },
                         validator: (v) =>
-                            _fieldErrors['phone'] ?? AuthValidation.phone(v),
+                            _fieldErrors['phone'] ??
+                            AuthValidation.phone(v, required: true),
                       ),
                       const SizedBox(height: AppSpacing.s16),
                       AppTextField(
                         controller: _emailController,
                         readOnly: _isLoading,
-                        labelText: 'Email',
+                        labelText: 'Email *',
                         hintText: 'Nhập địa chỉ email',
                         prefixIcon: const Icon(
                           LucideIcons.mail,
@@ -399,51 +401,56 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         ),
                         onPressed: _handleRegister,
                       ),
-                      const SizedBox(height: AppSpacing.s24),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        children: [
-                          Text(
-                            'Bạn đã có tài khoản? ',
-                            style: AppTypography.body
-                                .copyWith(color: AppColors.textMuted),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              if (context.canPop()) {
-                                context.pop();
-                              } else {
-                                final redirect = widget.redirectTo?.trim();
-                                if (redirect != null &&
-                                    AuthNotifier.isSafeRedirectPath(redirect)) {
-                                  context.go(
-                                    Uri(
-                                      path: '/dang-nhap',
-                                      queryParameters: <String, String>{
-                                        'redirectTo': redirect,
-                                      },
-                                    ).toString(),
-                                  );
+                      const SizedBox(height: AppSpacing.s16),
+                      Center(
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              'Bạn đã có tài khoản?',
+                              style: AppTypography.body
+                                  .copyWith(color: AppColors.textMuted),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                if (context.canPop()) {
+                                  context.pop();
                                 } else {
-                                  context.go('/dang-nhap');
+                                  final redirect = widget.redirectTo?.trim();
+                                  if (redirect != null &&
+                                      AuthNotifier.isSafeRedirectPath(
+                                          redirect)) {
+                                    context.go(
+                                      Uri(
+                                        path: '/dang-nhap',
+                                        queryParameters: <String, String>{
+                                          'redirectTo': redirect,
+                                        },
+                                      ).toString(),
+                                    );
+                                  } else {
+                                    context.go('/dang-nhap');
+                                  }
                                 }
-                              }
-                            },
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.s8,
+                              },
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                ),
+                                minimumSize: const Size(48, 48),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
-                              minimumSize: const Size(48, 48),
-                            ),
-                            child: Text(
-                              'Đăng nhập',
-                              style: AppTypography.body.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
+                              child: Text(
+                                'Đăng nhập',
+                                style: AppTypography.body.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.s16),
                       Row(
@@ -463,11 +470,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       const SizedBox(height: AppSpacing.s16),
                       AppButton.secondary(
                         text: 'Đăng nhập với Google',
-                        icon: const Icon(
-                          LucideIcons.logIn,
-                          size: 18,
-                          color: AppColors.iconStrong,
-                        ),
+                        icon: const AppBrandIcon.googleLogo(size: 20),
                         onPressed: _isLoading ? null : _handleGoogleLogin,
                       ),
                     ],

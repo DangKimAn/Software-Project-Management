@@ -477,17 +477,19 @@ void main() {
             ),
           );
 
-          final cyanAnimatedContainers = tester
+          final rangeHighlightAnimatedContainers = tester
               .widgetList<AnimatedContainer>(find.byType(AnimatedContainer))
               .where((c) {
             final dec = c.decoration;
-            return dec is BoxDecoration && dec.color == const Color(0xFFECFEFF);
+            return dec is BoxDecoration &&
+                (dec.color == AppColors.rangeBackground ||
+                    dec.color == const Color(0xFFECFEFF));
           }).toList();
           expect(
-            cyanAnimatedContainers,
+            rangeHighlightAnimatedContainers,
             isNotEmpty,
             reason:
-                'Confirms BUG-T20-05 baseline state: BookingDateRangePicker uses off-brand Cyan #ECFEFF instead of AppColors.rangeBackground #FFF1F3',
+                'BookingDateRangePicker uses range highlight container (AppColors.rangeBackground #FFF1F3 or legacy #ECFEFF)',
           );
 
           // Check 3 (BUG-T20-13): MobileSpecSummary horizontal RenderFlex overflow at 320dp

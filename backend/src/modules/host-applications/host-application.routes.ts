@@ -5,6 +5,7 @@ import { ApiError } from "../../common/api-error";
 import { authenticate } from "../../middlewares/authenticate.middleware";
 import { requireActiveUser } from "../../middlewares/require-active-user.middleware";
 import {
+    cancelHostApplicationController,
     getMyHostApplicationController,
     submitHostApplicationController,
 } from "./host-application.controller";
@@ -66,5 +67,8 @@ router.use(authenticate, requireActiveUser);
 
 router.get("/me", getMyHostApplicationController);
 router.post("/", uploadIdentityDocuments, submitHostApplicationController);
+router.post("/cancel", cancelHostApplicationController);
+router.post("/me/cancel", cancelHostApplicationController);
+router.delete("/me", cancelHostApplicationController);
 
 export default router;

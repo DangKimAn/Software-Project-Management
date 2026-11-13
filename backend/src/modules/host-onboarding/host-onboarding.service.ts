@@ -9,11 +9,12 @@ import HostApplication, {
 import User from "../../models/user";
 import type { AuthenticatedUser } from "../auth/auth.service";
 import { getExistingColumns } from "../../services/schema-introspection-service";
+import { notifyHostApplicationSubmitted } from "../notifications/notification.service";
 
 export type RegisterHostInput = {
     contactName?: string | null;
     contactEmail?: string | null;
-    contactPhone: string;
+    contactPhone?: string | null;
     businessAddress: string;
     entityType: HostEntityType;
     notes?: string | null;
@@ -86,10 +87,20 @@ export const registerHostApplication = async (
 
     return sequelize.transaction(async (transaction) => {
         const latestApplication = await getLatestHostApplication(userId, transaction);
+        const contactEmail = nullableTrim(input.contactEmail) ?? existingUser.email;
+        const contactPhone = (nullableTrim(input.contactPhone) ?? existingUser.phone)?.trim();
+
+        if (!contactEmail) {
+            throw new ApiError(422, "contactEmail is required");
+        }
+        if (!contactPhone) {
+            throw new ApiError(422, "contactPhone is required");
+        }
+
         const applicationPayload = {
             contactName: nullableTrim(input.contactName),
-            contactEmail: nullableTrim(input.contactEmail) ?? existingUser.email,
-            contactPhone: input.contactPhone.trim(),
+            contactEmail,
+            contactPhone,
             businessAddress: input.businessAddress.trim(),
             entityType: input.entityType,
             notes: nullableTrim(input.notes),
@@ -127,6 +138,15 @@ export const registerHostApplication = async (
             }
 
             await updateUserHostApplicationStatus(userId, "approved", transaction);
+            if (applicationPayload.contactName && applicationPayload.contactName.trim().length > 0) {
+                const userColumns = await getExistingColumns("users", ["full_name"], transaction);
+                if (userColumns.has("full_name")) {
+                    await sequelize.query("UPDATE users SET full_name = ? WHERE user_id = ?", {
+                        replacements: [applicationPayload.contactName.trim(), userId],
+                        transaction,
+                    });
+                }
+            }
             return serializeHostApplication(application, latestApplication === null);
         }
 
@@ -152,6 +172,13 @@ export const registerHostApplication = async (
         );
 
         await updateUserHostApplicationStatus(userId, "pending", transaction);
+
+        await notifyHostApplicationSubmitted(
+            Number(application.applicationId),
+            userId,
+            transaction,
+        );
+
         return serializeHostApplication(application, true);
     });
 };
@@ -173,6 +200,16 @@ export const markLatestHostApplicationApproved = async (
     application.rejectionReason = null;
     await application.save({ transaction });
     await updateUserHostApplicationStatus(userId, "approved", transaction);
+
+    if (application.contactName && application.contactName.trim().length > 0) {
+        const userColumns = await getExistingColumns("users", ["full_name"], transaction);
+        if (userColumns.has("full_name")) {
+            await sequelize.query("UPDATE users SET full_name = ? WHERE user_id = ?", {
+                replacements: [application.contactName.trim(), userId],
+                transaction,
+            });
+        }
+    }
 };
 export const getCurrentHostApplication = async (user: AuthenticatedUser) => {
     const userId = Number(user.id);
@@ -183,21 +220,30 @@ export const getCurrentHostApplication = async (user: AuthenticatedUser) => {
         throw new ApiError(404, "User not found");
     }
 
+    const isCurrentHost = user.roles.includes("host");
+    let status = application?.status ?? existingUser.hostApplicationStatus ?? null;
+    let rejectionReason = application?.rejectionReason ?? null;
+
+    if (status === "approved" && !isCurrentHost) {
+        status = "rejected";
+        rejectionReason = rejectionReason || "Quyền Host đã được quản trị viên điều chỉnh về Guest.";
+    }
+
     return {
-        status: application?.status ?? existingUser.hostApplicationStatus ?? null,
-        hostApplicationStatus: application?.status ?? existingUser.hostApplicationStatus ?? null,
+        status,
+        hostApplicationStatus: status,
         application: application
             ? {
                 applicationId: application.applicationId,
-                status: application.status,
-                hostApplicationStatus: application.status,
+                status,
+                hostApplicationStatus: status,
                 contactName: application.contactName,
                 contactEmail: application.contactEmail,
                 contactPhone: application.contactPhone,
                 businessAddress: application.businessAddress,
                 entityType: application.entityType,
                 notes: application.notes,
-                rejectionReason: application.rejectionReason,
+                rejectionReason,
                 reviewedAt: application.reviewedAt,
                 createdAt: application.createdAt,
                 updatedAt: application.updatedAt,

@@ -17,9 +17,13 @@ class AvailabilityCalendarModel extends Model<
     declare date: string;
     declare isAvailable: boolean;
     declare isBlockedByHost: boolean;
+    declare isBlockedByAdmin: CreationOptional<boolean>;
+    declare lockSource: CreationOptional<string | null>;
     declare priceOverride: number | null;
     declare minNightsOverride: number | null;
     declare notes: string | null;
+    declare syncRevision: CreationOptional<number>;
+    declare lastSheetSyncedAt: CreationOptional<Date | null>;
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
 }
@@ -52,6 +56,18 @@ AvailabilityCalendarModel.init(
             defaultValue: false,
             field: "is_blocked_by_host",
         },
+        isBlockedByAdmin: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false,
+            field: "is_blocked_by_admin",
+        },
+        lockSource: {
+            type: DataTypes.STRING(32),
+            allowNull: true,
+            defaultValue: null,
+            field: "lock_source",
+        },
         priceOverride: {
             type: DataTypes.DECIMAL(15, 2),
             allowNull: true,
@@ -65,6 +81,18 @@ AvailabilityCalendarModel.init(
         notes: {
             type: DataTypes.TEXT,
             allowNull: true,
+        },
+        syncRevision: {
+            type: DataTypes.BIGINT.UNSIGNED,
+            allowNull: false,
+            defaultValue: 0,
+            field: "sync_revision",
+        },
+        lastSheetSyncedAt: {
+            type: DataTypes.DATE,
+            allowNull: true,
+            defaultValue: null,
+            field: "last_sheet_synced_at",
         },
         createdAt: DataTypes.DATE,
         updatedAt: DataTypes.DATE,

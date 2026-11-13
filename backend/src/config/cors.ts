@@ -3,6 +3,9 @@ import type { CorsOptions } from "cors";
 import { ApiError } from "../common/api-error";
 import { getEnv } from "./env";
 
+const isLocalDevOrigin = (origin: string) =>
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+
 export const getCorsOptions = (): CorsOptions => {
     const env = getEnv();
     const allowedOrigins = env.corsOrigins;
@@ -22,7 +25,10 @@ export const getCorsOptions = (): CorsOptions => {
                 return callback(null, true);
             }
 
-            if (env.nodeEnv !== "production" && allowedOrigins.length === 0) {
+            if (
+                env.nodeEnv !== "production" &&
+                (allowedOrigins.length === 0 || isLocalDevOrigin(origin))
+            ) {
                 return callback(null, true);
             }
 

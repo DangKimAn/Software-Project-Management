@@ -931,7 +931,8 @@ const parseDateIntent = (normalized: string, now = new Date(), lightNorm?: strin
     // ── "N ngày M đêm" → nights = M ────────────────────────────────────────
     const nightsDaysMatch = normalized.match(/(\d+)\s*ngay\s+(\d+)\s*dem/);
     if (nightsDaysMatch) {
-        const nights = Number(nightsDaysMatch[2]);
+        const rawNights = Number(nightsDaysMatch[2]);
+        const nights = Number.isFinite(rawNights) ? Math.min(90, rawNights) : 0;
         if (nights > 0) {
             const checkIn = addDays(today, 1); // default to tomorrow
             return {

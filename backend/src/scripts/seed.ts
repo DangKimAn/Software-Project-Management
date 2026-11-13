@@ -16,33 +16,146 @@ import {
     AvailabilityCalendar,
 } from "../models";
 
-const VILLA_IMAGES = [
-    {
-        url: "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1200&q=80",
-        caption: "Mặt tiền biệt thự và hồ bơi ngoài trời",
-        isCover: true,
-    },
-    {
-        url: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80",
-        caption: "Phòng khách sang trọng hướng biển",
-        isCover: false,
-    },
-    {
-        url: "https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=1200&q=80",
-        caption: "Phòng ngủ Master view biển toàn cảnh",
-        isCover: false,
-    },
-    {
-        url: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
-        caption: "Khu vực bếp và bàn ăn ngoài trời",
-        isCover: false,
-    },
-    {
-        url: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80",
-        caption: "Phòng tắm hiện đại với bồn tắm sục",
-        isCover: false,
-    },
-];
+const VILLA_GALLERIES: Record<
+    number,
+    Array<{ url: string; caption: string; isCover: boolean }>
+> = {
+    101: [
+        {
+            url: "assets/images/109tranphu.jpg",
+            caption: "Mặt tiền biệt thự và hồ bơi ngoài trời",
+            isCover: true,
+        },
+        {
+            url: "assets/images/19tranphu.jpg",
+            caption: "Phòng khách sang trọng hướng biển",
+            isCover: false,
+        },
+        {
+            url: "assets/images/87tranphu.jpg",
+            caption: "Phòng ngủ Master view biển toàn cảnh",
+            isCover: false,
+        },
+        {
+            url: "assets/images/11tranphu.jpg",
+            caption: "Khu vực bếp và bàn ăn ngoài trời",
+            isCover: false,
+        },
+        {
+            url: "assets/images/NDT05929-HDR1.jpg",
+            caption: "Không gian nghỉ dưỡng toàn cảnh",
+            isCover: false,
+        },
+    ],
+    102: [
+        {
+            url: "assets/images/casamar.jpg",
+            caption: "Mặt tiền biệt thự và hồ bơi ngoài trời",
+            isCover: true,
+        },
+        {
+            url: "assets/images/lacase.jpg",
+            caption: "Phòng khách sang trọng hướng biển",
+            isCover: false,
+        },
+        {
+            url: "assets/images/diamond.jpg",
+            caption: "Phòng ngủ Master view biển toàn cảnh",
+            isCover: false,
+        },
+        {
+            url: "assets/images/b25thuyduong.jpg",
+            caption: "Khu vực bếp và bàn ăn ngoài trời",
+            isCover: false,
+        },
+        {
+            url: "assets/images/a3dtt.jpg",
+            caption: "Khuôn viên sân vườn và hồ bơi",
+            isCover: false,
+        },
+    ],
+    103: [
+        {
+            url: "assets/images/22012aphanchutrinh.jpg",
+            caption: "Mặt tiền biệt thự và hồ bơi ngoài trời",
+            isCover: true,
+        },
+        {
+            url: "assets/images/mocnhien.jpg",
+            caption: "Phòng khách sang trọng hướng biển",
+            isCover: false,
+        },
+        {
+            url: "assets/images/b5dtt.jpg",
+            caption: "Phòng ngủ Master view biển toàn cảnh",
+            isCover: false,
+        },
+        {
+            url: "assets/images/16022ahht.jpg",
+            caption: "Khu vực bếp và bàn ăn ngoài trời",
+            isCover: false,
+        },
+        {
+            url: "assets/images/16hahuytap.jpg",
+            caption: "Phòng tắm hiện đại và tiện nghi",
+            isCover: false,
+        },
+    ],
+    104: [
+        {
+            url: "assets/images/sunset.jpg",
+            caption: "Không gian homestay view biển Hạ Long",
+            isCover: true,
+        },
+        {
+            url: "assets/images/nabi.JPG",
+            caption: "Phòng khách thoáng đãng đón nắng",
+            isCover: false,
+        },
+        {
+            url: "assets/images/s07.jpg",
+            caption: "Phòng ngủ ấm cúng hướng biển",
+            isCover: false,
+        },
+        {
+            url: "assets/images/osaka.jpg",
+            caption: "Góc thư giãn và bếp tiện nghi",
+            isCover: false,
+        },
+        {
+            url: "assets/images/6nguyentuan.jpg",
+            caption: "Ban công ngắm hoàng hôn",
+            isCover: false,
+        },
+    ],
+    105: [
+        {
+            url: "assets/images/343vothisau.jpg",
+            caption: "Mặt tiền biệt thự sân vườn Bãi Trước",
+            isCover: true,
+        },
+        {
+            url: "assets/images/1phanhuychu.jpg",
+            caption: "Phòng khách rộng rãi và sang trọng",
+            isCover: false,
+        },
+        {
+            url: "assets/images/c12tongocvan.jpg",
+            caption: "Phòng ngủ Master thoáng mát",
+            isCover: false,
+        },
+        {
+            url: "assets/images/nasa.jpg",
+            caption: "Khu vực BBQ sân vườn và hồ bơi",
+            isCover: false,
+        },
+        {
+            url: "assets/images/NDT05929-HDR1.jpg",
+            caption: "Không gian giải trí và nghỉ dưỡng",
+            isCover: false,
+        },
+    ],
+};
 
 const seed = async () => {
     console.info("🌱 Bắt đầu nạp dữ liệu mẫu (Seeding Database)...");
@@ -141,6 +254,13 @@ const seed = async () => {
                 bio: `Tài khoản ${u.fullName} tại hệ thống The Palm Villa`,
             },
         });
+
+        if (user.fullName !== u.fullName || (user.bio && user.bio.includes("MinhThanh"))) {
+            await user.update({
+                fullName: u.fullName,
+                bio: `Tài khoản ${u.fullName} tại hệ thống The Palm Villa`,
+            });
+        }
 
         userMap.set(u.email, user);
 
@@ -312,7 +432,8 @@ const seed = async () => {
     ];
 
     for (const l of listingsData) {
-        const imagesWithMeta = VILLA_IMAGES.map((img, idx) => ({
+        const gallery = VILLA_GALLERIES[l.listingId] ?? VILLA_GALLERIES[101];
+        const imagesWithMeta = gallery.map((img, idx) => ({
             imageId: l.listingId * 10 + idx + 1,
             url: img.url,
             caption: img.caption,
@@ -320,7 +441,7 @@ const seed = async () => {
             isCover: img.isCover,
         }));
 
-        await Listing.findOrCreate({
+        const [listingRecord, created] = await Listing.findOrCreate({
             where: { listingId: l.listingId },
             defaults: {
                 listingId: l.listingId,
@@ -361,11 +482,14 @@ const seed = async () => {
                 deletedAt: null,
             },
         });
+        if (!created) {
+            await listingRecord.update({ title: l.title, images: imagesWithMeta });
+        }
 
         // Seed Listing Images table
-        for (let idx = 0; idx < VILLA_IMAGES.length; idx++) {
-            const img = VILLA_IMAGES[idx];
-            await ListingImage.findOrCreate({
+        for (let idx = 0; idx < gallery.length; idx++) {
+            const img = gallery[idx];
+            const [imgRecord, imgCreated] = await ListingImage.findOrCreate({
                 where: {
                     listingId: l.listingId,
                     sortOrder: idx,
@@ -379,6 +503,13 @@ const seed = async () => {
                     aiAnalysisStatus: "analyzed",
                 },
             });
+            if (!imgCreated) {
+                await imgRecord.update({
+                    url: img.url,
+                    caption: img.caption,
+                    isCover: img.isCover,
+                });
+            }
         }
 
         // Seed Listing Amenities mapping
@@ -419,44 +550,105 @@ const seed = async () => {
         }
 
         // Seed Reviews
-        await Review.findOrCreate({
-            where: {
-                listingId: l.listingId,
-                reviewerName: "Lê Hoàng Long",
-            },
-            defaults: {
-                reviewId: l.listingId * 10 + 1,
-                bookingId: null,
-                listingId: l.listingId,
-                reviewerUserId: guestUser.userId,
-                reviewerName: "Lê Hoàng Long",
-                rating: 5,
-                comment:
-                    "Villa quá đẹp, hồ bơi sạch và view biển ngắm hoàng hôn đỉnh cao! Chủ nhà nhiệt tình hỗ trợ đoàn mình tiệc BBQ rất chu đáo. Chắc chắn sẽ quay lại!",
-                hostReply: "Cảm ơn bạn Long và đoàn đã ghé thăm, rất hân hạnh được đón tiếp bạn lần sau nhé!",
-                isVisible: true,
-                deletedAt: null,
-            },
-        });
+        if (l.listingId === 105) {
+            await Review.destroy({
+                where: {
+                    listingId: 105,
+                    reviewerName: ["Lê Hoàng Long", "Nguyễn Hải Đăng"],
+                },
+            });
 
-        await Review.findOrCreate({
-            where: {
-                listingId: l.listingId,
-                reviewerName: "Nguyễn Hải Đăng",
-            },
-            defaults: {
-                reviewId: l.listingId * 10 + 2,
-                bookingId: null,
-                listingId: l.listingId,
-                reviewerUserId: null,
-                reviewerName: "Nguyễn Hải Đăng",
-                rating: 5,
-                comment: "Không gian rộng rãi, tiện nghi cao cấp, phòng ốc thơm tho sạch sẽ. 10/10 điểm!",
-                hostReply: null,
-                isVisible: true,
-                deletedAt: null,
-            },
-        });
+            const reviews105 = [
+                {
+                    reviewId: 1051,
+                    reviewerUserId: guestUser.userId,
+                    reviewerName: "Trần Minh Quân",
+                    rating: 4,
+                    comment:
+                        "Villa 105 có khuôn viên sân vườn rất xanh mát và thoáng đãng! Cả nhà mình ai cũng mê hồ cá Koi, các bé nhỏ thích cho cá ăn và chơi ngoài sân cả buổi. Phòng khách sang trọng, bàn bi-a giải trí buổi tối rất vui, vị trí ngay Bãi Trước nên đi bộ ra biển hay ghé các quán ăn nổi tiếng đều cực kỳ tiện. Trừ 1 sao nhẹ vì cuối tuần đường Quang Trung hơi nhộn nhịp vào giờ cao điểm, còn lại mọi thứ từ phòng ốc đến tiện nghi đều rất tuyệt vời, rất đáng tiền!",
+                    hostReply:
+                        "Dạ em cảm ơn anh Quân và gia đình đã dành thời gian nghỉ dưỡng tại The Palm Villa 105 ạ! Do villa nằm ở vị trí trung tâm Bãi Trước nên dịp cuối tuần sẽ sôi động hơn ngày thường một chút. Rất hân hạnh được đón tiếp gia đình mình trong những chuyến đi tiếp theo!",
+                },
+                {
+                    reviewId: 1052,
+                    reviewerUserId: null,
+                    reviewerName: "Hoàng Thu Trang",
+                    rating: 4,
+                    comment:
+                        "Biệt thự thực tế đẹp và sạch sẽ y hệt như hình mô tả. Nhóm tụi mình 12 người nướng BBQ ngoài sân vườn cực kỳ thoải mái và mát mẻ, khu bếp trang bị đầy đủ dụng cụ nấu nướng. Anh host hỗ trợ siêu nhiệt tình từ lúc nhận phòng đến khi trả phòng. Chỉ góp ý nho nhỏ là nếu phòng tắm tầng trên có thêm 1 máy sấy tóc công suất lớn nữa thì trọn vẹn 5 sao hoàn hảo luôn. Nhất định sẽ giới thiệu bạn bè ghé lại!",
+                    hostReply:
+                        "The Palm Villa cảm ơn Trang và nhóm bạn rất nhiều vì lời khen cũng như góp ý thiết thực ạ! Villa đã trang bị thêm máy sấy tóc công suất lớn cho các phòng theo gợi ý của bạn rồi nhé. Chúc bạn luôn có những chuyến đi thật vui vẻ!",
+                },
+            ];
+
+            for (const r of reviews105) {
+                const [revRecord, revCreated] = await Review.findOrCreate({
+                    where: {
+                        listingId: 105,
+                        reviewerName: r.reviewerName,
+                    },
+                    defaults: {
+                        reviewId: r.reviewId,
+                        bookingId: null,
+                        listingId: 105,
+                        reviewerUserId: r.reviewerUserId,
+                        reviewerName: r.reviewerName,
+                        rating: r.rating,
+                        comment: r.comment,
+                        hostReply: r.hostReply,
+                        isVisible: true,
+                        deletedAt: null,
+                    },
+                });
+
+                if (!revCreated) {
+                    await revRecord.update({
+                        rating: r.rating,
+                        comment: r.comment,
+                        hostReply: r.hostReply,
+                    });
+                }
+            }
+        } else {
+            await Review.findOrCreate({
+                where: {
+                    listingId: l.listingId,
+                    reviewerName: "Lê Hoàng Long",
+                },
+                defaults: {
+                    reviewId: l.listingId * 10 + 1,
+                    bookingId: null,
+                    listingId: l.listingId,
+                    reviewerUserId: guestUser.userId,
+                    reviewerName: "Lê Hoàng Long",
+                    rating: 5,
+                    comment:
+                        "Villa quá đẹp, hồ bơi sạch và view biển ngắm hoàng hôn đỉnh cao! Chủ nhà nhiệt tình hỗ trợ đoàn mình tiệc BBQ rất chu đáo. Chắc chắn sẽ quay lại!",
+                    hostReply: "Cảm ơn bạn Long và đoàn đã ghé thăm, rất hân hạnh được đón tiếp bạn lần sau nhé!",
+                    isVisible: true,
+                    deletedAt: null,
+                },
+            });
+
+            await Review.findOrCreate({
+                where: {
+                    listingId: l.listingId,
+                    reviewerName: "Nguyễn Hải Đăng",
+                },
+                defaults: {
+                    reviewId: l.listingId * 10 + 2,
+                    bookingId: null,
+                    listingId: l.listingId,
+                    reviewerUserId: null,
+                    reviewerName: "Nguyễn Hải Đăng",
+                    rating: 5,
+                    comment: "Không gian rộng rãi, tiện nghi cao cấp, phòng ốc thơm tho sạch sẽ. 10/10 điểm!",
+                    hostReply: null,
+                    isVisible: true,
+                    deletedAt: null,
+                },
+            });
+        }
     }
 
     // 4. Seed Coupons
@@ -518,7 +710,7 @@ const seed = async () => {
         },
     });
 
-    await Blog.findOrCreate({
+    const [blog1, blog1Created] = await Blog.findOrCreate({
         where: { slug: "top-5-bai-bien-dep-nhat-vung-tau" },
         defaults: {
             slug: "top-5-bai-bien-dep-nhat-vung-tau",
@@ -528,7 +720,7 @@ const seed = async () => {
             readTime: "5 phút đọc",
             location: "Vũng Tàu",
             excerpt: "Khám phá vẻ đẹp hoang sơ của Bãi Dâu, Bãi Dứa và những cung đường biển check-in triệu view tại Vũng Tàu.",
-            coverImage: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80",
+            coverImage: "assets/images/NDT05929-HDR1.jpg",
             content: [
                 "Vũng Tàu luôn là điểm đến nghỉ dưỡng số 1 cho cư dân miền Nam vào mỗi dịp cuối tuần.",
                 "Bên cạnh Bãi Sau nhộn nhịp, Bãi Dâu và Bãi Dứa sở hữu làn nước trong xanh và sự yên tĩnh hiếm có.",
@@ -539,8 +731,11 @@ const seed = async () => {
             createdByUserId: hostThanh.userId,
         },
     });
+    if (!blog1Created) {
+        await blog1.update({ coverImage: "assets/images/NDT05929-HDR1.jpg" });
+    }
 
-    await Blog.findOrCreate({
+    const [blog2, blog2Created] = await Blog.findOrCreate({
         where: { slug: "kinh-nghiem-thue-villa-vung-tau-gia-dinh" },
         defaults: {
             slug: "kinh-nghiem-thue-villa-vung-tau-gia-dinh",
@@ -550,7 +745,7 @@ const seed = async () => {
             readTime: "7 phút đọc",
             location: "Vũng Tàu",
             excerpt: "Những tiêu chí quan trọng khi đặt villa: hồ bơi riêng, tiện ích BBQ, vị trí sát biển và độ uy tín của chủ nhà.",
-            coverImage: "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=1200&q=80",
+            coverImage: "assets/images/19tranphu.jpg",
             content: [
                 "Khi đi du lịch theo đoàn từ 8 - 15 người, thuê trọn gói một căn villa luôn là lựa chọn tiết kiệm và riêng tư nhất.",
                 "Hãy ưu tiên các căn có hồ bơi riêng và sân vườn rộng để tổ chức tiệc nướng hải sản buổi tối.",
@@ -561,9 +756,17 @@ const seed = async () => {
             createdByUserId: hostThanh.userId,
         },
     });
+    if (!blog2Created) {
+        await blog2.update({ coverImage: "assets/images/19tranphu.jpg" });
+    }
 
     console.info("🎉 Seeding Database hoàn tất thành công 100%!");
 };
+
+if (process.env.NODE_ENV === "production" && process.env.ALLOW_PRODUCTION_SEED !== "true") {
+    console.error("Refusing to run seed script in production without ALLOW_PRODUCTION_SEED=true");
+    process.exit(1);
+}
 
 seed()
     .then(async () => {

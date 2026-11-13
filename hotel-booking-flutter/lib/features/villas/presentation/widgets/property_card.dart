@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/animations/animated_heart_button.dart';
 import '../../../../shared/animations/pressable_scale.dart';
 import '../../../../shared/widgets/price_display.dart';
@@ -135,7 +136,9 @@ class PropertyCard extends StatelessWidget {
 
                 // Description / Tagline preview
                 Text(
-                  villa.tagline.isNotEmpty ? villa.tagline : villa.description,
+                  villa.tagline.isNotEmpty
+                      ? villa.tagline
+                      : villa.descriptionDisplayFor(context.activeLanguageCode),
                   style: AppTypography.caption.copyWith(
                     color: const Color(0xFF4B5563),
                     height: 1.45,
@@ -162,12 +165,17 @@ class PropertyCard extends StatelessWidget {
                         saturdayPriceVnd: villa.saturdayPriceVnd,
                       ),
                     ),
-                    const Text(
-                      'Còn trống',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF0891B2),
+                    Flexible(
+                      flex: 0,
+                      child: Text(
+                        context.l10n.statusAvailable,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
                       ),
                     ),
                   ],

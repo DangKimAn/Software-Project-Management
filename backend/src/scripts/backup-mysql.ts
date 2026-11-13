@@ -31,13 +31,12 @@ const runBackup = async () => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const outputFile = path.join(backupDir, `${env.dbName}-${timestamp}.sql.gz`);
 
-    await fs.mkdir(backupDir, { recursive: true });
+    await fs.mkdir(backupDir, { recursive: true, mode: 0o700 });
 
     const args = [
         `--host=${env.dbHost}`,
         `--port=${env.dbPort}`,
         `--user=${env.dbUser}`,
-        `--password=${env.dbPassword}`,
         "--single-transaction",
         "--quick",
         "--routines",
@@ -49,10 +48,14 @@ const runBackup = async () => {
     await new Promise<void>((resolve, reject) => {
         const dump = spawn("mysqldump", args, {
             stdio: ["ignore", "pipe", "pipe"],
+            env: {
+                ...process.env,
+                MYSQL_PWD: env.dbPassword,
+            },
         });
 
         const gzip = createGzip();
-        const output = createWriteStream(outputFile);
+        const output = createWriteStream(outputFile, { mode: 0o600 });
 
         let stderr = "";
 
@@ -84,4 +87,4 @@ const runBackup = async () => {
 runBackup().catch((error) => {
     logger.error("Database backup failed", error);
     process.exit(1);
-});     
+});

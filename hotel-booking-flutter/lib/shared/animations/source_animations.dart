@@ -36,14 +36,30 @@ class _CalFadeInState extends State<CalFadeIn>
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: widget.duration);
-    final curved = CurvedAnimation(parent: _controller, curve: _curve);
+    final curved = _controller.drive(CurveTween(curve: _curve));
     _opacity = Tween<double>(begin: 0.0, end: 1.0).animate(curved);
     _scale = Tween<double>(begin: 0.97, end: 1.0).animate(curved);
     _slide = Tween<Offset>(
       begin: const Offset(0, -0.04),
       end: Offset.zero,
     ).animate(curved);
-    _controller.forward();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+      _controller.value = 1;
+    } else if (!_controller.isCompleted && !_controller.isAnimating) {
+      _controller.forward();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant CalFadeIn oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _controller.duration = widget.duration;
   }
 
   @override
@@ -97,8 +113,24 @@ class _SearchPopInState extends State<SearchPopIn>
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: widget.duration);
-    _curved = CurvedAnimation(parent: _controller, curve: _curve);
-    _controller.forward();
+    _curved = _controller.drive(CurveTween(curve: _curve));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+      _controller.value = 1;
+    } else if (!_controller.isCompleted && !_controller.isAnimating) {
+      _controller.forward();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant SearchPopIn oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _controller.duration = widget.duration;
   }
 
   @override
@@ -198,76 +230,13 @@ class MapMarkerPulse extends StatefulWidget {
   State<MapMarkerPulse> createState() => _MapMarkerPulseState();
 }
 
-class _MapMarkerPulseState extends State<MapMarkerPulse>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _curved;
-
-  static const Cubic _curve = Cubic(0.215, 0.61, 0.355, 1.0);
-
+class _MapMarkerPulseState extends State<MapMarkerPulse> {
   @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    )..repeat();
-    _curved = CurvedAnimation(parent: _controller, curve: _curve);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final inner = widget.child ??
-        Container(
-          width: 12,
-          height: 12,
-          decoration: const BoxDecoration(
-            color: Color(0xFF222222),
-            shape: BoxShape.circle,
-          ),
-        );
-    if (MediaQuery.disableAnimationsOf(context)) {
-      return inner;
-    }
-    return SizedBox(
-      width: widget.pulseSize,
-      height: widget.pulseSize,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          AnimatedBuilder(
-            animation: _curved,
-            builder: (context, _) {
-              final t = _curved.value;
-              final scale = 0.5 + 1.0 * t;
-              final opacity = (1.0 - t).clamp(0.0, 1.0);
-              return Opacity(
-                opacity: opacity,
-                child: Transform.scale(
-                  scale: scale,
-                  child: Container(
-                    width: widget.pulseSize,
-                    height: widget.pulseSize,
-                    decoration: BoxDecoration(
-                      color: widget.pulseColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-          inner,
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => SizedBox(
+        width: widget.pulseSize,
+        height: widget.pulseSize,
+        child: Center(child: widget.child ?? const Icon(LucideIcons.mapPin)),
+      );
 }
 
 /// Exact scroll visibility logic from `Source goc/frontend/src/hooks/useScrollVisibility.ts`
@@ -364,15 +333,13 @@ class AppModal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: CalFadeIn(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxWidth),
           child: Container(
             decoration: BoxDecoration(
-              color: AppColors.surfaceBase,
+              color: Theme.of(context).dialogTheme.backgroundColor,
               borderRadius: AppRadii.roundedModal,
               border: Border.all(color: AppColors.borderSoft),
             ),
@@ -423,7 +390,7 @@ class AppModal extends StatelessWidget {
                   ],
                   child,
                   if (actions != null && actions!.isNotEmpty) ...[
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     Wrap(
                       alignment: WrapAlignment.end,
                       spacing: 12,
@@ -482,16 +449,7 @@ class AppToast extends StatelessWidget {
   }
 
   Color _backgroundColor() {
-    switch (type) {
-      case AppToastType.success:
-        return AppColors.successSoft;
-      case AppToastType.warning:
-        return AppColors.warningSoft;
-      case AppToastType.error:
-        return AppColors.errorSoft;
-      case AppToastType.info:
-        return AppColors.surfaceWarmSand;
-    }
+    return AppColors.surfaceBase;
   }
 
   IconData _iconData() {
@@ -533,6 +491,7 @@ class AppToast extends StatelessWidget {
             if (onDismiss != null)
               IconButton(
                 onPressed: onDismiss,
+                tooltip: 'Đóng',
                 constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 icon: const Icon(
                   LucideIcons.x,

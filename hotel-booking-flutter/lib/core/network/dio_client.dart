@@ -104,6 +104,8 @@ class DioClient {
   CancelToken? _refreshCancelToken;
   final Set<CancelToken> _activeSessionCancelTokens = <CancelToken>{};
   final Map<String, CancelToken> _keyedCancelTokens = <String, CancelToken>{};
+  final Map<Timer, Completer<void>> _activeRetryTimers =
+      <Timer, Completer<void>>{};
   int _sessionEpoch = 0;
 
   DioClient({
@@ -367,6 +369,15 @@ class DioClient {
       }
     }
 
+    final retryTimers = Map<Timer, Completer<void>>.from(_activeRetryTimers);
+    _activeRetryTimers.clear();
+    for (final entry in retryTimers.entries) {
+      entry.key.cancel();
+      if (!entry.value.isCompleted) {
+        entry.value.complete();
+      }
+    }
+
     if (clearStorage && _secureStorage != null) {
       await _secureStorage.clearAuthSession();
     }
@@ -437,7 +448,10 @@ class DioClient {
       return true;
     }
 
-    if (path.startsWith('/api/amenities') || path.startsWith('/api/banks')) {
+    if (path.startsWith('/api/amenities') ||
+        path.startsWith('/api/banks') ||
+        path.startsWith('/api/exchange-rates') ||
+        path.startsWith('/api/v1/exchange-rates')) {
       return true;
     }
 
@@ -464,6 +478,35 @@ class DioClient {
       return false;
     }
     return false;
+  }
+
+  /// Verifies that [options] targets the configured API origin (or a relative API path),
+  /// preventing Bearer tokens and refresh cookies from leaking to third-party domains.
+  bool isTrustedApiRequest(RequestOptions options) {
+    final reqUri = options.uri;
+    if (!reqUri.hasAuthority || reqUri.host.trim().isEmpty) {
+      return true;
+    }
+    final configuredBase = _dio.options.baseUrl.trim().isNotEmpty
+        ? _dio.options.baseUrl.trim()
+        : AppConfig.apiBaseUrl.trim();
+    final baseUri = Uri.tryParse(normalizeBaseUrl(configuredBase));
+    if (baseUri == null || baseUri.host.trim().isEmpty) {
+      return false;
+    }
+    final reqScheme = reqUri.scheme.toLowerCase();
+    final baseScheme = baseUri.scheme.toLowerCase();
+    if (reqScheme != baseScheme) {
+      return false;
+    }
+    if (reqUri.host.toLowerCase() != baseUri.host.toLowerCase()) {
+      return false;
+    }
+    final reqPort =
+        reqUri.hasPort ? reqUri.port : (reqScheme == 'https' ? 443 : 80);
+    final basePort =
+        baseUri.hasPort ? baseUri.port : (baseScheme == 'https' ? 443 : 80);
+    return reqPort == basePort;
   }
 
   Future<void> _handleRequest(
@@ -503,9 +546,10 @@ class DioClient {
       options.cancelToken = sessionToken;
     }
 
+    final trustedOrigin = isTrustedApiRequest(options);
     final skipAuthToken = options.extra['skipAuthToken'] == true ||
         options.extra['publicEndpoint'] == true;
-    if (_secureStorage != null && !skipAuthToken) {
+    if (_secureStorage != null && !skipAuthToken && trustedOrigin) {
       try {
         final token = await _secureStorage.getAuthToken();
         if (token != null &&
@@ -521,6 +565,7 @@ class DioClient {
     // On native platforms (!kIsWeb), attach stored refreshToken cookie to /api/auth/* requests.
     if (!kIsWeb &&
         _secureStorage != null &&
+        trustedOrigin &&
         _isAuthCookieTargetPath(options.path)) {
       try {
         final refreshCookie = await _secureStorage.getRefreshCookie();
@@ -748,7 +793,16 @@ class DioClient {
       final currentRetryCount = (reqOptions.extra['retryCount'] as int?) ?? 0;
       final delay = _computeRetryDelay(error, currentRetryCount);
       if (delay > Duration.zero) {
-        await Future<void>.delayed(delay);
+        final completer = Completer<void>();
+        late final Timer timer;
+        timer = Timer(delay, () {
+          _activeRetryTimers.remove(timer);
+          if (!completer.isCompleted) {
+            completer.complete();
+          }
+        });
+        _activeRetryTimers[timer] = completer;
+        await completer.future;
       }
 
       if (_sessionEpoch == epochBeforeDelay &&

@@ -36,9 +36,9 @@ export const sequelize = new Sequelize(env.dbName, env.dbUser, env.dbPassword, {
     },
     pool: {
         max: 10,          // Tối đa 10 connections
-        min: 2,           // Giữ sẵn 2 connections luôn mở → tránh tạo mới khi có request
+        min: env.nodeEnv === "test" ? 0 : 2,           // Trong test mode không giữ connection idle tối thiểu
         acquire: 30000,   // Timeout khi lấy connection: 30s
-        idle: 60000,      // Đóng connection idle sau 60s (thay vì mặc định 10s)
+        idle: env.nodeEnv === "test" ? 1000 : 60000,   // Đóng connection idle sau 1s trong test, 60s trong dev/prod
     },
     define: {
         charset: "utf8mb4",

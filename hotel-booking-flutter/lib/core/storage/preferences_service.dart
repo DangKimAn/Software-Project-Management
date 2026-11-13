@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_constants.dart';
 
@@ -415,6 +416,8 @@ class _InMemoryPrefsBacking {
     _data.remove(key);
     return true;
   }
+
+  Iterable<String> getKeys() => _data.keys.toList();
 }
 
 class PreferencesService {
@@ -533,12 +536,68 @@ class PreferencesService {
   }
 
   // --- Locale ---
+  /// Resolves the app default locale based on the device's system language:
+  /// - Vietnamese ('vi') -> 'vi'
+  /// - Korean ('ko') -> 'ko'
+  /// - English ('en') -> 'en'
+  /// - Any other language -> defaults to 'en'
+  static String resolveDefaultLocale([String? systemLanguageCode]) {
+    final code = (systemLanguageCode ?? _detectSystemLanguageCode()).toLowerCase().trim();
+    if (code.startsWith('vi')) return 'vi';
+    if (code.startsWith('ko')) return 'ko';
+    if (code.startsWith('en')) return 'en';
+    return 'en';
+  }
+
+  static String _detectSystemLanguageCode() {
+    try {
+      return ui.PlatformDispatcher.instance.locale.languageCode;
+    } catch (_) {
+      return 'en';
+    }
+  }
+
   String getLocale() {
-    return _getString(AppConstants.storageLocaleKey) ?? 'vi';
+    final saved = _getString(AppConstants.storageLocaleKey);
+    if (saved != null && saved.trim().isNotEmpty) {
+      return saved.trim();
+    }
+    return 'vi';
   }
 
   Future<bool> setLocale(String languageCode) {
     return _setString(AppConstants.storageLocaleKey, languageCode.trim());
+  }
+
+  // --- Currency Preference & FX Rate Snapshot Cache (Preserved across sessions & upgrades) ---
+  String? getCurrencyPreferenceRaw() {
+    return _getString(AppConstants.storageCurrencyPreferenceKey);
+  }
+
+  Future<bool> setCurrencyPreferenceRaw(String serializedJson) {
+    return _setString(
+      AppConstants.storageCurrencyPreferenceKey,
+      serializedJson,
+    );
+  }
+
+  Future<bool> clearCurrencyPreference() {
+    return _remove(AppConstants.storageCurrencyPreferenceKey);
+  }
+
+  String? getExchangeRateSnapshotRaw() {
+    return _getString(AppConstants.storageExchangeRateSnapshotKey);
+  }
+
+  Future<bool> setExchangeRateSnapshotRaw(String serializedJson) {
+    return _setString(
+      AppConstants.storageExchangeRateSnapshotKey,
+      serializedJson,
+    );
+  }
+
+  Future<bool> clearExchangeRateSnapshot() {
+    return _remove(AppConstants.storageExchangeRateSnapshotKey);
   }
 
   // --- Favorites / Wishlist (with Guest -> Auth Migration & Account Isolation) ---
@@ -795,10 +854,11 @@ class PreferencesService {
 
   // --- Account Profile Extra Fields (`accountProfileStorage.ts`) ---
   Map<String, dynamic> getAccountProfile([String? userId]) {
-    final key = (userId != null && userId.isNotEmpty)
-        ? '${_keyAccountProfile}_$userId'
+    final normalizedUserId = userId?.trim() ?? '';
+    final key = normalizedUserId.isNotEmpty
+        ? '${_keyAccountProfile}_$normalizedUserId'
         : _keyAccountProfile;
-    final raw = _getString(key) ?? _getString(_keyAccountProfile);
+    final raw = _getString(key);
     if (raw == null || raw.isEmpty) return <String, dynamic>{};
     try {
       final decoded = jsonDecode(raw);
@@ -814,11 +874,11 @@ class PreferencesService {
     Map<String, dynamic>? profileData,
   ]) async {
     if (profileOrUserId is String && profileData != null) {
-      final key = profileOrUserId.isNotEmpty
-          ? '${_keyAccountProfile}_$profileOrUserId'
+      final normalizedUserId = profileOrUserId.trim();
+      final key = normalizedUserId.isNotEmpty
+          ? '${_keyAccountProfile}_$normalizedUserId'
           : _keyAccountProfile;
       await _setString(key, jsonEncode(profileData));
-      await _setString(_keyAccountProfile, jsonEncode(profileData));
     } else if (profileOrUserId is Map) {
       await _setString(
         _keyAccountProfile,
@@ -869,9 +929,21 @@ class PreferencesService {
     await _remove(_keyWishlistSyncedUserId);
     await _remove(_keyWishlistInvalidIds);
     await _remove(_keyBookingQueue);
+    await _remove(_keyRecentlyViewed);
     await _remove(_keySearchHistory);
     await _remove(_keyLastAiQuery);
     await _remove(_keyPendingBookingIntent);
+    await _remove(_keyAccountProfile);
+    await _remove('host_onboarding_kyc_draft_v2');
+
+    final existingKeys = _prefs?.getKeys() ?? _memory?.getKeys() ?? const <String>[];
+    for (final key in existingKeys.toList()) {
+      if (key.startsWith('${_keyAccountProfile}_') ||
+          key.startsWith('host_onboarding_kyc_draft_v2_')) {
+        await _remove(key);
+      }
+    }
+
     _notifySessionStateChanged();
   }
 }

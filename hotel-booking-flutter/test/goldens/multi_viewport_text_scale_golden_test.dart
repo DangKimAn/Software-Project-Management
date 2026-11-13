@@ -1,3 +1,6 @@
+@Tags(['golden'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
@@ -322,7 +325,6 @@ class GoldenResponsiveShowcase extends StatelessWidget {
         totalCalculatedVnd: 15700000,
         selectedNights: nightlyPrices.length,
         onBookNow: () {},
-        onAddToQueue: () {},
         onCallHotline: () {},
       ),
     );

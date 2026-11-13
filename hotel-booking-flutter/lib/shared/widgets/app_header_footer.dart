@@ -6,10 +6,16 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../app/di/providers.dart';
 import '../../app/theme/app_colors.dart';
+import '../../core/config/app_config.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/socket_service.dart';
 import '../../features/auth/presentation/view_models/auth_notifier.dart';
+import '../../features/search/presentation/widgets/source_search_bar.dart';
+import '../../features/trips/presentation/widgets/global_pending_booking_banner.dart';
+import '../../l10n/l10n.dart';
 import 'app_semantic_icons.dart';
+import 'currency_language_selector.dart';
+import 'notification_glass_widgets.dart';
 
 class AppNotificationItem {
   final String id;
@@ -47,10 +53,382 @@ class AppNotificationItem {
         eventType = eventType ?? type ?? 'system',
         body = body ?? message ?? '';
 
+  static final RegExp _legacyVillaBrandPattern =
+      RegExp(r'Minh\s*Th(?:ành|anh)\s+Villa', caseSensitive: false);
+  static final RegExp _legacyLuxuryBrandPattern =
+      RegExp(r'MinhThanh\s+Luxury', caseSensitive: false);
+
+  /// Normalizes legacy brand text from historical DB notification records to The Palm Villa.
+  static String normalizeBrandText(String input) {
+    if (input.isEmpty) return input;
+    return input
+        .replaceAll(_legacyVillaBrandPattern, 'The Palm Villa')
+        .replaceAll(_legacyLuxuryBrandPattern, 'The Palm Luxury');
+  }
+
   /// Backward-compatible getters
   String get type => eventType;
   String get message => body;
   Map<String, dynamic>? get metadata => payload;
+  bool get forAdmin =>
+      payload?['forAdmin'] == true ||
+      payload?['isAdminNotification'] == true ||
+      payload?['targetRole'] == 'admin' ||
+      title.startsWith('[Admin]');
+
+  String titleDisplayFor(String? localeCode, [MoneyFormatter? formatter]) {
+    final localized = localizeNotificationTitle(title, eventType, localeCode);
+    return convertCurrencyInText(localized, formatter);
+  }
+
+  String bodyDisplayFor(String? localeCode, [MoneyFormatter? formatter]) {
+    final converted = convertCurrencyInText(body, formatter);
+    return localizeNotificationBody(converted, localeCode);
+  }
+
+  static String convertCurrencyInText(String text, MoneyFormatter? formatter) {
+    if (formatter == null || !formatter.effectiveCurrency.isForeign) {
+      return text;
+    }
+    final moneyRegex = RegExp(
+      r'(\d{1,3}(?:[.,]\d{3})+|\d{5,})\s*(?:₫|đ|VND|vnd|VNĐ|vnđ)',
+      caseSensitive: false,
+    );
+    return text.replaceAllMapped(moneyRegex, (match) {
+      final rawDigits = match.group(1)!.replaceAll(RegExp(r'[.,]'), '');
+      final amount = int.tryParse(rawDigits);
+      if (amount == null || amount <= 0) return match.group(0)!;
+      final res =
+          formatter.format(amount, context: MoneyDisplayContext.breakdown);
+      return res.formatted;
+    });
+  }
+
+  static String localizeNotificationTitle(
+    String rawTitle,
+    String? eventType,
+    String? localeCode,
+  ) {
+    if (rawTitle.isEmpty) return rawTitle;
+    final isEn =
+        localeCode == 'en' || (localeCode != null && localeCode.startsWith('en'));
+    final isKo =
+        localeCode == 'ko' || (localeCode != null && localeCode.startsWith('ko'));
+    if (!isEn && !isKo) return rawTitle;
+
+    final trimmed = rawTitle.trim();
+    final lower = trimmed.toLowerCase();
+    final eType = (eventType ?? '').toUpperCase();
+
+    if (lower == 'thanh toán thành công' || eType == 'PAYMENT_SUCCESS') {
+      return isEn ? 'Payment successful' : '결제 완료';
+    }
+    if (lower == 'thanh toán đang chờ xử lý' || eType == 'PAYMENT_PENDING') {
+      return isEn ? 'Payment pending' : '결제 대기 중';
+    }
+    if (lower == 'booking đã được tạo' ||
+        lower == 'đặt phòng đã được tạo' ||
+        eType == 'BOOKING_CREATED') {
+      return isEn ? 'Booking created' : '예약 생성 완료';
+    }
+    if (lower == 'phiên thanh toán đã hết hạn' ||
+        lower == 'booking đã hết hạn thanh toán' ||
+        eType == 'PAYMENT_EXPIRED') {
+      return isEn ? 'Payment session expired' : '결제 세션 만료';
+    }
+    if (lower.startsWith('đặt phòng đã được xác nhận') ||
+        lower.startsWith('booking đã được xác nhận') ||
+        eType == 'BOOKING_CONFIRMED') {
+      return isEn ? 'Booking confirmed' : '예약 확정';
+    }
+    if (lower == 'bạn đã xác nhận booking') {
+      return isEn ? 'Booking confirmed by you' : '예약 확정 완료';
+    }
+    if (lower == 'booking đã thanh toán') {
+      return isEn ? 'Booking paid' : '예약 결제 완료';
+    }
+    if (lower == 'có booking mới') {
+      return isEn ? 'New booking received' : '새 예약 접수';
+    }
+    if (lower == 'booking đã bị hủy' ||
+        lower == 'đặt phòng đã bị hủy' ||
+        eType == 'BOOKING_CANCELLED') {
+      return isEn ? 'Booking cancelled' : '예약 취소';
+    }
+    if (lower == 'yêu cầu hoàn tiền đã được tạo' || eType == 'REFUND_CREATED') {
+      return isEn ? 'Refund request created' : '환불 요청 생성';
+    }
+    if (lower == 'có refund mới cần xử lý') {
+      return isEn ? 'New refund request pending review' : '새 환불 요청 대기 중';
+    }
+    if (lower == 'hoàn tiền thành công' || eType == 'REFUND_SUCCESS') {
+      return isEn ? 'Refund successful' : '환불 완료';
+    }
+    if (lower == 'payout đã được tạo' || eType == 'PAYOUT_CREATED') {
+      return isEn ? 'Payout created' : '정산 내역 생성';
+    }
+    if (lower == 'có đánh giá mới' || eType == 'REVIEW_CREATED') {
+      return isEn ? 'New review received' : '새 후기 등록';
+    }
+    if (lower.contains('hồ sơ đối tác đã được duyệt') ||
+        lower.contains('hồ sơ host đã được duyệt') ||
+        eType == 'HOST_APPLICATION_APPROVED') {
+      return isEn ? 'Host application approved' : '호스트 신청 승인';
+    }
+    if (lower.contains('hồ sơ đăng ký host bị từ chối') ||
+        lower.contains('hồ sơ host bị từ chối') ||
+        eType == 'HOST_APPLICATION_REJECTED') {
+      return isEn ? 'Host application rejected' : '호스트 신청 거절';
+    }
+    if (lower == 'listing đã được duyệt' || eType == 'LISTING_APPROVED') {
+      return isEn ? 'Listing approved' : '숙소 등록 승인';
+    }
+    if (lower == 'listing bị từ chối' || eType == 'LISTING_REJECTED') {
+      return isEn ? 'Listing rejected' : '숙소 등록 거절';
+    }
+    if (lower == 'tin đăng đã gửi kiểm duyệt' || eType == 'LISTING_SUBMITTED') {
+      return isEn ? 'Listing submitted for review' : '숙소 검토 요청 제출';
+    }
+    if (lower.contains('có hồ sơ host mới chờ duyệt')) {
+      return isEn
+          ? '[Admin] New host application awaiting review'
+          : '[Admin] 새 호스트 승인 대기 중';
+    }
+    if (lower.contains('có listing mới chờ duyệt')) {
+      return isEn
+          ? '[Admin] New listing awaiting review'
+          : '[Admin] 새 숙소 승인 대기 중';
+    }
+    if (lower.contains('xin chào đến với the palm villa')) {
+      return isEn ? 'Welcome to The Palm Villa' : 'The Palm Villa에 오신 것을 환영합니다';
+    }
+    if (lower.contains('thông báo điều chỉnh mức phí nền tảng')) {
+      return isEn ? 'Platform fee adjustment notice' : '플랫폼 수수료 조정 안내';
+    }
+    if (lower == 'thông báo mới') {
+      return isEn ? 'New notification' : '새 알림';
+    }
+    if (lower == 'thông báo') {
+      return isEn ? 'Notification' : '알림';
+    }
+
+    return rawTitle;
+  }
+
+  static String localizeNotificationBody(
+    String rawBody,
+    String? localeCode,
+  ) {
+    if (rawBody.isEmpty) return rawBody;
+    final isEn =
+        localeCode == 'en' || (localeCode != null && localeCode.startsWith('en'));
+    final isKo =
+        localeCode == 'ko' || (localeCode != null && localeCode.startsWith('ko'));
+    if (!isEn && !isKo) return rawBody;
+
+    final trimmed = rawBody.trim();
+
+    if (trimmed == 'Vui lòng hoàn tất thanh toán để giữ chỗ.') {
+      return isEn
+          ? 'Please complete payment to secure your reservation.'
+          : '예약을 유지하려면 결제를 완료해 주세요.';
+    }
+
+    final mSuccess = RegExp(
+      r'^(?:Booking|Báo cáo)\s*#(\d+)\s+đã thanh toán thành công\.?\s*(?:Host sẽ.*)?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mSuccess != null) {
+      final id = mSuccess.group(1);
+      return isEn
+          ? 'Booking #$id paid successfully. Host will confirm your booking.'
+          : '예약 #$id 결제가 완료되었습니다. 호스트가 확정할 예정입니다.';
+    }
+
+    final mPaidWait = RegExp(
+      r'^Booking\s*#(\d+)\s+đã thanh toán và đang chờ xác nhận\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mPaidWait != null) {
+      final id = mPaidWait.group(1);
+      return isEn
+          ? 'Booking #$id paid and awaiting host confirmation.'
+          : '예약 #$id 결제가 완료되어 호스트 확정 대기 중입니다.';
+    }
+
+    final mPending = RegExp(
+      r'^Thanh toán\s*#(\d+)\s+cho booking\s*#(\d+)\s+đang chờ (?:hoàn tất|xử lý)\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mPending != null) {
+      final pId = mPending.group(1);
+      final bId = mPending.group(2);
+      return isEn
+          ? 'Payment #$pId for booking #$bId is pending completion.'
+          : '예약 #$bId의 결제 #$pId 처리가 대기 중입니다.';
+    }
+
+    final mExpired = RegExp(
+      r'^Booking\s*#(\d+)\s+đã hết hạn thanh toán\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mExpired != null) {
+      final id = mExpired.group(1);
+      return isEn
+          ? 'Booking #$id payment session has expired.'
+          : '예약 #$id의 결제 유효 시간이 만료되었습니다.';
+    }
+
+    final mUnpaid = RegExp(
+      r'^Booking\s*#(\d+)\s+không được thanh toán đúng hạn\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mUnpaid != null) {
+      final id = mUnpaid.group(1);
+      return isEn
+          ? 'Booking #$id was not paid on time.'
+          : '예약 #$id이(가) 제시간에 결제되지 않았습니다.';
+    }
+
+    final mHostConf = RegExp(
+      r'^Host đã xác nhận booking\s*#(\d+)\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mHostConf != null) {
+      final id = mHostConf.group(1);
+      return isEn
+          ? 'Host has confirmed booking #$id.'
+          : '호스트가 예약 #$id을(를) 확정했습니다.';
+    }
+
+    final mWaitGuest = RegExp(
+      r'^Booking\s*#(\d+)\s+đang chờ khách thanh toán\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mWaitGuest != null) {
+      final id = mWaitGuest.group(1);
+      return isEn
+          ? 'Booking #$id is awaiting guest payment.'
+          : '예약 #$id이(가) 게스트 결제 대기 중입니다.';
+    }
+
+    final mConf = RegExp(
+      r'^Booking\s*#(\d+)\s+đã được xác nhận\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mConf != null) {
+      final id = mConf.group(1);
+      return isEn
+          ? 'Booking #$id has been confirmed.'
+          : '예약 #$id이(가) 확정되었습니다.';
+    }
+
+    final mCancel = RegExp(
+      r'^Booking\s*#(\d+)\s+đã bị hủy\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mCancel != null) {
+      final id = mCancel.group(1);
+      return isEn
+          ? 'Booking #$id has been cancelled.'
+          : '예약 #$id이(가) 취소되었습니다.';
+    }
+
+    final mRefund = RegExp(
+      r'^Hoàn tiền\s+(.+?)\s+cho booking\s*#(\d+)\s+đang chờ xử lý\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mRefund != null) {
+      final amt = mRefund.group(1);
+      final id = mRefund.group(2);
+      return isEn
+          ? 'Refund of $amt for booking #$id is pending processing.'
+          : '예약 #$id의 환불금 $amt 처리가 대기 중입니다.';
+    }
+
+    final mPayout = RegExp(
+      r'^Payout\s*#(\d+)\s+trị giá\s+(.+?)\s+đang chờ xử lý\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mPayout != null) {
+      final id = mPayout.group(1);
+      final amt = mPayout.group(2);
+      return isEn
+          ? 'Payout #$id for $amt is pending processing.'
+          : '정산 #$id($amt) 처리가 대기 중입니다.';
+    }
+
+    final mReview = RegExp(
+      r'^(.+?)\s+đã đánh giá\s+(\d+(?:\.\d+)?)/5\s+cho\s+(.+)\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mReview != null) {
+      final user = mReview.group(1);
+      final rating = mReview.group(2);
+      final listing = mReview.group(3);
+      return isEn
+          ? '$user left a $rating/5 rating for $listing.'
+          : '$user님이 $listing에 $rating/5점 후기를 남겼습니다.';
+    }
+
+    if (trimmed.contains('Chào mừng bạn đến với The Palm Villa!')) {
+      return isEn
+          ? 'Welcome to The Palm Villa! Your account has been created successfully.'
+          : 'The Palm Villa에 오신 것을 환영합니다! 계정이 성공적으로 생성되었습니다.';
+    }
+    if (trimmed.contains('Chúc mừng bạn đã trở thành Host!')) {
+      return isEn
+          ? 'Congratulations on becoming a Host! You can now list properties and manage bookings.'
+          : '호스트가 되신 것을 축하합니다! 이제 숙소를 등록하고 예약을 관리할 수 있습니다.';
+    }
+
+    final mListingApproved = RegExp(
+      r'^(.+?)\s+đã được duyệt và hiển thị trên hệ thống\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mListingApproved != null) {
+      final listing = mListingApproved.group(1);
+      return isEn
+          ? '$listing has been approved and is now active.'
+          : '$listing이(가) 승인되어 시스템에 게시되었습니다.';
+    }
+
+    final mListingWait = RegExp(
+      r'^(.+?)\s+đang chờ đội ngũ kiểm duyệt\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mListingWait != null) {
+      final listing = mListingWait.group(1);
+      return isEn
+          ? '$listing is awaiting review by our team.'
+          : '$listing이(가) 검토 대기 중입니다.';
+    }
+
+    final mListingNeed = RegExp(
+      r'^(.+?)\s+cần được kiểm duyệt\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mListingNeed != null) {
+      final listing = mListingNeed.group(1);
+      return isEn ? '$listing requires review.' : '$listing 검토가 필요합니다.';
+    }
+
+    final mPalmConfirm = RegExp(
+      r'Chủ biệt thự The Palm Villa đã xác nhận kỳ nghỉ\s*#(\d+)\s+của bạn tại\s+(.+?)\s+từ ngày\s+(\S+)\s+đến\s+(\S+)\.?',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (mPalmConfirm != null) {
+      final id = mPalmConfirm.group(1);
+      final place = mPalmConfirm.group(2);
+      final from = mPalmConfirm.group(3);
+      final to = mPalmConfirm.group(4);
+      return isEn
+          ? 'The Palm Villa host confirmed your stay #$id at $place from $from to $to.'
+          : 'The Palm Villa 호스트가 $place에서의 예약 #$id($from ~ $to)을 확정했습니다.';
+    }
+
+    return rawBody;
+  }
 
   factory AppNotificationItem.fromJson(Map<String, dynamic> rawJson) {
     final json = rawJson['notification'] is Map
@@ -83,9 +461,10 @@ class AppNotificationItem {
           : null,
       targetId:
           (rawTargetId != null && rawTargetId.isNotEmpty) ? rawTargetId : null,
-      title: (json['title'] ?? 'Thông báo').toString(),
-      body:
-          (json['body'] ?? json['message'] ?? json['content'] ?? '').toString(),
+      title: normalizeBrandText((json['title'] ?? 'Thông báo').toString()),
+      body: normalizeBrandText(
+          (json['body'] ?? json['message'] ?? json['content'] ?? '')
+              .toString()),
       actionUrl: (rawActionUrl != null && rawActionUrl.isNotEmpty)
           ? rawActionUrl
           : null,
@@ -123,15 +502,24 @@ class AppNotificationItem {
       return '/account/trips';
     }
 
-    if (tType == 'listing' || eType.startsWith('listing.')) {
-      if (eType == 'listing.submitted_for_review') {
+    if (tType == 'listing' ||
+        eType.startsWith('listing.') ||
+        eType.startsWith('listing_')) {
+      if (forAdmin ||
+          eType == 'listing.submitted_for_review' ||
+          eType == 'listing_submitted' ||
+          eType == 'listing.submitted') {
         return '/admin/kiem-duyet';
       }
       return '/chu-nha/cho-nghi';
     }
 
-    if (tType == 'host_application' || eType.startsWith('host_application.')) {
-      if (eType == 'host_application.submitted') {
+    if (tType == 'host_application' ||
+        eType.startsWith('host_application.') ||
+        eType.startsWith('host_application_')) {
+      if (forAdmin ||
+          eType == 'host_application.submitted' ||
+          eType == 'host_application_submitted') {
         return '/admin/ho-so-host';
       }
       return '/tro-thanh-host/trang-thai';
@@ -141,6 +529,11 @@ class AppNotificationItem {
         eType.contains('message') ||
         eType.contains('chat')) {
       final convId = targetId ?? payload?['conversationId']?.toString() ?? '';
+      if (forAdmin) {
+        return convId.isNotEmpty
+            ? '/admin/tin-nhan?conversationId=$convId'
+            : '/admin/tin-nhan';
+      }
       if (convId.isNotEmpty) {
         return '/messages?conversationId=$convId';
       }
@@ -155,8 +548,15 @@ class AppNotificationItem {
     if (!trimmed.startsWith('/') || trimmed.startsWith('//')) {
       return false;
     }
+    if (RegExp(r'[\x00-\x1F\x7F\\]').hasMatch(trimmed)) {
+      return false;
+    }
     final lower = trimmed.toLowerCase();
     if (lower.contains('://') ||
+        lower.contains('..') ||
+        lower.contains('%2f') ||
+        lower.contains('%5c') ||
+        lower.contains('%2e') ||
         lower.startsWith('/javascript:') ||
         lower.startsWith('/data:') ||
         lower.startsWith('/vbscript:')) {
@@ -171,6 +571,7 @@ class AppNotificationItem {
     if (route == '/host/listings') return '/chu-nha/cho-nghi';
     if (route == '/admin/moderation') return '/admin/kiem-duyet';
     if (route == '/admin/host-applications') return '/admin/ho-so-host';
+    if (route == '/admin/messages') return '/admin/tin-nhan';
     return route;
   }
 
@@ -235,13 +636,16 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
     SocketService? socketService,
     bool enablePolling = true,
     bool autoConnectSocket = true,
+    bool autoFetch = true,
   })  : _socketService = socketService,
         super(const NotificationsState()) {
     if (_isAuthenticated) {
       if (autoConnectSocket) {
         _socketService?.connect();
       }
-      fetchNotifications();
+      if (autoFetch) {
+        fetchNotifications();
+      }
       _socketSub = socketStream.listen(_onSocketNotification);
       _reconnectSub = _socketService?.onConnected.listen((_) {
         if (mounted && _isAuthenticated) {
@@ -369,17 +773,28 @@ final notificationsProvider =
   final client = ref.watch(dioClientProvider);
   final socket = ref.watch(socketServiceProvider);
   final user = ref.watch(authNotifierProvider).valueOrNull;
+  final isTest =
+      WidgetsBinding.instance.runtimeType.toString().contains('Test');
   return NotificationsNotifier(
     client,
     user != null,
     socket.onNotificationNew,
     socketService: socket,
+    enablePolling: !isTest,
+    autoConnectSocket: !isTest,
+    autoFetch: !isTest,
   );
 });
 
-/// NotificationBell widget matching `NotificationBell.tsx` with strict monochrome icon rules.
+/// NotificationBell widget styled with frosted glass capsule cards, pastel icon rings,
+/// and slender SF Pro typography while preserving 100% of existing notification content.
 class NotificationBell extends ConsumerWidget {
-  const NotificationBell({super.key});
+  final bool isOverlayTop;
+
+  const NotificationBell({
+    super.key,
+    this.isOverlayTop = false,
+  });
 
   String _formatNotificationTime(String raw) {
     if (raw.trim().isEmpty) return '';
@@ -391,172 +806,13 @@ class NotificationBell extends ConsumerWidget {
 
   void _openNotificationsSheet(BuildContext context, WidgetRef ref) {
     ref.read(notificationsProvider.notifier).fetchNotifications();
-    showModalBottomSheet<void>(
+    showGlassNotificationsOverlay(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.65,
-          maxChildSize: 0.9,
-          minChildSize: 0.4,
-          builder: (_, scrollController) {
-            return Consumer(
-              builder: (context, ref, _) {
-                final notifState = ref.watch(notificationsProvider);
-                return Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Thông báo (${notifState.unreadCount} chưa đọc)',
-                              style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ),
-                          if (notifState.unreadCount > 0)
-                            TextButton(
-                              onPressed: () => ref
-                                  .read(notificationsProvider.notifier)
-                                  .markAllAsRead(),
-                              child: const Text('Đánh dấu tất cả đã đọc'),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1, color: AppColors.border),
-                    Expanded(
-                      child: notifState.items.isEmpty
-                          ? const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(24),
-                                child: Text(
-                                  'Chưa có thông báo mới.',
-                                  style: TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              controller: scrollController,
-                              itemCount: notifState.items.length,
-                              separatorBuilder: (_, __) => const Divider(
-                                height: 1,
-                                color: AppColors.divider,
-                              ),
-                              itemBuilder: (context, index) {
-                                final item = notifState.items[index];
-                                final timeText =
-                                    _formatNotificationTime(item.createdAt);
-                                return InkWell(
-                                  onTap: () {
-                                    if (!item.isRead) {
-                                      ref
-                                          .read(notificationsProvider.notifier)
-                                          .markAsRead(item.id);
-                                    }
-                                    Navigator.of(ctx).pop();
-                                    _navigateForNotification(context, item);
-                                  },
-                                  child: Container(
-                                    color: item.isRead
-                                        ? Colors.white
-                                        : AppColors.surfaceWarmSand,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 14,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const Padding(
-                                          padding: EdgeInsets.only(top: 2),
-                                          child: Icon(
-                                            LucideIcons.bell,
-                                            size: 18,
-                                            color: AppColors.iconStrong,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                item.title,
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight: item.isRead
-                                                      ? FontWeight.w600
-                                                      : FontWeight.w700,
-                                                  color: AppColors.textPrimary,
-                                                ),
-                                              ),
-                                              if (item.body.isNotEmpty) ...[
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  item.body,
-                                                  style: const TextStyle(
-                                                    fontSize: 13,
-                                                    color:
-                                                        AppColors.textSecondary,
-                                                  ),
-                                                ),
-                                              ],
-                                              if (timeText.isNotEmpty) ...[
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  timeText,
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: AppColors.textMuted,
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                        if (!item.isRead)
-                                          Container(
-                                            margin: const EdgeInsets.only(
-                                              left: 8,
-                                              top: 4,
-                                            ),
-                                            width: 8,
-                                            height: 8,
-                                            decoration: const BoxDecoration(
-                                              color: AppColors.primary,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                );
-              },
-            );
-          },
-        );
+      formatTime: _formatNotificationTime,
+      onSelectNotification: (item) {
+        if (context.mounted) {
+          _navigateForNotification(context, item);
+        }
       },
     );
   }
@@ -573,48 +829,45 @@ class NotificationBell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authNotifierProvider).valueOrNull;
-    if (user == null) return const SizedBox.shrink();
-
     final notifState = ref.watch(notificationsProvider);
+    final locale = ref.watch(localeProvider);
+    final isEn = locale.startsWith('en');
+    final isKo = locale.startsWith('ko');
 
-    return Semantics(
-      button: true,
-      label: 'Thông báo',
-      child: InkWell(
-        onTap: () => _openNotificationsSheet(context, ref),
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        hoverColor: Colors.transparent,
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              const Icon(
-                LucideIcons.bell,
-                size: 20,
-                color: AppColors.iconStrong,
-              ),
-              if (notifState.unreadCount > 0)
-                Positioned(
-                  top: 8,
-                  right: 6,
-                  child: Text(
-                    notifState.unreadCount > 99
-                        ? '99+'
-                        : '${notifState.unreadCount}',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
+    return GlassNotificationBellButton(
+      unreadCount: notifState.unreadCount,
+      isOverlayTop: isOverlayTop,
+      semanticsLabel: isEn ? 'Notifications' : (isKo ? '알림' : 'Thông báo'),
+      onTap: () => _openNotificationsSheet(context, ref),
+    );
+  }
+}
+
+/// Top header variant equipped with the pill search bar ("Bạn muốn đi đâu?"),
+/// notification bell, and popup menu across main tabs (Tin nhắn, Chuyến đi, Tài khoản).
+class AppSearchHeader extends StatelessWidget {
+  final String currentPath;
+  final bool hidePendingBanner;
+
+  const AppSearchHeader({
+    super.key,
+    required this.currentPath,
+    this.hidePendingBanner = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppTopHeader(
+      currentPath: currentPath,
+      hidePendingBanner: hidePendingBanner,
+      centerSearchTrigger: SourceSearchBar(
+        isCompact: true,
+        isInHeader: true,
+        onSearchSubmitted: () {
+          try {
+            context.push('/tim-kiem');
+          } catch (_) {}
+        },
       ),
     );
   }
@@ -625,567 +878,657 @@ class AppTopHeader extends ConsumerWidget {
   final String currentPath;
   final Widget? centerSearchTrigger;
   final bool isOverlayTop;
+  final bool hidePendingBanner;
 
   const AppTopHeader({
     super.key,
     this.currentPath = '/',
     this.centerSearchTrigger,
     this.isOverlayTop = false,
+    this.hidePendingBanner = false,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authUser = ref.watch(authNotifierProvider).valueOrNull;
-    List<dynamic> queueItems = const [];
-    try {
-      queueItems = ref.watch(bookingQueueProvider);
-    } catch (_) {
-      queueItems = const [];
-    }
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isDesktop = screenWidth >= 900;
-    final isCompactMobile = screenWidth < 380;
+    final l10n = context.l10n;
+    return LayoutBuilder(builder: (context, constraints) {
+      final screenWidth = constraints.maxWidth;
+      final isDesktop = screenWidth >= 900;
+      final isCompactMobile = screenWidth < 380;
 
-    return AnimatedContainer(
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        color: isOverlayTop ? Colors.transparent : Colors.white,
-        border: isOverlayTop
-            ? null
-            : const Border(
-                bottom: BorderSide(color: Color(0xFFE4E4E7), width: 1),
-              ),
-      ),
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 40 : (isCompactMobile ? 12 : 16),
-        vertical: 12,
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Center(
-          heightFactor: 1.0,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1440),
-            child: Row(
-              children: [
-                // Left: Brand Logo (`Header.tsx` -> `logo_mau.svg`)
-                Flexible(
-                  child: InkWell(
-                    onTap: () => context.go('/'),
-                    splashColor: Colors.transparent,
-                    highlightColor: Colors.transparent,
-                    hoverColor: Colors.transparent,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          AppBrandIcon.minhThanhLogo(
-                            size: 26,
-                            color: isOverlayTop
-                                ? Colors.white
-                                : AppColors.iconStrong,
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              'The Palm Villa',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: isCompactMobile ? 16 : 19,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.4,
-                                color: isOverlayTop
-                                    ? Colors.white
-                                    : AppColors.textPrimary,
+      return AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          color: isOverlayTop ? Colors.transparent : Colors.white,
+          border: isOverlayTop
+              ? null
+              : const Border(
+                  bottom: BorderSide(color: Color(0xFFE4E4E7), width: 1),
+                ),
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: isDesktop
+              ? (centerSearchTrigger != null ? 24 : 40)
+              : (isCompactMobile ? 12.0 : 16.0),
+          vertical: 10,
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                heightFactor: 1.0,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1440),
+                  child: Row(
+                    children: [
+                      // Left & Center Area: Switches smoothly between (Brand Logo + Nav Links) and (Pinned Search Bar)
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: MediaQuery.disableAnimationsOf(context)
+                              ? Duration.zero
+                              : const Duration(milliseconds: 380),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          layoutBuilder: (currentChild, previousChildren) {
+                            return Stack(
+                              alignment: Alignment.centerLeft,
+                              children: [
+                                ...previousChildren,
+                                if (currentChild != null) currentChild,
+                              ],
+                            );
+                          },
+                          transitionBuilder: (child, animation) {
+                            final isSearch = (child.key as ValueKey?)?.value ==
+                                'pinned_search_content';
+                            if (isSearch) {
+                              return SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0.0, 0.70),
+                                  end: Offset.zero,
+                                ).animate(CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeOutCubic,
+                                )),
+                                child: FadeTransition(
+                                  opacity: CurvedAnimation(
+                                    parent: animation,
+                                    curve: const Interval(0.1, 1.0,
+                                        curve: Curves.easeOut),
+                                  ),
+                                  child: ScaleTransition(
+                                    scale: Tween<double>(
+                                      begin: 0.94,
+                                      end: 1.0,
+                                    ).animate(CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeOutCubic,
+                                    )),
+                                    child: child,
+                                  ),
+                                ),
+                              );
+                            } else {
+                              return SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0.0, -0.2),
+                                  end: Offset.zero,
+                                ).animate(CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeOutCubic,
+                                )),
+                                child: FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                              );
+                            }
+                          },
+                          child: centerSearchTrigger != null
+                              ? KeyedSubtree(
+                                  key: const ValueKey('pinned_search_content'),
+                                  child: Padding(
+                                    padding: EdgeInsets.only(
+                                      right: isDesktop ? 16 : 8,
+                                    ),
+                                    child: centerSearchTrigger!,
+                                  ),
+                                )
+                              : KeyedSubtree(
+                                  key: const ValueKey('top_header_content'),
+                                  child: Row(
+                                    children: [
+                                      // Left: Brand Logo + "The Palm Villa"
+                                      Flexible(
+                                        child: InkWell(
+                                          onTap: () => context.go('/'),
+                                          splashColor: Colors.transparent,
+                                          highlightColor: Colors.transparent,
+                                          hoverColor: Colors.transparent,
+                                          child: ConstrainedBox(
+                                            constraints: const BoxConstraints(
+                                                minHeight: 48),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                AppBrandIcon.minhThanhLogo(
+                                                  size: 26,
+                                                  color: isOverlayTop
+                                                      ? Colors.white
+                                                      : AppColors.iconStrong,
+                                                ),
+                                                if (screenWidth >= 380) ...[
+                                                  const SizedBox(width: 8),
+                                                  Flexible(
+                                                    child: Text(
+                                                      'The Palm Villa',
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        fontSize: isDesktop
+                                                            ? 19
+                                                            : (isCompactMobile
+                                                                ? 16
+                                                                : 19),
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        letterSpacing: -0.4,
+                                                        color: isOverlayTop
+                                                            ? Colors.white
+                                                            : AppColors
+                                                                .textPrimary,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+
+                                      if (isDesktop) ...[
+                                        const Spacer(),
+                                        // Center: 4 Navigation Links (`Navbar.tsx`)
+                                        Flexible(
+                                          flex: 3,
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                _NavTextLink(
+                                                  label: l10n.navDiscover,
+                                                  isActive: currentPath == '/',
+                                                  isOverlayTop: isOverlayTop,
+                                                  onTap: () => context.go('/'),
+                                                ),
+                                                SizedBox(
+                                                    width: screenWidth >= 1280
+                                                        ? 28
+                                                        : (screenWidth >= 1080
+                                                            ? 20
+                                                            : 14)),
+                                                _NavTextLink(
+                                                  label: l10n.navStays,
+                                                  isActive: currentPath
+                                                          .startsWith(
+                                                              '/search') ||
+                                                      currentPath.startsWith(
+                                                          '/tim-kiem') ||
+                                                      currentPath.startsWith(
+                                                          '/noi-luu-tru') ||
+                                                      currentPath.startsWith(
+                                                          '/villas'),
+                                                  isOverlayTop: isOverlayTop,
+                                                  onTap: () =>
+                                                      context.push('/tim-kiem'),
+                                                ),
+                                                SizedBox(
+                                                    width: screenWidth >= 1280
+                                                        ? 28
+                                                        : (screenWidth >= 1080
+                                                            ? 20
+                                                            : 14)),
+                                                _NavTextLink(
+                                                  label: l10n.navBlog,
+                                                  isActive: currentPath
+                                                          .startsWith(
+                                                              '/blog') ||
+                                                      currentPath.startsWith(
+                                                          '/cam-nang'),
+                                                  isOverlayTop: isOverlayTop,
+                                                  onTap: () =>
+                                                      context.push('/cam-nang'),
+                                                ),
+                                                SizedBox(
+                                                    width: screenWidth >= 1280
+                                                        ? 28
+                                                        : (screenWidth >= 1080
+                                                            ? 20
+                                                            : 14)),
+                                                _NavTextLink(
+                                                  label: l10n.navContact,
+                                                  isActive: currentPath
+                                                      .startsWith('/lien-he'),
+                                                  isOverlayTop: isOverlayTop,
+                                                  onTap: () =>
+                                                      context.push('/lien-he'),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                      ] else
+                                        const Spacer(),
+                                    ],
+                                  ),
+                                ),
+                        ),
+                      ),
+
+                      // Right: Host action (only when not scrolled down), NotificationBell, then Menu
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 320),
+                        curve: Curves.easeOutCubic,
+                        child: (centerSearchTrigger == null &&
+                                (authUser == null || !authUser.isAdmin) &&
+                                screenWidth >= 1260)
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  InkWell(
+                                    onTap: () {
+                                      if (authUser != null && authUser.isHost) {
+                                        context.push('/chu-nha/cho-nghi');
+                                      } else {
+                                        context.push('/tro-thanh-host');
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(999),
+                                    child: Container(
+                                      constraints:
+                                          const BoxConstraints(minHeight: 48),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 9,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isOverlayTop
+                                            ? Colors.transparent
+                                            : Colors.white,
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            authUser != null && authUser.isHost
+                                                ? l10n.navHostPortal
+                                                : l10n.navBecomeHost,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: isOverlayTop
+                                                  ? Colors.white
+                                                  : const Color(0xFF18181B),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+
+                      // Notification Bell (Icon thông báo)
+                      NotificationBell(isOverlayTop: isOverlayTop),
+                      const SizedBox(width: 2),
+
+                      // Menu Button (Icon menu)
+                      PopupMenuButton<String>(
+                        tooltip: 'Menu',
+                        offset: const Offset(0, 48),
+                        color: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        onSelected: (value) async {
+                          switch (value) {
+                            case 'home':
+                              context.go('/');
+                              break;
+                            case 'login':
+                              unawaited(context.push('/dang-nhap'));
+                              break;
+                            case 'register':
+                              unawaited(context.push('/dang-ky'));
+                              break;
+                            case 'profile':
+                              unawaited(context.push('/account/profile'));
+                              break;
+                            case 'trips':
+                              unawaited(context.push('/account/trips'));
+                              break;
+                            case 'wishlist':
+                              unawaited(context.push('/yeu-thich'));
+                              break;
+                            case 'messages':
+                              if (authUser != null && authUser.isAdmin) {
+                                unawaited(context.push('/admin/tin-nhan'));
+                              } else {
+                                unawaited(context.push('/messages'));
+                              }
+                              break;
+                            case 'ai-search':
+                              unawaited(context.push('/tim-kiem-ai'));
+                              break;
+                            case 'stays':
+                              unawaited(context.push('/tim-kiem'));
+                              break;
+                            case 'blog':
+                              unawaited(context.push('/cam-nang'));
+                              break;
+                            case 'contact':
+                              unawaited(context.push('/lien-he'));
+                              break;
+                            case 'language-currency':
+                              unawaited(
+                                showCurrencyLanguageBottomSheet(context),
+                              );
+                              break;
+                            case 'host':
+                              if (authUser != null && authUser.isHost) {
+                                unawaited(context.push('/chu-nha/cho-nghi'));
+                              } else {
+                                unawaited(context.push('/tro-thanh-host'));
+                              }
+                              break;
+                            case 'admin':
+                              unawaited(context.push('/admin'));
+                              break;
+                            case 'logout':
+                              ref
+                                  .read(notificationsProvider.notifier)
+                                  .clearForLogout();
+                              await ref
+                                  .read(authNotifierProvider.notifier)
+                                  .logout();
+                              if (context.mounted) {
+                                context.go('/');
+                              }
+                              break;
+                          }
+                        },
+                        itemBuilder: (context) {
+                          if (authUser == null) {
+                            return [
+                              if (!isDesktop) ...[
+                                PopupMenuItem(
+                                  value: 'home',
+                                  child: _MenuItemRow(
+                                    icon: AppSemanticIcons.home,
+                                    label: l10n.navDiscover,
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'stays',
+                                  child: _MenuItemRow(
+                                    icon: LucideIcons.search,
+                                    label: l10n.navStays,
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'blog',
+                                  child: _MenuItemRow(
+                                    icon: LucideIcons.bookOpen,
+                                    label: l10n.navBlog,
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'contact',
+                                  child: _MenuItemRow(
+                                    icon: LucideIcons.phone,
+                                    label: l10n.navContact,
+                                  ),
+                                ),
+                                const PopupMenuDivider(),
+                              ],
+                              PopupMenuItem(
+                                value: 'wishlist',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.heart,
+                                  label: l10n.navFavorites,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'trips',
+                                child: _MenuItemRow(
+                                  icon: AppSemanticIcons.bookings,
+                                  label: l10n.navTrips,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'messages',
+                                child: _MenuItemRow(
+                                  icon: AppSemanticIcons.messageHost,
+                                  label: l10n.navMessages,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'profile',
+                                child: _MenuItemRow(
+                                  icon: AppSemanticIcons.userProfile,
+                                  label: l10n.navAccount,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'language-currency',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.globe,
+                                  label:
+                                      '${l10n.settingsLanguage} • ${ref.read(effectiveCurrencyProvider).code} (${ref.read(effectiveCurrencyProvider).symbol})',
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                              PopupMenuItem(
+                                value: 'host',
+                                child: _MenuItemRow(
+                                  icon: AppSemanticIcons.becomeHost,
+                                  label: l10n.navBecomeHost,
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                              PopupMenuItem(
+                                value: 'login',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.logIn,
+                                  label: l10n.authLoginTitle,
+                                  isBold: true,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'register',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.userPlus,
+                                  label: l10n.authRegisterTitle,
+                                ),
+                              ),
+                            ];
+                          }
+                          return [
+                            PopupMenuItem(
+                              enabled: false,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    authUser.fullName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  Text(
+                                    authUser.email,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
+                            const PopupMenuDivider(),
+                            if (!isDesktop) ...[
+                              PopupMenuItem(
+                                value: 'home',
+                                child: _MenuItemRow(
+                                  icon: AppSemanticIcons.home,
+                                  label: l10n.navDiscover,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'stays',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.search,
+                                  label: l10n.navStays,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'blog',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.bookOpen,
+                                  label: l10n.navBlog,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'contact',
+                                child: _MenuItemRow(
+                                  icon: LucideIcons.phone,
+                                  label: l10n.navContact,
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                            ],
+                            PopupMenuItem(
+                              value: 'wishlist',
+                              child: _MenuItemRow(
+                                icon: LucideIcons.heart,
+                                label: l10n.navFavorites,
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'trips',
+                              child: _MenuItemRow(
+                                icon: AppSemanticIcons.bookings,
+                                label: l10n.navTrips,
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'messages',
+                              child: _MenuItemRow(
+                                icon: AppSemanticIcons.messageHost,
+                                label: l10n.navMessages,
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'profile',
+                              child: _MenuItemRow(
+                                icon: AppSemanticIcons.userProfile,
+                                label: l10n.navAccount,
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'language-currency',
+                              child: _MenuItemRow(
+                                icon: LucideIcons.globe,
+                                label:
+                                    '${l10n.settingsLanguage} • ${ref.read(effectiveCurrencyProvider).code} (${ref.read(effectiveCurrencyProvider).symbol})',
+                              ),
+                            ),
+                            const PopupMenuDivider(),
+                            if (!authUser.isAdmin)
+                              PopupMenuItem(
+                                value: 'host',
+                                child: _MenuItemRow(
+                                  icon: authUser.isHost
+                                      ? AppSemanticIcons.home
+                                      : AppSemanticIcons.becomeHost,
+                                  label: authUser.isHost
+                                      ? l10n.navHostPortal
+                                      : l10n.navBecomeHost,
+                                ),
+                              ),
+                            if (authUser.isAdmin)
+                              PopupMenuItem(
+                                value: 'admin',
+                                child: _MenuItemRow(
+                                  icon: AppSemanticIcons.adminPortal,
+                                  label: l10n.navAdminPortal,
+                                  isBold: true,
+                                ),
+                              ),
+                            const PopupMenuDivider(),
+                            PopupMenuItem(
+                              value: 'logout',
+                              child: _MenuItemRow(
+                                icon: AppSemanticIcons.logout,
+                                label: l10n.authLogout,
+                              ),
+                            ),
+                          ];
+                        },
+                        child: Container(
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 48,
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                if (isDesktop) const Spacer(),
-
-                // Center: 4 Navigation Links (`Navbar.tsx`) or Compact Search Trigger
-                if (centerSearchTrigger != null && isDesktop)
-                  centerSearchTrigger!
-                else if (isDesktop)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _NavTextLink(
-                        label: 'Trang chủ',
-                        isActive: currentPath == '/',
-                        isOverlayTop: isOverlayTop,
-                        onTap: () => context.go('/'),
-                      ),
-                      const SizedBox(width: 32),
-                      _NavTextLink(
-                        label: 'Nơi lưu trú',
-                        isActive: currentPath.startsWith('/search') ||
-                            currentPath.startsWith('/tim-kiem') ||
-                            currentPath.startsWith('/noi-luu-tru') ||
-                            currentPath.startsWith('/villas'),
-                        isOverlayTop: isOverlayTop,
-                        onTap: () => context.push('/tim-kiem'),
-                      ),
-                      const SizedBox(width: 32),
-                      _NavTextLink(
-                        label: 'Blog',
-                        isActive: currentPath.startsWith('/blog') ||
-                            currentPath.startsWith('/cam-nang'),
-                        isOverlayTop: isOverlayTop,
-                        onTap: () => context.push('/cam-nang'),
-                      ),
-                      const SizedBox(width: 32),
-                      _NavTextLink(
-                        label: 'Liên hệ',
-                        isActive: currentPath.startsWith('/lien-he'),
-                        isOverlayTop: isOverlayTop,
-                        onTap: () => context.push('/lien-he'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Center(
+                            child: Icon(
+                              LucideIcons.menu,
+                              size: 20,
+                              color: isOverlayTop
+                                  ? Colors.white
+                                  : AppColors.iconStrong,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
-
-                if (isDesktop) const Spacer() else const SizedBox(width: 8),
-
-                // Right: "Trở thành host" (`rounded-full`) + NotificationBell + AccountMenu (`rounded-full` trigger, `rounded-3xl` menu)
-                if (screenWidth >= 640) ...[
-                  InkWell(
-                    onTap: () {
-                      if (authUser != null && authUser.isHost) {
-                        context.push('/chu-nha/cho-nghi');
-                      } else {
-                        context.push('/tro-thanh-host');
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(999),
-                    child: Container(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 9,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isOverlayTop ? Colors.transparent : Colors.white,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            authUser != null && authUser.isHost
-                                ? 'Khu vực host'
-                                : 'Trở thành host',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: isOverlayTop
-                                  ? Colors.white
-                                  : const Color(0xFF18181B),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                ],
-
-                // MultiBooking Queue Link (/gio-cho-dat)
-                if (queueItems.isNotEmpty) ...[
-                  InkWell(
-                    onTap: () => context.push('/gio-cho-dat'),
-                    splashColor: Colors.transparent,
-                    highlightColor: Colors.transparent,
-                    hoverColor: Colors.transparent,
-                    child: SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Icon(
-                            LucideIcons.shoppingCart,
-                            size: 20,
-                            color: isOverlayTop
-                                ? Colors.white
-                                : AppColors.iconStrong,
-                          ),
-                          Positioned(
-                            top: 8,
-                            right: 6,
-                            child: Text(
-                              '${queueItems.length}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color: isOverlayTop
-                                    ? Colors.white
-                                    : AppColors.primary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-
-                // Notification Bell
-                const NotificationBell(),
-                const SizedBox(width: 4),
-
-                // User Account Menu (`AccountMenu.tsx` + `Header.tsx`)
-                PopupMenuButton<String>(
-                  tooltip: 'Tài khoản',
-                  offset: const Offset(0, 48),
-                  color: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  onSelected: (value) async {
-                    switch (value) {
-                      case 'home':
-                        context.go('/');
-                        break;
-                      case 'login':
-                        unawaited(context.push('/dang-nhap'));
-                        break;
-                      case 'register':
-                        unawaited(context.push('/dang-ky'));
-                        break;
-                      case 'profile':
-                        unawaited(context.push('/account/profile'));
-                        break;
-                      case 'trips':
-                        unawaited(context.push('/account/trips'));
-                        break;
-                      case 'wishlist':
-                        unawaited(context.push('/yeu-thich'));
-                        break;
-                      case 'queue':
-                        unawaited(context.push('/gio-cho-dat'));
-                        break;
-                      case 'messages':
-                        unawaited(context.push('/messages'));
-                        break;
-                      case 'ai-search':
-                        unawaited(context.push('/tim-kiem-ai'));
-                        break;
-                      case 'stays':
-                        unawaited(context.push('/tim-kiem'));
-                        break;
-                      case 'blog':
-                        unawaited(context.push('/cam-nang'));
-                        break;
-                      case 'contact':
-                        unawaited(context.push('/lien-he'));
-                        break;
-                      case 'host':
-                        if (authUser != null && authUser.isHost) {
-                          unawaited(context.push('/chu-nha/cho-nghi'));
-                        } else {
-                          unawaited(context.push('/tro-thanh-host'));
-                        }
-                        break;
-                      case 'admin':
-                        unawaited(context.push('/admin'));
-                        break;
-                      case 'logout':
-                        ref
-                            .read(notificationsProvider.notifier)
-                            .clearForLogout();
-                        await ref.read(authNotifierProvider.notifier).logout();
-                        if (context.mounted) {
-                          context.go('/');
-                        }
-                        break;
-                    }
-                  },
-                  itemBuilder: (context) {
-                    if (authUser == null) {
-                      return [
-                        if (!isDesktop) ...[
-                          const PopupMenuItem(
-                            value: 'home',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.house,
-                              label: 'Trang chủ',
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'stays',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.search,
-                              label: 'Nơi lưu trú',
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'blog',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.bookOpen,
-                              label: 'Blog',
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'contact',
-                            child: _MenuItemRow(
-                              icon: LucideIcons.phone,
-                              label: 'Liên hệ',
-                            ),
-                          ),
-                          const PopupMenuDivider(),
-                        ],
-                        const PopupMenuItem(
-                          value: 'wishlist',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.heart,
-                            label: 'Danh sách yêu thích',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'trips',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.plane,
-                            label: 'Chuyến đi',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'messages',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.messageSquare,
-                            label: 'Tin nhắn',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'profile',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.userRound,
-                            label: 'Hồ sơ',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'queue',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.shoppingCart,
-                            label: 'Danh sách đặt nhiều căn',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'ai-search',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.sparkles,
-                            label: 'Tìm kiếm bằng AI',
-                          ),
-                        ),
-                        const PopupMenuDivider(),
-                        const PopupMenuItem(
-                          value: 'host',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.house,
-                            label: 'Trở thành host',
-                          ),
-                        ),
-                        const PopupMenuDivider(),
-                        const PopupMenuItem(
-                          value: 'login',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.logIn,
-                            label: 'Đăng nhập',
-                            isBold: true,
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'register',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.userPlus,
-                            label: 'Đăng ký',
-                          ),
-                        ),
-                      ];
-                    }
-                    return [
-                      PopupMenuItem(
-                        enabled: false,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              authUser.fullName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            Text(
-                              authUser.email,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuDivider(),
-                      if (!isDesktop) ...[
-                        const PopupMenuItem(
-                          value: 'home',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.house,
-                            label: 'Trang chủ',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'stays',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.search,
-                            label: 'Nơi lưu trú',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'blog',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.bookOpen,
-                            label: 'Blog',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'contact',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.phone,
-                            label: 'Liên hệ',
-                          ),
-                        ),
-                        const PopupMenuDivider(),
-                      ],
-                      const PopupMenuItem(
-                        value: 'wishlist',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.heart,
-                          label: 'Danh sách yêu thích',
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'trips',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.plane,
-                          label: 'Chuyến đi',
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'messages',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.messageSquare,
-                          label: 'Tin nhắn',
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'profile',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.userRound,
-                          label: 'Hồ sơ',
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'queue',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.shoppingCart,
-                          label: 'Danh sách đặt nhiều căn',
-                        ),
-                      ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: 'host',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.house,
-                          label: authUser.isHost
-                              ? 'Khu vực host'
-                              : 'Trở thành host',
-                        ),
-                      ),
-                      if (authUser.isAdmin)
-                        const PopupMenuItem(
-                          value: 'admin',
-                          child: _MenuItemRow(
-                            icon: LucideIcons.shield,
-                            label: 'Khu vực admin',
-                            isBold: true,
-                          ),
-                        ),
-                      const PopupMenuDivider(),
-                      const PopupMenuItem(
-                        value: 'logout',
-                        child: _MenuItemRow(
-                          icon: LucideIcons.logOut,
-                          label: 'Đăng xuất',
-                        ),
-                      ),
-                    ];
-                  },
-                  child: Container(
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          LucideIcons.menu,
-                          size: 16,
-                          color: AppColors.iconStrong,
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(
-                          LucideIcons.circleUser,
-                          size: 22,
-                          color: AppColors.iconMuted,
-                        ),
-                        if (authUser != null && screenWidth >= 520) ...[
-                          const SizedBox(width: 6),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 96),
-                            child: Text(
-                              authUser.firstName.isNotEmpty
-                                  ? authUser.firstName
-                                  : authUser.fullName,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
                 ),
-              ],
-            ),
+              ),
+              if (!hidePendingBanner)
+                const GlobalPendingBookingHeaderBanner(
+                  margin: EdgeInsets.only(top: 8),
+                ),
+            ],
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 }
 
@@ -1245,8 +1588,7 @@ class _NavTextLink extends StatelessWidget {
         ? (isActive ? Colors.white : Colors.white.withValues(alpha: 0.85))
         : (isActive ? const Color(0xFF0F172A) : const Color(0xFF475569));
 
-    final indicatorColor =
-        isOverlayTop ? Colors.white : const Color(0xFF06B6D4);
+    final indicatorColor = isOverlayTop ? Colors.white : AppColors.primary;
 
     return InkWell(
       onTap: onTap,
@@ -1262,7 +1604,7 @@ class _NavTextLink extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 16,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: isActive ? FontWeight.w800 : FontWeight.w700,
                 color: textColor,
               ),
             ),
@@ -1284,7 +1626,7 @@ class _NavTextLink extends StatelessWidget {
 }
 
 /// Footer matching `Source goc/frontend/src/views/components/common/Footer.tsx` 100%.
-class AppFooter extends StatelessWidget {
+class AppFooter extends ConsumerWidget {
   const AppFooter({super.key});
 
   Future<void> _openExternalUrl(String url) async {
@@ -1295,7 +1637,9 @@ class AppFooter extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentLocale = ref.watch(localeProvider);
+    final l10n = lookupAppLocalizations(Locale(currentLocale));
     final width = MediaQuery.sizeOf(context).width;
     final horizontalPad = width >= 1024 ? 80.0 : (width >= 768 ? 24.0 : 16.0);
 
@@ -1324,26 +1668,26 @@ class AppFooter extends StatelessWidget {
                       SizedBox(
                         width: colWidth,
                         child: _FooterColumn(
-                          title: 'Hỗ trợ',
+                          title: l10n.footerSupport,
                           links: [
                             (
-                              'Hướng dẫn đặt phòng',
+                              l10n.footerBookingGuide,
                               () => context.push(
                                     '/cam-nang/checklist-truoc-khi-dat-villa',
                                   )
                             ),
                             (
-                              'Chính sách hủy phòng',
+                              l10n.footerCancellationPolicy,
                               () => context.push(
                                     '/cam-nang/kinh-nghiem-dat-villa-vung-tau-lan-dau',
                                   )
                             ),
                             (
-                              'Khiếu nại & Góp ý',
+                              l10n.footerFeedback,
                               () => context.push('/lien-he')
                             ),
                             (
-                              'Câu hỏi thường gặp (FAQ)',
+                              l10n.footerFaq,
                               () => context.push('/lien-he')
                             ),
                           ],
@@ -1352,21 +1696,21 @@ class AppFooter extends StatelessWidget {
                       SizedBox(
                         width: colWidth,
                         child: _FooterColumn(
-                          title: 'Khám phá Vũng Tàu',
+                          title: l10n.footerDiscover,
                           links: [
-                            ('Về chúng tôi', () => context.push('/lien-he')),
+                            (l10n.footerAboutUs, () => context.push('/lien-he')),
                             (
-                              'Cẩm nang du lịch',
+                              l10n.footerTravelGuide,
                               () => context.push('/cam-nang')
                             ),
                             (
-                              'Dịch vụ đi kèm',
+                              l10n.footerAddonServices,
                               () => context.push(
                                     '/cam-nang/lich-trinh-vung-tau-2-ngay-1-dem-cho-nhom-ban',
                                   )
                             ),
                             (
-                              'Ưu đãi thành viên',
+                              l10n.footerMemberOffers,
                               () => context.push('/tim-kiem')
                             ),
                           ],
@@ -1375,20 +1719,28 @@ class AppFooter extends StatelessWidget {
                       SizedBox(
                         width: colWidth,
                         child: _FooterColumn(
-                          title: 'Liên hệ',
+                          title: l10n.footerContact,
                           links: [
+                            if (AppConfig.verifiedHotlineOrNull != null)
+                              (
+                                l10n.footerHotline(AppConfig.verifiedHotlineOrNull!),
+                                () => _openExternalUrl(
+                                      'tel:${AppConfig.verifiedHotlineOrNull}',
+                                    )
+                              )
+                            else
+                              (
+                                l10n.footerOnlineConsultation,
+                                () => context.push('/lien-he')
+                              ),
                             (
-                              'Hotline: 0929.399.893',
-                              () => _openExternalUrl('tel:0929399893')
-                            ),
-                            (
-                              'Địa chỉ: 28 Thi Sách',
+                              l10n.footerAddress,
                               () => _openExternalUrl(
                                     'https://www.google.com/maps/search/?api=1&query=28%20Thi%20Sach%20Vung%20Tau',
                                   )
                             ),
                             (
-                              'Email: bookingvillavtdl@gmail.com',
+                              l10n.footerEmail('bookingvillavtdl@gmail.com'),
                               () => _openExternalUrl(
                                     'mailto:bookingvillavtdl@gmail.com',
                                   )
@@ -1401,9 +1753,9 @@ class AppFooter extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Social',
-                              style: TextStyle(
+                            Text(
+                              l10n.footerSocial,
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
@@ -1470,11 +1822,11 @@ class AppFooter extends StatelessWidget {
               const SizedBox(height: 48),
               const Divider(color: Color(0xFF374151), height: 1),
               const SizedBox(height: 24),
-              const Center(
+              Center(
                 child: Text(
-                  '© Copyright Villa Vung Tau 2026',
+                  l10n.footerCopyright,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Color(0xFF9CA3AF),
                     fontSize: 14,
                   ),

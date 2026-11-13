@@ -22,14 +22,15 @@ import '../../features/search/presentation/screens/ai_search_screen.dart';
 import '../../features/search/presentation/screens/search_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/trips/presentation/screens/guest_payment_screen.dart';
-import '../../features/trips/presentation/screens/multi_booking_screen.dart';
 import '../../features/trips/presentation/screens/payment_result_screen.dart';
 import '../../features/trips/presentation/screens/trips_screen.dart';
 import '../../features/villa_detail/presentation/screens/villa_detail_screen.dart';
 import '../../features/villas/presentation/screens/villa_list_screen.dart';
+import '../../l10n/l10n.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../../shared/widgets/app_semantic_icons.dart';
 
 enum RouteAccessLevel {
   public,
@@ -76,10 +77,12 @@ bool _isProtectedRoutePath(String path) {
       path == '/account/profile' ||
       path == '/gio-cho-dat' ||
       path == '/messages' ||
+      path == '/tin-nhan' ||
       path == '/tro-thanh-host/dang-ky' ||
       path == '/tro-thanh-host/trang-thai' ||
       path == '/thanh-toan/ket-qua' ||
-      path.startsWith('/thanh-toan/');
+      path.startsWith('/thanh-toan/') ||
+      (path.startsWith('/villa/') && path.endsWith('/nhan-tin-host'));
 }
 
 String? _sanitizeRedirectParam(String? rawRedirectTo) {
@@ -211,22 +214,28 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Branch 1: Wishlist / Favorites (/favorites, /yeu-thich)
+          // Branch 1: Guest Messages (/messages, /tin-nhan)
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/favorites',
-                builder: (context, state) => const RouteAuthGuard(
-                  accessLevel: RouteAccessLevel.authenticated,
-                  child: FavoritesScreen(),
-                ),
+                path: '/messages',
+                builder: (context, state) {
+                  final convId = state.uri.queryParameters['conversationId'];
+                  return RouteAuthGuard(
+                    accessLevel: RouteAccessLevel.authenticated,
+                    child: MessagesScreen(initialConversationId: convId),
+                  );
+                },
               ),
               GoRoute(
-                path: '/yeu-thich',
-                builder: (context, state) => const RouteAuthGuard(
-                  accessLevel: RouteAccessLevel.authenticated,
-                  child: FavoritesScreen(),
-                ),
+                path: '/tin-nhan',
+                builder: (context, state) {
+                  final convId = state.uri.queryParameters['conversationId'];
+                  return RouteAuthGuard(
+                    accessLevel: RouteAccessLevel.authenticated,
+                    child: MessagesScreen(initialConversationId: convId),
+                  );
+                },
               ),
             ],
           ),
@@ -462,25 +471,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
 
-      // ── Booking Queue, Payments & Messages (Authenticated) ──
+      // ── Booking Queue, Payments & Wishlist / Favorites (Authenticated) ──
       GoRoute(
         path: '/gio-cho-dat',
+        // Retired queue: old links must not reopen its UI.
+        redirect: (context, state) => '/account/trips',
+      ),
+      GoRoute(
+        path: '/favorites',
         pageBuilder: (context, state) => _buildProtectedSlidePage(
           state: state,
           accessLevel: RouteAccessLevel.authenticated,
-          child: const MultiBookingScreen(),
+          child: const FavoritesScreen(),
         ),
       ),
       GoRoute(
-        path: '/messages',
-        pageBuilder: (context, state) {
-          final convId = state.uri.queryParameters['conversationId'];
-          return _buildProtectedSlidePage(
-            state: state,
-            accessLevel: RouteAccessLevel.authenticated,
-            child: MessagesScreen(initialConversationId: convId),
-          );
-        },
+        path: '/yeu-thich',
+        pageBuilder: (context, state) => _buildProtectedSlidePage(
+          state: state,
+          accessLevel: RouteAccessLevel.authenticated,
+          child: const FavoritesScreen(),
+        ),
       ),
       GoRoute(
         path: '/thanh-toan/ket-qua',
@@ -539,11 +550,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ── Host Portal (/chu-nha/* & /host/*) — Host-only ──
       GoRoute(
         path: '/chu-nha',
-        redirect: (context, state) => '/chu-nha/cho-nghi',
+        redirect: (context, state) => '/chu-nha/tong-quan',
       ),
       GoRoute(
         path: '/chu-nha/tong-quan',
-        redirect: (context, state) => '/chu-nha/cho-nghi',
+        pageBuilder: (context, state) => _buildProtectedSlidePage(
+          state: state,
+          accessLevel: RouteAccessLevel.hostOnly,
+          child: const HostPortalScreen(section: 'tong-quan'),
+        ),
       ),
       GoRoute(
         path: '/chu-nha/cho-nghi',
@@ -594,7 +609,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/host',
-        redirect: (context, state) => '/host/tin-nhan',
+        redirect: (context, state) => '/chu-nha/khach-luu-tru',
+      ),
+      GoRoute(
+        path: '/host/khach',
+        redirect: (context, state) => '/chu-nha/khach-luu-tru',
       ),
       GoRoute(
         path: '/host/tin-nhan',
@@ -685,6 +704,28 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           accessLevel: RouteAccessLevel.adminOnly,
           child: const AdminPortalScreen(activeTab: 'phan-quyen'),
         ),
+      ),
+      GoRoute(
+        path: '/admin/phi-nen-tang',
+        pageBuilder: (context, state) => _buildProtectedSlidePage(
+          state: state,
+          accessLevel: RouteAccessLevel.adminOnly,
+          child: const AdminPortalScreen(activeTab: 'phi-nen-tang'),
+        ),
+      ),
+      GoRoute(
+        path: '/admin/tin-nhan',
+        pageBuilder: (context, state) {
+          final convId = state.uri.queryParameters['conversationId'];
+          return _buildProtectedSlidePage(
+            state: state,
+            accessLevel: RouteAccessLevel.adminOnly,
+            child: AdminPortalScreen(
+              activeTab: 'tin-nhan',
+              initialConversationId: convId,
+            ),
+          );
+        },
       ),
     ],
   );
@@ -869,19 +910,20 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
     required this.navigationShell,
   });
 
-  static const _tabs = [
-    (icon: LucideIcons.compass, label: 'Khám phá'),
-    (icon: LucideIcons.heart, label: 'Yêu thích'),
-    (icon: LucideIcons.calendarCheck, label: 'Chuyến đi'),
-    (icon: LucideIcons.user, label: 'Tài khoản'),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width >= 1024;
     if (isWide) {
       return Scaffold(body: navigationShell);
     }
+
+    final l10n = context.l10n;
+    final tabs = [
+      (icon: LucideIcons.compass, label: l10n.navDiscover),
+      (icon: AppSemanticIcons.messageHost, label: l10n.navMessages),
+      (icon: AppSemanticIcons.bookings, label: l10n.navTrips),
+      (icon: AppSemanticIcons.userProfile, label: l10n.navAccount),
+    ];
 
     return Scaffold(
       body: navigationShell,
@@ -895,8 +937,8 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
           child: SizedBox(
             height: 60,
             child: Row(
-              children: List.generate(_tabs.length, (index) {
-                final tab = _tabs[index];
+              children: List.generate(tabs.length, (index) {
+                final tab = tabs[index];
                 final isSelected = navigationShell.currentIndex == index;
                 return Expanded(
                   child: GestureDetector(
@@ -915,14 +957,6 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Container(
-                            width: 24,
-                            height: 2,
-                            margin: const EdgeInsets.only(bottom: 6),
-                            color: isSelected
-                                ? AppColors.textStrong
-                                : Colors.transparent,
-                          ),
                           Icon(
                             tab.icon,
                             size: 20,
@@ -931,18 +965,37 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
                                 : AppColors.iconMuted,
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            tab.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: isSelected
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                            child: Text(
+                              tab.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: AppTypography.textFontFamily,
+                                fontFamilyFallback: AppTypography.fontFallbacks,
+                                fontSize: 10.5,
+                                fontWeight: isSelected
+                                    ? FontWeight.w500
+                                    : FontWeight.w400,
+                                letterSpacing: -0.02,
+                                height: 1.35,
+                                color: isSelected
+                                    ? AppColors.textStrong
+                                    : AppColors.textMuted,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            width: 24,
+                            height: 2,
+                            margin: const EdgeInsets.only(top: 4),
+                            decoration: BoxDecoration(
                               color: isSelected
-                                  ? AppColors.textStrong
-                                  : AppColors.textSecondary,
+                                  ? AppColors.primary
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(999),
                             ),
                           ),
                         ],

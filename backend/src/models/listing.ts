@@ -75,6 +75,10 @@ export type ListingAvailabilityDayRecord = {
     date: string;
     isAvailable: boolean;
     isBlockedByHost: boolean;
+    isBlockedByAdmin?: boolean;
+    lockSource?: string | null;
+    syncRevision?: number;
+    lastSheetSyncedAt?: Date | string | null;
     priceOverride?: number | null;
     minNightsOverride?: number | null;
     notes?: string | null;
@@ -316,6 +320,7 @@ ListingModel.init(
         serviceFeePct: {
             type: DataTypes.DECIMAL(5, 2),
             allowNull: true,
+            defaultValue: 10,
             field: "service_fee_pct",
         },
         extraGuestFee: {

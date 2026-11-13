@@ -3,6 +3,7 @@ import type { Transaction } from "sequelize";
 import { ApiError } from "../../common/api-error";
 import BookingStatusHistory from "../../models/booking-status-history";
 import type { BookingDocument, BookingStatus } from "../../models/booking";
+import { enqueueHostSheetSyncJobSafe } from "../host-sheet-sync/host-sheet-sync.service";
 
 export type BookingStateActor = "guest" | "host" | "admin" | "system";
 
@@ -290,6 +291,28 @@ export const transitionBookingStatus = async (params: {
     params.booking.status = params.toStatus;
     params.booking.version = (params.booking.version ?? 0) + 1;
     await params.booking.save(persistenceOptions);
+
+    const hostUserId = Number(params.booking.hostUserId ?? 0);
+    const listingId = Number(params.booking.listingId ?? 0) || null;
+    const bookingId = Number(params.booking.bookingId ?? 0) || null;
+    if (hostUserId > 0) {
+        const triggerSheetSync = () => {
+            enqueueHostSheetSyncJobSafe({
+                hostUserId,
+                jobType: "booking_changed",
+                listingId,
+                bookingId,
+            });
+        };
+        const txWithHook = params.transaction as unknown as {
+            afterCommit?: (fn: () => void) => void;
+        };
+        if (typeof txWithHook?.afterCommit === "function") {
+            txWithHook.afterCommit(triggerSheetSync);
+        } else {
+            setImmediate(triggerSheetSync);
+        }
+    }
 
     if (persistenceOptions || process.env.NODE_ENV !== "test") {
         await BookingStatusHistory.create(

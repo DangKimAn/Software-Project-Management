@@ -47,11 +47,23 @@ final class AppConfig {
   static const enableLogging =
       bool.fromEnvironment('ENABLE_LOGGING', defaultValue: true);
 
+  /// Feature flag allowing instant rollback of foreign currency display back to pure VND.
+  static const enableMultiCurrencyDisplay = bool.fromEnvironment(
+    'ENABLE_MULTI_CURRENCY_DISPLAY',
+    defaultValue: true,
+  );
+
   /// Public Google OAuth 2.0 Client IDs (never client secrets).
-  static const googleClientId =
-      String.fromEnvironment('GOOGLE_CLIENT_ID', defaultValue: '');
-  static const googleServerClientId =
-      String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID', defaultValue: '');
+  static const googleClientId = String.fromEnvironment(
+    'GOOGLE_CLIENT_ID',
+    defaultValue:
+        '1066515688940-7a3979894bs52fuvt95ggkvc8u63lfuq.apps.googleusercontent.com',
+  );
+  static const googleServerClientId = String.fromEnvironment(
+    'GOOGLE_SERVER_CLIENT_ID',
+    defaultValue:
+        '1066515688940-7a3979894bs52fuvt95ggkvc8u63lfuq.apps.googleusercontent.com',
+  );
   static const googleIosClientId =
       String.fromEnvironment('GOOGLE_IOS_CLIENT_ID', defaultValue: '');
 
