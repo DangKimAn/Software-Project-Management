@@ -423,3 +423,35 @@ export const rejectHostApplication = async (
         };
     });
 };
+
+export type RequestMoreInfoHostApplicationInput = {
+    reason?: string | null;
+    note?: string | null;
+};
+
+/**
+ * Giải thuật yêu cầu bổ sung chứng từ KYC cho hồ sơ Chủ nhà đang chờ duyệt (`requestMoreInfoHostApplication`):
+ * - Ràng buộc quyền Admin và ghi chú hướng dẫn bổ sung rõ ràng (`1..1800` ký tự).
+ * - Đánh dấu tiền tố `[Yêu cầu bổ sung hồ sơ]` trên `rejectionReason` và chuyển trạng thái để ứng viên nộp lại ngay mà không vi phạm ràng buộc ENUM hiện hữu, kèm thông báo và nhật ký kiểm toán (`TC-090`).
+ */
+export const requestMoreInfoHostApplication = async (
+    admin: AuthenticatedUser,
+    applicationId: number,
+    input: RequestMoreInfoHostApplicationInput,
+    context: AdminActionContext = {},
+) => {
+    const rawNote = (input.note ?? input.reason ?? "").trim();
+    if (!rawNote) {
+        throw new ApiError(422, "Validation error", [
+            {
+                path: "reason",
+                msg: "Vui lòng nhập nội dung yêu cầu bổ sung hồ sơ.",
+            },
+        ]);
+    }
+    const prefixedReason = rawNote.startsWith("[Yêu cầu bổ sung hồ sơ]")
+        ? rawNote.slice(0, 2000)
+        : `[Yêu cầu bổ sung hồ sơ] ${rawNote}`.slice(0, 2000);
+
+    return rejectHostApplication(admin, applicationId, { reason: prefixedReason }, context);
+};

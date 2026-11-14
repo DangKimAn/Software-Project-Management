@@ -70,11 +70,30 @@ export const blogIdParamSchema = z.object({
     blogId: z.coerce.number().int().positive(),
 });
 
+const slugInputSchema = z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z
+        .string()
+        .trim()
+        .min(1)
+        .max(255)
+        .regex(
+            /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+            "slug chỉ được chứa chữ thường không dấu (a-z), chữ số (0-9) và dấu gạch ngang đơn (-)",
+        )
+        .optional(),
+);
+
+const tagsSchema = z
+    .array(z.string().trim().min(1).max(64))
+    .max(20)
+    .optional();
+
 /**
- * Schema kiểm chứng dữ liệu tạo mới bài viết gồm tiêu đề, tóm tắt, nội dung, ảnh bìa hợp lệ và trạng thái.
+ * Schema kiểm chứng dữ liệu tạo mới bài viết gồm tiêu đề, tóm tắt, nội dung, thẻ từ khóa, ảnh bìa hợp lệ và trạng thái.
  */
 export const createBlogBodySchema = z.object({
-    slug: z.string().trim().min(1).max(255).optional(),
+    slug: slugInputSchema,
     title: z.string().trim().min(1).max(255),
     category: z.string().trim().min(1).max(255),
     readTime: nullableTrimmedString(64),
@@ -82,6 +101,7 @@ export const createBlogBodySchema = z.object({
     excerpt: z.string().trim().min(1).max(2000),
     coverImage: coverImageSchema,
     content: contentSchema,
+    tags: tagsSchema,
     status: z.enum(blogStatusValues).optional(),
     publishedAt: nullableTrimmedString(64),
 });

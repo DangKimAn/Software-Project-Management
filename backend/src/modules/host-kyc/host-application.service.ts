@@ -31,7 +31,9 @@ import {
     getDocumentsForApplication,
     listAdminHostApplications as listAdminHostApplicationsImpl,
     rejectHostApplication as rejectHostApplicationImpl,
+    requestMoreInfoHostApplication as requestMoreInfoHostApplicationImpl,
     type RejectHostApplicationInput,
+    type RequestMoreInfoHostApplicationInput,
 } from "./host-application-review.service";
 import {
     assertSubmitInput,
@@ -164,6 +166,24 @@ export const submitHostApplication = async (
                         },
                     ]);
                 }
+
+                if (!frontAiResult.isClear) {
+                    throw new ApiError(422, "Validation error", [
+                        {
+                            path: "identityFront",
+                            msg: "Ảnh mặt trước giấy tờ bị mờ, lóa sáng hoặc mất góc. Vui lòng chụp lại ảnh rõ nét.",
+                        },
+                    ]);
+                }
+
+                if (identityBackItem && frontAiResult.side === "back") {
+                    throw new ApiError(422, "Validation error", [
+                        {
+                            path: "identityFront",
+                            msg: "Ảnh tải lên ở ô mặt trước đang là mặt sau CCCD. Vui lòng đặt đúng mặt trước và mặt sau.",
+                        },
+                    ]);
+                }
             } catch (error) {
                 if (error instanceof ApiError && error.statusCode === 422) {
                     throw error;
@@ -189,6 +209,24 @@ export const submitHostApplication = async (
                         {
                             path: "identityBack",
                             msg: `Tệp mặt sau không phải là CCCD hợp lệ: ${reason}. Vui lòng tải lên ảnh chụp mặt sau CCCD gốc.`,
+                        },
+                    ]);
+                }
+
+                if (!backAiResult.isClear) {
+                    throw new ApiError(422, "Validation error", [
+                        {
+                            path: "identityBack",
+                            msg: "Ảnh mặt sau CCCD bị mờ, lóa sáng hoặc mất góc. Vui lòng chụp lại ảnh rõ nét.",
+                        },
+                    ]);
+                }
+
+                if (backAiResult.side === "front") {
+                    throw new ApiError(422, "Validation error", [
+                        {
+                            path: "identityBack",
+                            msg: "Ảnh tải lên ở ô mặt sau đang là mặt trước CCCD. Vui lòng tải đúng mặt sau của cùng thẻ CCCD.",
                         },
                     ]);
                 }
@@ -644,6 +682,13 @@ export const rejectHostApplication = (
     input: RejectHostApplicationInput,
     context?: AdminActionContext,
 ) => rejectHostApplicationImpl(admin, applicationId, input, context);
+
+export const requestMoreInfoHostApplication = (
+    admin: AuthenticatedUser,
+    applicationId: number,
+    input: RequestMoreInfoHostApplicationInput,
+    context?: AdminActionContext,
+) => requestMoreInfoHostApplicationImpl(admin, applicationId, input, context);
 
 export const createHostDocStreamToken = (params: Parameters<typeof createHostDocStreamTokenImpl>[0]) =>
     createHostDocStreamTokenImpl(params);

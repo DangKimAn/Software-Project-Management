@@ -63,7 +63,7 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
 
         const message = error.expose || !isProduction() ? error.message : "Internal server error";
 
-        return sendError(res, error.statusCode, message, error.errors);
+        return sendError(res, error.statusCode, message, error.details ?? error.errors, error.code);
     }
 
     if (error instanceof UniqueConstraintError) {

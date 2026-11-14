@@ -28,6 +28,7 @@ import {
     cancelBookingBodySchema,
     createBulkBookingBodySchema,
     createBookingBodySchema,
+    guestCancelBookingBodySchema,
 } from "./bookings.validator";
 
 const router = express.Router();
@@ -41,7 +42,7 @@ router.get("/mine", validate({ query: bookingsQuerySchema }), getMyGuestBookings
 router.get("/:bookingId", validate({ params: bookingIdParamSchema }), getGuestBookingById);
 router.post(
     "/:bookingId/cancel",
-    validate({ params: bookingIdParamSchema, body: cancelBookingBodySchema }),
+    validate({ params: bookingIdParamSchema, body: guestCancelBookingBodySchema }),
     cancelGuestBookingById,
 );
 

@@ -89,6 +89,7 @@ const decodeHtmlEntities = (value: string) => {
  */
 const normalizeForModeration = (value: string) =>
     value
+        .replace(/[đĐ]/g, "d")
         .normalize("NFD")
         .replace(/\p{Diacritic}/gu, "")
         .toLowerCase()
@@ -143,12 +144,16 @@ export const assertTextAllowed = (value: string, field: string) => {
     });
 
     if (matchedTerm) {
-        throw new ApiError(422, "Validation error", [
-            {
-                path: field,
-                msg: "content violates content policy",
-            },
-        ]);
+        throw new ApiError(
+            422,
+            "Nội dung chứa từ ngữ không phù hợp với tiêu chuẩn cộng đồng.",
+            [
+                {
+                    path: field,
+                    msg: "content violates content policy",
+                },
+            ],
+        );
     }
 };
 

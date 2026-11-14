@@ -278,6 +278,26 @@ export const rejectHostApplicationController: RequestHandler = asyncHandler(asyn
     });
 });
 
+export const requestMoreInfoHostApplicationController: RequestHandler = asyncHandler(async (req, res) => {
+    const applicationId = parsePositiveIntParam(req.params.applicationId, "applicationId");
+    await hostApplicationService.requestMoreInfoHostApplication(
+        req.user!,
+        applicationId,
+        {
+            note: typeof req.body.note === "string" ? req.body.note : null,
+            reason: typeof req.body.reason === "string" ? req.body.reason : null,
+        },
+        {
+            ipAddress: req.ip,
+            userAgent: req.get("user-agent") ?? null,
+        },
+    );
+
+    return sendSuccess(res, {
+        message: "Đã gửi yêu cầu bổ sung hồ sơ cho ứng viên Chủ nhà.",
+    });
+});
+
 export const submitVerificationController: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 

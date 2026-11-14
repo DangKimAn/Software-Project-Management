@@ -18,10 +18,25 @@ import {
     RejectListingInput,
     approveAdminListing,
     getAdminListingDetail,
+    listAdminListings,
     listPendingAdminListings,
     rejectAdminListing,
     transferAdminListingHost,
 } from "./admin.service";
+
+/**
+ * Liệt kê phân trang danh sách chỗ ở cho quản trị viên theo bộ lọc trạng thái (`pending_approval`, `active`, `rejected`, `inactive`, `all`).
+ */
+export const listAllAdminListings: RequestHandler = asyncHandler(async (req, res) => {
+    assertValidRequest(req);
+
+    const queryParams = getValidatedQuery<AdminListingQuery>(req);
+    const result = await listAdminListings(req.user!, queryParams);
+
+    return sendSuccess(res, {
+        data: result,
+    });
+});
 
 /**
  * Liệt kê phân trang danh sách các chỗ ở đang chờ quản trị viên kiểm duyệt.

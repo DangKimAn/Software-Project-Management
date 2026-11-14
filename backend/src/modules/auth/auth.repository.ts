@@ -104,7 +104,11 @@ export const countRecentAuditLogsByIdentifierHash = async (
         );
 
         return Number(rows[0]?.count ?? 0);
-    } catch {
+    } catch (error) {
+        logger.warn("Failed to count recent audit logs by identifierHash", {
+            action,
+            error: error instanceof Error ? error.message : String(error),
+        });
         return 0;
     }
 };

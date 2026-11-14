@@ -35,6 +35,7 @@ import {
     registerHostOnboardingController,
     rejectHostApplicationController,
     rejectVerificationController,
+    requestMoreInfoHostApplicationController,
     streamAdminHostDocumentController,
     submitHostApplicationController,
     submitVerificationController,
@@ -200,6 +201,8 @@ adminHostApplicationsRouter.get("/", listAdminHostApplicationsController);
 adminHostApplicationsRouter.get("/:applicationId", getAdminHostApplicationDetailController);
 adminHostApplicationsRouter.patch("/:applicationId/approve", approveHostApplicationController);
 adminHostApplicationsRouter.patch("/:applicationId/reject", rejectHostApplicationController);
+adminHostApplicationsRouter.patch("/:applicationId/request-more-info", requestMoreInfoHostApplicationController);
+adminHostApplicationsRouter.post("/:applicationId/request-more-info", requestMoreInfoHostApplicationController);
 
 const verificationIdParamValidator = param("verificationId")
     .isInt({ min: 1 })

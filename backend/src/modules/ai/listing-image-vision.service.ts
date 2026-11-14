@@ -892,6 +892,19 @@ const saveAnalysisTags = async (
             );
         }
 
+        // Giải thuật phân lọc nhãn cảnh báo chất lượng ảnh (TC-077):
+        // Chỉ giữ lại các nhãn khiếm khuyết thực sự (mờ, tối, lóa, vỡ nét, watermark) trong `aiQualityWarnings`, tránh hiển thị nhầm nhãn tích cực thành cảnh báo lỗi.
+        const qualityWarningPattern =
+            /(blur|blurry|out[_ -]?of[_ -]?focus|dark|underexposed|overexposed|glare|low[_ -]?res|pixelat|watermark|tilted|mo\b|nhoe|thieu sang|toi\b|loa\b|vo net|nghieng)/i;
+        const qualityWarnings = (result.qualityTags ?? []).filter((tag) => {
+            const normalizedTag = tag
+                .replace(/[đĐ]/g, "d")
+                .normalize("NFD")
+                .replace(/\p{Diacritic}/gu, "")
+                .toLowerCase();
+            return qualityWarningPattern.test(normalizedTag);
+        });
+
         await image.update(
             {
                 displayTitle: title,
@@ -902,7 +915,7 @@ const saveAnalysisTags = async (
                 aiAmenityTags: amenityTags,
                 aiDescription: result.caption,
                 aiConfidence: confidence,
-                aiQualityWarnings: result.qualityTags,
+                aiQualityWarnings: qualityWarnings,
                 aiAnalysisStatus: "analyzed",
                 aiErrorMessage: null,
                 aiAnalyzedAt: analyzedAt,

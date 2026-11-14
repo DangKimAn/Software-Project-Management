@@ -488,7 +488,9 @@ const getConversationRowsForUser = async (
                         WHERE ur_admin.user_id = other_user.user_id
                           AND r_admin.code = 'admin'
                     ) THEN 'admin'
-                    ELSE NULL
+                    WHEN c.host_user_id = other_user.user_id THEN 'host'
+                    WHEN c.guest_user_id = other_user.user_id THEN 'guest'
+                    ELSE 'guest'
                 END AS otherRole,
                 COALESCE(
                     c.last_message_at,

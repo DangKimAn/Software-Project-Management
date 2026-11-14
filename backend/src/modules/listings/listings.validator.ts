@@ -23,6 +23,18 @@ export const publicListingsQuerySchema = z.object({
     checkIn: z.string().optional(),
     checkOut: z.string().optional(),
     guests: z.coerce.number().int().positive().optional(),
+    bedrooms: z.coerce.number().int().min(0).optional(),
+    beds: z.coerce.number().int().min(0).optional(),
+    bathrooms: z.coerce.number().int().min(0).optional(),
+    pets: z.preprocess(
+        (value) =>
+            value === "true" || value === true
+                ? true
+                : value === "false" || value === false
+                    ? false
+                    : undefined,
+        z.boolean().optional(),
+    ),
     propertyType: z.enum(["apartment", "villa", "hotel", "homestay"]).optional(),
     roomType: z.enum(["entire_place", "private_room", "shared_room"]).optional(),
     priceMin: z.coerce.number().min(0).optional(),

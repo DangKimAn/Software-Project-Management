@@ -155,11 +155,17 @@ export const verifyEmailBodySchema = z.object({
 });
 
 /**
- * Schema kiểm chứng yêu cầu đăng nhập OAuth bằng chuỗi `idToken` do Google cấp.
+ * Schema kiểm chứng yêu cầu đăng nhập OAuth bằng chuỗi `idToken` hoặc `accessToken` dự phòng (Flutter Web GIS) do Google cấp.
  */
-export const googleLoginBodySchema = z.object({
-    idToken: z.string().trim().min(1, "idToken is required"),
-});
+export const googleLoginBodySchema = z
+    .object({
+        idToken: z.string().trim().min(1, "idToken is required").optional(),
+        accessToken: z.string().trim().min(1, "accessToken is required").optional(),
+    })
+    .refine((data) => Boolean(data.idToken || data.accessToken), {
+        message: "idToken is required",
+        path: ["idToken"],
+    });
 
 /**
  * Schema kiểm chứng dữ liệu làm mới phiên đăng nhập với trường `refreshToken` tùy chọn (khi không truyền qua cookie).

@@ -98,9 +98,10 @@ export const calculateCouponDiscountVnd = ({
     maxDiscountAmount?: MoneyInput | null;
 }) => {
     const amountVnd = moneyToVnd(amount);
+    // Giải thuật làm tròn half-up trên miền BigInt ((x + 5000n) / 10000n) đồng bộ tuyệt đối với Math.round ở booking-pricing.service:
     const rawDiscount =
         discountType === "percent"
-            ? (amountVnd * decimalToScaledInteger(discountValue, 2)) / 10000n
+            ? (amountVnd * decimalToScaledInteger(discountValue, 2) + 5000n) / 10000n
             : moneyToVnd(discountValue);
     const cappedDiscount =
         maxDiscountAmount !== null && maxDiscountAmount !== undefined

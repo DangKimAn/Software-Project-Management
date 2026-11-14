@@ -89,6 +89,19 @@ export const verifyMailConnection = async () => {
 export const sendMail = async (input: SendMailInput) => {
     const mailConfig = getMailConfig();
 
+    // Giải thuật hạ cấp an toàn trên môi trường phát triển/kiểm thử cục bộ khi chưa cấu hình SMTP thực:
+    // ghi nhận nhật ký cảnh báo thay vì chặn đứng luồng OTP 503 để cho phép kiểm thử đầu-cuối (kèm debugOtp nếu bật).
+    if (
+        (!mailConfig.enabled || !mailConfig.host || !mailConfig.user || !mailConfig.password) &&
+        process.env.NODE_ENV !== "production"
+    ) {
+        logger.warn("SMTP is not configured in non-production environment; skipping external email dispatch", {
+            to: input.to,
+            subject: input.subject,
+        });
+        return { messageId: "dev-local-noop" };
+    }
+
     const attachments = [...(input.attachments ?? [])];
     if (input.html && input.html.includes("cid:the_palm_villa_logo")) {
         const logoPath = resolveBrandLogoPath();

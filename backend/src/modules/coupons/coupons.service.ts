@@ -4,6 +4,7 @@ import { ApiError } from "../../common/api-error";
 import { parseVietnamDateBoundary } from "../../common/date-time";
 import sequelize from "../../config/database";
 import type { AuthenticatedUser } from "../auth/auth.service";
+import Booking from "../../models/booking";
 import Coupon, { CouponType } from "../../models/coupon";
 import CouponRedemption from "../../models/coupon-redemption";
 import { calculateCouponDiscountVnd, moneyToVnd, vndToNumber } from "../../common/money";
@@ -181,7 +182,7 @@ const buildInvalidCouponResult = (reason: string) => ({
  */
 const validateCouponAvailability = async (
     coupon: InstanceType<typeof Coupon> | null,
-    userId: number,
+    userId: number | null,
     bookingAmount: string,
 ) => {
     if (!coupon || coupon.deletedAt) {
@@ -208,7 +209,9 @@ const validateCouponAvailability = async (
         return buildInvalidCouponResult("Order value does not meet coupon minimum");
     }
 
-    if (coupon.limitPerUser !== null && coupon.limitPerUser !== undefined) {
+    // Giải thuật kiểm tra hạn mức lượt dùng mỗi người dùng nhất quán với booking-pricing.service (TC-035):
+    // Chỉ kiểm tra khi người dùng đã đăng nhập (`userId !== null`) và cộng cả số đơn đang giữ chỗ (`pending_payment` còn hạn).
+    if (userId !== null && coupon.limitPerUser !== null && coupon.limitPerUser !== undefined) {
         const redemptionCount = await CouponRedemption.count({
             where: {
                 couponId: coupon.couponId,
@@ -216,7 +219,25 @@ const validateCouponAvailability = async (
             },
         });
 
-        if (redemptionCount >= coupon.limitPerUser) {
+        let pendingHoldCount = 0;
+        if (Object.prototype.hasOwnProperty.call(Booking, "count")) {
+            try {
+                pendingHoldCount = await Booking.count({
+                    where: {
+                        guestUserId: userId,
+                        couponId: coupon.couponId,
+                        status: "pending_payment",
+                        lockedUntil: {
+                            [Op.gt]: now,
+                        },
+                    },
+                });
+            } catch {
+                pendingHoldCount = 0;
+            }
+        }
+
+        if (redemptionCount + pendingHoldCount >= coupon.limitPerUser) {
             return buildInvalidCouponResult("Coupon usage limit has been reached");
         }
     }
@@ -238,9 +259,9 @@ const validateCouponAvailability = async (
 };
 
 /**
- * Giải thuật tra cứu coupon theo mã chuẩn hóa chưa xóa mềm và xác thực hiệu lực áp dụng cho người dùng hiện tại.
+ * Giải thuật tra cứu coupon theo mã chuẩn hóa chưa xóa mềm và xác thực hiệu lực áp dụng cho người dùng hiện tại hoặc khách vãng lai.
  */
-export const validateCouponForUser = async (user: AuthenticatedUser, input: ValidateCouponInput) => {
+export const validateCouponForUser = async (user: AuthenticatedUser | null, input: ValidateCouponInput) => {
     const coupon = await Coupon.findOne({
         where: {
             code: normalizeCode(input.code),
@@ -248,7 +269,7 @@ export const validateCouponForUser = async (user: AuthenticatedUser, input: Vali
         },
     });
 
-    return validateCouponAvailability(coupon, Number(user.id), input.bookingAmount);
+    return validateCouponAvailability(coupon, user ? Number(user.id) : null, input.bookingAmount);
 };
 
 /**

@@ -12,7 +12,7 @@ import {
     updateAdminCouponRequest,
     validateCoupon,
 } from "./coupons.controller";
-import { authenticate } from "../../middlewares/authenticate.middleware";
+import { authenticate, optionalAuthenticate } from "../../middlewares/authenticate.middleware";
 import { getCouponValidateRateLimiter } from "../../middlewares/rate-limit.middleware";
 import { requireRole } from "../../middlewares/require-role.middleware";
 import { validate } from "../../middlewares/validate";
@@ -28,7 +28,7 @@ const router = express.Router();
 
 router.get(
     "/validate",
-    authenticate,
+    optionalAuthenticate,
     getCouponValidateRateLimiter(),
     validate({ query: validateCouponQuerySchema }),
     validateCoupon,

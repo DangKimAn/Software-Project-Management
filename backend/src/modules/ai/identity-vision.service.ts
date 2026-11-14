@@ -316,6 +316,27 @@ export const analyzeIdentityDocument = async (input: AnalyzeIdentityInput): Prom
     } catch (err) {
         logger.error("Failed to analyze identity document with AI", err);
         if (err instanceof ApiError) throw err;
+        // Giải thuật phân loại lỗi nhà cung cấp AI Vision bên ngoài (OpenAI SDK / mạng):
+        // Ánh xạ lỗi xác thực khóa API, hết hạn mức hoặc mất kết nối sang 503 Service Unavailable thay vì 500 Internal Error.
+        const upstreamStatus = typeof (err as { status?: unknown })?.status === "number"
+            ? Number((err as { status: number }).status)
+            : 0;
+        const upstreamName = String((err as { name?: unknown })?.name ?? "");
+        const upstreamCode = String((err as { code?: unknown })?.code ?? "");
+        if (
+            upstreamStatus === 401 ||
+            upstreamStatus === 403 ||
+            upstreamStatus === 408 ||
+            upstreamStatus === 429 ||
+            upstreamStatus >= 500 ||
+            /AuthenticationError|PermissionDeniedError|RateLimitError|APIConnection|APITimeout|InternalServerError/i.test(upstreamName) ||
+            /ECONN|ETIMEDOUT|ENOTFOUND|invalid_api_key|insufficient_quota/i.test(upstreamCode)
+        ) {
+            throw new ApiError(
+                503,
+                "Dịch vụ AI nhận diện giấy tờ tạm thời không khả dụng. Vui lòng thử lại sau.",
+            );
+        }
         throw new ApiError(500, "Không thể phân tích ảnh căn cước bằng AI. Vui lòng thử lại với ảnh rõ nét hơn.");
     }
 };

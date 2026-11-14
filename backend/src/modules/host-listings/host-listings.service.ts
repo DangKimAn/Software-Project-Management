@@ -315,6 +315,7 @@ const normalizeUpdateListingLocationInput = (input: UpdateListingInput): UpdateL
 };
 
 const sensitiveListingFields = new Set<keyof UpdateListingInput>([
+    "title",
     "description",
     "addressLine",
     "ward",
@@ -989,9 +990,25 @@ export const updateListing = async (listingId: number, actor: HostActor, input: 
         const nextMaxNights = hasOwn(sanitizedInput, "maxNights")
             ? sanitizedInput.maxNights ?? null
             : listing.maxNights;
-        const changedFields = Object.keys(sanitizedInput).filter(
-            (key) => key !== "status" && sanitizedInput[key as keyof UpdateListingInput] !== undefined,
-        );
+        // Giải thuật xác định trường thực sự biến đổi giá trị (`changedFields`) khi cập nhật listing (TC-078):
+        // Đối chiếu giá trị sau chuẩn hóa với giá trị đang lưu trên DB để form gửi kèm trường không đổi không bị chuyển oan sang `pending_approval`.
+        const changedFields = Object.keys(sanitizedInput).filter((key) => {
+            if (key === "status") {
+                return false;
+            }
+            const nextVal = sanitizedInput[key as keyof UpdateListingInput];
+            if (nextVal === undefined) {
+                return false;
+            }
+            const currentVal = (listing as unknown as Record<string, unknown>)[key];
+            if (Array.isArray(nextVal) || Array.isArray(currentVal)) {
+                return JSON.stringify(nextVal ?? []) !== JSON.stringify(currentVal ?? []);
+            }
+            if (typeof nextVal === "number" || typeof currentVal === "number") {
+                return Number(nextVal ?? 0) !== Number(currentVal ?? 0);
+            }
+            return String(nextVal ?? "") !== String(currentVal ?? "");
+        });
         const hasSensitiveChange = changedFields.some((field) =>
             sensitiveListingFields.has(field as keyof UpdateListingInput),
         );
@@ -1641,17 +1658,17 @@ export const bulkUpdateListingCalendar = async (
     return sequelize.transaction(async (transaction) => {
         const listing = await getListingForHost(listingId, actor, transaction);
 
-        if (input.isBlockedByHost === true || input.isAvailable === false) {
-            const bookedDates = await findBookedCalendarDates(listing.listingId, uniqueDates, transaction);
+        // Giải thuật bảo vệ lịch đặt phòng đang hiệu lực (TC-081):
+        // Chặn mọi thao tác đóng lịch hoặc ghi đè giá/đêm tối thiểu trên những ngày đã có booking đang hiệu lực (`409 Conflict`).
+        const bookedDates = await findBookedCalendarDates(listing.listingId, uniqueDates, transaction);
 
-            if (bookedDates.length > 0) {
-                throw new ApiError(409, "Cannot block dates with active bookings", [
-                    {
-                        path: "dates",
-                        msg: `Dates already have active bookings: ${bookedDates.join(", ")}`,
-                    },
-                ]);
-            }
+        if (bookedDates.length > 0) {
+            throw new ApiError(409, "Cannot modify calendar dates with active bookings", [
+                {
+                    path: "dates",
+                    msg: `Dates already have active bookings: ${bookedDates.join(", ")}`,
+                },
+            ]);
         }
 
         const calendarRows = await getAvailabilityCalendarForListing(listing, transaction);

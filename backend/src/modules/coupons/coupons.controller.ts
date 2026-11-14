@@ -34,7 +34,7 @@ const auditContextFromRequest = (req: Request) => ({
  */
 export const validateCoupon: RequestHandler = asyncHandler(async (req, res) => {
     const query = getValidatedQuery<ValidateCouponInput>(req);
-    const result = await validateCouponForUser(req.user!, query);
+    const result = await validateCouponForUser(req.user ?? null, query);
 
     return sendSuccess(res, {
         data: result,

@@ -85,7 +85,71 @@ const defaultGoogleIdTokenVerifier: GoogleIdTokenVerifier = async (idToken) => {
     }
 };
 
+/**
+ * Giải thuật xác thực Google Access Token dự phòng cho nền tảng trình duyệt (Flutter Web Google Identity Services):
+ * - Đối chiếu `accessToken` qua `OAuth2Client.getTokenInfo` để xác nhận đối tượng thụ hưởng `aud === googleClientId`.
+ * - Truy vấn hồ sơ OpenID Connect chuẩn tại `https://openidconnect.googleapis.com/v1/userinfo` để thu thập `sub`, `email`, `email_verified` và tên hiển thị.
+ */
+const defaultGoogleAccessTokenVerifier: GoogleIdTokenVerifier = async (accessToken) => {
+    const clientId = getEnv().googleClientId;
+
+    if (!clientId) {
+        throw new ApiError(500, "Missing Google client id configuration");
+    }
+
+    const client = new OAuth2Client(clientId);
+
+    try {
+        const tokenInfo = await client.getTokenInfo(accessToken);
+
+        if (!tokenInfo || (tokenInfo.aud && tokenInfo.aud !== clientId)) {
+            throw new ApiError(401, "Invalid Google token");
+        }
+
+        const userInfoRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+            },
+        });
+
+        if (!userInfoRes.ok) {
+            throw new ApiError(401, "Invalid Google token");
+        }
+
+        const userInfo = (await userInfoRes.json()) as {
+            sub?: string;
+            email?: string;
+            email_verified?: boolean;
+            name?: string;
+            picture?: string | null;
+        };
+
+        const sub = userInfo.sub || tokenInfo.sub;
+        const email = userInfo.email || tokenInfo.email;
+        const emailVerified = userInfo.email_verified === true || tokenInfo.email_verified === true;
+
+        if (!sub || !email || !emailVerified) {
+            throw new ApiError(401, "Invalid Google token");
+        }
+
+        return {
+            sub,
+            email,
+            emailVerified: true,
+            name: userInfo.name?.trim() || email,
+            picture: userInfo.picture ?? null,
+        };
+    } catch (error) {
+        if (error instanceof ApiError) {
+            throw error;
+        }
+
+        throw new ApiError(401, "Invalid Google token");
+    }
+};
+
 let googleIdTokenVerifier: GoogleIdTokenVerifier = defaultGoogleIdTokenVerifier;
+let googleAccessTokenVerifier: GoogleIdTokenVerifier = defaultGoogleAccessTokenVerifier;
 
 /**
  * Thay thế hàm xác thực Google ID Token phục vụ kiểm thử tự động cô lập,
@@ -93,6 +157,7 @@ let googleIdTokenVerifier: GoogleIdTokenVerifier = defaultGoogleIdTokenVerifier;
  */
 export const setGoogleIdTokenVerifierForTests = (verifier?: GoogleIdTokenVerifier) => {
     googleIdTokenVerifier = verifier ?? defaultGoogleIdTokenVerifier;
+    googleAccessTokenVerifier = verifier ?? defaultGoogleAccessTokenVerifier;
 };
 
 /**
@@ -103,6 +168,21 @@ export const setGoogleIdTokenVerifierForTests = (verifier?: GoogleIdTokenVerifie
 export const verifyGoogleIdToken = async (idToken: string) => {
     try {
         return await googleIdTokenVerifier(idToken);
+    } catch (error) {
+        if (error instanceof ApiError) {
+            throw error;
+        }
+
+        throw new ApiError(401, "Invalid Google token");
+    }
+};
+
+/**
+ * Giải thuật xác thực Google Access Token có chuẩn hóa ngoại lệ cho luồng OAuth trình duyệt.
+ */
+export const verifyGoogleAccessToken = async (accessToken: string) => {
+    try {
+        return await googleAccessTokenVerifier(accessToken);
     } catch (error) {
         if (error instanceof ApiError) {
             throw error;
@@ -148,11 +228,19 @@ const applyVerifiedGoogleProfile = async (user: UserDocument, profile: VerifiedG
  *    - Nếu chưa tồn tại tài khoản: khởi tạo nguyên tử người dùng xã hội mới kèm liên kết `SocialAccount`.
  * 4. Khởi tạo phiên đăng nhập mới (`issueAuthSession`) gồm Access Token và Refresh Token lưu băm.
  */
-export const authenticateWithGoogleIdToken = async (
-    idToken: string,
+export const authenticateWithGoogleToken = async (
+    tokens: { idToken?: string; accessToken?: string },
     context: GoogleAuthContext = {},
 ) => {
-    const profile = await verifyGoogleIdToken(idToken);
+    const profile = tokens.idToken
+        ? await verifyGoogleIdToken(tokens.idToken)
+        : tokens.accessToken
+            ? await verifyGoogleAccessToken(tokens.accessToken)
+            : null;
+
+    if (!profile) {
+        throw new ApiError(400, "idToken is required");
+    }
     const normalizedEmail = normalizeEmail(profile.email);
 
     if (!profile.emailVerified || !normalizedEmail) {
@@ -234,3 +322,11 @@ export const authenticateWithGoogleIdToken = async (
         user: await toAuthResponseUser(user, roles),
     };
 };
+
+/**
+ * Hàm bao tương thích ngược xác thực trực tiếp bằng chuỗi `idToken` của Google.
+ */
+export const authenticateWithGoogleIdToken = async (
+    idToken: string,
+    context: GoogleAuthContext = {},
+) => authenticateWithGoogleToken({ idToken }, context);

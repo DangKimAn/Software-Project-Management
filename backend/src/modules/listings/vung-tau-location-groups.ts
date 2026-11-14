@@ -163,11 +163,12 @@ export const LOCATION_GROUP_AREA_KEYS: Record<LocationGroupName, string> = {
     "Thùy Vân": "thuy_van",
 };
 
+// Giải thuật chuẩn hóa khung bao địa lý (Bounding Box) thành phố Vũng Tàu bao phủ cả bán đảo trung tâm và xã đảo Long Sơn (TC-024, TC-075):
 export const VUNG_TAU_MAP_BOUNDS = {
-    south: 10.295,
-    west: 107.03,
-    north: 10.455,
-    east: 107.18,
+    south: 10.28,
+    west: 107.0,
+    north: 10.5,
+    east: 107.26,
 } as const;
 
 /**

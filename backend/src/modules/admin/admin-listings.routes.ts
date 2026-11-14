@@ -11,6 +11,7 @@ import {
     approveListing,
     transferListingHostHandler,
     getAdminListingDetailHandler,
+    listAllAdminListings,
     listPendingListings,
     rejectListing,
 } from "./admin.controller";
@@ -26,6 +27,24 @@ const listingIdParamValidator = param("listingId")
     .toInt();
 
 const requireAdmin = [authenticate, requireRole("admin")];
+
+router.get(
+    "/",
+    requireAdmin,
+    [
+        query("status")
+            .optional()
+            .isIn(["pending_approval", "pending", "active", "published", "rejected", "inactive", "draft", "all"])
+            .withMessage("status is invalid"),
+        query("page").optional().isInt({ min: 1 }).withMessage("page must be at least 1").toInt(),
+        query("limit")
+            .optional()
+            .isInt({ min: 1, max: adminListingsMaxPageLimit })
+            .withMessage(`limit must be between 1 and ${adminListingsMaxPageLimit}`)
+            .toInt(),
+    ],
+    listAllAdminListings,
+);
 
 router.get(
     "/pending",

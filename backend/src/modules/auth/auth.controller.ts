@@ -11,11 +11,13 @@ import { asyncHandler } from "../../common/async-handler";
 import { sendSuccess } from "../../common/http";
 import { assertValidRequest, getValidatedBody } from "../../common/validation";
 import { getEnv } from "../../config/env";
-import { authenticateWithGoogleIdToken } from "./google-auth.service";
+import { disconnectUserSockets } from "../../socket/socket";
+import { authenticateWithGoogleIdToken, authenticateWithGoogleToken } from "./google-auth.service";
 import {
     buildAuthCookieOptions,
     buildRefreshCookieOptions,
     comparePassword,
+    extractAuthToken,
     extractRefreshToken,
     findUserForLogin,
     issueAuthOtp,
@@ -25,8 +27,11 @@ import {
     refreshAuthSession,
     registerUser,
     resetPasswordWithOtp,
+    revokeAllRefreshSessionsForUser,
     revokeRefreshSessionByToken,
     toAuthResponseUser,
+    verifyAuthToken,
+    verifyRefreshToken,
     verifyPhoneWithOtp,
     verifyEmailWithOtp,
 } from "./auth.service";
@@ -94,9 +99,11 @@ export const login: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
     const payload = getValidatedBody<{ identifier: string; password: string }>(req);
+    const lockMinutes = getEnv().authRateLimitWindowMinutes || 15;
+    const lockoutMessage = `Tài khoản tạm thời bị khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau ${lockMinutes} phút.`;
 
     if (await isLoginTemporarilyLocked(payload.identifier)) {
-        throw new ApiError(423, "Tài khoản tạm thời bị khóa. Vui lòng thử lại sau.");
+        throw new ApiError(423, lockoutMessage);
     }
 
     const user = await findUserForLogin(payload.identifier);
@@ -106,7 +113,7 @@ export const login: RequestHandler = asyncHandler(async (req, res) => {
         const failedCount = await recordFailedLoginAttempt(payload.identifier, authContextFromRequest(req), user);
 
         if (failedCount >= 5) {
-            throw new ApiError(423, "Tài khoản tạm thời bị khóa. Vui lòng thử lại sau.");
+            throw new ApiError(423, lockoutMessage);
         }
 
         throw new ApiError(401, "Email/SĐT hoặc mật khẩu không đúng.");
@@ -132,9 +139,27 @@ export const login: RequestHandler = asyncHandler(async (req, res) => {
  */
 export const logout: RequestHandler = asyncHandler(async (req, res) => {
     const refreshToken = extractRefreshToken(req);
+    const accessToken = extractAuthToken(req);
 
+    // Giải thuật thu hồi phiên kép khi đăng xuất (TC-065):
+    // 1. Ưu tiên thu hồi phiên Refresh Token theo cookie/body hiện hành.
+    // 2. Nếu client không gửi kèm cookie Refresh Token (ví dụ mobile/SPA chỉ gửi Bearer Access Token),
+    //    giải mã an toàn Access Token để thu hồi các phiên Refresh Session đang mở và ngắt kênh Socket.IO.
     if (refreshToken) {
         await revokeRefreshSessionByToken(refreshToken);
+        try {
+            const refreshPayload = verifyRefreshToken(refreshToken);
+            disconnectUserSockets(refreshPayload.userId);
+        } catch {
+            // Bỏ qua nếu chữ ký token giả lập hoặc đã hết hạn
+        }
+    } else if (accessToken) {
+        try {
+            const authPayload = verifyAuthToken(accessToken);
+            await revokeAllRefreshSessionsForUser(Number(authPayload.userId));
+        } catch {
+            // Đảm bảo đăng xuất luôn bất biến (idempotent) ngay cả khi Access Token hết hạn
+        }
     }
 
     res.clearCookie("auth_token", buildAuthCookieOptions());
@@ -265,8 +290,10 @@ export const verifyEmail: RequestHandler = asyncHandler(async (req, res) => {
 export const loginWithGoogle: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
-    const payload = getValidatedBody<{ idToken: string }>(req);
-    const result = await authenticateWithGoogleIdToken(payload.idToken, authContextFromRequest(req));
+    const payload = getValidatedBody<{ idToken?: string; accessToken?: string }>(req);
+    const result = payload.idToken
+        ? await authenticateWithGoogleIdToken(payload.idToken, authContextFromRequest(req))
+        : await authenticateWithGoogleToken(payload, authContextFromRequest(req));
 
     writeAuthCookies(res, result);
 

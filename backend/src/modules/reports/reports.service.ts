@@ -3,7 +3,10 @@ import { Op, QueryTypes } from "sequelize";
 import { ApiError } from "../../common/api-error";
 import sequelize from "../../config/database";
 import Booking from "../../models/booking";
+import Conversation from "../../models/conversation";
+import ConversationParticipant from "../../models/conversation-participant";
 import Listing from "../../models/listing";
+import Message from "../../models/message";
 import Report, {
     ReportStatus,
     ReportTargetType,
@@ -276,6 +279,43 @@ const assertTargetExists = async (targetType: ReportTargetType, targetId: number
 
         if (!review) {
             throw new ApiError(404, "Review not found");
+        }
+
+        return;
+    }
+
+    if (targetType === "message") {
+        // Giải thuật xác thực báo cáo tin nhắn vi phạm (TC-095):
+        // Kiểm tra tin nhắn tồn tại và người báo cáo bắt buộc là thành viên hợp lệ trong cuộc hội thoại chứa tin nhắn đó.
+        const message = await Message.findOne({
+            where: {
+                messageId: targetId,
+            },
+        });
+
+        if (!message) {
+            throw new ApiError(404, "Message not found");
+        }
+
+        const conversation = await Conversation.findOne({
+            where: {
+                conversationId: message.conversationId,
+            },
+        });
+
+        const isDirectMember =
+            conversation &&
+            (Number(conversation.guestUserId) === reporterId || Number(conversation.hostUserId) === reporterId);
+        if (!isDirectMember) {
+            const participant = await ConversationParticipant.findOne({
+                where: {
+                    conversationId: message.conversationId,
+                    userId: reporterId,
+                },
+            });
+            if (!participant) {
+                throw new ApiError(403, "Forbidden");
+            }
         }
 
         return;

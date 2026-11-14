@@ -36,6 +36,7 @@ import Listing, {
 } from "../../models/listing";
 import Review from "../../models/review";
 import User from "../../models/user";
+import { syncEffectivePlatformFee } from "../admin/admin-fees.service";
 
 export const publicListingSortValues = [
     "price_asc",
@@ -125,12 +126,12 @@ type AmenityLookup = {
         active: boolean;
         isActive: boolean;
     }>;
-    aliasMap: Map<string, number>;
+    aliasMap: Map<string, number[]>;
     searchTermsById: Map<number, string[]>;
 };
 
 type ResolvedAmenityFilters = {
-    amenityIds: number[];
+    amenityIdGroups: number[][];
     textTokens: string[];
 };
 
@@ -331,6 +332,14 @@ const matchesAmenityTextToken = (
     const normalizedText = normalizeComparableText(searchableText);
     const compactText = normalizeAmenityToken(searchableText);
 
+    if (textToken === "petfriendly" || textToken === "petsallowed" || textToken === "thucung") {
+        return (
+            Boolean(listing.petsAllowed) ||
+            normalizedText.includes("thu cung") ||
+            normalizedText.includes("pet")
+        );
+    }
+
     if (textToken === "nearbeach" || textToken === "ganbien") {
         return normalizedText.includes("bien") || 
                normalizedText.includes("beach") || 
@@ -508,15 +517,33 @@ const isDateRangeAvailable = (
             return true;
         }
 
-        return !day.isBlockedByHost && day.isAvailable;
+        return !day.isBlockedByHost && !day.isBlockedByAdmin && day.isAvailable;
     });
 };
 
 /**
- * Giải thuật xây dựng chỉ mục tra cứu tiện ích song ngữ Việt-Anh:
- * Tải danh mục tiện ích đang hoạt động và thiết lập bảng ánh xạ hai chiều gồm `aliasMap` (`token -> amenityId`)
- * và `searchTermsById` (`amenityId -> danh sách từ khóa đồng nghĩa`) phục vụ lọc tập con tiện ích và tìm kiếm từ khóa.
+ * Giải thuật xây dựng chỉ mục tra cứu tiện ích song ngữ Việt-Anh động theo dữ liệu thực trong DB (TC-023):
+ * - Tải danh mục tiện ích đang hoạt động và đối sánh từng nhóm từ đồng nghĩa với tên `Amenity` thực tế trong CSDL
+ *   thay vì gán cứng `amenityId` số học, cho phép một mã slug (ví dụ `"pool"`, `"air_conditioner"`) khớp chính xác
+ *   với tập các `amenityId` tương ứng (ví dụ cả `"Hồ bơi"` lẫn `"Hồ bơi riêng"`).
  */
+const amenitySynonymGroups: string[][] = [
+    ["wifi", "wi-fi", "internet", "mạng không dây"],
+    ["air_conditioner", "airconditioner", "air conditioning", "airconditioning", "điều hòa", "dieu hoa", "máy lạnh", "may lanh"],
+    ["washer", "washing machine", "máy giặt", "may giat"],
+    ["kitchen", "bếp", "bep", "nhà bếp", "nha bep"],
+    ["pool", "swimming pool", "private pool", "hồ bơi", "ho boi", "hồ bơi riêng", "bể bơi", "be boi"],
+    ["parking", "free parking", "chỗ đậu xe", "cho dau xe", "đậu xe", "dau xe", "đỗ xe", "bãi xe", "gara"],
+    ["tv", "television", "smart tv", "tivi"],
+    ["balcony", "patio", "ban công", "ban cong", "sân thượng"],
+    ["bbq", "bếp nướng", "bep nuong", "nướng bbq", "nuong bbq", "grill"],
+    ["jacuzzi", "hot tub", "bồn tắm sục", "bon tam suc", "bồn sục"],
+    ["fireplace", "lò sưởi", "lo suoi"],
+    ["fridge", "refrigerator", "tủ lạnh", "tu lanh"],
+    ["hair dryer", "hairdryer", "máy sấy tóc", "may say toc"],
+    ["iron", "bàn ủi", "ban ui"],
+];
+
 const buildAmenityLookup = async (): Promise<AmenityLookup> => {
     const amenities = (await Amenity.find({
         active: true,
@@ -528,11 +555,15 @@ const buildAmenityLookup = async (): Promise<AmenityLookup> => {
         active: boolean;
         isActive: boolean;
     }>;
-    const aliasMap = new Map<string, number>();
+    const aliasMap = new Map<string, Set<number>>();
     const searchTermsById = new Map<number, Set<string>>();
 
     const addAlias = (value: string, amenityId: number) => {
-        aliasMap.set(normalizeAmenityToken(value), amenityId);
+        const token = normalizeAmenityToken(value);
+        if (!token) return;
+        const ids = aliasMap.get(token) ?? new Set<number>();
+        ids.add(amenityId);
+        aliasMap.set(token, ids);
 
         const terms = searchTermsById.get(amenityId) ?? new Set<string>();
         terms.add(value);
@@ -541,56 +572,28 @@ const buildAmenityLookup = async (): Promise<AmenityLookup> => {
 
     for (const amenity of amenities) {
         addAlias(amenity.name, amenity.amenityId);
-    }
+        const normalizedAmenityName = normalizeAmenityToken(amenity.name);
 
-    [
-        ["wifi", 1],
-        ["wi-fi", 1],
-        ["air conditioning", 2],
-        ["airconditioning", 2],
-        ["điều hòa", 2],
-        ["dieu hoa", 2],
-        ["máy lạnh", 2],
-        ["washer", 3],
-        ["máy giặt", 3],
-        ["may giat", 3],
-        ["kitchen", 4],
-        ["bếp", 4],
-        ["bep", 4],
-        ["pool", 5],
-        ["hồ bơi", 5],
-        ["ho boi", 5],
-        ["swimming pool", 5],
-        ["parking", 6],
-        ["chỗ đậu xe", 6],
-        ["cho dau xe", 6],
-        ["đậu xe", 6],
-        ["dau xe", 6],
-        ["đỗ xe", 6],
-        ["bãi xe", 6],
-        ["gara", 6],
-        ["tv", 7],
-        ["television", 7],
-        ["balcony", 8],
-        ["ban công", 8],
-        ["ban cong", 8],
-        ["fireplace", 9],
-        ["fridge", 10],
-        ["refrigerator", 10],
-        ["tủ lạnh", 10],
-        ["tu lanh", 10],
-        ["hair dryer", 11],
-        ["hairdryer", 11],
-        ["máy sấy tóc", 11],
-        ["may say toc", 11],
-        ["iron", 12],
-        ["bàn ủi", 12],
-        ["ban ui", 12],
-    ].forEach(([value, amenityId]) => addAlias(String(value), Number(amenityId)));
+        for (const group of amenitySynonymGroups) {
+            const normalizedGroupTokens = group.map(normalizeAmenityToken).filter(Boolean);
+            const isMatch = normalizedGroupTokens.some(
+                (groupToken) =>
+                    normalizedAmenityName === groupToken ||
+                    (groupToken.length >= 3 && normalizedAmenityName.includes(groupToken)),
+            );
+            if (isMatch) {
+                for (const synonym of group) {
+                    addAlias(synonym, amenity.amenityId);
+                }
+            }
+        }
+    }
 
     return {
         amenities,
-        aliasMap,
+        aliasMap: new Map(
+            Array.from(aliasMap.entries()).map(([token, ids]) => [token, Array.from(ids)]),
+        ),
         searchTermsById: new Map(
             Array.from(searchTermsById.entries()).map(([amenityId, terms]) => [amenityId, Array.from(terms)]),
         ),
@@ -599,7 +602,7 @@ const buildAmenityLookup = async (): Promise<AmenityLookup> => {
 
 /**
  * Giải thuật phân giải bộ lọc chuỗi tiện ích (`amenitiesQuery` phân tách bằng dấu phẩy):
- * Khử trùng lặp các token chuẩn hóa và phân loại thành tập mã tiện ích định danh (`amenityIds`) cùng tập nhãn văn bản tự do (`textTokens`).
+ * Khử trùng lặp các token chuẩn hóa và phân loại thành các nhóm mã tiện ích tương đương (`amenityIdGroups`) cùng tập nhãn văn bản tự do (`textTokens`).
  */
 const resolveAmenityFilters = async (
     amenitiesQuery?: string,
@@ -623,22 +626,27 @@ const resolveAmenityFilters = async (
     }
 
     const { aliasMap } = amenityLookup ?? (await buildAmenityLookup());
-    const amenityIds: number[] = [];
+    const amenityIdGroups: number[][] = [];
     const textTokens: string[] = [];
 
     for (const token of requestedTokens) {
-        const amenityId = aliasMap.get(token);
-
-        if (amenityId === undefined) {
+        if (token === "petfriendly" || token === "petsallowed" || token === "thucung") {
             textTokens.push(token);
             continue;
         }
 
-        amenityIds.push(amenityId);
+        const candidateIds = aliasMap.get(token);
+
+        if (!candidateIds || candidateIds.length === 0) {
+            textTokens.push(token);
+            continue;
+        }
+
+        amenityIdGroups.push(candidateIds);
     }
 
     return {
-        amenityIds: Array.from(new Set(amenityIds)),
+        amenityIdGroups,
         textTokens,
     };
 };
@@ -830,6 +838,10 @@ export const getPublicListings = async (query: PublicListingsQuery) => {
         propertyType?: PropertyType;
         roomType?: RoomType;
         maxGuests?: { $gte: number };
+        bedrooms?: { $gte: number };
+        beds?: { $gte: number };
+        bathrooms?: { $gte: number };
+        petsAllowed?: boolean;
         basePrice?: { $gte?: number; $lte?: number };
     } = {
         status: "active",
@@ -839,6 +851,10 @@ export const getPublicListings = async (query: PublicListingsQuery) => {
     if (query.propertyType) publicFilter.propertyType = query.propertyType;
     if (query.roomType) publicFilter.roomType = query.roomType;
     if (query.guests !== undefined) publicFilter.maxGuests = { $gte: query.guests };
+    if (query.bedrooms !== undefined && query.bedrooms > 0) publicFilter.bedrooms = { $gte: query.bedrooms };
+    if (query.beds !== undefined && query.beds > 0) publicFilter.beds = { $gte: query.beds };
+    if (query.bathrooms !== undefined && query.bathrooms > 0) publicFilter.bathrooms = { $gte: query.bathrooms };
+    if (query.pets === true) publicFilter.petsAllowed = true;
 
     if (priceMin !== undefined || priceMax !== undefined) {
         publicFilter.basePrice = {};
@@ -910,12 +926,16 @@ export const getPublicListings = async (query: PublicListingsQuery) => {
         const listingAmenityIds = amenityIdsMap.get(listing.listingId) ?? [];
 
         if (amenityFilters) {
-            const hasAllAmenityIds = amenityFilters.amenityIds.every((amenityId) => {
-                if (listingAmenityIds.includes(amenityId)) return true;
-                
+            const hasAllAmenityIds = amenityFilters.amenityIdGroups.every((candidateIds) => {
+                if (candidateIds.some((amenityId) => listingAmenityIds.includes(amenityId))) {
+                    return true;
+                }
+
                 // Fallback to text match if relation is missing
-                const terms = amenityLookup?.searchTermsById.get(amenityId) ?? [];
-                return terms.some(term => matchesAmenityTextToken(listing, listingAmenityIds, term, amenityLookup));
+                const terms = candidateIds.flatMap(
+                    (amenityId) => amenityLookup?.searchTermsById.get(amenityId) ?? [],
+                );
+                return terms.some((term) => matchesAmenityTextToken(listing, listingAmenityIds, term, amenityLookup));
             });
 
             if (!hasAllAmenityIds) return false;
@@ -1045,12 +1065,13 @@ export const getPublicListings = async (query: PublicListingsQuery) => {
  */
 export const getPublicListingDetail = async (listingId: number) => {
     const listing = await getPublicListingOrThrow(listingId);
-    const [amenityIds, images, rules, reviewSummary, host] = await Promise.all([
+    const [amenityIds, images, rules, reviewSummary, host, effectivePlatformFeePct] = await Promise.all([
         getListingAmenityIdsForListing(listing),
         getListingImagesForListing(listing),
         getListingRulesForListing(listing),
         getListingReviewSummary(listing.listingId),
         User.findById(listing.hostId),
+        syncEffectivePlatformFee().catch(() => 10),
     ]);
     const amenities = await getAmenityDetails(amenityIds);
 
@@ -1061,7 +1082,7 @@ export const getPublicListingDetail = async (listingId: number) => {
         basePrice: listing.basePrice,
         weekendPrice: listing.weekendPrice ?? null,
         cleaningFee: listing.cleaningFee ?? null,
-        serviceFeePct: listing.serviceFeePct ?? null,
+        serviceFeePct: listing.serviceFeePct ?? effectivePlatformFeePct,
         extraGuestFee: listing.extraGuestFee ?? null,
         currency: listing.currency,
         maxGuests: listing.maxGuests,
@@ -1123,7 +1144,9 @@ export const getPublicListingAvailability = async (listingId: number, query: Pub
         const date = `${year}-${String(month).padStart(2, "0")}-${String(index + 1).padStart(2, "0")}`;
         const existing = availabilityMap.get(date);
         const isPast = date < todayVN;
-        const calendarAvailable = existing ? !existing.isBlockedByHost && existing.isAvailable : true;
+        const calendarAvailable = existing
+            ? !existing.isBlockedByHost && !existing.isBlockedByAdmin && existing.isAvailable
+            : true;
 
         return {
             date,

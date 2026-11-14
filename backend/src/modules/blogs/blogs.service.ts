@@ -25,6 +25,7 @@ export type BlogInput = {
     excerpt: string;
     coverImage?: string | null;
     content: string[];
+    tags?: string[];
     status?: BlogStatus;
     publishedAt?: string | null;
 };
@@ -56,6 +57,7 @@ const assertAdmin = (user: AuthenticatedUser) => {
  */
 const slugify = (value: string) => {
     const slug = sanitizeSingleLineText(value)
+        .replace(/[đĐ]/g, "d")
         .normalize("NFD")
         .replace(/\p{Diacritic}/gu, "")
         .toLowerCase()
@@ -64,6 +66,28 @@ const slugify = (value: string) => {
         .slice(0, 255);
 
     return slug || `blog-${Date.now()}`;
+};
+
+/**
+ * Giải thuật chuẩn hóa danh sách thẻ từ khóa bài viết (`tags`):
+ * Làm sạch từng thẻ một dòng, khử trùng lặp không phân biệt hoa thường và giới hạn tối đa 20 thẻ (TC-060).
+ */
+const normalizeTags = (tags?: string[]) => {
+    if (!Array.isArray(tags)) {
+        return [];
+    }
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const rawTag of tags) {
+        const tag = sanitizeSingleLineText(rawTag);
+        if (!tag) continue;
+        const key = tag.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push(tag.slice(0, 64));
+        if (result.length >= 20) break;
+    }
+    return result;
 };
 
 /**
@@ -156,6 +180,7 @@ const serializeBlog = (blog: BlogDocument) => ({
     excerpt: blog.excerpt,
     coverImage: blog.coverImage ?? "",
     content: Array.isArray(blog.content) ? blog.content : [],
+    tags: Array.isArray(blog.tags) ? blog.tags : [],
     status: blog.status,
     publishedAt: formatPublishedAt(blog.publishedAt),
     createdAt: blog.createdAt,
@@ -387,6 +412,7 @@ export const createAdminBlog = async (
                 excerpt: sanitizeText(input.excerpt),
                 coverImage: sanitizeNullableSingleLineText(input.coverImage),
                 content,
+                tags: normalizeTags(input.tags),
                 status,
                 publishedAt,
                 createdByUserId: Number(admin.id),
@@ -448,6 +474,7 @@ export const updateAdminBlog = async (
         if (input.excerpt !== undefined) blog.excerpt = sanitizeText(input.excerpt);
         if (input.coverImage !== undefined) blog.coverImage = sanitizeNullableSingleLineText(input.coverImage);
         if (input.content !== undefined) blog.content = normalizeContent(input.content);
+        if (input.tags !== undefined) blog.tags = normalizeTags(input.tags);
         if (input.status !== undefined) blog.status = input.status;
 
         const nextPublishedAt = toDateOrNull(input.publishedAt);

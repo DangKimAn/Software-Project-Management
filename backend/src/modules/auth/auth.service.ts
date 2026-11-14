@@ -702,72 +702,102 @@ export const refreshAuthSession = async (
     const payload = verifyRefreshToken(refreshToken);
     const tokenHash = hashRefreshToken(refreshToken);
 
-    return sequelize.transaction(async (transaction) => {
-        const session = await RefreshSession.findOne({
-            where: {
-                sessionId: payload.sessionId,
-                userId: Number(payload.userId),
-                tokenHash,
-                revokedAt: null,
-                expiresAt: {
-                    [Op.gte]: new Date(),
-                },
-            },
+    // Giải thuật cam kết thu hồi toàn diện trước khi ném ngoại lệ 403 (TC-099):
+    // Trả về kết quả phân nhánh để giao dịch Sequelize COMMIT thành công thao tác thu hồi toàn bộ phiên của userId
+    // khi phát hiện phát lại Refresh Token cũ, sau đó mới ngắt cưỡng bức Socket và ném lỗi 403 bên ngoài giao dịch.
+    const txResult = await sequelize.transaction(
+        async (
             transaction,
-            lock: transaction.LOCK.UPDATE,
-        });
-
-        if (!session) {
-            const reusedOrRevokedSession = await RefreshSession.findOne({
+        ): Promise<
+            | { status: "ok"; sessionData: IssuedAuthSession & { user: AuthResponseUser } }
+            | { status: "reuse_detected"; userId: number }
+            | { status: "invalid" }
+        > => {
+            const session = await RefreshSession.findOne({
                 where: {
                     sessionId: payload.sessionId,
                     userId: Number(payload.userId),
+                    tokenHash,
+                    revokedAt: null,
+                    expiresAt: {
+                        [Op.gte]: new Date(),
+                    },
                 },
                 transaction,
                 lock: transaction.LOCK.UPDATE,
             });
 
-            if (reusedOrRevokedSession?.revokedAt) {
-                await RefreshSession.update(
-                    {
-                        revokedAt: new Date(),
+            if (!session) {
+                const reusedOrRevokedSession = await RefreshSession.findOne({
+                    where: {
+                        sessionId: payload.sessionId,
+                        userId: Number(payload.userId),
                     },
-                    {
-                        where: {
-                            userId: Number(payload.userId),
-                            revokedAt: null,
+                    transaction,
+                    lock: transaction.LOCK.UPDATE,
+                });
+
+                if (reusedOrRevokedSession?.revokedAt) {
+                    await RefreshSession.update(
+                        {
+                            revokedAt: new Date(),
                         },
-                        transaction,
-                    },
-                );
+                        {
+                            where: {
+                                userId: Number(payload.userId),
+                                revokedAt: null,
+                            },
+                            transaction,
+                        },
+                    );
+
+                    return {
+                        status: "reuse_detected",
+                        userId: Number(payload.userId),
+                    };
+                }
+
+                return { status: "invalid" };
             }
 
-            throw new ApiError(403, "Invalid or expired refresh token");
-        }
+            const user = await User.findOne({
+                where: {
+                    userId: Number(payload.userId),
+                },
+                transaction,
+            });
 
-        const user = await User.findOne({
-            where: {
-                userId: Number(payload.userId),
-            },
-            transaction,
-        });
+            if (!user) {
+                return { status: "invalid" };
+            }
 
-        if (!user) {
-            throw new ApiError(403, "Invalid or expired refresh token");
-        }
+            assertUserCanAuthenticate(user);
 
-        assertUserCanAuthenticate(user);
+            session.revokedAt = new Date();
+            await session.save({ transaction });
 
-        session.revokedAt = new Date();
-        await session.save({ transaction });
+            const nextSession = await issueAuthSession(user, input, transaction);
 
-        const nextSession = await issueAuthSession(user, input, transaction);
+            return {
+                status: "ok",
+                sessionData: {
+                    ...nextSession,
+                    user: await toAuthResponseUser(user, nextSession.roles),
+                },
+            };
+        },
+    );
 
-        return {
-            ...nextSession,
-            user: await toAuthResponseUser(user, nextSession.roles),
-        };
-    });
+    if (txResult.status === "reuse_detected") {
+        disconnectUserSockets(txResult.userId);
+        throw new ApiError(403, "Invalid or expired refresh token");
+    }
+
+    if (txResult.status === "invalid") {
+        throw new ApiError(403, "Invalid or expired refresh token");
+    }
+
+    return txResult.sessionData;
 };
 
 /**
@@ -787,6 +817,30 @@ export const revokeRefreshSessionByToken = async (token: string) => {
             },
         },
     );
+};
+
+/**
+ * Giải thuật thu hồi toàn bộ các phiên Refresh Token đang hoạt động của một người dùng
+ * và ngắt cưỡng bức kết nối thời gian thực Socket.IO (phục vụ đăng xuất qua Bearer Token hoặc khóa tài khoản).
+ */
+export const revokeAllRefreshSessionsForUser = async (userId: number) => {
+    if (!Number.isInteger(userId) || userId <= 0) {
+        return;
+    }
+
+    await RefreshSession.update(
+        {
+            revokedAt: new Date(),
+        },
+        {
+            where: {
+                userId,
+                revokedAt: null,
+            },
+        },
+    );
+
+    disconnectUserSockets(userId);
 };
 
 /**
@@ -815,6 +869,7 @@ const maskIdentifier = (identifier: string) => {
 const buildOtpResponse = (identifier: string, otp: string | null, expiresAt: Date) => ({
     maskedDestination: maskIdentifier(identifier),
     expiresAt,
+    resendCooldownSeconds: getEnv().otpResendCooldownSeconds,
     ...(otp && getEnv().authDebugOtp ? { debugOtp: otp } : {}),
 });
 
@@ -866,7 +921,19 @@ export const issueAuthOtp = async (
         latestOtp &&
         Date.now() - latestOtp.sentAt.getTime() < getEnv().otpResendCooldownSeconds * 1000
     ) {
-        throw new ApiError(429, "Please wait before requesting another OTP.");
+        const retryAfterSeconds = Math.max(
+            1,
+            Math.ceil(
+                (getEnv().otpResendCooldownSeconds * 1000 - (Date.now() - latestOtp.sentAt.getTime())) /
+                    1000,
+            ),
+        );
+        throw new ApiError(
+            429,
+            `Vui lòng đợi ${retryAfterSeconds} giây trước khi yêu cầu gửi lại mã OTP.`,
+            undefined,
+            { details: { retryAfterSeconds } },
+        );
     }
 
     const user = await findUserForLogin(normalizedIdentifier);

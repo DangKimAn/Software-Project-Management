@@ -97,21 +97,23 @@ export const handleVnpayReturn: RequestHandler = asyncHandler(async (req, res) =
     const clientOrigin = getEnv().clientOrigin;
 
     if (clientOrigin) {
-        const redirectUrl = new URL("/thanh-toan/ket-qua", clientOrigin);
-
-        redirectUrl.searchParams.set("paymentId", String(result.paymentId));
-        redirectUrl.searchParams.set("bookingId", String(result.bookingId));
-        redirectUrl.searchParams.set("status", String(result.paymentResultStatus ?? result.paymentStatus));
+        // Giải thuật điều hướng về tuyến Hash URL của Flutter Web (/#/thanh-toan/ket-qua?...) để tránh lỗi 404 SPA reload (TC-047):
+        const params = new URLSearchParams({
+            paymentId: String(result.paymentId),
+            bookingId: String(result.bookingId),
+            status: String(result.paymentResultStatus ?? result.paymentStatus),
+        });
 
         if (result.requiresRefund) {
-            redirectUrl.searchParams.set("requiresRefund", "true");
+            params.set("requiresRefund", "true");
         }
 
         if (result.refundStatus) {
-            redirectUrl.searchParams.set("refundStatus", String(result.refundStatus));
+            params.set("refundStatus", String(result.refundStatus));
         }
 
-        return res.redirect(redirectUrl.toString());
+        const cleanOrigin = clientOrigin.replace(/\/+$/, "");
+        return res.redirect(`${cleanOrigin}/#/thanh-toan/ket-qua?${params.toString()}`);
     }
 
     return sendSuccess(res, {
@@ -151,21 +153,23 @@ export const handleMomoReturn: RequestHandler = asyncHandler(async (req, res) =>
     const clientOrigin = getEnv().clientOrigin;
 
     if (clientOrigin) {
-        const redirectUrl = new URL("/thanh-toan/ket-qua", clientOrigin);
-
-        redirectUrl.searchParams.set("paymentId", String(result.paymentId));
-        redirectUrl.searchParams.set("bookingId", String(result.bookingId));
-        redirectUrl.searchParams.set("status", String(result.paymentResultStatus ?? result.paymentStatus));
+        // Giải thuật điều hướng về tuyến Hash URL của Flutter Web (/#/thanh-toan/ket-qua?...) để tránh lỗi 404 SPA reload (TC-047):
+        const params = new URLSearchParams({
+            paymentId: String(result.paymentId),
+            bookingId: String(result.bookingId),
+            status: String(result.paymentResultStatus ?? result.paymentStatus),
+        });
 
         if (result.requiresRefund) {
-            redirectUrl.searchParams.set("requiresRefund", "true");
+            params.set("requiresRefund", "true");
         }
 
         if (result.refundStatus) {
-            redirectUrl.searchParams.set("refundStatus", String(result.refundStatus));
+            params.set("refundStatus", String(result.refundStatus));
         }
 
-        return res.redirect(redirectUrl.toString());
+        const cleanOrigin = clientOrigin.replace(/\/+$/, "");
+        return res.redirect(`${cleanOrigin}/#/thanh-toan/ket-qua?${params.toString()}`);
     }
 
     return sendSuccess(res, {

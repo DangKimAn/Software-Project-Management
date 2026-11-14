@@ -32,6 +32,8 @@ export const createBookingBodySchema = z.object({
     guests: z.coerce.number().int().positive().optional(),
     guestsCount: z.coerce.number().int().positive().optional(),
     couponCode: z.string().trim().min(1).max(64).optional(),
+    bookingNote: z.string().trim().max(2000).optional(),
+    specialRequests: z.string().trim().max(2000).optional(),
 }).superRefine((value, ctx) => {
     const checkInDate = value.checkInDate ?? value.checkIn;
     const checkOutDate = value.checkOutDate ?? value.checkOut;
@@ -86,6 +88,7 @@ export const createBookingBodySchema = z.object({
     checkOutDate: value.checkOutDate ?? value.checkOut!,
     guestCount: value.guestCount ?? value.guests ?? value.guestsCount!,
     couponCode: value.couponCode,
+    bookingNote: value.bookingNote ?? value.specialRequests,
 }));
 
 /**
@@ -96,7 +99,7 @@ export const createBulkBookingBodySchema = z.object({
 });
 
 /**
- * Schema kiểm chứng lý do hủy đơn đặt phòng.
+ * Schema kiểm chứng lý do hủy đơn đặt phòng cho chủ nhà / quản trị.
  */
 export const cancelBookingBodySchema = z.object({
     reason: z.string().trim().max(2000).optional(),
@@ -118,6 +121,13 @@ export const cancelBookingBodySchema = z.object({
         .max(255)
         .optional()
         .or(z.literal("")),
+});
+
+/**
+ * Schema kiểm chứng yêu cầu hủy đơn từ phía khách hàng, bắt buộc cung cấp lý do hủy không rỗng (TC-053).
+ */
+export const guestCancelBookingBodySchema = cancelBookingBodySchema.extend({
+    reason: z.string().trim().min(1, "Vui lòng nhập lý do hủy đơn đặt phòng").max(2000),
 });
 
 /**

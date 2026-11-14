@@ -6,6 +6,7 @@ import { getEnv } from "../config/env";
 import { logger } from "../config/logger";
 import Conversation from "../models/conversation";
 import ConversationParticipant from "../models/conversation-participant";
+import Message from "../models/message";
 import User from "../models/user";
 import {
     assertUserCanAuthenticate,
@@ -335,6 +336,101 @@ export const initializeSocket = (server: HttpServer) => {
             if (Number.isInteger(conversationId) && conversationId > 0) {
                 authenticatedSocket.leave(conversationRoom(conversationId));
             }
+        });
+
+        // Giải thuật phát sóng trạng thái đang gõ phím (typing indicator) thời gian thực giữa hai thành viên hội thoại (TC-057):
+        authenticatedSocket.on("conversation:typing", (payload?: unknown) => {
+            if (!consumeEventQuota()) {
+                return;
+            }
+
+            const record =
+                typeof payload === "object" && payload !== null
+                    ? (payload as { conversationId?: unknown; isTyping?: unknown })
+                    : {};
+            const conversationId = Number(record.conversationId);
+            const isTyping = Boolean(record.isTyping);
+
+            if (!Number.isInteger(conversationId) || conversationId < 1) {
+                return;
+            }
+
+            void (async () => {
+                const allowed = await assertSocketConversationParticipant(
+                    authenticatedSocket,
+                    conversationId,
+                    Number(user.id),
+                );
+                if (!allowed) {
+                    return;
+                }
+                authenticatedSocket.to(conversationRoom(conversationId)).emit("conversation:typing", {
+                    conversationId,
+                    userId: Number(user.id),
+                    isTyping,
+                });
+            })().catch((error) => {
+                logger.warn("Failed to relay conversation:typing event", {
+                    userId: user.id,
+                    conversationId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            });
+        });
+
+        // Giải thuật đồng bộ biểu cảm tin nhắn (message:reaction) có kiểm tra thành viên hội thoại và quyền truy cập tin nhắn (TC-057):
+        authenticatedSocket.on("message:reaction", (payload?: unknown) => {
+            if (!consumeEventQuota()) {
+                return;
+            }
+
+            const record =
+                typeof payload === "object" && payload !== null
+                    ? (payload as { conversationId?: unknown; messageId?: unknown; reaction?: unknown })
+                    : {};
+            const conversationId = Number(record.conversationId);
+            const messageId = Number(record.messageId);
+            const reaction =
+                typeof record.reaction === "string" && record.reaction.trim().length > 0
+                    ? record.reaction.trim().slice(0, 32)
+                    : null;
+
+            if (!Number.isInteger(conversationId) || conversationId < 1 || !Number.isInteger(messageId) || messageId < 1) {
+                return;
+            }
+
+            void (async () => {
+                const allowed = await assertSocketConversationParticipant(
+                    authenticatedSocket,
+                    conversationId,
+                    Number(user.id),
+                );
+                if (!allowed) {
+                    return;
+                }
+                const targetMessage = await Message.findOne({
+                    where: {
+                        messageId,
+                        conversationId,
+                    },
+                });
+                if (!targetMessage) {
+                    return;
+                }
+                io?.to(conversationRoom(conversationId)).emit("message:reaction", {
+                    conversationId,
+                    messageId,
+                    userId: Number(user.id),
+                    reaction,
+                });
+            })().catch((error) => {
+                logger.warn("Failed to relay message:reaction event", {
+                    userId: user.id,
+                    conversationId,
+                    messageId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            });
         });
     });
 

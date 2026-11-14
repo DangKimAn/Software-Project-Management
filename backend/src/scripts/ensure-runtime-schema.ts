@@ -847,6 +847,59 @@ const ensureHostSheetSyncSchema = async () => {
     }
 };
 
+// Giải thuật đồng bộ bảng khóa ngày đặt phòng ACID (booking_date_locks) kèm cột sinh ảo active_lock_key và chỉ mục UNIQUE chống đặt trùng (TC-041):
+const ensureBookingDateLocksSchema = async () => {
+    if (!(await tableExists("booking_date_locks"))) {
+        await sequelize.query(`
+            CREATE TABLE \`booking_date_locks\` (
+                \`booking_date_lock_id\` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                \`booking_id\` INT UNSIGNED NOT NULL,
+                \`listing_id\` INT UNSIGNED NOT NULL,
+                \`reserved_date\` DATE NOT NULL,
+                \`status\` VARCHAR(32) NOT NULL DEFAULT 'held',
+                \`released_at\` DATETIME NULL,
+                \`active_lock_key\` TINYINT AS (CASE WHEN \`released_at\` IS NULL THEN 1 ELSE NULL END) VIRTUAL,
+                \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (\`booking_date_lock_id\`),
+                UNIQUE KEY \`uq_booking_date_locks_booking_date\` (\`booking_id\`, \`reserved_date\`),
+                UNIQUE KEY \`uq_booking_date_locks_active\` (\`listing_id\`, \`reserved_date\`, \`active_lock_key\`),
+                INDEX \`idx_booking_date_locks_listing_date\` (\`listing_id\`, \`reserved_date\`),
+                INDEX \`idx_booking_date_locks_released_at\` (\`released_at\`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        return;
+    }
+
+    await ensureColumn(
+        "booking_date_locks",
+        "active_lock_key",
+        "`active_lock_key` TINYINT AS (CASE WHEN `released_at` IS NULL THEN 1 ELSE NULL END) VIRTUAL AFTER `released_at`",
+    );
+    await ensureIndex(
+        "booking_date_locks",
+        "uq_booking_date_locks_active",
+        "UNIQUE INDEX",
+        "`listing_id`, `reserved_date`, `active_lock_key`",
+    );
+};
+
+// Giải thuật đồng bộ bảng bài viết (`blogs.tags_json`) và bảng báo cáo vi phạm (`reports.target_type` mở rộng `'message'`) (TC-060, TC-095):
+const ensureBlogsAndReportsSchema = async () => {
+    if (await tableExists("blogs")) {
+        await ensureColumn("blogs", "tags_json", "`tags_json` JSON NULL AFTER `content_json`");
+    }
+
+    if (await tableExists("reports")) {
+        await ensureEnumContains(
+            "reports",
+            "target_type",
+            ["listing", "user", "review", "booking", "message"],
+            "NOT NULL",
+        );
+    }
+};
+
 /**
  * Kịch bản đồng bộ lũy đẳng (idempotent runtime DDL) đảm bảo toàn bộ bảng, cột, chỉ mục, ENUM và ràng buộc CHECK
  * thiết yếu tồn tại và tương thích trước khi máy chủ nhận lưu lượng.
@@ -862,6 +915,8 @@ export const ensureRuntimeSchema = async () => {
     await ensurePayoutAccountSchema();
     await ensureMessagingSchema();
     await ensurePlatformFeeSettingsSchema();
+    await ensureBookingDateLocksSchema();
+    await ensureBlogsAndReportsSchema();
     await ensureHostSheetSyncSchema();
 };
 

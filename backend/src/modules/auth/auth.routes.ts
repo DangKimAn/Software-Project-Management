@@ -44,7 +44,7 @@ import {
 const router = express.Router();
 
 const requireGoogleIdToken: RequestHandler = (req, _res, next) => {
-    if (req.body?.idToken === undefined) {
+    if (req.body?.idToken === undefined && req.body?.accessToken === undefined) {
         return next(
             new ApiError(400, "idToken is required", [
                 {

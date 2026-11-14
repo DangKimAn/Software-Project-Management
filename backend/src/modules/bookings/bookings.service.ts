@@ -25,7 +25,7 @@ import {
 } from "./booking-display-status";
 import { getListingImagesForListing } from "../listings/listing-relations";
 import { getCoverImage, serializeListingImage } from "../listings/listing-mappers";
-import { sanitizeNullableSingleLineText } from "../../common/sanitization";
+import { sanitizeNullableSingleLineText, sanitizeText } from "../../common/sanitization";
 import sequelize from "../../config/database";
 import { logger } from "../../config/logger";
 import AuditLog from "../../models/audit-log";
@@ -70,6 +70,8 @@ export type CreateBookingInput = {
     checkOutDate: string;
     guestCount: number;
     couponCode?: string;
+    bookingNote?: string | null;
+    specialRequests?: string | null;
 };
 
 export type CreateBulkBookingInput = {
@@ -421,6 +423,7 @@ const getCalendarMapForDates = async (
             date: row.date,
             isAvailable: row.isAvailable,
             isBlockedByHost: row.isBlockedByHost,
+            isBlockedByAdmin: Boolean(row.isBlockedByAdmin),
             priceOverride: row.priceOverride ?? null,
             minNightsOverride: row.minNightsOverride ?? null,
             notes: row.notes ?? null,
@@ -431,22 +434,30 @@ const getCalendarMapForDates = async (
 };
 
 /**
- * Giải thuật kiểm định tính khả dụng trên lịch chủ nhà cho toàn bộ danh sách đêm lưu trú `dates`;
- * ném lỗi `409 Conflict` kèm danh sách ngày cụ thể nếu có bất kỳ đêm nào bị chủ nhà chặn (`isBlockedByHost`) hoặc đóng bán (`!isAvailable`).
+ * Giải thuật kiểm định tính khả dụng trên lịch chủ nhà và quản trị cho toàn bộ danh sách đêm lưu trú `dates`;
+ * ném lỗi `409 Conflict` kèm danh sách ngày cụ thể nếu có bất kỳ đêm nào bị chủ nhà/admin chặn (`isBlockedByHost || isBlockedByAdmin`) hoặc đóng bán (`!isAvailable`).
  */
-const assertCalendarAvailability = (dates: string[], calendarByDate: Map<string, { isAvailable: boolean; isBlockedByHost: boolean }>) => {
+const assertCalendarAvailability = (
+    dates: string[],
+    calendarByDate: Map<string, { isAvailable: boolean; isBlockedByHost: boolean; isBlockedByAdmin?: boolean }>,
+) => {
     const unavailableDates = dates.filter((date) => {
         const day = calendarByDate.get(date);
-        return day ? day.isBlockedByHost || !day.isAvailable : false;
+        return day ? day.isBlockedByHost || Boolean(day.isBlockedByAdmin) || !day.isAvailable : false;
     });
 
     if (unavailableDates.length > 0) {
-        throw new ApiError(409, "Listing is not available for the selected dates", [
-            {
-                path: "checkInDate",
-                msg: `Unavailable dates: ${unavailableDates.join(", ")}`,
-            },
-        ]);
+        throw new ApiError(
+            409,
+            "Listing is not available for the selected dates",
+            [
+                {
+                    path: "checkInDate",
+                    msg: `Unavailable dates: ${unavailableDates.join(", ")}`,
+                },
+            ],
+            { code: "DATES_UNAVAILABLE" },
+        );
     }
 };
 
@@ -471,7 +482,9 @@ const assertNoActiveOverlappingBooking = async (
     });
 
     if (overlapping) {
-        throw new ApiError(409, "Listing is already booked for the selected dates");
+        throw new ApiError(409, "Listing is already booked for the selected dates", undefined, {
+            code: "DATES_UNAVAILABLE",
+        });
     }
 };
 
@@ -685,13 +698,22 @@ const buildBookingPriceBreakdownForResponse = (booking: BookingDocument): Bookin
  *   `checked_in -> checked_out` (khi `today >= checkOutDate`), và `checked_out -> completed`.
  * - Mỗi bước chuyển mở một giao dịch độc lập kèm khóa bi quan `SELECT ... FOR UPDATE` và đi qua máy trạng thái `transitionBookingStatus` (`actor = 'system'`).
  */
-const autoAdvanceBookingStatus = async (booking: BookingDocument): Promise<void> => {
-    const today = getTodayInVietnam();
+// Giải thuật quy đổi mốc giờ tiêu chuẩn nhận phòng (14:00) và trả phòng (12:00) theo múi giờ Việt Nam UTC+7 (TC-051, TC-053):
+const toVietnamStandardCheckInMs = (dateStr: string) =>
+    new Date(`${dateStr}T14:00:00+07:00`).getTime();
 
-    // Giải thuật tự động chuyển tiếp đơn 'paid' đã quá hạn trả phòng (today >= checkOutDate):
+const toVietnamStandardCheckOutMs = (dateStr: string) =>
+    new Date(`${dateStr}T12:00:00+07:00`).getTime();
+
+const autoAdvanceBookingStatus = async (booking: BookingDocument): Promise<void> => {
+    const nowMs = Date.now();
+    const reachedCheckIn = nowMs >= toVietnamStandardCheckInMs(booking.checkInDate);
+    const reachedCheckOut = nowMs >= toVietnamStandardCheckOutMs(booking.checkOutDate);
+
+    // Giải thuật tự động chuyển tiếp đơn 'paid' đã quá hạn trả phòng (now >= checkOutDate 12:00 UTC+7):
     // Nếu khách đã thanh toán thành công, không bị hủy/từ chối và kỳ lưu trú đã kết thúc nhưng Host quên bấm xác nhận,
     // hệ thống tự chuyển sang 'completed' để đơn không bị treo vĩnh viễn ở tab "Sắp tới".
-    if (booking.status === "paid" && today >= booking.checkOutDate) {
+    if (booking.status === "paid" && reachedCheckOut) {
         try {
             await sequelize.transaction(async (transaction) => {
                 const fresh = await getBookingOrThrow(booking.bookingId, transaction, true);
@@ -722,8 +744,8 @@ const autoAdvanceBookingStatus = async (booking: BookingDocument): Promise<void>
         }
     }
 
-    // confirmed → checked_in (today >= checkInDate)
-    if (booking.status === "confirmed" && today >= booking.checkInDate) {
+    // confirmed -> checked_in (now >= checkInDate 14:00 UTC+7)
+    if (booking.status === "confirmed" && reachedCheckIn) {
         try {
             await sequelize.transaction(async (transaction) => {
                 const fresh = await getBookingOrThrow(booking.bookingId, transaction, true);
@@ -754,8 +776,8 @@ const autoAdvanceBookingStatus = async (booking: BookingDocument): Promise<void>
         }
     }
 
-    // checked_in → checked_out (today >= checkOutDate)
-    if (booking.status === "checked_in" && today >= booking.checkOutDate) {
+    // checked_in -> checked_out (now >= checkOutDate 12:00 UTC+7)
+    if (booking.status === "checked_in" && reachedCheckOut) {
         try {
             await sequelize.transaction(async (transaction) => {
                 const fresh = await getBookingOrThrow(booking.bookingId, transaction, true);
@@ -926,6 +948,8 @@ const serializeBooking = async (booking: BookingDocument, includeImages = false)
         hasReview: !!review,
         paymentStatus: latestPayment?.status ?? null,
         refundStatus: latestRefund?.status ?? null,
+        refundAmount: latestRefund ? toNumber(latestRefund.amount) : 0,
+        cancellationPolicy: listing?.cancellationPolicy ?? "strict",
         payoutStatus,
         lockedUntil: booking.lockedUntil,
         paymentStartedAt,
@@ -942,7 +966,8 @@ const serializeBooking = async (booking: BookingDocument, includeImages = false)
         priceBreakdown,
         couponId: booking.couponId ?? null,
         bookingNote: booking.bookingNote ?? null,
-        cancellationReason: displayStatus.reason ?? booking.cancellationReason ?? null,
+        cancellationReason: booking.cancellationReason ?? displayStatus.reason ?? null,
+        cancellationReasonCode: displayStatus.reason ?? null,
         cancelledByUserId: booking.cancelledByUserId ? String(booking.cancelledByUserId) : null,
         cancelledAt: booking.cancelledAt ?? null,
         checkedInAt: booking.checkedInAt ?? null,
@@ -1168,10 +1193,10 @@ const getListingCancellationPolicy = async (booking: BookingDocument, transactio
 };
 
 /**
- * Giải thuật tính khoảng cách thời gian còn lại (đơn vị giờ thực) từ thời điểm hiện tại tới mốc nhận phòng `checkInDate` (`00:00:00.000Z`).
+ * Giải thuật tính khoảng cách thời gian còn lại (đơn vị giờ thực) từ thời điểm hiện tại tới mốc nhận phòng chuẩn `14:00:00+07:00` ngày `checkInDate`.
  */
 const getHoursUntilCheckIn = (booking: BookingDocument) =>
-    (toDateAtUtcMidnight(booking.checkInDate).getTime() - Date.now()) / (60 * 60 * 1000);
+    (toVietnamStandardCheckInMs(booking.checkInDate) - Date.now()) / (60 * 60 * 1000);
 
 /**
  * Giải thuật tính số tiền hoàn trả theo chính sách hủy (`flexible` / `moderate` / `strict`), tác nhân hủy và số giờ còn lại trước `checkInDate`:
@@ -1366,13 +1391,14 @@ const cancelBooking = async (
             actor: stateActor,
         });
         const { reasonCode, note } = resolveCancellationReason(user, actor, existingBooking.status, input.reason);
+        const persistedReason = note ?? reasonCode;
         const policy = await getListingCancellationPolicy(existingBooking, transaction);
         const refund = await createRefundForPaidPaymentIfNeeded(
             existingBooking,
             policy,
             stateActor === "guest" ? "guest" : "host",
             Number(user.id),
-            reasonCode,
+            persistedReason,
             transaction,
             {
                 bankName: input.bankName,
@@ -1389,16 +1415,17 @@ const cancelBooking = async (
             toStatus: nextStatus,
             actor: stateActor,
             changedByUserId: Number(user.id),
-            reason: reasonCode,
+            reason: persistedReason,
             metadata: {
                 cancellationPolicy: policy,
                 refundId: refund?.refundId ?? null,
                 refundAmount: refund ? toNumber(refund.amount) : 0,
+                reasonCode,
                 note,
             },
             transaction,
             mutate: (booking) => {
-                booking.cancellationReason = reasonCode;
+                booking.cancellationReason = persistedReason;
                 booking.cancelledByUserId = Number(user.id);
                 booking.cancelledAt = cancelledAt;
             },
@@ -1494,7 +1521,9 @@ const prepareBookingCreate = async (
     const listing = await getPublicListingForBooking(input.listingId, transaction);
 
     if (String(listing.hostId) === user.id) {
-        throw new ApiError(403, "Hosts cannot book their own listing");
+        throw new ApiError(403, "Chủ nhà không thể tự đặt phòng của chính mình.", undefined, {
+            code: "SELF_BOOKING_FORBIDDEN",
+        });
     }
 
     if (input.guestCount > listing.maxGuests) {
@@ -1558,6 +1587,9 @@ const createPreparedBooking = async (
     const env = getEnv();
     const lockedUntil = new Date(Date.now() + env.paymentHoldMinutes * 60 * 1000);
     const status: BookingStatus = "pending_payment";
+    const rawNote = input.bookingNote ?? input.specialRequests;
+    const sanitizedBookingNote =
+        typeof rawNote === "string" && sanitizeText(rawNote).length > 0 ? sanitizeText(rawNote) : null;
     const createdBooking = await Booking.create(
         {
             bookingId: await getNextBookingSequence(transaction),
@@ -1580,7 +1612,7 @@ const createPreparedBooking = async (
             discountAmount: pricing.discountAmount,
             totalAmount: pricing.totalAmount,
             priceBreakdown: pricing.priceBreakdown as unknown as Record<string, unknown>,
-            bookingNote: null,
+            bookingNote: sanitizedBookingNote,
             cancellationReason: null,
             cancelledByUserId: null,
             cancelledAt: null,

@@ -21,7 +21,18 @@ import {
 } from "../notifications/notification.service";
 import { enqueueHostSheetSyncJobSafe } from "../host-sheet-sync/host-sheet-sync.service";
 
+export type AdminListingStatusFilter =
+    | "pending_approval"
+    | "pending"
+    | "active"
+    | "published"
+    | "rejected"
+    | "inactive"
+    | "draft"
+    | "all";
+
 export type AdminListingQuery = {
+    status?: AdminListingStatusFilter;
     page?: number;
     limit?: number;
 };
@@ -60,18 +71,26 @@ const assertCanModerateListings = (user: AuthenticatedUser) => {
 const serializeAdminListing = (listing: ListingDocument, images = listing.images ?? []) => {
     const safeImages = Array.isArray(images) ? images : [];
     const coverImage = getCoverImage(safeImages);
+    const serializedImages = safeImages.map(serializeListingImage);
     const serializedCoverImage = coverImage ? serializeListingImage(coverImage) : null;
+    const aiQualityWarningsCount = serializedImages.reduce(
+        (sum, img) => sum + (Array.isArray(img.aiQualityWarnings) ? img.aiQualityWarnings.length : 0),
+        0,
+    );
 
     return {
         listingId: listing.listingId,
         hostId: listing.hostId,
         title: listing.title,
         status: toApiListingStatus(listing.status),
+        rawStatus: listing.status,
         description: listing.description,
         addressLine: listing.addressLine,
         ward: listing.ward,
         district: listing.district,
         city: listing.city,
+        latitude: listing.latitude !== null && listing.latitude !== undefined ? Number(listing.latitude) : null,
+        longitude: listing.longitude !== null && listing.longitude !== undefined ? Number(listing.longitude) : null,
         propertyType: listing.propertyType,
         roomType: listing.roomType,
         basePrice: listing.basePrice,
@@ -79,7 +98,9 @@ const serializeAdminListing = (listing: ListingDocument, images = listing.images
         imageUrl: serializedCoverImage?.url ?? null,
         coverImageUrl: serializedCoverImage?.url ?? null,
         coverImage: serializedCoverImage,
-        images: safeImages.map(serializeListingImage),
+        images: serializedImages,
+        aiQualityWarningsCount,
+        hasQualityWarnings: aiQualityWarningsCount > 0,
         rejectionReason: listing.rejectionReason ?? null,
         approvedBy: listing.approvedBy ?? null,
         approvedAt: listing.approvedAt ?? null,
@@ -112,12 +133,28 @@ const getListingOrThrow = async (listingId: number, transaction?: Transaction) =
  * Tải song song danh sách bản ghi và tổng số dòng, đồng thời gom nạp hàng loạt hình ảnh qua `getListingImagesMap` để khử truy vấn N+1.
  */
 export const listPendingAdminListings = async (actor: AuthenticatedUser, query: AdminListingQuery) => {
+    return listAdminListings(actor, { ...query, status: query.status ?? "pending_approval" });
+};
+
+/**
+ * Giải thuật truy vấn phân trang danh sách chỗ nghỉ cho Quản trị viên theo bộ lọc trạng thái (`pending_approval`, `active`, `rejected`, `inactive`, `draft`, `all`) (TC-089):
+ * Ánh xạ nhãn trạng thái API (`published` -> `active`, `pending` -> `pending_approval`) về trạng thái lưu trữ nội bộ và nạp hàng loạt ảnh chống N+1.
+ */
+export const listAdminListings = async (actor: AuthenticatedUser, query: AdminListingQuery) => {
     assertCanModerateListings(actor);
 
     const { page, limit } = toPagination(query.page, query.limit);
-    const filter = {
-        status: "pending_approval" as const,
+    const rawStatus = query.status ?? "pending_approval";
+    const normalizedStatus =
+        rawStatus === "published"
+            ? "active"
+            : rawStatus === "pending"
+              ? "pending_approval"
+              : rawStatus;
+
+    const filter: Record<string, unknown> = {
         deletedAt: null,
+        ...(normalizedStatus !== "all" ? { status: normalizedStatus } : {}),
     };
 
     const [items, totalItems] = await Promise.all([
@@ -394,6 +431,8 @@ export async function getAdminListingDetail(listingId: number) {
         ward: listing.ward,
         district: listing.district,
         city: listing.city,
+        latitude: listing.latitude !== null && listing.latitude !== undefined ? Number(listing.latitude) : null,
+        longitude: listing.longitude !== null && listing.longitude !== undefined ? Number(listing.longitude) : null,
         propertyType: listing.propertyType,
         roomType: listing.roomType,
         maxGuests: listing.maxGuests,

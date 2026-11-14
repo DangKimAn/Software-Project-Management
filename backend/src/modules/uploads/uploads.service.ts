@@ -200,7 +200,7 @@ const assertMandatoryUploadSize = (size: unknown): number => {
     }
 
     if (typeof size !== "number" || !Number.isInteger(size) || size < 1 || size > maxUploadSizeBytes) {
-        throw new ApiError(413, "Upload file size must be between 1 byte and 10MB");
+        throw new ApiError(413, "Upload file size must be between 1 byte and 25MB");
     }
 
     return size;

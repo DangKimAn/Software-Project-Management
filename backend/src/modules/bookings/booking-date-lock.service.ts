@@ -86,7 +86,9 @@ export async function createBookingDateLocks(params: {
         );
     } catch (error) {
         if (error instanceof UniqueConstraintError) {
-            throw new ApiError(409, "Listing is already booked for the selected dates");
+            throw new ApiError(409, "Listing is already booked for the selected dates", undefined, {
+                code: "DATES_UNAVAILABLE",
+            });
         }
 
         throw error;
