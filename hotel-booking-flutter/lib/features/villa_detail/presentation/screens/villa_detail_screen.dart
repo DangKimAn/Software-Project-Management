@@ -17,6 +17,7 @@ import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_loading.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
+import '../../../../shared/widgets/report_violation_dialog.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../../reviews/presentation/widgets/review_list_widget.dart';
 import '../../../search/presentation/widgets/booking_date_range_picker.dart';
@@ -843,6 +844,46 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
 
                             // House Rules & Cancellation Policy (`PoliciesCard`)
                             _buildPoliciesCard(villa),
+
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                key: const Key('villa_report_listing_btn'),
+                                onPressed: () {
+                                  final user = ref
+                                      .read(authNotifierProvider)
+                                      .valueOrNull;
+                                  if (user == null) {
+                                    context.push('/dang-nhap');
+                                    return;
+                                  }
+                                  showReportViolationDialog(
+                                    context: context,
+                                    ref: ref,
+                                    targetType: 'listing',
+                                    targetId: int.tryParse(villa.id) ?? 0,
+                                    targetLabel: villa.name,
+                                  );
+                                },
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.textSecondary,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 8,
+                                  ),
+                                ),
+                                icon: const Icon(LucideIcons.flag, size: 15),
+                                label: const Text(
+                                  'Báo cáo tin đăng này',
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w500,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ),
+                            ),
 
                             _buildSectionDivider(),
 

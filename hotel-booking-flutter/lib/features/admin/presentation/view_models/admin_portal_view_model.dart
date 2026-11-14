@@ -80,6 +80,19 @@ class AdminPortalViewModel {
   }
 
   // Giải thuật truy vấn danh sách chỗ nghỉ chờ kiểm duyệt và thực thi phê duyệt / từ chối / phân tích ảnh AI.
+  /// Lấy danh sách phân trang các chỗ nghỉ theo bộ lọc trạng thái `status`.
+  Future<AdminPaginatedResult<Map<String, dynamic>>> getAdminListingsPaginated({
+    String status = 'pending_approval',
+    int page = 1,
+    int limit = AdminRepository.maxListingsPageLimit,
+  }) {
+    return _adminRepo.getAdminListingsPaginated(
+      status: status,
+      page: page,
+      limit: limit,
+    );
+  }
+
   /// Lấy danh sách phân trang các chỗ nghỉ đang chờ quản trị viên kiểm duyệt.
   Future<AdminPaginatedResult<Map<String, dynamic>>>
       getPendingListingsPaginated({
@@ -162,6 +175,14 @@ class AdminPortalViewModel {
     return _adminRepo.rejectHostApplication(applicationId, reason);
   }
 
+  /// Yêu cầu ứng viên Chủ nhà `applicationId` bổ sung hoặc chụp lại chứng từ KYC với ghi chú `reason`.
+  Future<void> requestMoreInfoHostApplication(
+    String applicationId,
+    String reason,
+  ) {
+    return _adminRepo.requestMoreInfoHostApplication(applicationId, reason);
+  }
+
   /// Truy vấn danh sách yêu cầu xác minh danh tính thế hệ cũ theo `status` và `verificationType`.
   Future<AdminPaginatedResult<Map<String, dynamic>>>
       getAdminVerificationsPaginated({
@@ -230,6 +251,36 @@ class AdminPortalViewModel {
     return _adminRepo.disburseHostPayout(payoutId);
   }
 
+  /// Lập lô chi trả mới (Bước 1 - Maker) cho Chủ nhà `hostId`.
+  Future<Map<String, dynamic>> createAdminHostPayout({
+    required int hostId,
+    required List<int> bookingIds,
+    required int payoutAccountId,
+    required int amount,
+    String? notes,
+  }) {
+    return _adminRepo.createAdminHostPayout(
+      hostId: hostId,
+      bookingIds: bookingIds,
+      payoutAccountId: payoutAccountId,
+      amount: amount,
+      notes: notes,
+    );
+  }
+
+  /// Phê duyệt độc lập lệnh chi trả `payoutId` (Bước 2 - Checker).
+  Future<Map<String, dynamic>> approveHostPayout(String payoutId) {
+    return _adminRepo.approveHostPayout(payoutId);
+  }
+
+  /// Xác nhận đã chuyển khoản cho lệnh chi trả `payoutId` kèm mã giao dịch `transferReference` (Bước 3).
+  Future<Map<String, dynamic>> markHostPayoutPaid(
+    String payoutId,
+    String transferReference,
+  ) {
+    return _adminRepo.markHostPayoutPaid(payoutId, transferReference);
+  }
+
   /// Từ chối đơn rút tiền `payoutId` của Chủ nhà kèm lý do `reason`.
   Future<Map<String, dynamic>> rejectHostPayout(
     String payoutId,
@@ -262,6 +313,38 @@ class AdminPortalViewModel {
     String reason,
   ) {
     return _adminRepo.rejectRefund(refundId, reason);
+  }
+
+  // Giải thuật truy vấn phân trang và xử lý báo cáo vi phạm cho Admin.
+  /// Truy vấn danh sách báo cáo vi phạm theo `status` và `targetType`.
+  Future<AdminPaginatedResult<Map<String, dynamic>>> getAdminReportsPaginated({
+    String status = 'all',
+    String targetType = 'all',
+    int page = 1,
+    int limit = 20,
+  }) {
+    return _adminRepo.getAdminReportsPaginated(
+      status: status,
+      targetType: targetType,
+      page: page,
+      limit: limit,
+    );
+  }
+
+  /// Đánh dấu đã xử lý báo cáo vi phạm `reportId` với ghi chú `resolution`.
+  Future<Map<String, dynamic>> resolveAdminReport(
+    String reportId,
+    String resolution,
+  ) {
+    return _adminRepo.resolveAdminReport(reportId, resolution);
+  }
+
+  /// Bác bỏ báo cáo vi phạm `reportId` kèm lý do `reason`.
+  Future<Map<String, dynamic>> rejectAdminReport(
+    String reportId,
+    String reason,
+  ) {
+    return _adminRepo.rejectAdminReport(reportId, reason);
   }
 
   // Giải thuật khởi tạo kênh trò chuyện hỗ trợ trực tiếp với người dùng và làm mới danh sách hội thoại.

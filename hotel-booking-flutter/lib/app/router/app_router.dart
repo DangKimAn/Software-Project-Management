@@ -680,7 +680,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return _buildProtectedSlidePage(
             state: state,
             accessLevel: RouteAccessLevel.hostOnly,
-            child: HostListingFormScreen(listingId: listingId),
+            child: HostListingFormScreen(
+              listingId: listingId,
+              stepMode: listingId == null,
+            ),
           );
         },
       ),
@@ -714,7 +717,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/host',
-        redirect: (context, state) => '/chu-nha/khach-luu-tru',
+        redirect: (context, state) => '/chu-nha/tong-quan',
       ),
       GoRoute(
         path: '/host/khach',
@@ -824,6 +827,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           state: state,
           accessLevel: RouteAccessLevel.adminOnly,
           child: const AdminPortalScreen(activeTab: 'chi-tra'),
+        ),
+      ),
+      GoRoute(
+        path: '/admin/bao-cao',
+        pageBuilder: (context, state) => _buildProtectedSlidePage(
+          state: state,
+          accessLevel: RouteAccessLevel.adminOnly,
+          child: const AdminPortalScreen(activeTab: 'bao-cao'),
         ),
       ),
       GoRoute(

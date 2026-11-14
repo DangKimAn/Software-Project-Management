@@ -109,7 +109,8 @@ class _MessengerVoiceRecorderBarState extends State<MessengerVoiceRecorderBar>
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withValues(alpha: opacity * 0.6),
+                          color: AppColors.primary
+                              .withValues(alpha: opacity * 0.6),
                           blurRadius: 6,
                           spreadRadius: 1,
                         ),
@@ -145,14 +146,18 @@ class _MessengerVoiceRecorderBarState extends State<MessengerVoiceRecorderBar>
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: List.generate(barCount, (i) {
                       final phase = (i / barCount) * math.pi * 2;
-                      final wave = (math.sin(_animCtrl.value * math.pi * 2 + phase) + 1) / 2;
+                      final wave =
+                          (math.sin(_animCtrl.value * math.pi * 2 + phase) +
+                                  1) /
+                              2;
                       // Dynamic height between 4dp and 24dp
                       final height = 4.0 + 20.0 * wave;
                       return Container(
                         width: 2.8,
                         height: height,
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.4 + 0.6 * wave),
+                          color: AppColors.primary
+                              .withValues(alpha: 0.4 + 0.6 * wave),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       );

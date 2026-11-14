@@ -484,7 +484,8 @@ class _GlassNotificationsModal extends ConsumerWidget {
                           Flexible(
                             child: notifState.items.isEmpty
                                 ? Padding(
-                                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+                                    padding: const EdgeInsets.fromLTRB(
+                                        14, 8, 14, 14),
                                     child: _EmptyNotificationGlassCard(
                                       label: isEn
                                           ? 'No new notifications.'

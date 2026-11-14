@@ -642,8 +642,7 @@ void main() {
             },
           });
         }
-        if (options.path == '/api/wishlist/101' &&
-            options.method == 'DELETE') {
+        if (options.path == '/api/wishlist/101' && options.method == 'DELETE') {
           return _jsonResponse({'success': true});
         }
         throw AssertionError('Unexpected wishlist path: ${options.path}');
@@ -712,7 +711,8 @@ void main() {
         [12],
         referenceToday: const BookingDate(year: 2026, month: 11, day: 4),
       );
-      expect(decRange.checkIn, const BookingDate(year: 2026, month: 12, day: 1));
+      expect(
+          decRange.checkIn, const BookingDate(year: 2026, month: 12, day: 1));
       expect(
         decRange.checkIn.differenceInNights(decRange.checkOut),
         30,

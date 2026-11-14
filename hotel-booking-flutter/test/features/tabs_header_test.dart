@@ -93,7 +93,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('header-search-bar')),
+          findsOneWidget);
       expect(find.text('Bạn muốn đi đâu?'), findsOneWidget);
       expect(find.byType(NotificationBell), findsOneWidget);
       expect(find.byType(GlobalPendingBookingBanner), findsNothing);
@@ -105,7 +106,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
             conversationsListProvider
                 .overrideWith((ref) => Future.value(<ConversationItem>[])),
             activePendingBookingProvider.overrideWithValue(testPendingBooking),
@@ -164,8 +166,8 @@ void main() {
           overrides: [
             authNotifierProvider
                 .overrideWith((ref) => _FakeAuthNotifier(testUser)),
-            myBookingsProvider
-                .overrideWith((ref) => Future.value(<Booking>[testPendingBooking])),
+            myBookingsProvider.overrideWith(
+                (ref) => Future.value(<Booking>[testPendingBooking])),
             activePendingBookingProvider.overrideWithValue(testPendingBooking),
           ],
           child: buildTestApp(const TripsScreen()),
@@ -242,7 +244,8 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('header-search-bar')),
+          findsNothing);
       expect(find.byType(NotificationBell), findsNothing);
     });
   });

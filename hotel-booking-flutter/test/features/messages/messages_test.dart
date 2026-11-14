@@ -136,7 +136,8 @@ const _guestUser = User(
 
 class _FakeLocaleNotifier extends LocaleNotifier {
   _FakeLocaleNotifier([String initial = 'vi'])
-      : super(PreferencesService.inMemory({AppConstants.storageLocaleKey: initial})) {
+      : super(PreferencesService.inMemory(
+            {AppConstants.storageLocaleKey: initial})) {
     state = initial;
   }
 }
@@ -1176,7 +1177,8 @@ void main() {
             await tester.pumpWidget(
               ProviderScope(
                 overrides: [
-                  localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
+                  localeProvider
+                      .overrideWith((ref) => _FakeLocaleNotifier('vi')),
                   dioClientProvider.overrideWithValue(client),
                   socketServiceProvider.overrideWithValue(socketService),
                   authNotifierProvider.overrideWith((_) => authNotifier),

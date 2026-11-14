@@ -150,9 +150,7 @@ class AppNotificationItem {
       return isEn ? 'New refund request pending review' : '새 환불 요청 대기 중';
     }
     if (lower == 'có yêu cầu rút tiền host cần duyệt') {
-      return isEn
-          ? 'Host payout request pending review'
-          : '호스트 정산 승인 대기 중';
+      return isEn ? 'Host payout request pending review' : '호스트 정산 승인 대기 중';
     }
     if (lower == 'yêu cầu hoàn tiền đã được tạo' || eType == 'REFUND_CREATED') {
       return isEn ? 'Refund request created' : '환불 요청 생성';
@@ -196,9 +194,7 @@ class AppNotificationItem {
           : '[Admin] 새 숙소 승인 대기 중';
     }
     if (lower.contains('xin chào đến với the palm villa')) {
-      return isEn
-          ? 'Welcome to The Palm Villa'
-          : 'The Palm Villa에 오신 것을 환영합니다';
+      return isEn ? 'Welcome to The Palm Villa' : 'The Palm Villa에 오신 것을 환영합니다';
     }
     if (lower.contains('thông báo điều chỉnh mức phí nền tảng')) {
       return isEn ? 'Platform fee adjustment notice' : '플랫폼 수수료 조정 안내';
@@ -316,9 +312,7 @@ class AppNotificationItem {
     ).firstMatch(trimmed);
     if (mConf != null) {
       final id = mConf.group(1);
-      return isEn
-          ? 'Booking #$id has been confirmed.'
-          : '예약 #$id이(가) 확정되었습니다.';
+      return isEn ? 'Booking #$id has been confirmed.' : '예약 #$id이(가) 확정되었습니다.';
     }
 
     final mCancel = RegExp(
@@ -327,9 +321,7 @@ class AppNotificationItem {
     ).firstMatch(trimmed);
     if (mCancel != null) {
       final id = mCancel.group(1);
-      return isEn
-          ? 'Booking #$id has been cancelled.'
-          : '예약 #$id이(가) 취소되었습니다.';
+      return isEn ? 'Booking #$id has been cancelled.' : '예약 #$id이(가) 취소되었습니다.';
     }
 
     final mRefund = RegExp(

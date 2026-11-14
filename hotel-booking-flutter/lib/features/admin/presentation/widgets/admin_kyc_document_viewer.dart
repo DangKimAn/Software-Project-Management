@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hotel_booking_flutter/features/admin/presentation/view_models/admin_portal_view_model.dart';
 import 'package:hotel_booking_flutter/features/admin/presentation/theme/admin_studio_tokens.dart';
 import 'package:hotel_booking_flutter/features/admin/presentation/widgets/admin_studio_widgets.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_image.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Giải thuật hiển thị chứng từ định danh KYC bảo mật cho Quản trị viên:
@@ -37,7 +38,16 @@ class _AdminKycDocumentViewerState extends State<AdminKycDocumentViewer> {
   String get _mimeType =>
       '${widget.document['mimeType'] ?? ''}'.trim().toLowerCase();
   String get _streamToken => '${widget.document['streamToken'] ?? ''}'.trim();
-  bool get _isPdf => _mimeType == 'application/pdf';
+  String get _legacyUrl {
+    final raw =
+        '${widget.document['url'] ?? widget.document['fileUrl'] ?? widget.document['documentUrl'] ?? ''}'
+            .trim();
+    return (raw == 'null' || raw == '-') ? '' : raw;
+  }
+
+  bool get _isPdf =>
+      _mimeType == 'application/pdf' ||
+      _legacyUrl.toLowerCase().endsWith('.pdf');
 
   @override
   void initState() {
@@ -187,6 +197,15 @@ class _AdminKycDocumentViewerState extends State<AdminKycDocumentViewer> {
               onPressed: _openZoomDialog,
               icon: const Icon(LucideIcons.zoomIn, size: 16),
               label: const Text('Xem phóng to tài liệu'),
+            ),
+          ] else if (_documentId.isEmpty && _legacyUrl.isNotEmpty) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: AppImage(
+                imageUrl: _legacyUrl,
+                height: 180,
+                width: double.infinity,
+              ),
             ),
           ],
         ],

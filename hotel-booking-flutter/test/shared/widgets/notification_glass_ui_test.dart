@@ -445,7 +445,8 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.text('Refund of ≈ \$63.20 for booking #42 is pending processing.'),
+          find.text(
+              'Refund of ≈ \$63.20 for booking #42 is pending processing.'),
           findsOneWidget,
         );
 

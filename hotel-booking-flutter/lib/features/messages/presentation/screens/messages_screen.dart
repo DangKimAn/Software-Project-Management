@@ -21,6 +21,7 @@ import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
 import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
+import '../../../../shared/widgets/report_violation_dialog.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 // CONFLICT-RESOLVED: Giữ `MessagesViewModel` chuẩn MVVM của HEAD kết hợp dịch vụ ghi âm và các widget bong bóng ảnh/thoại từ develop.
@@ -795,7 +796,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     final text = rawContent.trim();
     if (convId == null ||
         convId.isEmpty ||
-        (text.isEmpty && (attachments == null || attachments.isEmpty))) return;
+        (text.isEmpty && (attachments == null || attachments.isEmpty))) {
+      return;
+    }
 
     final currentUserId = ref.read(authNotifierProvider).valueOrNull?.id ?? '';
     if (currentUserId.isEmpty) return;
@@ -2221,6 +2224,38 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                           color: _showTimestampsPinned
                               ? AppColors.primary
                               : AppColors.iconMuted,
+                        ),
+                      ),
+                    if (!isCompactHeader &&
+                        paneWidth >= 520 &&
+                        textScale <= 1.15)
+                      IconButton(
+                        key: const Key('chat_report_violation_btn'),
+                        onPressed: () {
+                          final rawTargetId =
+                              (conv.otherParticipantId?.trim().isNotEmpty ==
+                                      true)
+                                  ? conv.otherParticipantId!.trim()
+                                  : (conv.hostId == currentUserId
+                                      ? conv.guestId
+                                      : conv.hostId);
+                          showReportViolationDialog(
+                            context: context,
+                            ref: ref,
+                            targetType: 'user',
+                            targetId: int.tryParse(rawTargetId) ?? 0,
+                            targetLabel: counterpart,
+                          );
+                        },
+                        tooltip: 'Báo cáo vi phạm',
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        icon: const Icon(
+                          LucideIcons.flag,
+                          size: 17,
+                          color: AppColors.iconMuted,
                         ),
                       ),
                     if (conv.listingId.isNotEmpty)

@@ -109,6 +109,9 @@ class _TroThanhHostLandingScreenState
     try {
       final repo = ref.read(hostOnboardingViewModelProvider);
       final record = await repo.getMyApplicationRecord();
+      if (record?.status == HostApplicationStatus.approved) {
+        await repo.refreshApprovedHostSession();
+      }
       if (!mounted) return;
       setState(() {
         _existingRecord = record;
@@ -373,7 +376,10 @@ class _TroThanhHostLandingScreenState
         key: const Key('host_landing_login_btn'),
         icon: LucideIcons.logIn,
         label: 'Đăng nhập để đăng ký Host',
-        onPressed: () => _navigateToRoute(context, '/dang-nhap'),
+        onPressed: () => _navigateToRoute(
+          context,
+          '/dang-nhap?redirectTo=%2Ftro-thanh-host%2Fdang-ky',
+        ),
       );
     } else if (isAlreadyHost) {
       primaryCta = _PillCtaButton.primary(
@@ -1188,6 +1194,63 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
             content: Text(
               'Tệp không hợp lệ: $reason',
             ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      // Giải thuật kiểm định độ nét và nhận diện mặt trước/mặt sau CCCD từ kết quả AI OCR:
+      // Chặn tệp ảnh bị mờ, lóa sáng, mất góc (`!result.isClear`) hoặc không xác định được mặt thẻ (`side == 'unknown'`) khi tải CCCD 2 mặt.
+      if (!result.isClear) {
+        final blurDetail =
+            result.warnings.isNotEmpty ? ' (${result.warnings.first})' : '';
+        final errText =
+            'Ảnh giấy tờ bị mờ, lóa sáng hoặc mất góc$blurDetail. Vui lòng chụp lại ảnh rõ nét đủ 4 góc.';
+        setState(() {
+          if (isFront) {
+            _aiFrontResult = result;
+            _analyzingFront = false;
+            _aiFrontError = errText;
+          } else {
+            _aiBackResult = result;
+            _analyzingBack = false;
+            _aiBackError = errText;
+          }
+          _errorMessage = errText;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errText),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      if (_documentType.requiresFrontAndBack &&
+          slotKey != 'identitySingle' &&
+          result.side == 'unknown') {
+        final errText = isFront
+            ? 'Không nhận diện được mặt trước CCCD (có ảnh chân dung và số định danh). Vui lòng chụp rõ mặt trước.'
+            : 'Không nhận diện được mặt sau CCCD (có chip điện tử và dãy mã MRZ). Vui lòng chụp rõ mặt sau.';
+        setState(() {
+          if (isFront) {
+            _aiFrontResult = result;
+            _analyzingFront = false;
+            _aiFrontError = errText;
+          } else {
+            _aiBackResult = result;
+            _analyzingBack = false;
+            _aiBackError = errText;
+          }
+          _errorMessage = errText;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errText),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -3715,7 +3778,8 @@ class TrangThaiHostScreen extends ConsumerStatefulWidget {
       _TrangThaiHostScreenState();
 }
 
-class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
+class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen>
+    with WidgetsBindingObserver {
   bool _loading = true;
   bool _cancelling = false;
   HostOnboardingClassifiedError? _classifiedError;
@@ -3724,9 +3788,23 @@ class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _fetchStatus();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted && !_loading) {
+      _fetchStatus();
+    }
   }
 
   Future<void> _fetchStatus() async {
@@ -3748,6 +3826,10 @@ class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
           (effectiveRecord.reviewedAt == null ||
               effectiveRecord.reviewedAt!.trim().isEmpty)) {
         effectiveRecord = fallbackSubmitted;
+      }
+      if (effectiveRecord?.status == HostApplicationStatus.approved) {
+        await repo.refreshApprovedHostSession();
+        if (!mounted) return;
       }
       setState(() {
         _record = effectiveRecord;

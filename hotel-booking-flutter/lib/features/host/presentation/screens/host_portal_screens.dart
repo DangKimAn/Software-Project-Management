@@ -123,7 +123,7 @@ enum HostPortalSection {
       case 'overview':
         return HostPortalSection.overview;
       default:
-        return HostPortalSection.guests;
+        return HostPortalSection.overview;
     }
   }
 }
@@ -306,6 +306,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   final TextEditingController _bankAccountNumberCtrl = TextEditingController();
   final TextEditingController _bankAccountHolderCtrl = TextEditingController();
   final TextEditingController _bankBranchCtrl = TextEditingController();
+  StreamSubscription<Map<String, dynamic>>? _socketMsgSub;
+  StreamSubscription<Map<String, dynamic>>? _socketReactionSub;
 
   @override
   void initState() {
@@ -325,7 +327,70 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     _calendarYear = vnNow.year;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _bindRealtimeChatStreams();
       _triggerSectionLoad(_activeSection);
+    });
+  }
+
+  // Giải thuật đồng bộ tin nhắn mới (`message:new`) và biểu cảm (`message:reaction`) thời gian thực vào khung chat Host, khử trùng lặp theo `messageId`.
+  void _bindRealtimeChatStreams() {
+    if (!mounted) return;
+    final vm = ref.read(hostPortalViewModelProvider);
+    _socketMsgSub?.cancel();
+    _socketReactionSub?.cancel();
+    _socketMsgSub = vm.onMessageNew.listen((payload) {
+      if (!mounted) return;
+      final rawMsg = payload['message'] is Map
+          ? Map<String, dynamic>.from(payload['message'] as Map)
+          : payload;
+      final incomingConvId =
+          '${payload['conversationId'] ?? rawMsg['conversationId'] ?? ''}'
+              .trim();
+      if (incomingConvId.isEmpty) return;
+      final msgId = '${rawMsg['messageId'] ?? rawMsg['id'] ?? ''}'.trim();
+      setState(() {
+        for (final conv in _conversations) {
+          if ('${conv['conversationId'] ?? conv['id']}' == incomingConvId) {
+            conv['lastMessagePreview'] =
+                rawMsg['content'] ?? conv['lastMessagePreview'];
+            conv['lastMessageAt'] =
+                rawMsg['createdAt'] ?? DateTime.now().toIso8601String();
+          }
+        }
+        if (incomingConvId == _selectedConversationId) {
+          final exists = msgId.isNotEmpty &&
+              _conversationMessages.any(
+                (m) => '${m['messageId'] ?? m['id'] ?? ''}'.trim() == msgId,
+              );
+          if (!exists) {
+            _conversationMessages = [
+              ..._conversationMessages,
+              rawMsg,
+            ];
+          }
+        }
+      });
+      if (incomingConvId == _selectedConversationId) {
+        _scrollChatToBottom();
+      }
+    });
+    _socketReactionSub = vm.onMessageReaction.listen((payload) {
+      if (!mounted) return;
+      final incomingConvId = '${payload['conversationId'] ?? ''}'.trim();
+      if (incomingConvId.isNotEmpty &&
+          incomingConvId != _selectedConversationId) {
+        return;
+      }
+      final msgId = '${payload['messageId'] ?? ''}'.trim();
+      if (msgId.isEmpty) return;
+      final reaction = '${payload['reaction'] ?? ''}'.trim();
+      setState(() {
+        if (reaction.isEmpty) {
+          _messageReactions.remove(msgId);
+        } else {
+          _messageReactions[msgId] = reaction;
+        }
+      });
     });
   }
 
@@ -344,6 +409,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
   @override
   void dispose() {
+    _socketMsgSub?.cancel();
+    _socketReactionSub?.cancel();
     _calendarSearchCtrl.dispose();
     _calendarPriceOverrideCtrl.dispose();
     _calendarMinNightsCtrl.dispose();
@@ -969,6 +1036,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   Future<void> _fetchMessagesForConversation(String conversationId) async {
     if (conversationId == 'admin_support') return;
     final repo = ref.read(hostPortalViewModelProvider);
+    if (isNumericHostConversationId(conversationId)) {
+      repo.joinConversation(conversationId);
+    }
     try {
       final msgs = await repo.getConversationMessages(conversationId);
       if (!mounted) return;
@@ -7019,6 +7089,50 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
               ),
             ],
           ),
+          if (display.actions.canCheckIn || display.actions.canCheckOut) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: Key(
+                  'guest_card_${display.actions.canCheckIn ? 'checkin' : 'checkout'}_btn_$bookingId',
+                ),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 42),
+                  backgroundColor: HostStudioTokens.softCircle,
+                  foregroundColor: HostStudioTokens.inkPrimary,
+                  side: const BorderSide(color: HostStudioTokens.hairline),
+                  shape: const StadiumBorder(),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                ),
+                onPressed: _busyBookingActionId == bookingId
+                    ? null
+                    : () => _handleBookingAction(
+                          b,
+                          display.actions.canCheckIn ? 'check_in' : 'check_out',
+                        ),
+                icon: Icon(
+                  display.actions.canCheckIn
+                      ? AppSemanticIcons.checkIn
+                      : AppSemanticIcons.checkOut,
+                  size: 14.5,
+                  color: HostStudioTokens.inkPrimary,
+                ),
+                label: Text(
+                  display.actions.canCheckIn
+                      ? 'Xác nhận Check-in'
+                      : 'Xác nhận Check-out',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HostStudioTokens.pillText.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: HostStudioTokens.inkPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -7544,9 +7658,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 (matchedConv['listing'] as Map)['listingId'])
             : null);
     final listingId = (rawListingId ?? '').toString().trim();
-    final effectiveListingId = listingId.isNotEmpty
-        ? listingId
-        : (listingTitle.isNotEmpty ? '1' : '');
+    final effectiveListingId =
+        listingId.isNotEmpty ? listingId : (listingTitle.isNotEmpty ? '1' : '');
 
     return Column(
       children: [
@@ -7733,11 +7846,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       final m = _conversationMessages[i];
                       final content =
                           (m['content'] ?? m['body'] ?? '').toString();
-                      var rawAttachments = m['attachments'] ?? m['attachments_json'];
+                      var rawAttachments =
+                          m['attachments'] ?? m['attachments_json'];
                       var attachments = rawAttachments is List
                           ? rawAttachments
                               .map((a) {
-                                if (a is Map) return (a['url'] ?? a['imageUrl'] ?? '').toString();
+                                if (a is Map) {
+                                  return (a['url'] ?? a['imageUrl'] ?? '')
+                                      .toString();
+                                }
                                 return a?.toString() ?? '';
                               })
                               .where((s) => s.isNotEmpty)
@@ -7751,7 +7868,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                             content.contains('[Ảnh chụp trực tiếp từ villa]')) {
                           attachments = ['assets/images/343vothisau.jpg'];
                         } else if (content.contains('🎤 Tin nhắn thoại')) {
-                          attachments = ['https://pub-67a3f362466e495d9c2f371ca84b6d03.r2.dev/chat/sample_voice.wav'];
+                          attachments = [
+                            'https://pub-67a3f362466e495d9c2f371ca84b6d03.r2.dev/chat/sample_voice.wav'
+                          ];
                         }
                       }
                       final senderId =
@@ -7812,15 +7931,21 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
                       DateTime? prevDt;
                       if (i > 0) {
-                        final prevRawCreatedAt = _conversationMessages[i - 1]['createdAt'];
+                        final prevRawCreatedAt =
+                            _conversationMessages[i - 1]['createdAt'];
                         if (prevRawCreatedAt != null) {
-                          prevDt = DateTime.tryParse(prevRawCreatedAt.toString());
+                          prevDt =
+                              DateTime.tryParse(prevRawCreatedAt.toString());
                         }
                       }
 
                       final currentLocale = ref.watch(localeProvider);
-                      final showTimeDivider = msgDt != null && shouldShowChatTimeDivider(msgDt, prevDt);
-                      final timeDividerLabel = msgDt != null ? formatChatTimeDivider(msgDt, localeCode: currentLocale) : '';
+                      final showTimeDivider = msgDt != null &&
+                          shouldShowChatTimeDivider(msgDt, prevDt);
+                      final timeDividerLabel = msgDt != null
+                          ? formatChatTimeDivider(msgDt,
+                              localeCode: currentLocale)
+                          : '';
 
                       // Render bong bóng tin nhắn tinh gọn kiểu Messenger kèm reaction & avatar bên trái
                       return AnimatedBuilder(
@@ -7848,258 +7973,318 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                     if (isReactionOpen)
                                       _buildReactionPicker(msgKey),
 
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    // Hình đại diện nhỏ bên trái của người gửi (đối phương)
-                                    if (!isMe) ...[
-                                      _buildChatSmallAvatar(
-                                        isAdmin: isMsgAdmin,
-                                        name: participantName,
-                                        avatarUrl:
-                                            other?['avatar']?.toString() ??
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        // Hình đại diện nhỏ bên trái của người gửi (đối phương)
+                                        if (!isMe) ...[
+                                          _buildChatSmallAvatar(
+                                            isAdmin: isMsgAdmin,
+                                            name: participantName,
+                                            avatarUrl: other?['avatar']
+                                                    ?.toString() ??
                                                 other?['avatarUrl']?.toString(),
-                                      ),
-                                      const SizedBox(width: 8),
-                                    ],
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
 
-                                    // Bong bóng nội dung tin nhắn
-                                    Expanded(
-                                      child: Align(
-                                        alignment: isMe
-                                            ? Alignment.centerRight
-                                            : Alignment.centerLeft,
-                                        child: GestureDetector(
-                                          key: Key('chat_bubble_$msgKey'),
-                                          onLongPress: () {
-                                            setState(() {
-                                              _reactionActiveMsgKey =
-                                                  isReactionOpen
-                                                      ? null
-                                                      : msgKey;
-                                            });
-                                          },
-                                          onSecondaryTap: () {
-                                            setState(() {
-                                              _reactionActiveMsgKey =
-                                                  isReactionOpen
-                                                      ? null
-                                                      : msgKey;
-                                            });
-                                          },
-                                          child: Stack(
-                                            clipBehavior: Clip.none,
-                                            children: [
-                                              Container(
-                                                constraints: BoxConstraints(
-                                                  maxWidth:
-                                                      MediaQuery.of(context)
-                                                              .size
-                                                              .width *
-                                                          0.68,
-                                                ),
-                                                padding: (isImageOnly || isAudioOnly)
-                                                    ? EdgeInsets.zero
-                                                    : const EdgeInsets.symmetric(
-                                                        horizontal: 14,
-                                                        vertical: 9,
-                                                      ),
-                                                decoration: BoxDecoration(
-                                                  color: (isImageOnly || isAudioOnly)
-                                                      ? Colors.transparent
-                                                      : (isMe
-                                                          ? AppColors.primary
-                                                          : (isMsgAdmin
-                                                              ? const Color(0xFFFFF1F2)
-                                                              : const Color(0xFFF1F5F9))),
-                                                  borderRadius: bubbleRadius,
-                                                  border: isMe
-                                                      ? null
-                                                      : (isMsgAdmin
-                                                          ? Border.all(
-                                                              color: const Color(0xFFFECDD3),
-                                                            )
-                                                          : null),
-                                                  boxShadow: (isMe && !isImageOnly)
-                                                      ? [
-                                                          BoxShadow(
-                                                            color: AppColors.primary
-                                                                .withValues(alpha: 0.16),
-                                                            blurRadius: 4,
-                                                            offset: const Offset(0, 1),
+                                        // Bong bóng nội dung tin nhắn
+                                        Expanded(
+                                          child: Align(
+                                            alignment: isMe
+                                                ? Alignment.centerRight
+                                                : Alignment.centerLeft,
+                                            child: GestureDetector(
+                                              key: Key('chat_bubble_$msgKey'),
+                                              onLongPress: () {
+                                                setState(() {
+                                                  _reactionActiveMsgKey =
+                                                      isReactionOpen
+                                                          ? null
+                                                          : msgKey;
+                                                });
+                                              },
+                                              onSecondaryTap: () {
+                                                setState(() {
+                                                  _reactionActiveMsgKey =
+                                                      isReactionOpen
+                                                          ? null
+                                                          : msgKey;
+                                                });
+                                              },
+                                              child: Stack(
+                                                clipBehavior: Clip.none,
+                                                children: [
+                                                  Container(
+                                                    constraints: BoxConstraints(
+                                                      maxWidth:
+                                                          MediaQuery.of(context)
+                                                                  .size
+                                                                  .width *
+                                                              0.68,
+                                                    ),
+                                                    padding: (isImageOnly ||
+                                                            isAudioOnly)
+                                                        ? EdgeInsets.zero
+                                                        : const EdgeInsets
+                                                            .symmetric(
+                                                            horizontal: 14,
+                                                            vertical: 9,
                                                           ),
-                                                        ]
-                                                      : null,
-                                                ),
-                                                child: Column(
-                                                  crossAxisAlignment: isMe
-                                                      ? CrossAxisAlignment.end
-                                                      : CrossAxisAlignment.start,
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    if (hasAttachments) ...[
-                                                      for (final attUrl in attachments)
-                                                        Padding(
-                                                          padding: EdgeInsets.only(
-                                                            bottom: isImageOnly
-                                                                ? 0
-                                                                : (displayCaption != null ? 6 : 0),
-                                                          ),
-                                                          child: _isChatAudioUrl(attUrl)
-                                                              ? _buildHostAudioBubble(attUrl, isMe: isMe)
-                                                              : ChatImageBubble(
-                                                                  imageUrl: attUrl,
-                                                                  borderRadius: bubbleRadius,
-                                                                  maxWidth: MediaQuery.of(context).size.width * 0.68,
-                                                                  onTap: () => _openFullScreenImage(context, attUrl),
-                                                                ),
-                                                        ),
-                                                    ],
-                                                    if (displayCaption != null && displayCaption.isNotEmpty)
-                                                      Text(
-                                                        displayCaption,
-                                                        style: TextStyle(
-                                                          fontSize: 14,
-                                                          height: 1.35,
-                                                          color: isMe
-                                                              ? Colors.white
+                                                    decoration: BoxDecoration(
+                                                      color: (isImageOnly ||
+                                                              isAudioOnly)
+                                                          ? Colors.transparent
+                                                          : (isMe
+                                                              ? AppColors
+                                                                  .primary
                                                               : (isMsgAdmin
-                                                                  ? const Color(0xFF881337)
-                                                                  : AppColors.textPrimary),
-                                                        ),
-                                                      ),
-                                                  ],
-                                                ),
-                                              ),
-
-                                              // Badge cảm xúc ở góc dưới của bong bóng tin nhắn
-                                              if (reaction != null)
-                                                Positioned(
-                                                  bottom: -8,
-                                                  right: isMe ? 8 : null,
-                                                  left: isMe ? null : 8,
-                                                  child: GestureDetector(
-                                                    onTap: () {
-                                                      setState(() {
-                                                        _reactionActiveMsgKey =
-                                                            isReactionOpen
-                                                                ? null
-                                                                : msgKey;
-                                                      });
-                                                    },
-                                                    child: Container(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 5,
-                                                        vertical: 2,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: Colors.white,
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(12),
-                                                        border: Border.all(
-                                                          color: const Color(
-                                                              0xFFE2E8F0),
-                                                        ),
-                                                        boxShadow: [
-                                                          BoxShadow(
-                                                            color: Colors.black
-                                                                .withValues(
-                                                                    alpha: 0.1),
-                                                            blurRadius: 4,
-                                                            offset:
-                                                                const Offset(
-                                                                    0, 1),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      child: Builder(
-                                                        builder: (context) {
-                                                          final reactionMeta =
-                                                              resolveAppChatReaction(
-                                                            reaction,
-                                                          );
-                                                          return Icon(
-                                                            reactionMeta.icon,
-                                                            key: Key(
-                                                              'reaction_badge_${reactionMeta.code}_$msgKey',
+                                                                  ? const Color(
+                                                                      0xFFFFF1F2)
+                                                                  : const Color(
+                                                                      0xFFF1F5F9))),
+                                                      borderRadius:
+                                                          bubbleRadius,
+                                                      border: isMe
+                                                          ? null
+                                                          : (isMsgAdmin
+                                                              ? Border.all(
+                                                                  color: const Color(
+                                                                      0xFFFECDD3),
+                                                                )
+                                                              : null),
+                                                      boxShadow: (isMe &&
+                                                              !isImageOnly)
+                                                          ? [
+                                                              BoxShadow(
+                                                                color: AppColors
+                                                                    .primary
+                                                                    .withValues(
+                                                                        alpha:
+                                                                            0.16),
+                                                                blurRadius: 4,
+                                                                offset:
+                                                                    const Offset(
+                                                                        0, 1),
+                                                              ),
+                                                            ]
+                                                          : null,
+                                                    ),
+                                                    child: Column(
+                                                      crossAxisAlignment: isMe
+                                                          ? CrossAxisAlignment
+                                                              .end
+                                                          : CrossAxisAlignment
+                                                              .start,
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        if (hasAttachments) ...[
+                                                          for (final attUrl
+                                                              in attachments)
+                                                            Padding(
+                                                              padding:
+                                                                  EdgeInsets
+                                                                      .only(
+                                                                bottom: isImageOnly
+                                                                    ? 0
+                                                                    : (displayCaption !=
+                                                                            null
+                                                                        ? 6
+                                                                        : 0),
+                                                              ),
+                                                              child: _isChatAudioUrl(
+                                                                      attUrl)
+                                                                  ? _buildHostAudioBubble(
+                                                                      attUrl,
+                                                                      isMe:
+                                                                          isMe)
+                                                                  : ChatImageBubble(
+                                                                      imageUrl:
+                                                                          attUrl,
+                                                                      borderRadius:
+                                                                          bubbleRadius,
+                                                                      maxWidth: MediaQuery.of(context)
+                                                                              .size
+                                                                              .width *
+                                                                          0.68,
+                                                                      onTap: () => _openFullScreenImage(
+                                                                          context,
+                                                                          attUrl),
+                                                                    ),
                                                             ),
-                                                            size: 13,
-                                                            color: AppColors
-                                                                .primary,
-                                                          );
-                                                        },
-                                                      ),
+                                                        ],
+                                                        if (displayCaption !=
+                                                                null &&
+                                                            displayCaption
+                                                                .isNotEmpty)
+                                                          Text(
+                                                            displayCaption,
+                                                            style: TextStyle(
+                                                              fontSize: 14,
+                                                              height: 1.35,
+                                                              color: isMe
+                                                                  ? Colors.white
+                                                                  : (isMsgAdmin
+                                                                      ? const Color(
+                                                                          0xFF881337)
+                                                                      : AppColors
+                                                                          .textPrimary),
+                                                            ),
+                                                          ),
+                                                      ],
                                                     ),
                                                   ),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
 
-                                    // Khung thời gian trượt ra khi kéo qua bên phải
-                                    if (progress > 0.01 && msgTime != null)
-                                      Opacity(
-                                        opacity: timeOpacity,
-                                        child: Container(
-                                          width: timeWidth,
-                                          alignment: Alignment.centerRight,
-                                          padding:
-                                              const EdgeInsets.only(left: 6),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 3,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFE2E8F0),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              msgTime,
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w600,
-                                                color: Color(0xFF475569),
+                                                  // Badge cảm xúc ở góc dưới của bong bóng tin nhắn
+                                                  if (reaction != null)
+                                                    Positioned(
+                                                      bottom: -8,
+                                                      right: isMe ? 8 : null,
+                                                      left: isMe ? null : 8,
+                                                      child: GestureDetector(
+                                                        onTap: () {
+                                                          setState(() {
+                                                            _reactionActiveMsgKey =
+                                                                isReactionOpen
+                                                                    ? null
+                                                                    : msgKey;
+                                                          });
+                                                        },
+                                                        child: Container(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                            horizontal: 5,
+                                                            vertical: 2,
+                                                          ),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: Colors.white,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        12),
+                                                            border: Border.all(
+                                                              color: const Color(
+                                                                  0xFFE2E8F0),
+                                                            ),
+                                                            boxShadow: [
+                                                              BoxShadow(
+                                                                color: Colors
+                                                                    .black
+                                                                    .withValues(
+                                                                        alpha:
+                                                                            0.1),
+                                                                blurRadius: 4,
+                                                                offset:
+                                                                    const Offset(
+                                                                        0, 1),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          child: Builder(
+                                                            builder: (context) {
+                                                              final reactionMeta =
+                                                                  resolveAppChatReaction(
+                                                                reaction,
+                                                              );
+                                                              return Icon(
+                                                                reactionMeta
+                                                                    .icon,
+                                                                key: Key(
+                                                                  'reaction_badge_${reactionMeta.code}_$msgKey',
+                                                                ),
+                                                                size: 13,
+                                                                color: AppColors
+                                                                    .primary,
+                                                              );
+                                                            },
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                ],
                                               ),
                                             ),
                                           ),
                                         ),
+
+                                        // Khung thời gian trượt ra khi kéo qua bên phải
+                                        if (progress > 0.01 && msgTime != null)
+                                          Opacity(
+                                            opacity: timeOpacity,
+                                            child: Container(
+                                              width: timeWidth,
+                                              alignment: Alignment.centerRight,
+                                              padding: const EdgeInsets.only(
+                                                  left: 6),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 3,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color:
+                                                      const Color(0xFFE2E8F0),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                ),
+                                                child: Text(
+                                                  msgTime,
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Color(0xFF475569),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+
+                                    // Trạng thái Messenger tách biệt ở góc dưới cùng bên phải của cụm tin nhắn cuối cùng
+                                    if (i == _conversationMessages.length - 1 &&
+                                        isMe) ...[
+                                      MessengerStatusIndicator(
+                                        state: (m['status'] == 'failed' ||
+                                                m['isFailed'] == true)
+                                            ? MessengerDeliveryState.failed
+                                            : (m['status'] == 'sending' ||
+                                                    m['status'] == 'pending')
+                                                ? MessengerDeliveryState.sending
+                                                : (m['isRead'] == true ||
+                                                        m['readAt'] != null ||
+                                                        m['seen'] == true ||
+                                                        m['status'] == 'read')
+                                                    ? MessengerDeliveryState
+                                                        .seen
+                                                    : MessengerDeliveryState
+                                                        .sent,
+                                        recipientName: participantName,
+                                        recipientAvatar: participantAvatar,
+                                        customLabel: (m['isRead'] == true ||
+                                                m['readAt'] != null ||
+                                                m['seen'] == true ||
+                                                m['status'] == 'read')
+                                            ? 'Đã xem'
+                                            : (m['status'] == 'sending' ||
+                                                    m['status'] == 'pending')
+                                                ? 'Đang gửi...'
+                                                : (m['status'] == 'failed' ||
+                                                        m['isFailed'] == true)
+                                                    ? 'Gửi thất bại'
+                                                    : 'Đã gửi',
                                       ),
+                                    ],
                                   ],
                                 ),
-
-                                // Trạng thái Messenger tách biệt ở góc dưới cùng bên phải của cụm tin nhắn cuối cùng
-                                if (i == _conversationMessages.length - 1 &&
-                                    isMe) ...[
-                                  MessengerStatusIndicator(
-                                    state: (m['status'] == 'failed' || m['isFailed'] == true)
-                                        ? MessengerDeliveryState.failed
-                                        : (m['status'] == 'sending' || m['status'] == 'pending')
-                                            ? MessengerDeliveryState.sending
-                                            : (m['isRead'] == true || m['readAt'] != null || m['seen'] == true || m['status'] == 'read')
-                                                ? MessengerDeliveryState.seen
-                                                : MessengerDeliveryState.sent,
-                                    recipientName: participantName,
-                                    recipientAvatar: participantAvatar,
-                                    customLabel: (m['isRead'] == true || m['readAt'] != null || m['seen'] == true || m['status'] == 'read')
-                                        ? 'Đã xem'
-                                        : (m['status'] == 'sending' || m['status'] == 'pending')
-                                            ? 'Đang gửi...'
-                                            : (m['status'] == 'failed' || m['isFailed'] == true)
-                                                ? 'Gửi thất bại'
-                                                : 'Đã gửi',
-                                  ),
-                                ],
                               ],
                             ),
-                          ],
-                        ),
-                      );
+                          );
                         },
                       );
                     },
@@ -8201,12 +8386,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
     if (avatarUrl != null && avatarUrl.isNotEmpty) {
       return ClipOval(
-        child: Image.network(
-          avatarUrl,
+        child: AppImage(
+          imageUrl: avatarUrl,
           width: 28,
           height: 28,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _buildLetterAvatar(name),
+          errorWidget: _buildLetterAvatar(name),
         ),
       );
     }
@@ -8261,6 +8446,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             child: InkWell(
               key: Key('reaction_${item.code}_$msgKey'),
               onTap: () {
+                final nextReaction = isSelected ? '' : item.code;
                 setState(() {
                   if (isSelected) {
                     _messageReactions.remove(msgKey);
@@ -8269,6 +8455,14 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   }
                   _reactionActiveMsgKey = null;
                 });
+                final activeConv = _selectedConversationId ?? '';
+                if (isNumericHostConversationId(activeConv)) {
+                  ref.read(hostPortalViewModelProvider).sendReaction(
+                        activeConv,
+                        messageId: msgKey,
+                        reaction: nextReaction,
+                      );
+                }
               },
               borderRadius: BorderRadius.circular(20),
               child: Padding(
@@ -8627,7 +8821,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: const Icon(LucideIcons.x, color: Colors.white, size: 20),
+                  icon:
+                      const Icon(LucideIcons.x, color: Colors.white, size: 20),
                   onPressed: () => Navigator.pop(ctx),
                 ),
               ),
@@ -9170,7 +9365,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                     ),
                     const SizedBox(height: 16),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
                         color: AppColors.surfaceBase,
                         borderRadius: BorderRadius.circular(8),
@@ -9179,13 +9375,16 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       child: Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: AppColors.textStrong,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              rawBankName.length > 6 ? rawBankName.substring(0, 6).toUpperCase() : rawBankName.toUpperCase(),
+                              rawBankName.length > 6
+                                  ? rawBankName.substring(0, 6).toUpperCase()
+                                  : rawBankName.toUpperCase(),
                               style: const TextStyle(
                                 color: AppColors.textInverse,
                                 fontSize: 10,
@@ -9199,7 +9398,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  rawAccountName.isNotEmpty ? rawAccountName : rawBankName,
+                                  rawAccountName.isNotEmpty
+                                      ? rawAccountName
+                                      : rawBankName,
                                   style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
@@ -9242,7 +9443,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.textStrong, width: 1.5),
+                          borderSide: const BorderSide(
+                              color: AppColors.textStrong, width: 1.5),
                         ),
                       ),
                       onChanged: (val) {
@@ -9256,10 +9458,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _buildQuickAmountChip('1.000.000 ₫', () => setQuickAmount(1000000)),
-                        _buildQuickAmountChip('5.000.000 ₫', () => setQuickAmount(5000000)),
-                        _buildQuickAmountChip('10.000.000 ₫', () => setQuickAmount(10000000)),
-                        _buildQuickAmountChip('Rút hết', () => setQuickAmount(availableBalance), isMax: true),
+                        _buildQuickAmountChip(
+                            '1.000.000 ₫', () => setQuickAmount(1000000)),
+                        _buildQuickAmountChip(
+                            '5.000.000 ₫', () => setQuickAmount(5000000)),
+                        _buildQuickAmountChip(
+                            '10.000.000 ₫', () => setQuickAmount(10000000)),
+                        _buildQuickAmountChip(
+                            'Rút hết', () => setQuickAmount(availableBalance),
+                            isMax: true),
                       ],
                     ),
                     const SizedBox(height: 14),
@@ -9272,7 +9479,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       ),
                       child: const Row(
                         children: [
-                          Icon(LucideIcons.shieldCheck, size: 16, color: AppColors.textPrimary),
+                          Icon(LucideIcons.shieldCheck,
+                              size: 16, color: AppColors.textPrimary),
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -9297,20 +9505,24 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                               final amt = double.tryParse(text) ?? 0;
                               if (amt < 200000) {
                                 setModalState(() {
-                                  amountError = 'Số tiền rút tối thiểu là 200.000 VNĐ';
+                                  amountError =
+                                      'Số tiền rút tối thiểu là 200.000 VNĐ';
                                 });
                                 return;
                               }
-                              if (amt > availableBalance && availableBalance > 0) {
+                              if (amt > availableBalance &&
+                                  availableBalance > 0) {
                                 setModalState(() {
-                                  amountError = 'Số tiền vượt quá số dư khả dụng (${formatHostVnd(availableBalance)})';
+                                  amountError =
+                                      'Số tiền vượt quá số dư khả dụng (${formatHostVnd(availableBalance)})';
                                 });
                                 return;
                               }
 
                               setModalState(() => isSubmitting = true);
                               // CONFLICT-RESOLVED: Ủy quyền yêu cầu rút tiền qua `hostPortalViewModelProvider` thay vì gọi thẳng `hostRepositoryProvider` để giữ chuẩn MVVM.
-                              final repo = ref.read(hostPortalViewModelProvider);
+                              final repo =
+                                  ref.read(hostPortalViewModelProvider);
                               try {
                                 final result = await repo.requestPayout(
                                   amount: amt,
@@ -9320,7 +9532,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                 Navigator.of(ctx).pop();
                                 _showWithdrawalSuccessDialog(
                                   amount: amt,
-                                  payoutId: (result['payoutId'] ?? result['id'] ?? 'Mới').toString(),
+                                  payoutId: (result['payoutId'] ??
+                                          result['id'] ??
+                                          'Mới')
+                                      .toString(),
                                   bankName: rawBankName,
                                   accountHolder: rawAccountName,
                                   accountNumber: maskedAcc,
@@ -9372,7 +9587,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
-  Widget _buildQuickAmountChip(String label, VoidCallback onTap, {bool isMax = false}) {
+  Widget _buildQuickAmountChip(String label, VoidCallback onTap,
+      {bool isMax = false}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
@@ -9460,7 +9676,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   children: [
                     _buildReceiptRow('Mã yêu cầu:', '#PO-$payoutId'),
                     const SizedBox(height: 6),
-                    _buildReceiptRow('Số tiền yêu cầu:', formatHostVnd(amount), isPrimary: true),
+                    _buildReceiptRow('Số tiền yêu cầu:', formatHostVnd(amount),
+                        isPrimary: true),
                     const SizedBox(height: 6),
                     _buildReceiptRow('Ngân hàng nhận:', bankName),
                     if (accountHolder.isNotEmpty) ...[
@@ -9473,10 +9690,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       children: [
                         const Text(
                           'Trạng thái:',
-                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             border: Border.all(color: AppColors.border),
                             borderRadius: BorderRadius.circular(4),
@@ -9484,7 +9703,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(LucideIcons.clock, size: 10, color: AppColors.warningAmber),
+                              Icon(LucideIcons.clock,
+                                  size: 10, color: AppColors.warningAmber),
                               SizedBox(width: 4),
                               Text(
                                 'Chờ Admin duyệt',
@@ -9529,7 +9749,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
-  Widget _buildReceiptRow(String label, String value, {bool isPrimary = false}) {
+  Widget _buildReceiptRow(String label, String value,
+      {bool isPrimary = false}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [

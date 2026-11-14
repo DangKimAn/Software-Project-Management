@@ -725,7 +725,9 @@ abstract final class LocaleFormatters {
     final lang = normalizeLanguageCode(localeCode);
     final trimmed = location.trim();
     final lower = trimmed.toLowerCase();
-    if (trimmed.isEmpty || lower.contains('vũng tàu') || lower.contains('vung tau')) {
+    if (trimmed.isEmpty ||
+        lower.contains('vũng tàu') ||
+        lower.contains('vung tau')) {
       if (lang == 'ko') return '붕따우';
       if (lang == 'en') return 'Vung Tau';
       return 'Vũng Tàu';

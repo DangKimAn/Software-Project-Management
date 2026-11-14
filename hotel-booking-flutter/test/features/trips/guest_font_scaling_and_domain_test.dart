@@ -62,7 +62,8 @@ void main() {
 
   group('Guest Domain, Pagination & Route Normalization Runtime Verification',
       () {
-    test('BookingRepositoryImpl.getMyBookings loops 1..totalPages with limit 50',
+    test(
+        'BookingRepositoryImpl.getMyBookings loops 1..totalPages with limit 50',
         () async {
       final pages = <int>[];
       final dio = _mockDio((options) async {
@@ -84,7 +85,12 @@ void main() {
                   'status': 'confirmed',
                 },
               ),
-              'pagination': {'page': 1, 'limit': 50, 'total': 62, 'totalPages': 2},
+              'pagination': {
+                'page': 1,
+                'limit': 50,
+                'total': 62,
+                'totalPages': 2
+              },
             },
           });
         }
@@ -103,7 +109,12 @@ void main() {
                 'status': 'completed',
               },
             ),
-            'pagination': {'page': 2, 'limit': 50, 'total': 62, 'totalPages': 2},
+            'pagination': {
+              'page': 2,
+              'limit': 50,
+              'total': 62,
+              'totalPages': 2
+            },
           },
         });
       });
@@ -291,7 +302,8 @@ void main() {
                                 SizedBox(
                                   width: 300,
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const SizedBox(height: 225),
                                       const SizedBox(height: 12),

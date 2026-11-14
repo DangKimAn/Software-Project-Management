@@ -265,8 +265,8 @@ void main() {
               effectiveCurrency: AppCurrency.usd,
               snapshot: testFxSnapshot,
             )),
-            myBookingsProvider.overrideWith((ref) =>
-                Future.value([completedBooking, cancelledBooking])),
+            myBookingsProvider.overrideWith(
+                (ref) => Future.value([completedBooking, cancelledBooking])),
             activePendingBookingProvider.overrideWithValue(null),
           ],
           child: const MaterialApp(

@@ -172,7 +172,12 @@ void main() {
         expect(unverified.showsActiveDot, isFalse);
         expect(unverified.nextTargetStatus, 'active');
 
-        for (final alias in const ['suspended', 'blocked', 'locked', 'LOCKED']) {
+        for (final alias in const [
+          'suspended',
+          'blocked',
+          'locked',
+          'LOCKED'
+        ]) {
           final locked = AdminStatusHelper.classifyUserStatus(alias);
           expect(locked.kind, AdminUserStatusKind.suspended);
           expect(locked.badgeLabel, 'Tạm khóa');
@@ -740,7 +745,8 @@ void main() {
 
           if (tab == 'nguoi-dung') {
             final dropdownFinder = find.byType(DropdownButton<String>).first;
-            expect(tester.getSize(dropdownFinder).height, greaterThanOrEqualTo(28));
+            expect(tester.getSize(dropdownFinder).height,
+                greaterThanOrEqualTo(28));
           }
 
           final scrollable = find.byType(SingleChildScrollView).first;

@@ -62,8 +62,11 @@ class ChatMediaUploadService {
       throw const ValidationFailure('Dữ liệu tệp tải lên không được để trống.');
     }
 
-    final safeFilename = filename.trim().isNotEmpty ? filename.trim() : 'media_upload.bin';
-    final safeContentType = contentType.trim().isNotEmpty ? contentType.trim().toLowerCase() : 'application/octet-stream';
+    final safeFilename =
+        filename.trim().isNotEmpty ? filename.trim() : 'media_upload.bin';
+    final safeContentType = contentType.trim().isNotEmpty
+        ? contentType.trim().toLowerCase()
+        : 'application/octet-stream';
 
     final ChatUploadResult presigned;
     try {
@@ -80,7 +83,8 @@ class ChatMediaUploadService {
       final body = presignResponse.data ?? const <String, dynamic>{};
       presigned = ChatUploadResult.fromJson(body);
       if (presigned.uploadUrl.isEmpty || presigned.publicUrl.isEmpty) {
-        throw const ServerFailure('Không nhận được liên kết tải lên từ máy chủ.');
+        throw const ServerFailure(
+            'Không nhận được liên kết tải lên từ máy chủ.');
       }
     } on AppFailure {
       rethrow;
@@ -143,8 +147,8 @@ class ChatMediaUploadService {
     bytes.setUint8(2, 0x46); // 'F'
     bytes.setUint8(3, 0x46); // 'F'
     bytes.setUint32(4, fileSize, Endian.little);
-    bytes.setUint8(8, 0x57);  // 'W'
-    bytes.setUint8(9, 0x41);  // 'A'
+    bytes.setUint8(8, 0x57); // 'W'
+    bytes.setUint8(9, 0x41); // 'A'
     bytes.setUint8(10, 0x56); // 'V'
     bytes.setUint8(11, 0x45); // 'E'
 
@@ -154,11 +158,12 @@ class ChatMediaUploadService {
     bytes.setUint8(14, 0x74); // 't'
     bytes.setUint8(15, 0x20); // ' '
     bytes.setUint32(16, 16, Endian.little); // Subchunk1Size for PCM
-    bytes.setUint16(20, 1, Endian.little);  // AudioFormat 1 = PCM
-    bytes.setUint16(22, 1, Endian.little);  // NumChannels 1 = Mono
+    bytes.setUint16(20, 1, Endian.little); // AudioFormat 1 = PCM
+    bytes.setUint16(22, 1, Endian.little); // NumChannels 1 = Mono
     bytes.setUint32(24, sampleRate, Endian.little); // SampleRate
-    bytes.setUint32(28, sampleRate * 2, Endian.little); // ByteRate = SampleRate * 1 channel * 2 bytes
-    bytes.setUint16(32, 2, Endian.little);  // BlockAlign = 1 channel * 2 bytes
+    bytes.setUint32(28, sampleRate * 2,
+        Endian.little); // ByteRate = SampleRate * 1 channel * 2 bytes
+    bytes.setUint16(32, 2, Endian.little); // BlockAlign = 1 channel * 2 bytes
     bytes.setUint16(34, 16, Endian.little); // BitsPerSample = 16
 
     // "data" sub-chunk

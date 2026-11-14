@@ -123,7 +123,8 @@ class DefaultHostOnboardingPermissionService
   /// Khởi tạo dịch vụ kiểm quyền mặc định.
   const DefaultHostOnboardingPermissionService();
 
-  static const String kCameraPermissionPrefKey = 'kyc_camera_permission_granted';
+  static const String kCameraPermissionPrefKey =
+      'kyc_camera_permission_granted';
 
   @override
   Future<HostKycPermissionResult> requestPermission(

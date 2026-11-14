@@ -5,6 +5,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/di/providers.dart';
+import '../../../../core/network/dio_client.dart';
+import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../data/host_repository.dart';
 import '../../domain/host_models.dart';
 import '../../onboarding/host_onboarding_services.dart';
@@ -129,6 +132,54 @@ class HostOnboardingViewModel {
     void Function(int sent, int total)? onSendProgress,
   }) {
     return _api.submitKycApplication(dto, onSendProgress: onSendProgress);
+  }
+
+  // Giải thuật làm mới phiên JWT ngầm khi hồ sơ KYC đã được Admin phê duyệt để nâng quyền Guest -> Host tức thì mà không làm gián đoạn phiên hiện tại nếu mạng lỗi.
+  /// Làm mới Access Token và đồng bộ vai trò `host` vào `AuthNotifier` ngay khi phát hiện hồ sơ KYC đạt trạng thái `approved`.
+  Future<void> refreshApprovedHostSession() async {
+    final currentUser = _ref.read(authNotifierProvider).valueOrNull;
+    if (currentUser == null ||
+        currentUser.isHost ||
+        currentUser.roles.contains('host')) {
+      return;
+    }
+    try {
+      final client = _ref.read(dioClientProvider);
+      final response = await client.dio
+          .post<Map<String, dynamic>>(
+            '/api/auth/refresh',
+            data: const <String, dynamic>{},
+            options: Options(
+              extra: const <String, dynamic>{
+                'skipAuthRefresh': true,
+                'skipAuthToken': true,
+                'skipSessionCancel': true,
+                'disableRetry': true,
+              },
+            ),
+          )
+          .timeout(const Duration(seconds: 4));
+      final unwrapped = DioClient.unwrapEnvelope(response.data);
+      final Map<String, dynamic>? payload = unwrapped is Map<String, dynamic>
+          ? unwrapped
+          : (response.data?['data'] is Map<String, dynamic>
+              ? response.data!['data'] as Map<String, dynamic>
+              : response.data);
+      final newToken =
+          (payload?['accessToken'] ?? payload?['token'])?.toString().trim() ??
+              '';
+      if (newToken.isNotEmpty) {
+        await _ref.read(secureStorageProvider).saveAuthToken(newToken);
+      }
+      final rawUser = payload?['user'];
+      if (rawUser is Map) {
+        _ref
+            .read(authNotifierProvider.notifier)
+            .handleSessionRefreshed(Map<String, dynamic>.from(rawUser));
+      }
+    } catch (_) {
+      // Giữ nguyên phiên hiện tại nếu môi trường kiểm thử cô lập hoặc mạng tạm thời gián đoạn.
+    }
   }
 
   // Giải thuật hủy hồ sơ đăng ký Host đang chờ duyệt và xóa bản ghi tạm trong bộ nhớ phiên.

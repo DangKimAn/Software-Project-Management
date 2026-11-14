@@ -3356,8 +3356,7 @@ void main() {
         );
 
         // Non-blocking cancelled_by_guest date remains selectable!
-        final cancelledCellFinder =
-            find.byKey(Key('calendar_day_$altDateStr'));
+        final cancelledCellFinder = find.byKey(Key('calendar_day_$altDateStr'));
         await tester.ensureVisible(cancelledCellFinder);
         await tester.pumpAndSettle();
         await tester.tap(cancelledCellFinder);
@@ -3392,7 +3391,11 @@ void main() {
             if (options.path == '/api/listings/88/reviews') {
               return jsonResponse({
                 'items': [
-                  {'reviewId': 2, 'reviewerName': 'Fallback Guest', 'rating': 4},
+                  {
+                    'reviewId': 2,
+                    'reviewerName': 'Fallback Guest',
+                    'rating': 4
+                  },
                 ],
               });
             }

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/di/providers.dart';
 import '../../../messages/services/chat_media_upload_service.dart';
 import '../../data/host_repository.dart';
 import '../../domain/host_models.dart';
@@ -203,6 +204,37 @@ class HostPortalViewModel {
 
   Future<void> markConversationRead(String conversationId) {
     return _repo.markConversationRead(conversationId);
+  }
+
+  // Giải thuật kết nối thời gian thực Socket.IO cho hộp thư Chủ nhà: lắng nghe tin nhắn đến, biểu cảm và tham gia phòng hội thoại an toàn.
+  /// Luồng sự kiện tin nhắn mới thời gian thực (`message:new`) từ `SocketService`.
+  Stream<Map<String, dynamic>> get onMessageNew =>
+      _ref.read(socketServiceProvider).onMessageNew;
+
+  /// Luồng sự kiện thả biểu cảm tin nhắn thời gian thực (`message:reaction`) từ `SocketService`.
+  Stream<Map<String, dynamic>> get onMessageReaction =>
+      _ref.read(socketServiceProvider).onMessageReaction;
+
+  /// Tham gia phòng hội thoại `conversationId` qua kênh WebSocket thời gian thực.
+  void joinConversation(String conversationId) {
+    try {
+      _ref.read(socketServiceProvider).joinConversation(conversationId);
+    } catch (_) {}
+  }
+
+  /// Phát sự kiện thả biểu cảm `reaction` cho tin nhắn `messageId` trong hội thoại `conversationId`.
+  void sendReaction(
+    String conversationId, {
+    required String messageId,
+    required String reaction,
+  }) {
+    try {
+      _ref.read(socketServiceProvider).sendReaction(
+            conversationId,
+            messageId: messageId,
+            reaction: reaction,
+          );
+    } catch (_) {}
   }
 
   Future<List<Map<String, dynamic>>> getConversationMessages(

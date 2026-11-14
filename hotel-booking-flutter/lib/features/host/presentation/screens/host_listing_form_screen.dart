@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
+import '../../../../shared/widgets/vung_tau_map_picker.dart';
 import '../../domain/host_models.dart';
 import '../view_models/host_listing_form_view_model.dart';
 
@@ -1917,6 +1918,23 @@ class _HostListingFormScreenState extends ConsumerState<HostListingFormScreen> {
             );
           },
         ),
+        const SizedBox(height: 16),
+        VungTauMapPicker(
+          key: const Key('host_listing_map_picker'),
+          initialLat:
+              double.tryParse(_latController.text.trim()) ?? kDefaultVungTauLat,
+          initialLng:
+              double.tryParse(_lngController.text.trim()) ?? kDefaultVungTauLng,
+          height: 220,
+          showRadiusCircle: false,
+          showPresetChips: false,
+          onLocationChanged: (lat, lng, _) {
+            setState(() {
+              _latController.text = lat.toStringAsFixed(6);
+              _lngController.text = lng.toStringAsFixed(6);
+            });
+          },
+        ),
       ],
     );
   }
@@ -3280,6 +3298,13 @@ class _HostListingFormScreenState extends ConsumerState<HostListingFormScreen> {
             _errorMessage = 'Vui lòng nhập địa chỉ cụ thể trước khi tiếp tục.');
         return false;
       }
+      final lat = double.tryParse(_latController.text.trim());
+      final lng = double.tryParse(_lngController.text.trim());
+      if (lat == null || lng == null || !isWithinVungTauBounds(lat, lng)) {
+        setState(() => _errorMessage =
+            'Tọa độ phải nằm trong phạm vi TP. Vũng Tàu (Vĩ độ 10.28–10.50, Kinh độ 107.00–107.26).');
+        return false;
+      }
     } else if (_currentStep == 2) {
       final price = int.tryParse(
             _basePriceController.text.replaceAll(RegExp(r'[^0-9]'), ''),
@@ -3696,12 +3721,12 @@ class _HostListingFormScreenState extends ConsumerState<HostListingFormScreen> {
                 child: Stack(
                   children: [
                     if (coverUrl != null && coverUrl.isNotEmpty)
-                      Image.network(
-                        coverUrl,
+                      AppImage(
+                        imageUrl: coverUrl,
                         height: 180,
                         width: double.infinity,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildPlaceholderCover(),
+                        errorWidget: _buildPlaceholderCover(),
                       )
                     else
                       _buildPlaceholderCover(),

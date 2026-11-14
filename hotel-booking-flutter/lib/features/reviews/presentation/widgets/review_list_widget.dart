@@ -45,7 +45,8 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
   final Map<String, String> _translatedHostReplies = <String, String>{};
   final Set<String> _translatingReviewIds = <String>{};
 
-  Future<void> _toggleTranslation(ReviewItem review, String targetLanguage) async {
+  Future<void> _toggleTranslation(
+      ReviewItem review, String targetLanguage) async {
     final reviewId = review.id;
     if (_translatedReviewIds.contains(reviewId)) {
       setState(() {
@@ -154,7 +155,8 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              _buildRatingFilterChip(label: l10n.reviewsFilterAll, ratingValue: null),
+              _buildRatingFilterChip(
+                  label: l10n.reviewsFilterAll, ratingValue: null),
               for (final star in [5, 4, 3, 2, 1]) ...[
                 const SizedBox(width: 8),
                 _buildRatingFilterChip(

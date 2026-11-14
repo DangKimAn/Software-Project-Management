@@ -29,7 +29,8 @@ class _MockDioAdapter implements HttpClientAdapter {
 }
 
 void main() {
-  group('AdminStatusHelper — User status, verification guard & chart window', () {
+  group('AdminStatusHelper — User status, verification guard & chart window',
+      () {
     test(
       'distinguishes active, inactive, suspended/blocked/locked, and deleted statuses accurately',
       () {

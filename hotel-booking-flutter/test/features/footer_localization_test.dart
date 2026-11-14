@@ -7,7 +7,8 @@ import 'package:hotel_booking_flutter/l10n/l10n.dart';
 // CONFLICT-RESOLVED: Cập nhật đường dẫn import sang app_footer.dart sau khi tách app_header_footer.dart theo nguyên tắc đơn trách nhiệm.
 import 'package:hotel_booking_flutter/shared/widgets/app_footer.dart';
 
-class _TestLocaleNotifier extends StateNotifier<String> implements LocaleNotifier {
+class _TestLocaleNotifier extends StateNotifier<String>
+    implements LocaleNotifier {
   _TestLocaleNotifier(super.state);
 
   @override
@@ -24,7 +25,8 @@ void main() {
     Widget buildTestHarness(String languageCode) {
       return ProviderScope(
         overrides: [
-          localeProvider.overrideWith((ref) => _TestLocaleNotifier(languageCode)),
+          localeProvider
+              .overrideWith((ref) => _TestLocaleNotifier(languageCode)),
         ],
         child: MaterialApp(
           locale: Locale(languageCode),
@@ -48,7 +50,8 @@ void main() {
       );
     }
 
-    testWidgets('Renders English strings when active locale is en', (tester) async {
+    testWidgets('Renders English strings when active locale is en',
+        (tester) async {
       await tester.pumpWidget(buildTestHarness('en'));
       await tester.pumpAndSettle();
 
@@ -68,10 +71,12 @@ void main() {
       expect(find.text('Contact'), findsOneWidget);
       expect(find.text('Address: 28 Thi Sách, TP. Vũng Tàu'), findsOneWidget);
       expect(find.text('Social'), findsOneWidget);
-      expect(find.text('© 2026 The Palm Villa Vung Tau. All rights reserved.'), findsOneWidget);
+      expect(find.text('© 2026 The Palm Villa Vung Tau. All rights reserved.'),
+          findsOneWidget);
     });
 
-    testWidgets('Renders Vietnamese strings when active locale is vi', (tester) async {
+    testWidgets('Renders Vietnamese strings when active locale is vi',
+        (tester) async {
       await tester.pumpWidget(buildTestHarness('vi'));
       await tester.pumpAndSettle();
 
@@ -91,10 +96,12 @@ void main() {
       expect(find.text('Liên hệ'), findsOneWidget);
       expect(find.text('Địa chỉ: 28 Thi Sách, TP. Vũng Tàu'), findsOneWidget);
       expect(find.text('Social'), findsOneWidget);
-      expect(find.text('© 2026 The Palm Villa Vũng Tàu. Bảo lưu mọi quyền.'), findsOneWidget);
+      expect(find.text('© 2026 The Palm Villa Vũng Tàu. Bảo lưu mọi quyền.'),
+          findsOneWidget);
     });
 
-    testWidgets('Renders Korean strings when active locale is ko', (tester) async {
+    testWidgets('Renders Korean strings when active locale is ko',
+        (tester) async {
       await tester.pumpWidget(buildTestHarness('ko'));
       await tester.pumpAndSettle();
 

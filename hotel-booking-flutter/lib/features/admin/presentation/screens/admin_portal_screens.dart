@@ -10,6 +10,8 @@ import 'package:hotel_booking_flutter/features/admin/presentation/view_models/ad
 import 'package:hotel_booking_flutter/features/admin/domain/admin_status_helper.dart';
 import 'package:hotel_booking_flutter/features/admin/presentation/theme/admin_studio_tokens.dart';
 import 'package:hotel_booking_flutter/features/admin/presentation/widgets/admin_kyc_document_viewer.dart';
+import 'package:hotel_booking_flutter/features/admin/presentation/widgets/admin_payout_batch_panel.dart';
+import 'package:hotel_booking_flutter/features/admin/presentation/widgets/admin_reports_tab.dart';
 import 'package:hotel_booking_flutter/features/admin/presentation/widgets/admin_studio_widgets.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
 import 'package:hotel_booking_flutter/features/auth/presentation/view_models/auth_notifier.dart';
@@ -58,6 +60,8 @@ class AdminNavItem {
       case 'phi-nen-tang':
       case 'chi-tra':
         return l10n.adminTabFinance;
+      case 'bao-cao':
+        return localeCode == 'en' ? 'Reports' : '신고 관리';
       case 'tin-nhan':
         return l10n.navMessages;
       default:
@@ -124,6 +128,15 @@ const List<AdminNavItem> kAdminNavItems = [
     title: 'Duyệt chi trả & Hoàn tiền',
     subtitle:
         'Phê duyệt giải ngân Napas 24/7 cho Host rút tiền và Khách hoàn tiền.',
+  ),
+  AdminNavItem(
+    id: 'bao-cao',
+    label: 'Báo cáo vi phạm',
+    route: '/admin/bao-cao',
+    icon: LucideIcons.flag,
+    title: 'Báo cáo vi phạm',
+    subtitle:
+        'Tiếp nhận, thẩm tra và xử lý báo cáo vi phạm từ Khách hàng & Chủ nhà.',
   ),
   AdminNavItem(
     id: 'tin-nhan',
@@ -912,6 +925,7 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
     final isMenuTabActive = _currentTab == 'phan-quyen' ||
         _currentTab == 'phi-nen-tang' ||
         _currentTab == 'chi-tra' ||
+        _currentTab == 'bao-cao' ||
         _currentTab == 'tin-nhan';
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final showCompactCircleOnly = textScale > 1.45;
@@ -1040,6 +1054,8 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
         return const _AdminPlatformFeeTab();
       case 'chi-tra':
         return const _AdminDisbursementsTab();
+      case 'bao-cao':
+        return const AdminReportsTab();
       case 'tin-nhan':
         return _AdminMessagesTab(
           initialConversationId: widget.initialConversationId,
@@ -1066,6 +1082,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
   bool _isOffline = false;
   int _rangeDays = 30;
   String _group = 'day';
+  bool _showFullRevenueSeries = false;
 
   @override
   void initState() {
@@ -1182,9 +1199,13 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
     ];
 
     final series = stats?.revenueSeries ?? const <AdminRevenuePoint>[];
-    // CONFLICT-RESOLVED: Giữ 14 kỳ doanh thu mới nhất theo thứ tự thời gian ASC thay vì cắt mất ngày mới nhất ở chế độ 30/90 ngày.
-    final visibleSeries =
-        AdminStatusHelper.sliceLatestRevenueWindow(series, maxItems: 14);
+    // Giải thuật hiển thị chuỗi doanh thu linh hoạt (`TC-087`):
+    // Mặc định hiển thị 14 kỳ gần nhất theo thứ tự thời gian ASC để gọn giao diện, đồng thời cho phép mở rộng
+    // toàn bộ chuỗi 30/90 ngày kèm dải cột cuộn ngang (`SingleChildScrollView`) không cắt bớt dữ liệu.
+    // CONFLICT-RESOLVED: Giữ 14 kỳ doanh thu mới nhất theo thứ tự thời gian ASC mặc định và hỗ trợ xem toàn bộ 30/90 kỳ.
+    final visibleSeries = _showFullRevenueSeries
+        ? List<AdminRevenuePoint>.unmodifiable(series)
+        : AdminStatusHelper.sliceLatestRevenueWindow(series, maxItems: 14);
     final maxRevenue = visibleSeries.fold<double>(
       0,
       (prev, item) => item.grossRevenue > prev ? item.grossRevenue : prev,
@@ -1363,6 +1384,20 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                   runSpacing: 6,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    if (!_loading && series.length > 14)
+                      OutlinedButton(
+                        key: const Key('admin_revenue_toggle_full_series_btn'),
+                        style: _kCompactPillOutlinedStyle,
+                        onPressed: () => setState(
+                          () =>
+                              _showFullRevenueSeries = !_showFullRevenueSeries,
+                        ),
+                        child: Text(
+                          _showFullRevenueSeries
+                              ? 'Thu gọn 14 kỳ'
+                              : 'Xem đủ ${series.length} kỳ',
+                        ),
+                      ),
                     if (!_loading && stats != null)
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -1484,88 +1519,54 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                         chartConstraints.maxWidth < 460 ||
                                             textScale > 1.25;
                                     return Column(
-                                      children: visibleSeries.map((point) {
-                                        final ratio = maxRevenue > 0
-                                            ? (point.grossRevenue / maxRevenue)
-                                                .clamp(0.05, 1.0)
-                                            : 0.05;
-                                        final amountLabel =
-                                            '${MoneyFormatter.formatVnd(point.grossRevenue.round(), fallback: '0 ₫')} (${point.bookingCount} đơn)';
-                                        return AdminStudioInnerCard(
-                                          margin:
-                                              const EdgeInsets.only(bottom: 8),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 12,
-                                          ),
-                                          child: compactChart
-                                              ? Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Wrap(
-                                                      spacing: 8,
-                                                      runSpacing: 4,
-                                                      alignment: WrapAlignment
-                                                          .spaceBetween,
-                                                      crossAxisAlignment:
-                                                          WrapCrossAlignment
-                                                              .center,
-                                                      children: [
-                                                        Row(
-                                                          mainAxisSize:
-                                                              MainAxisSize.min,
-                                                          children: [
-                                                            const Icon(
-                                                              LucideIcons
-                                                                  .calendar,
-                                                              size: 13,
-                                                              color:
-                                                                  AdminStudioTokens
-                                                                      .iconMuted,
-                                                            ),
-                                                            const SizedBox(
-                                                              width: 6,
-                                                            ),
-                                                            Text(
-                                                              point.period,
-                                                              style: AdminStudioTokens
-                                                                  .metaCaption,
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        Text(
-                                                          amountLabel,
-                                                          style:
-                                                              AdminStudioTokens
-                                                                  .pillText
-                                                                  .copyWith(
-                                                            fontSize: 12.5,
-                                                            color:
-                                                                AdminStudioTokens
-                                                                    .inkPrimary,
-                                                          ),
-                                                        ),
-                                                      ],
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        if (_showFullRevenueSeries &&
+                                            visibleSeries.length > 14)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 12,
+                                            ),
+                                            child: SingleChildScrollView(
+                                              key: const Key(
+                                                'admin_revenue_horizontal_scroll',
+                                              ),
+                                              scrollDirection: Axis.horizontal,
+                                              child: Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.end,
+                                                children: visibleSeries.map((
+                                                  pt,
+                                                ) {
+                                                  final barRatio =
+                                                      maxRevenue > 0
+                                                          ? (pt.grossRevenue /
+                                                                  maxRevenue)
+                                                              .clamp(0.08, 1.0)
+                                                          : 0.08;
+                                                  final shortLabel =
+                                                      pt.period.length >= 5
+                                                          ? pt.period.substring(
+                                                              pt.period.length -
+                                                                  5,
+                                                            )
+                                                          : pt.period;
+                                                  return Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                      right: 8,
                                                     ),
-                                                    const SizedBox(height: 8),
-                                                    ClipRRect(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                        AdminStudioTokens
-                                                            .pillRadius,
-                                                      ),
-                                                      child: Container(
-                                                        height: 7,
-                                                        color: AdminStudioTokens
-                                                            .softCircle,
-                                                        alignment: Alignment
-                                                            .centerLeft,
-                                                        child:
-                                                            FractionallySizedBox(
-                                                          widthFactor: ratio,
-                                                          child: Container(
-                                                            height: 7,
+                                                    child: SizedBox(
+                                                      width: 44,
+                                                      child: Column(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          Container(
+                                                            height:
+                                                                96 * barRatio,
+                                                            width: 22,
                                                             decoration:
                                                                 BoxDecoration(
                                                               color:
@@ -1574,48 +1575,102 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                                               borderRadius:
                                                                   BorderRadius
                                                                       .circular(
-                                                                AdminStudioTokens
-                                                                    .pillRadius,
+                                                                6,
                                                               ),
                                                             ),
                                                           ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                )
-                                              : Row(
-                                                  children: [
-                                                    SizedBox(
-                                                      width: 102,
-                                                      child: Row(
-                                                        children: [
-                                                          const Icon(
-                                                            LucideIcons
-                                                                .calendar,
-                                                            size: 13,
-                                                            color:
-                                                                AdminStudioTokens
-                                                                    .iconMuted,
-                                                          ),
                                                           const SizedBox(
-                                                            width: 6,
+                                                            height: 4,
                                                           ),
-                                                          Expanded(
-                                                            child: Text(
-                                                              point.period,
-                                                              overflow:
-                                                                  TextOverflow
-                                                                      .ellipsis,
-                                                              style: AdminStudioTokens
-                                                                  .metaCaption,
+                                                          Text(
+                                                            shortLabel,
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            style:
+                                                                AdminStudioTokens
+                                                                    .metaCaption
+                                                                    .copyWith(
+                                                              fontSize: 10,
                                                             ),
                                                           ),
                                                         ],
                                                       ),
                                                     ),
-                                                    Expanded(
-                                                      child: ClipRRect(
+                                                  );
+                                                }).toList(),
+                                              ),
+                                            ),
+                                          ),
+                                        ...visibleSeries.map((point) {
+                                          final ratio = maxRevenue > 0
+                                              ? (point.grossRevenue /
+                                                      maxRevenue)
+                                                  .clamp(0.05, 1.0)
+                                              : 0.05;
+                                          final amountLabel =
+                                              '${MoneyFormatter.formatVnd(point.grossRevenue.round(), fallback: '0 ₫')} (${point.bookingCount} đơn)';
+                                          return AdminStudioInnerCard(
+                                            margin: const EdgeInsets.only(
+                                                bottom: 8),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 12,
+                                            ),
+                                            child: compactChart
+                                                ? Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Wrap(
+                                                        spacing: 8,
+                                                        runSpacing: 4,
+                                                        alignment: WrapAlignment
+                                                            .spaceBetween,
+                                                        crossAxisAlignment:
+                                                            WrapCrossAlignment
+                                                                .center,
+                                                        children: [
+                                                          Row(
+                                                            mainAxisSize:
+                                                                MainAxisSize
+                                                                    .min,
+                                                            children: [
+                                                              const Icon(
+                                                                LucideIcons
+                                                                    .calendar,
+                                                                size: 13,
+                                                                color: AdminStudioTokens
+                                                                    .iconMuted,
+                                                              ),
+                                                              const SizedBox(
+                                                                width: 6,
+                                                              ),
+                                                              Text(
+                                                                point.period,
+                                                                style: AdminStudioTokens
+                                                                    .metaCaption,
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          Text(
+                                                            amountLabel,
+                                                            style:
+                                                                AdminStudioTokens
+                                                                    .pillText
+                                                                    .copyWith(
+                                                              fontSize: 12.5,
+                                                              color:
+                                                                  AdminStudioTokens
+                                                                      .inkPrimary,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      const SizedBox(height: 8),
+                                                      ClipRRect(
                                                         borderRadius:
                                                             BorderRadius
                                                                 .circular(
@@ -1623,7 +1678,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                                               .pillRadius,
                                                         ),
                                                         child: Container(
-                                                          height: 8,
+                                                          height: 7,
                                                           color:
                                                               AdminStudioTokens
                                                                   .softCircle,
@@ -1633,7 +1688,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                                               FractionallySizedBox(
                                                             widthFactor: ratio,
                                                             child: Container(
-                                                              height: 8,
+                                                              height: 7,
                                                               decoration:
                                                                   BoxDecoration(
                                                                 color:
@@ -1650,28 +1705,98 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                                           ),
                                                         ),
                                                       ),
-                                                    ),
-                                                    const SizedBox(width: 12),
-                                                    SizedBox(
-                                                      width: 156,
-                                                      child: Text(
-                                                        amountLabel,
-                                                        textAlign:
-                                                            TextAlign.right,
-                                                        style: AdminStudioTokens
-                                                            .pillText
-                                                            .copyWith(
-                                                          fontSize: 12,
-                                                          color:
-                                                              AdminStudioTokens
-                                                                  .inkPrimary,
+                                                    ],
+                                                  )
+                                                : Row(
+                                                    children: [
+                                                      SizedBox(
+                                                        width: 102,
+                                                        child: Row(
+                                                          children: [
+                                                            const Icon(
+                                                              LucideIcons
+                                                                  .calendar,
+                                                              size: 13,
+                                                              color:
+                                                                  AdminStudioTokens
+                                                                      .iconMuted,
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 6,
+                                                            ),
+                                                            Expanded(
+                                                              child: Text(
+                                                                point.period,
+                                                                overflow:
+                                                                    TextOverflow
+                                                                        .ellipsis,
+                                                                style: AdminStudioTokens
+                                                                    .metaCaption,
+                                                              ),
+                                                            ),
+                                                          ],
                                                         ),
                                                       ),
-                                                    ),
-                                                  ],
-                                                ),
-                                        );
-                                      }).toList(),
+                                                      Expanded(
+                                                        child: ClipRRect(
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(
+                                                            AdminStudioTokens
+                                                                .pillRadius,
+                                                          ),
+                                                          child: Container(
+                                                            height: 8,
+                                                            color:
+                                                                AdminStudioTokens
+                                                                    .softCircle,
+                                                            alignment: Alignment
+                                                                .centerLeft,
+                                                            child:
+                                                                FractionallySizedBox(
+                                                              widthFactor:
+                                                                  ratio,
+                                                              child: Container(
+                                                                height: 8,
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: AdminStudioTokens
+                                                                      .obsidian,
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                    AdminStudioTokens
+                                                                        .pillRadius,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 12),
+                                                      SizedBox(
+                                                        width: 156,
+                                                        child: Text(
+                                                          amountLabel,
+                                                          textAlign:
+                                                              TextAlign.right,
+                                                          style:
+                                                              AdminStudioTokens
+                                                                  .pillText
+                                                                  .copyWith(
+                                                            fontSize: 12,
+                                                            color:
+                                                                AdminStudioTokens
+                                                                    .inkPrimary,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                          );
+                                        }),
+                                      ],
                                     );
                                   },
                                 ),
@@ -2539,6 +2664,7 @@ class _AdminModerationTab extends ConsumerStatefulWidget {
 
 class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
   List<Map<String, dynamic>> _listings = const [];
+  String _statusFilter = 'pending_approval';
   int _page = 1;
   final int _limit = 20;
   int _total = 0;
@@ -2567,7 +2693,8 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
     try {
       final paginated = await ref
           .read(adminPortalViewModelProvider)
-          .getPendingListingsPaginated(
+          .getAdminListingsPaginated(
+            status: _statusFilter,
             page: _page,
             limit: _limit,
           );
@@ -3080,6 +3207,15 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                               style:
                                                   AdminStudioTokens.bodyRegular,
                                             ),
+                                            if (currentDetail['latitude'] !=
+                                                    null &&
+                                                currentDetail['longitude'] !=
+                                                    null)
+                                              Text(
+                                                'Tọa độ GPS: ${currentDetail['latitude']}, ${currentDetail['longitude']}',
+                                                style: AdminStudioTokens
+                                                    .bodyRegular,
+                                              ),
                                           ],
                                         ),
                                       ),
@@ -3268,6 +3404,18 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                               ],
                                               if (allLabels.isNotEmpty) ...[
                                                 const SizedBox(height: 6),
+                                                Text(
+                                                  'Nhãn phù hợp:',
+                                                  style: AdminStudioTokens
+                                                      .metaCaption
+                                                      .copyWith(
+                                                    fontSize: 10.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: AdminStudioTokens
+                                                        .successInk,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 3),
                                                 Wrap(
                                                   spacing: 4,
                                                   runSpacing: 4,
@@ -3282,7 +3430,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                                       ),
                                                       decoration: BoxDecoration(
                                                         color: AdminStudioTokens
-                                                            .softCircle,
+                                                            .successTint,
                                                         borderRadius:
                                                             BorderRadius
                                                                 .circular(
@@ -3298,7 +3446,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                                           fontSize: 11,
                                                           color:
                                                               AdminStudioTokens
-                                                                  .inkSecondary,
+                                                                  .successInk,
                                                         ),
                                                       ),
                                                     );
@@ -3321,11 +3469,11 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                                     ),
                                                   ),
                                                   child: Text(
-                                                    [
+                                                    'Cảnh báo lỗi ảnh: ${[
                                                       ...warnings,
                                                       if (aiError.isNotEmpty)
                                                         aiError,
-                                                    ].join(' · '),
+                                                    ].join(' · ')}',
                                                     style: AdminStudioTokens
                                                         .metaCaption
                                                         .copyWith(
@@ -3516,6 +3664,37 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                     onRetry: _loading ? null : _fetchPending,
                   ),
                 ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: const [
+                    ('pending_approval', 'Chờ duyệt'),
+                    ('active', 'Đang hoạt động'),
+                    ('rejected', 'Đã từ chối'),
+                    ('inactive', 'Đã ẩn'),
+                    ('all', 'Tất cả'),
+                  ].map((opt) {
+                    final selected = _statusFilter == opt.$1;
+                    return ChoiceChip(
+                      key: Key('admin_moderation_filter_${opt.$1}'),
+                      label: Text(opt.$2),
+                      selected: selected,
+                      onSelected: _loading
+                          ? null
+                          : (_) {
+                              if (_statusFilter == opt.$1) return;
+                              setState(() {
+                                _statusFilter = opt.$1;
+                                _page = 1;
+                              });
+                              _fetchPending();
+                            },
+                    );
+                  }).toList(),
+                ),
+              ),
               AdminStudioGroupCard(
                 title: 'Hàng đợi kiểm duyệt',
                 trailing: Container(
@@ -3717,7 +3896,16 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                         ElevatedButton(
                                           style: _kCompactPillElevatedStyle,
                                           onPressed: !canModerate ||
-                                                  _processingId == listingId
+                                                  _processingId == listingId ||
+                                                  !const {
+                                                    '',
+                                                    'pending_approval',
+                                                    'pending',
+                                                  }.contains(
+                                                    '${item['status'] ?? 'pending_approval'}'
+                                                        .trim()
+                                                        .toLowerCase(),
+                                                  )
                                               ? null
                                               : () => _handleApprove(listingId),
                                           child: Text(
@@ -3729,7 +3917,16 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                         OutlinedButton(
                                           style: _kCompactPillOutlinedStyle,
                                           onPressed: !canModerate ||
-                                                  _processingId == listingId
+                                                  _processingId == listingId ||
+                                                  !const {
+                                                    '',
+                                                    'pending_approval',
+                                                    'pending',
+                                                  }.contains(
+                                                    '${item['status'] ?? 'pending_approval'}'
+                                                        .trim()
+                                                        .toLowerCase(),
+                                                  )
                                               ? null
                                               : () => _openRejectDialog(item),
                                           child: const Text('Từ chối'),
@@ -4090,9 +4287,24 @@ class _AdminHostApplicationsTabState
         builder: (ctx, setModalState) {
           final appId =
               '${currentDetail['applicationId'] ?? currentDetail['id'] ?? applicationId}';
-          final documents = currentDetail['documents'] is List
+          final rawDocuments = currentDetail['documents'] is List
               ? (currentDetail['documents'] as List)
               : const <dynamic>[];
+          final legacyUrls = currentDetail['documentUrls'] is List
+              ? (currentDetail['documentUrls'] as List)
+              : const <dynamic>[];
+          final documents = rawDocuments.isNotEmpty
+              ? rawDocuments
+              : legacyUrls
+                  .where((u) => u != null && '$u'.trim().isNotEmpty)
+                  .map(
+                    (u) => <String, dynamic>{
+                      'documentType': 'cccd',
+                      'side': 'legacy',
+                      'url': '$u'.trim(),
+                    },
+                  )
+                  .toList();
 
           Future<void> handleApprove() async {
             if (appId.isEmpty) return;
@@ -4208,6 +4420,66 @@ class _AdminHostApplicationsTabState
               }
               if (status == 409 && mounted) {
                 await _fetchApplications(preserveError: true);
+              }
+            }
+          }
+
+          Future<void> handleRequestMoreInfo() async {
+            if (appId.isEmpty) return;
+            final latestActor = ref.read(authNotifierProvider).valueOrNull;
+            if (!_isActorAdmin(latestActor)) {
+              setModalState(() {
+                modalError =
+                    'Chỉ Quản trị viên (Admin) mới có quyền yêu cầu bổ sung hồ sơ host (403).';
+                modalIsOffline = false;
+              });
+              return;
+            }
+
+            final reason = _rejectReasonCtrl.text.trim();
+            if (reason.isEmpty) {
+              setModalState(() {
+                rejectReasonError =
+                    'Vui lòng nhập nội dung cần ứng viên bổ sung hoặc chụp lại.';
+              });
+              return;
+            }
+
+            setModalState(() {
+              actionLoading = true;
+              modalError = null;
+              rejectReasonError = null;
+              modalIsOffline = false;
+            });
+            try {
+              await ref
+                  .read(adminPortalViewModelProvider)
+                  .requestMoreInfoHostApplication(appId, reason);
+              if (ctx.mounted) {
+                Navigator.of(ctx).pop();
+              }
+              if (!mounted) return;
+              final infoMsg =
+                  'Đã gửi yêu cầu bổ sung chứng từ cho hồ sơ #$appId.';
+              setState(() {
+                _message = infoMsg;
+                _error = null;
+                _isOffline = false;
+              });
+              AppToast.show(context, infoMsg, type: AppToastType.info);
+              await _fetchApplications();
+            } catch (e) {
+              final errMsg = AdminPortalViewModel.extractErrorMessage(
+                e,
+                'Không thể gửi yêu cầu bổ sung hồ sơ.',
+              );
+              final offline = AdminPortalViewModel.isOfflineError(e);
+              if (ctx.mounted) {
+                setModalState(() {
+                  actionLoading = false;
+                  modalError = errMsg;
+                  modalIsOffline = offline;
+                });
               }
             }
           }
@@ -4493,6 +4765,16 @@ class _AdminHostApplicationsTabState
                                 ),
                                 OutlinedButton(
                                   key: const Key(
+                                    'admin_host_app_request_more_info_btn',
+                                  ),
+                                  style: _kPillOutlinedStyle,
+                                  onPressed: !canManageHostApps || actionLoading
+                                      ? null
+                                      : handleRequestMoreInfo,
+                                  child: const Text('Yêu cầu bổ sung'),
+                                ),
+                                OutlinedButton(
+                                  key: const Key(
                                     'admin_host_app_reject_btn',
                                   ),
                                   style: _kPillOutlinedStyle,
@@ -4568,6 +4850,35 @@ class _AdminHostApplicationsTabState
                 'Đã từ chối',
                 style: AdminStudioTokens.metaCaption.copyWith(
                   color: AdminStudioTokens.dangerInk,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (status == 'supplement_required') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: AdminStudioTokens.warningTint,
+          borderRadius: BorderRadius.circular(AdminStudioTokens.pillRadius),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              LucideIcons.fileWarning,
+              size: 13.5,
+              color: AdminStudioTokens.warningInk,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                'Yêu cầu bổ sung hồ sơ',
+                style: AdminStudioTokens.metaCaption.copyWith(
+                  color: AdminStudioTokens.warningInk,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -6448,10 +6759,9 @@ class _AdminDisbursementsTabState
     final amount = double.tryParse('${payout['amount'] ?? 0}') ?? 0;
     final bankName = (payout['bankName'] ?? 'Ngân hàng').toString();
     final accName = (payout['accountName'] ?? '').toString();
-    final accNumber = (payout['accountNumberMasked'] ??
-            payout['accountNumber'] ??
-            '')
-        .toString();
+    final accNumber =
+        (payout['accountNumberMasked'] ?? payout['accountNumber'] ?? '')
+            .toString();
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -6481,7 +6791,8 @@ class _AdminDisbursementsTabState
           children: [
             Text(
               'Bạn có chắc chắn muốn duyệt và giải ngân cho đơn rút tiền Payout #$payoutId?',
-              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style:
+                  const TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 12),
             Container(
@@ -6505,19 +6816,22 @@ class _AdminDisbursementsTabState
                   const SizedBox(height: 4),
                   Text(
                     'Ngân hàng: $bankName',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textPrimary),
                   ),
                   if (accName.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Text(
                       'Chủ TK: $accName',
-                      style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textPrimary),
                     ),
                   ],
                   const SizedBox(height: 2),
                   Text(
                     'STK: $accNumber',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textMuted),
                   ),
                 ],
               ),
@@ -6525,7 +6839,8 @@ class _AdminDisbursementsTabState
             const SizedBox(height: 10),
             const Row(
               children: [
-                Icon(LucideIcons.shieldCheck, size: 14, color: AppColors.textSecondary),
+                Icon(LucideIcons.shieldCheck,
+                    size: 14, color: AppColors.textSecondary),
                 SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -6540,7 +6855,8 @@ class _AdminDisbursementsTabState
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text('Hủy',
+                style: TextStyle(color: AppColors.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -6595,6 +6911,84 @@ class _AdminDisbursementsTabState
     }
   }
 
+  // Giải thuật thực thi Bước 2 (phê duyệt độc lập) và Bước 3 (ghi nhận mã chuyển khoản FT) của quy trình Maker-Checker (`TC-093`).
+  Future<void> _approveHostPayoutStep2(Map<String, dynamic> payout) async {
+    final payoutId = '${payout['payoutId'] ?? payout['id'] ?? ''}';
+    if (payoutId.isEmpty) return;
+    setState(() => _processingIds.add(payoutId));
+    try {
+      await ref.read(adminPortalViewModelProvider).approveHostPayout(payoutId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã duyệt lệnh chi trả Payout #$payoutId (Bước 2).'),
+          backgroundColor: AppColors.successGreen,
+        ),
+      );
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AdminPortalViewModel.extractErrorMessage(
+              e,
+              'Không thể duyệt lệnh chi trả.',
+            ),
+          ),
+          backgroundColor: AppColors.errorRed,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingIds.remove(payoutId));
+      }
+    }
+  }
+
+  Future<void> _markHostPayoutPaidStep3(Map<String, dynamic> payout) async {
+    final payoutId = '${payout['payoutId'] ?? payout['id'] ?? ''}';
+    if (payoutId.isEmpty) return;
+    final transferRef = await showMarkPayoutPaidDialog(
+      context: context,
+      payoutId: payoutId,
+    );
+    if (transferRef == null || !mounted) return;
+    setState(() => _processingIds.add(payoutId));
+    try {
+      await ref
+          .read(adminPortalViewModelProvider)
+          .markHostPayoutPaid(payoutId, transferRef);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đã xác nhận chuyển khoản Payout #$payoutId (Mã FT: $transferRef).',
+          ),
+          backgroundColor: AppColors.successGreen,
+        ),
+      );
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AdminPortalViewModel.extractErrorMessage(
+              e,
+              'Không thể xác nhận chuyển khoản.',
+            ),
+          ),
+          backgroundColor: AppColors.errorRed,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingIds.remove(payoutId));
+      }
+    }
+  }
+
   Future<void> _rejectHostPayout(Map<String, dynamic> payout) async {
     final payoutId = '${payout['payoutId'] ?? payout['id'] ?? ''}';
     final reasonController = TextEditingController();
@@ -6620,7 +7014,8 @@ class _AdminDisbursementsTabState
           children: [
             Text(
               'Nhập lý do từ chối yêu cầu rút tiền Payout #$payoutId để thông báo cho Host:',
-              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style:
+                  const TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -6636,7 +7031,8 @@ class _AdminDisbursementsTabState
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text('Hủy',
+                style: TextStyle(color: AppColors.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -6721,7 +7117,8 @@ class _AdminDisbursementsTabState
           children: [
             Text(
               'Duyệt hoàn tiền cho đơn Refund #$refundId? Tiền sẽ được chuyển ngay vào tài khoản của khách.',
-              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style:
+                  const TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 12),
             Container(
@@ -6745,20 +7142,23 @@ class _AdminDisbursementsTabState
                   const SizedBox(height: 4),
                   Text(
                     'Ngân hàng: $bankName',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textPrimary),
                   ),
                   if (accName.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Text(
                       'Chủ TK: $accName',
-                      style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textPrimary),
                     ),
                   ],
                   if (accNumber.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Text(
                       'STK: $accNumber',
-                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textMuted),
                     ),
                   ],
                 ],
@@ -6767,7 +7167,8 @@ class _AdminDisbursementsTabState
             const SizedBox(height: 10),
             const Row(
               children: [
-                Icon(LucideIcons.shieldCheck, size: 14, color: AppColors.textSecondary),
+                Icon(LucideIcons.shieldCheck,
+                    size: 14, color: AppColors.textSecondary),
                 SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -6782,7 +7183,8 @@ class _AdminDisbursementsTabState
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text('Hủy',
+                style: TextStyle(color: AppColors.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -6862,7 +7264,8 @@ class _AdminDisbursementsTabState
           children: [
             Text(
               'Nhập lý do từ chối yêu cầu hoàn tiền Refund #$refundId:',
-              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style:
+                  const TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -6878,7 +7281,8 @@ class _AdminDisbursementsTabState
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text('Hủy',
+                style: TextStyle(color: AppColors.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -6930,8 +7334,14 @@ class _AdminDisbursementsTabState
 
   @override
   Widget build(BuildContext context) {
-    final pendingPayouts = _payouts.where((p) => '${p['status']}'.toLowerCase() == 'pending' || '${p['status']}'.toLowerCase() == 'approved').toList();
-    final pendingRefunds = _refunds.where((r) => '${r['status']}'.toLowerCase() == 'pending').toList();
+    final pendingPayouts = _payouts
+        .where((p) =>
+            '${p['status']}'.toLowerCase() == 'pending' ||
+            '${p['status']}'.toLowerCase() == 'approved')
+        .toList();
+    final pendingRefunds = _refunds
+        .where((r) => '${r['status']}'.toLowerCase() == 'pending')
+        .toList();
 
     double totalPendingPayoutAmount = 0;
     for (final p in pendingPayouts) {
@@ -6982,7 +7392,8 @@ class _AdminDisbursementsTabState
                 SizedBox(height: 4),
                 Text(
                   'Phê duyệt và chuyển tiền tự động Napas 24/7',
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  style:
+                      TextStyle(fontSize: 13, color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -7037,15 +7448,21 @@ class _AdminDisbursementsTabState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _activeSubTab == 'payouts' ? 'Đơn rút chờ duyệt' : 'Đơn hoàn chờ duyệt',
-                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          _activeSubTab == 'payouts'
+                              ? 'Đơn rút chờ duyệt'
+                              : 'Đơn hoàn chờ duyệt',
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           _activeSubTab == 'payouts'
                               ? '${pendingPayouts.length} đơn'
                               : '${pendingRefunds.length} đơn',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                          style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary),
                         ),
                       ],
                     ),
@@ -7064,15 +7481,27 @@ class _AdminDisbursementsTabState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _activeSubTab == 'payouts' ? 'Tổng tiền cần chi' : 'Tổng tiền cần hoàn',
-                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          _activeSubTab == 'payouts'
+                              ? 'Tổng tiền cần chi'
+                              : 'Tổng tiền cần hoàn',
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           _activeSubTab == 'payouts'
-                              ? (totalPendingPayoutAmount > 0 ? MoneyFormatter.formatVnd(totalPendingPayoutAmount.round()) : '0 đ')
-                              : (totalPendingRefundAmount > 0 ? MoneyFormatter.formatVnd(totalPendingRefundAmount.round()) : '0 đ'),
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.primary),
+                              ? (totalPendingPayoutAmount > 0
+                                  ? MoneyFormatter.formatVnd(
+                                      totalPendingPayoutAmount.round())
+                                  : '0 đ')
+                              : (totalPendingRefundAmount > 0
+                                  ? MoneyFormatter.formatVnd(
+                                      totalPendingRefundAmount.round())
+                                  : '0 đ'),
+                          style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary),
                         ),
                       ],
                     ),
@@ -7099,13 +7528,15 @@ class _AdminDisbursementsTabState
                 ),
                 child: Column(
                   children: [
-                    Text(_error!, style: const TextStyle(color: AppColors.errorRed)),
+                    Text(_error!,
+                        style: const TextStyle(color: AppColors.errorRed)),
                     const SizedBox(height: 8),
                     ElevatedButton(
                       onPressed: _loadData,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
                       ),
                       child: const Text('Thử lại'),
                     ),
@@ -7114,14 +7545,37 @@ class _AdminDisbursementsTabState
               )
             else if (_activeSubTab == 'payouts') ...[
               // PAYOUTS VIEW
+              AdminPayoutMakerCheckerBar(
+                onCreateBatch: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final created = await showCreateAdminPayoutBatchDialog(
+                    context: context,
+                    viewModel: ref.read(adminPortalViewModelProvider),
+                  );
+                  if (created && mounted) {
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text('Đã khởi tạo lô chi trả mới thành công.'),
+                      ),
+                    );
+                    await _loadData();
+                  }
+                },
+              ),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _buildFilterChip('Tất cả', 'all', _payoutFilter, (val) => setState(() => _payoutFilter = val)),
-                  _buildFilterChip('Chờ duyệt', 'pending', _payoutFilter, (val) => setState(() => _payoutFilter = val)),
-                  _buildFilterChip('Đã chi tiền', 'paid', _payoutFilter, (val) => setState(() => _payoutFilter = val)),
-                  _buildFilterChip('Từ chối', 'rejected', _payoutFilter, (val) => setState(() => _payoutFilter = val)),
+                  _buildFilterChip('Tất cả', 'all', _payoutFilter,
+                      (val) => setState(() => _payoutFilter = val)),
+                  _buildFilterChip('Chờ duyệt', 'pending', _payoutFilter,
+                      (val) => setState(() => _payoutFilter = val)),
+                  _buildFilterChip('Đã duyệt', 'approved', _payoutFilter,
+                      (val) => setState(() => _payoutFilter = val)),
+                  _buildFilterChip('Đã chi tiền', 'paid', _payoutFilter,
+                      (val) => setState(() => _payoutFilter = val)),
+                  _buildFilterChip('Từ chối', 'rejected', _payoutFilter,
+                      (val) => setState(() => _payoutFilter = val)),
                 ],
               ),
               const SizedBox(height: 12),
@@ -7135,15 +7589,20 @@ class _AdminDisbursementsTabState
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _buildFilterChip('Tất cả', 'all', _refundFilter, (val) => setState(() => _refundFilter = val)),
-                  _buildFilterChip('Chờ duyệt', 'pending', _refundFilter, (val) => setState(() => _refundFilter = val)),
-                  _buildFilterChip('Đã hoàn tiền', 'completed', _refundFilter, (val) => setState(() => _refundFilter = val)),
-                  _buildFilterChip('Từ chối', 'cancelled', _refundFilter, (val) => setState(() => _refundFilter = val)),
+                  _buildFilterChip('Tất cả', 'all', _refundFilter,
+                      (val) => setState(() => _refundFilter = val)),
+                  _buildFilterChip('Chờ duyệt', 'pending', _refundFilter,
+                      (val) => setState(() => _refundFilter = val)),
+                  _buildFilterChip('Đã hoàn tiền', 'completed', _refundFilter,
+                      (val) => setState(() => _refundFilter = val)),
+                  _buildFilterChip('Từ chối', 'cancelled', _refundFilter,
+                      (val) => setState(() => _refundFilter = val)),
                 ],
               ),
               const SizedBox(height: 12),
               if (filteredRefunds.isEmpty)
-                _buildEmptyState('Không có yêu cầu hoàn tiền nào trong mục này.')
+                _buildEmptyState(
+                    'Không có yêu cầu hoàn tiền nào trong mục này.')
               else
                 ...filteredRefunds.map((r) => _buildRefundCard(r)),
             ],
@@ -7207,7 +7666,8 @@ class _AdminDisbursementsTabState
         decoration: BoxDecoration(
           color: isSelected ? AppColors.textStrong : AppColors.surfaceBase,
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: isSelected ? AppColors.textStrong : AppColors.border),
+          border: Border.all(
+              color: isSelected ? AppColors.textStrong : AppColors.border),
         ),
         child: Text(
           label,
@@ -7234,7 +7694,9 @@ class _AdminDisbursementsTabState
           children: [
             const Icon(LucideIcons.inbox, size: 28, color: AppColors.textMuted),
             const SizedBox(height: 8),
-            Text(msg, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+            Text(msg,
+                style: const TextStyle(
+                    fontSize: 13, color: AppColors.textSecondary)),
           ],
         ),
       ),
@@ -7247,11 +7709,13 @@ class _AdminDisbursementsTabState
     final status = '${payout['status'] ?? 'pending'}'.toLowerCase();
     final bankName = (payout['bankName'] ?? 'Ngân hàng').toString();
     final accName = (payout['accountName'] ?? '').toString();
-    final accNumber = (payout['accountNumberMasked'] ??
-            payout['accountNumber'] ??
-            '')
+    final accNumber =
+        (payout['accountNumberMasked'] ?? payout['accountNumber'] ?? '')
+            .toString();
+    final hostName = (payout['hostName'] ??
+            payout['host']?['fullName'] ??
+            'Host #${payout['hostId']}')
         .toString();
-    final hostName = (payout['hostName'] ?? payout['host']?['fullName'] ?? 'Host #${payout['hostId']}').toString();
     final transferRef = (payout['transferReference'] ?? '').toString();
     final isProcessing = _processingIds.contains(payoutId);
 
@@ -7271,7 +7735,10 @@ class _AdminDisbursementsTabState
             children: [
               Text(
                 'Payout #$payoutId',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary),
               ),
               _buildStatusBadge(status),
             ],
@@ -7279,7 +7746,10 @@ class _AdminDisbursementsTabState
           const SizedBox(height: 6),
           Text(
             MoneyFormatter.formatVnd(amount.round()),
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.primary),
+            style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary),
           ),
           const SizedBox(height: 8),
           Container(
@@ -7292,14 +7762,20 @@ class _AdminDisbursementsTabState
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                   decoration: BoxDecoration(
                     color: AppColors.textStrong,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    bankName.length > 6 ? bankName.substring(0, 6).toUpperCase() : bankName.toUpperCase(),
-                    style: const TextStyle(color: AppColors.textInverse, fontSize: 9, fontWeight: FontWeight.w700),
+                    bankName.length > 6
+                        ? bankName.substring(0, 6).toUpperCase()
+                        : bankName.toUpperCase(),
+                    style: const TextStyle(
+                        color: AppColors.textInverse,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -7309,11 +7785,17 @@ class _AdminDisbursementsTabState
                     children: [
                       Text(
                         accName.isNotEmpty ? '$accName ($hostName)' : hostName,
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary),
                       ),
                       Text(
                         accNumber.isNotEmpty ? 'STK: $accNumber' : bankName,
-                        style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontFamily: 'monospace'),
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textMuted,
+                            fontFamily: 'monospace'),
                       ),
                     ],
                   ),
@@ -7325,38 +7807,88 @@ class _AdminDisbursementsTabState
             const SizedBox(height: 6),
             Text(
               'Mã chuyển khoản Napas: $transferRef',
-              style: const TextStyle(fontSize: 11, color: AppColors.successGreen, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.successGreen,
+                  fontWeight: FontWeight.w600),
             ),
           ],
           if (status == 'pending' || status == 'approved') ...[
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
               children: [
                 OutlinedButton(
-                  onPressed: isProcessing ? null : () => _rejectHostPayout(payout),
+                  onPressed:
+                      isProcessing ? null : () => _rejectHostPayout(payout),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.textStrong,
                     side: const BorderSide(color: AppColors.border),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     minimumSize: const Size(0, 36),
                   ),
                   child: const Text('Từ chối'),
                 ),
-                const SizedBox(width: 8),
+                if (status == 'pending')
+                  OutlinedButton.icon(
+                    key: Key('admin_payout_approve_btn_$payoutId'),
+                    onPressed: isProcessing
+                        ? null
+                        : () => _approveHostPayoutStep2(payout),
+                    icon: const Icon(LucideIcons.shieldCheck, size: 14),
+                    label: const Text('Duyệt lệnh'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      minimumSize: const Size(0, 36),
+                    ),
+                  ),
+                if (status == 'approved')
+                  OutlinedButton.icon(
+                    key: Key('admin_payout_mark_paid_btn_$payoutId'),
+                    onPressed: isProcessing
+                        ? null
+                        : () => _markHostPayoutPaidStep3(payout),
+                    icon: const Icon(LucideIcons.check, size: 14),
+                    label: const Text('Xác nhận chuyển (FT)'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.successGreen,
+                      side: const BorderSide(color: AppColors.successGreen),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      minimumSize: const Size(0, 36),
+                    ),
+                  ),
                 ElevatedButton.icon(
-                  onPressed: isProcessing ? null : () => _disburseHostPayout(payout),
+                  onPressed:
+                      isProcessing ? null : () => _disburseHostPayout(payout),
                   icon: const Icon(LucideIcons.arrowUpRight, size: 14),
                   label: isProcessing
-                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textInverse))
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.textInverse))
                       : const Text('Duyệt & Chi tiền'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: AppColors.textInverse,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     minimumSize: const Size(0, 36),
                   ),
                 ),
@@ -7400,7 +7932,10 @@ class _AdminDisbursementsTabState
             children: [
               Text(
                 'Refund #$refundId · Đơn #$bookingId',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary),
               ),
               _buildStatusBadge(status),
             ],
@@ -7408,12 +7943,16 @@ class _AdminDisbursementsTabState
           const SizedBox(height: 6),
           Text(
             MoneyFormatter.formatVnd(amount.round()),
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.primary),
+            style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary),
           ),
           const SizedBox(height: 4),
           Text(
             'Lý do: $reason',
-            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            style:
+                const TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
           const SizedBox(height: 8),
           Container(
@@ -7426,14 +7965,20 @@ class _AdminDisbursementsTabState
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                   decoration: BoxDecoration(
                     color: AppColors.textStrong,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    bankName.length > 6 ? bankName.substring(0, 6).toUpperCase() : bankName.toUpperCase(),
-                    style: const TextStyle(color: AppColors.textInverse, fontSize: 9, fontWeight: FontWeight.w700),
+                    bankName.length > 6
+                        ? bankName.substring(0, 6).toUpperCase()
+                        : bankName.toUpperCase(),
+                    style: const TextStyle(
+                        color: AppColors.textInverse,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -7443,11 +7988,17 @@ class _AdminDisbursementsTabState
                     children: [
                       Text(
                         accName.isNotEmpty ? accName : 'Khách hàng',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary),
                       ),
                       Text(
                         accNumber.isNotEmpty ? 'STK: $accNumber' : bankName,
-                        style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontFamily: 'monospace'),
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textMuted,
+                            fontFamily: 'monospace'),
                       ),
                     ],
                   ),
@@ -7459,7 +8010,10 @@ class _AdminDisbursementsTabState
             const SizedBox(height: 6),
             Text(
               'Mã chuyển khoản Napas: $transferRef',
-              style: const TextStyle(fontSize: 11, color: AppColors.successGreen, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.successGreen,
+                  fontWeight: FontWeight.w600),
             ),
           ],
           if (status == 'pending') ...[
@@ -7472,8 +8026,10 @@ class _AdminDisbursementsTabState
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.textStrong,
                     side: const BorderSide(color: AppColors.border),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     minimumSize: const Size(0, 36),
                   ),
                   child: const Text('Từ chối'),
@@ -7483,14 +8039,20 @@ class _AdminDisbursementsTabState
                   onPressed: isProcessing ? null : () => _approveRefund(refund),
                   icon: const Icon(LucideIcons.arrowUpRight, size: 14),
                   label: isProcessing
-                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textInverse))
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.textInverse))
                       : const Text('Duyệt & Hoàn tiền'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: AppColors.textInverse,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     minimumSize: const Size(0, 36),
                   ),
                 ),
@@ -7555,7 +8117,8 @@ class _AdminDisbursementsTabState
           const SizedBox(width: 4),
           Text(
             label,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: textColor),
+            style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w700, color: textColor),
           ),
         ],
       ),
