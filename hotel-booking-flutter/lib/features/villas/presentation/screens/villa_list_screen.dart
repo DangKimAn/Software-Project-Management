@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/animations/fade_slide_in.dart';
 import '../../../../shared/animations/shimmer_loading.dart';
 import '../../../../shared/animations/source_animations.dart';
@@ -65,6 +66,8 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
     final paginatedAsync = ref.watch(villaPaginatedProvider);
     final filter = ref.watch(villaFilterProvider);
     final favorites = ref.watch(favoritesProvider);
+    final activeL10n =
+        lookupAppLocalizations(Locale(ref.watch(localeProvider)));
 
     return Scaffold(
       backgroundColor: AppColors.surfaceBase,
@@ -115,8 +118,10 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                     ),
                                     label: Text(
                                       filter.activeFilterCount > 0
-                                          ? 'Bộ lọc (${filter.activeFilterCount})'
-                                          : 'Bộ lọc',
+                                          ? activeL10n.searchFilterActiveBtn(
+                                              filter.activeFilterCount,
+                                            )
+                                          : activeL10n.searchFilterBtn,
                                     ),
                                   ),
                                   OutlinedButton.icon(
@@ -130,8 +135,8 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                     ),
                                     label: Text(
                                       _showInlineMap
-                                          ? 'Ẩn bản đồ Vũng Tàu'
-                                          : 'Bản đồ Vũng Tàu',
+                                          ? activeL10n.searchHideMapBtn
+                                          : activeL10n.searchShowMapBtn,
                                     ),
                                   ),
                                   if (filter.searchQuery.isNotEmpty ||
@@ -145,9 +150,9 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                             .read(villaFilterProvider.notifier)
                                             .state = const VillaFilterState();
                                       },
-                                      child: const Text(
-                                        'Xóa toàn bộ lọc',
-                                        style: TextStyle(
+                                      child: Text(
+                                        activeL10n.searchClearAllBtn,
+                                        style: const TextStyle(
                                           color: AppColors.primary,
                                           fontWeight: FontWeight.w700,
                                         ),
@@ -202,10 +207,9 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 48),
                             child: AppEmptyView(
-                              title: 'Không tìm thấy biệt thự phù hợp',
-                              description:
-                                  'Hãy thử xóa bộ lọc hoặc mở rộng khu vực tìm kiếm tại Vũng Tàu.',
-                              actionText: 'Đặt lại bộ lọc',
+                              title: activeL10n.emptyList,
+                              description: activeL10n.emptyListDesc,
+                              actionText: activeL10n.ctaResetFilter,
                               onAction: () {
                                 ref.read(villaFilterProvider.notifier).state =
                                     const VillaFilterState();
@@ -226,7 +230,9 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Tìm thấy ${pagination.totalItems} nơi lưu trú tại Vũng Tàu',
+                                    activeL10n.searchFoundStaysCount(
+                                      pagination.totalItems,
+                                    ),
                                     style: AppTypography.cardTitle.copyWith(
                                       fontSize: 16,
                                     ),
@@ -322,7 +328,10 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                             child: const Text('<'),
                                           ),
                                           Text(
-                                            'Trang ${pagination.page} / ${pagination.totalPages}',
+                                            activeL10n.paginationPageOf(
+                                              pagination.page,
+                                              pagination.totalPages,
+                                            ),
                                             style: const TextStyle(
                                               fontWeight: FontWeight.w700,
                                             ),

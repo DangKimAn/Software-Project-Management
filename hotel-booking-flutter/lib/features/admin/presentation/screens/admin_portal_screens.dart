@@ -3,7 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hotel_booking_flutter/core/currency/money_formatter.dart';
+import 'package:hotel_booking_flutter/app/di/providers.dart';
+import 'package:hotel_booking_flutter/l10n/l10n.dart';
 // CONFLICT-RESOLVED: Điều phối toàn bộ dữ liệu quản trị qua `AdminPortalViewModel` thay vì gọi trực tiếp Repository trên Screen (FLUTTER_RULES.md Mục 2).
 import 'package:hotel_booking_flutter/features/admin/presentation/view_models/admin_portal_view_model.dart';
 import 'package:hotel_booking_flutter/features/admin/domain/admin_status_helper.dart';
@@ -18,6 +19,7 @@ import 'package:hotel_booking_flutter/shared/widgets/app_dialog.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_header.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_image.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
+import 'package:hotel_booking_flutter/shared/widgets/currency_language_selector.dart';
 import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -38,6 +40,30 @@ class AdminNavItem {
   final IconData icon;
   final String title;
   final String subtitle;
+
+  /// Phân giải nhãn điều hướng Admin theo ngôn ngữ hiện hành, giữ nguyên vẹn nhãn Tiếng Việt gốc khi `localeCode == 'vi'`.
+  String localizedLabel(AppLocalizations l10n, String localeCode) {
+    if (localeCode == 'vi') return label;
+    switch (id) {
+      case 'tong-quan':
+        return l10n.adminTabOverview;
+      case 'nguoi-dung':
+        return l10n.adminTabUsers;
+      case 'kiem-duyet':
+        return l10n.adminTabModeration;
+      case 'ho-so-host':
+        return l10n.adminTabHostApplications;
+      case 'phan-quyen':
+        return l10n.adminTabRoles;
+      case 'phi-nen-tang':
+      case 'chi-tra':
+        return l10n.adminTabFinance;
+      case 'tin-nhan':
+        return l10n.navMessages;
+      default:
+        return label;
+    }
+  }
 }
 
 const List<AdminNavItem> kAdminNavItems = [
@@ -600,7 +626,12 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  item.label,
+                                  item.localizedLabel(
+                                    lookupAppLocalizations(
+                                      Locale(ref.watch(localeProvider)),
+                                    ),
+                                    ref.watch(localeProvider),
+                                  ),
                                   style: AdminStudioTokens.pillText.copyWith(
                                     fontSize: 13.5,
                                     fontWeight: selected
@@ -667,17 +698,23 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                         if (inDrawer) Navigator.of(context).pop();
                         _navigateExternalRoute(context, '/');
                       },
-                      child: const Wrap(
+                      child: Wrap(
                         spacing: 8,
                         alignment: WrapAlignment.center,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Icon(
+                          const Icon(
                             AppSemanticIcons.home,
                             size: 15,
                             color: AdminStudioTokens.iconInk,
                           ),
-                          Text('Về trang khách'),
+                          Text(
+                            ref.watch(localeProvider) == 'vi'
+                                ? 'Về trang khách'
+                                : lookupAppLocalizations(
+                                    Locale(ref.watch(localeProvider)),
+                                  ).ctaBackHome,
+                          ),
                         ],
                       ),
                     ),
@@ -688,23 +725,42 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                     child: OutlinedButton(
                       style: _kPillOutlinedStyle,
                       onPressed: () async {
+                        // Giải thuật xác nhận hai bước trước khi đăng xuất khỏi Cổng Quản trị viên (`TC-065`).
+                        final activeL10n = lookupAppLocalizations(
+                          Locale(ref.read(localeProvider)),
+                        );
+                        final confirmed = await AppDialog.show(
+                          context,
+                          title: activeL10n.settingsConfirmLogoutTitle,
+                          message: activeL10n.settingsConfirmLogout,
+                          confirmText: activeL10n.authLogout,
+                          cancelText: activeL10n.ctaCancel,
+                        );
+                        if (confirmed != true || !context.mounted) return;
                         if (inDrawer) Navigator.of(context).pop();
+                        ref
+                            .read(notificationsProvider.notifier)
+                            .clearForLogout();
                         await ref.read(authNotifierProvider.notifier).logout();
                         if (context.mounted) {
                           _navigateExternalRoute(context, '/dang-nhap');
                         }
                       },
-                      child: const Wrap(
+                      child: Wrap(
                         spacing: 8,
                         alignment: WrapAlignment.center,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Icon(
+                          const Icon(
                             AppSemanticIcons.logout,
                             size: 15,
                             color: AdminStudioTokens.iconInk,
                           ),
-                          Text('Đăng xuất'),
+                          Text(
+                            lookupAppLocalizations(
+                              Locale(ref.watch(localeProvider)),
+                            ).authLogout,
+                          ),
                         ],
                       ),
                     ),
@@ -823,6 +879,9 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                               ),
                             ],
                           ),
+                        ),
+                        HeaderCurrencyLanguageButton(
+                          showCodePill: width >= 768,
                         ),
                         const NotificationBell(),
                         if (!isDesktop)

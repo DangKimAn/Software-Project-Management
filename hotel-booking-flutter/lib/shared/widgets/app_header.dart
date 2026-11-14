@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../app/di/providers.dart';
 import '../../app/theme/app_colors.dart';
 import '../../features/auth/presentation/view_models/auth_notifier.dart';
 import '../../features/search/presentation/widgets/source_search_bar.dart';
@@ -12,6 +13,7 @@ import '../../l10n/l10n.dart';
 import 'app_header_menu.dart';
 import 'app_notification_bell.dart';
 import 'app_semantic_icons.dart';
+import 'currency_language_selector.dart';
 
 export 'app_notification_bell.dart';
 
@@ -101,7 +103,12 @@ class AppTopHeader extends ConsumerWidget {
     // Sử dụng AnimatedSwitcher định danh bằng ValueKey ('pinned_search_content' so với 'top_header_content')
     // kết hợp trượt dọc đối xứng, mờ dần theo khoảng Interval(0.1, 1.0) và phóng nhẹ từ 0.94 -> 1.0.
     final authUser = ref.watch(authNotifierProvider).valueOrNull;
+    final activeLocale = ref.watch(localeProvider);
+    final activeL10n = lookupAppLocalizations(Locale(activeLocale));
     return LayoutBuilder(builder: (context, constraints) {
+      // Giải thuật co giãn thanh đầu trang chống tràn ngang ở dải màn hình 1024px–1280px và hệ số chữ 1.2x:
+      // Thu gọn khoảng đệm ngang về 20px dưới 1280px, hạ ngưỡng nút Host xuống 1024px kèm giới hạn chiều rộng chữ,
+      // và tự động ẩn nhãn mã tiền tệ trên nút Ngôn ngữ/Tiền tệ dưới 1220px để giữ đủ không gian cho các liên kết chính.
       final screenWidth = constraints.maxWidth;
       final isDesktop = screenWidth >= 900;
       final isCompactMobile = screenWidth < 380;
@@ -121,7 +128,9 @@ class AppTopHeader extends ConsumerWidget {
         ),
         padding: EdgeInsets.symmetric(
           horizontal: isDesktop
-              ? (centerSearchTrigger != null ? 24 : 40)
+              ? (screenWidth >= 1280
+                  ? (centerSearchTrigger != null ? 24 : 36)
+                  : 20)
               : (isCompactMobile ? 12.0 : 16.0),
           vertical: 10,
         ),
@@ -211,6 +220,7 @@ class AppTopHeader extends ConsumerWidget {
                                   key: const ValueKey('top_header_content'),
                                   child: _buildBrandAndDesktopNav(
                                     context,
+                                    l10n: activeL10n,
                                     screenWidth: screenWidth,
                                     isDesktop: isDesktop,
                                     isCompactMobile: isCompactMobile,
@@ -223,11 +233,12 @@ class AppTopHeader extends ConsumerWidget {
                         curve: Curves.easeOutCubic,
                         child: (centerSearchTrigger == null &&
                                 (authUser == null || !authUser.isAdmin) &&
-                                screenWidth >= 1260)
+                                screenWidth >= 1024)
                             ? Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   InkWell(
+                                    key: const Key('header_become_host_button'),
                                     onTap: () {
                                       if (authUser != null && authUser.isHost) {
                                         context.push('/chu-nha/cho-nghi');
@@ -239,8 +250,9 @@ class AppTopHeader extends ConsumerWidget {
                                     child: Container(
                                       constraints:
                                           const BoxConstraints(minHeight: 48),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal:
+                                            screenWidth >= 1280 ? 16 : 12,
                                         vertical: 9,
                                       ),
                                       decoration: BoxDecoration(
@@ -253,33 +265,51 @@ class AppTopHeader extends ConsumerWidget {
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Text(
-                                            authUser != null && authUser.isHost
-                                                ? context.l10n.navHostPortal
-                                                : context.l10n.navBecomeHost,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                              color: isOverlayTop
-                                                  ? Colors.white
-                                                  : const Color(0xFF18181B),
+                                          ConstrainedBox(
+                                            constraints: BoxConstraints(
+                                              maxWidth: screenWidth >= 1280
+                                                  ? 180
+                                                  : 140,
+                                            ),
+                                            child: Text(
+                                              authUser != null &&
+                                                      authUser.isHost
+                                                  ? activeL10n.navHostPortal
+                                                  : activeL10n.navBecomeHost,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color: isOverlayTop
+                                                    ? Colors.white
+                                                    : const Color(0xFF18181B),
+                                              ),
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 6),
+                                  const SizedBox(width: 4),
                                 ],
                               )
                             : const SizedBox.shrink(),
                       ),
+                      if (isDesktop) ...[
+                        HeaderCurrencyLanguageButton(
+                          isOverlayTop: isOverlayTop,
+                          showCodePill: screenWidth >= 1220,
+                        ),
+                        const SizedBox(width: 2),
+                      ],
                       NotificationBell(isOverlayTop: isOverlayTop),
                       const SizedBox(width: 2),
                       AppHeaderMenuButton(
                         authUser: authUser,
                         isDesktop: isDesktop,
                         isOverlayTop: isOverlayTop,
+                        currentPath: currentPath,
                       ),
                     ],
                   ),
@@ -298,99 +328,100 @@ class AppTopHeader extends ConsumerWidget {
 
   Widget _buildBrandAndDesktopNav(
     BuildContext context, {
+    required AppLocalizations l10n,
     required double screenWidth,
     required bool isDesktop,
     required bool isCompactMobile,
   }) {
     final navSpacing =
-        screenWidth >= 1280 ? 28.0 : (screenWidth >= 1080 ? 20.0 : 14.0);
+        screenWidth >= 1280 ? 26.0 : (screenWidth >= 1120 ? 16.0 : 12.0);
+    final brandWidget = ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: 48,
+        maxWidth: isDesktop ? 210 : (screenWidth - 130).clamp(120.0, 220.0),
+      ),
+      child: InkWell(
+        onTap: () => context.go('/'),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        hoverColor: Colors.transparent,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppBrandIcon.minhThanhLogo(
+              size: 26,
+              color: isOverlayTop ? Colors.white : AppColors.iconStrong,
+            ),
+            if (screenWidth >= 380) ...[
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'The Palm Villa',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: isDesktop ? 19 : (isCompactMobile ? 16 : 19),
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                    color: isOverlayTop ? Colors.white : AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+
     return Row(
       children: [
-        Flexible(
-          child: InkWell(
-            onTap: () => context.go('/'),
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            hoverColor: Colors.transparent,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AppBrandIcon.minhThanhLogo(
-                    size: 26,
-                    color: isOverlayTop ? Colors.white : AppColors.iconStrong,
-                  ),
-                  if (screenWidth >= 380) ...[
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        'The Palm Villa',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize:
-                              isDesktop ? 19 : (isCompactMobile ? 16 : 19),
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.4,
-                          color: isOverlayTop
-                              ? Colors.white
-                              : AppColors.textPrimary,
-                        ),
-                      ),
+        if (isDesktop) brandWidget else Flexible(child: brandWidget),
+        if (isDesktop) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // CONFLICT-RESOLVED: Sử dụng khóa l10n (`navDiscover`, `navStays`, `navBlog`, `navContact`) từ `origin/develop` để thanh Header Desktop tự động đổi ngôn ngữ VI/EN/KO theo thời gian thực.
+                    _NavTextLink(
+                      label: l10n.navDiscover,
+                      isActive: currentPath == '/',
+                      isOverlayTop: isOverlayTop,
+                      onTap: () => context.go('/'),
+                    ),
+                    SizedBox(width: navSpacing),
+                    _NavTextLink(
+                      label: l10n.navStays,
+                      isActive: currentPath.startsWith('/search') ||
+                          currentPath.startsWith('/tim-kiem') ||
+                          currentPath.startsWith('/noi-luu-tru') ||
+                          currentPath.startsWith('/villas'),
+                      isOverlayTop: isOverlayTop,
+                      onTap: () => context.push('/tim-kiem'),
+                    ),
+                    SizedBox(width: navSpacing),
+                    _NavTextLink(
+                      label: l10n.navBlog,
+                      isActive: currentPath.startsWith('/blog') ||
+                          currentPath.startsWith('/cam-nang'),
+                      isOverlayTop: isOverlayTop,
+                      onTap: () => context.push('/cam-nang'),
+                    ),
+                    SizedBox(width: navSpacing),
+                    _NavTextLink(
+                      label: l10n.navContact,
+                      isActive: currentPath.startsWith('/lien-he'),
+                      isOverlayTop: isOverlayTop,
+                      onTap: () => context.push('/lien-he'),
                     ),
                   ],
-                ],
+                ),
               ),
             ),
           ),
-        ),
-        if (isDesktop) ...[
-          const Spacer(),
-          Flexible(
-            flex: 3,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // CONFLICT-RESOLVED: Sử dụng khóa l10n (`navDiscover`, `navStays`, `navBlog`, `navContact`) từ `origin/develop` để thanh Header Desktop tự động đổi ngôn ngữ VI/EN/KO theo thời gian thực.
-                  _NavTextLink(
-                    label: context.l10n.navDiscover,
-                    isActive: currentPath == '/',
-                    isOverlayTop: isOverlayTop,
-                    onTap: () => context.go('/'),
-                  ),
-                  SizedBox(width: navSpacing),
-                  _NavTextLink(
-                    label: context.l10n.navStays,
-                    isActive: currentPath.startsWith('/search') ||
-                        currentPath.startsWith('/tim-kiem') ||
-                        currentPath.startsWith('/noi-luu-tru') ||
-                        currentPath.startsWith('/villas'),
-                    isOverlayTop: isOverlayTop,
-                    onTap: () => context.push('/tim-kiem'),
-                  ),
-                  SizedBox(width: navSpacing),
-                  _NavTextLink(
-                    label: context.l10n.navBlog,
-                    isActive: currentPath.startsWith('/blog') ||
-                        currentPath.startsWith('/cam-nang'),
-                    isOverlayTop: isOverlayTop,
-                    onTap: () => context.push('/cam-nang'),
-                  ),
-                  SizedBox(width: navSpacing),
-                  _NavTextLink(
-                    label: context.l10n.navContact,
-                    isActive: currentPath.startsWith('/lien-he'),
-                    isOverlayTop: isOverlayTop,
-                    onTap: () => context.push('/lien-he'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const Spacer(),
         ] else
           const Spacer(),
       ],

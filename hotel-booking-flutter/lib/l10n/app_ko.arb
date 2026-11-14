@@ -1039,5 +1039,157 @@
   "supportCouponCodeInputLabel": "쿠폰 코드 (예: PALM2026)",
   "supportCouponAmountInputLabel": "예상 예약 금액 (VND)",
   "supportCouponCheckingLabel": "확인 중...",
-  "supportCouponCheckAction": "쿠폰 코드 확인"
+  "supportCouponCheckAction": "쿠폰 코드 확인",
+  "homeEmptyApprovedVillas": "현재 승인된 빌라가 없습니다.",
+  "homeApprovedVillasCountTitle": "검수 완료 숙소 ({count})",
+  "@homeApprovedVillasCountTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "homePrevVillaTooltip": "이전 빌라",
+  "homeNextVillaTooltip": "다음 빌라",
+  "homeFavoriteAdd": "위시리스트에 저장",
+  "homeFavoriteRemove": "위시리스트에서 제거",
+  "homeCardSpecsSummary": "침실 {bedrooms}개 · 최대 {guests}명",
+  "@homeCardSpecsSummary": {
+    "placeholders": {
+      "bedrooms": {
+        "type": "int"
+      },
+      "guests": {
+        "type": "int"
+      }
+    }
+  },
+  "searchFilterBtn": "필터",
+  "searchFilterActiveBtn": "필터 ({count})",
+  "@searchFilterActiveBtn": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchShowMapBtn": "지도 보기",
+  "searchHideMapBtn": "지도 숨기기",
+  "searchClearAllBtn": "모두 지우기",
+  "searchFoundStaysCount": "붕따우 숙소 {count}개 검색됨",
+  "@searchFoundStaysCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "favoritesSavedCountSubtitle": "저장된 빌라 {count}채",
+  "@favoritesSavedCountSubtitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "favoritesSyncOfflineNotice": "서버와 동기화할 수 없어 기기에 저장된 목록을 표시합니다.",
+  "favoritesInvalidCountNotice": "현재 예약을 받지 않는 숙소가 {count}개 있습니다.",
+  "@favoritesInvalidCountNotice": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "favoritesExploreAction": "빌라 둘러보기",
+  "contactEyebrow": "붕따우 현지 직접 상담",
+  "contactBrowseVillas": "빌라 목록 보기",
+  "contactHeroTitle": "숙박 상담 및 현지 운영팀에 문의하기",
+  "contactHeroSubtitle": "실시간 일정 확인, 단체 맞춤 빌라 추천 및 붕따우 숙박 안내를 도와드립니다.",
+  "contactHotlineTitle": "핫라인 및 Zalo 상담",
+  "contactVerifiedBadge": "인증됨",
+  "contactCallNow": "전화 걸기",
+  "contactCopyHotlineTooltip": "핫라인 번호 복사",
+  "contactCopiedHotline": "핫라인 번호가 복사되었습니다",
+  "contactOpenZalo": "Zalo OA 문의",
+  "contactOfficeTitle": "붕따우 현지 안내 오피스",
+  "contactMapAction": "오시는 길 지도 보기",
+  "contactEmailTitle": "고객 지원 및 정산 이메일",
+  "contactSameDayReply": "당일 답변",
+  "contactSendEmail": "이메일 문의 보내기",
+  "contactCopyEmailTooltip": "이메일 주소 복사",
+  "contactCopiedEmail": "이메일 주소가 복사되었습니다",
+  "authWelcomeBack": "다시 오신 것을 환영합니다",
+  "authLoginSubtitle": "로그인하여 더 팜 빌라의 휴가 일정과 여행을 관리하세요.",
+  "authIdentifierLabel": "이메일 또는 휴대폰 번호",
+  "authIdentifierHint": "이메일 또는 베트남 휴대폰 번호 입력",
+  "authPasswordLabel": "비밀번호",
+  "authPasswordHint": "비밀번호 입력",
+  "authShowPasswordTooltip": "비밀번호 표시",
+  "authHidePasswordTooltip": "비밀번호 숨기기",
+  "authRememberMe": "로그인 상태 유지",
+  "authSigningIn": "로그인 중...",
+  "authOrDivider": "또는",
+  "authGoogleLoginBtn": "Google로 로그인",
+  "authNoAccountYet": "아직 계정이 없으신가요?",
+  "authRegisterBtn": "회원가입",
+  "authCreateAccountTitle": "새 계정 만들기",
+  "authRegisterSubtitle": "검증된 독채 휴양 빌라를 예약하고 회원 전용 혜택을 받아보세요.",
+  "authFullNameLabel": "성명",
+  "authFullNameHint": "성명을 입력하세요",
+  "authPhoneRequiredLabel": "휴대폰 번호 *",
+  "authPhoneHint": "베트남 휴대폰 번호 입력 (예: 0901234567)",
+  "authEmailRequiredLabel": "이메일 *",
+  "authEmailHint": "이메일 주소 입력",
+  "authPasswordCreateHint": "비밀번호 생성 (영문·숫자 포함 최소 8자)",
+  "authConfirmPasswordLabel": "비밀번호 확인 *",
+  "authConfirmPasswordHint": "비밀번호를 다시 입력하세요",
+  "authPasswordStrengthLabel": "비밀번호 강도: {level}",
+  "@authPasswordStrengthLabel": {
+    "placeholders": {
+      "level": {
+        "type": "String"
+      }
+    }
+  },
+  "authStrengthWeak": "약함",
+  "authStrengthFair": "보통",
+  "authStrengthGood": "양호",
+  "authStrengthStrong": "강함",
+  "authTermsAgreement": "더 팜 빌라 서비스 이용약관 및 개인정보 처리방침에 동의합니다",
+  "authTermsRequiredError": "서비스 이용약관 및 개인정보 처리방침에 동의해 주세요",
+  "authCreatingAccount": "계정 생성 중...",
+  "authAlreadyHaveAccount": "이미 계정이 있으신가요?",
+  "authForgotQuestionTitle": "비밀번호를 잊으셨나요?",
+  "authOtpVerifyTitle": "OTP 인증번호 확인",
+  "authPasswordChangedTitle": "비밀번호 변경 완료",
+  "authForgotRequestSubtitle": "가입한 이메일 또는 휴대폰 번호를 입력하여 비밀번호 복구용 6자리 인증번호를 받으세요.",
+  "authForgotOtpSubtitle": "6자리 OTP 인증번호를 입력하고 새 비밀번호를 설정하세요.",
+  "authForgotSuccessSubtitle": "비밀번호가 안전하게 변경되었습니다.",
+  "authSendOtpButton": "인증번호 받기",
+  "authOtpSentTo": "OTP 발송 대상: {target}",
+  "@authOtpSentTo": {
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "authOtpSixDigitsLabel": "6자리 OTP 인증번호",
+  "authNewPasswordLabel": "새 비밀번호",
+  "authResendOtpCountdown": "00:{seconds} 후 재전송",
+  "@authResendOtpCountdown": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "authResendOtpButton": "OTP 다시 보내기",
+  "authConfirmOtpButton": "OTP 인증 확인",
+  "authOtpSuccessBanner": "OTP 인증이 완료되었으며 새 비밀번호를 바로 사용할 수 있습니다.",
+  "authBackToLoginButton": "로그인으로 돌아가기",
+  "adminTabFinance": "재무 및 정산",
+  "adminTabBlog": "블로그 관리",
+  "adminTabTrustSafety": "신고 및 안전"
 }

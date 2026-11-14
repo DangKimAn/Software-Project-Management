@@ -2663,4 +2663,292 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get supportCouponCheckAction => 'Kiểm tra mã ưu đãi';
+
+  @override
+  String get homeEmptyApprovedVillas =>
+      'Hiện chưa có căn biệt thự nào đã được phê duyệt trên hệ thống.';
+
+  @override
+  String homeApprovedVillasCountTitle(int count) {
+    return 'Danh sách chỗ nghỉ đã duyệt ($count)';
+  }
+
+  @override
+  String get homePrevVillaTooltip => 'Căn trước';
+
+  @override
+  String get homeNextVillaTooltip => 'Căn tiếp theo';
+
+  @override
+  String get homeFavoriteAdd => 'Lưu vào yêu thích';
+
+  @override
+  String get homeFavoriteRemove => 'Bỏ khỏi yêu thích';
+
+  @override
+  String homeCardSpecsSummary(int bedrooms, int guests) {
+    return '$bedrooms PN · Tối đa $guests khách';
+  }
+
+  @override
+  String get searchFilterBtn => 'Bộ lọc';
+
+  @override
+  String searchFilterActiveBtn(int count) {
+    return 'Bộ lọc ($count)';
+  }
+
+  @override
+  String get searchShowMapBtn => 'Hiện bản đồ';
+
+  @override
+  String get searchHideMapBtn => 'Ẩn bản đồ';
+
+  @override
+  String get searchClearAllBtn => 'Xóa tất cả';
+
+  @override
+  String searchFoundStaysCount(int count) {
+    return 'Tìm thấy $count chỗ nghỉ tại Vũng Tàu';
+  }
+
+  @override
+  String favoritesSavedCountSubtitle(int count) {
+    return '$count căn biệt thự đã lưu';
+  }
+
+  @override
+  String get favoritesSyncOfflineNotice =>
+      'Không thể đồng bộ máy chủ — đang hiển thị danh sách lưu trên thiết bị.';
+
+  @override
+  String favoritesInvalidCountNotice(int count) {
+    return 'Có $count chỗ nghỉ không còn mở lịch nhận khách.';
+  }
+
+  @override
+  String get favoritesExploreAction => 'Khám phá biệt thự';
+
+  @override
+  String get contactEyebrow => 'HỖ TRỢ TRỰC TIẾP VŨNG TÀU';
+
+  @override
+  String get contactBrowseVillas => 'Xem danh sách Villa';
+
+  @override
+  String get contactHeroTitle => 'Liên hệ đội ngũ tư vấn & vận hành lưu trú';
+
+  @override
+  String get contactHeroSubtitle =>
+      'Hỗ trợ kiểm tra lịch trống, tư vấn chọn căn theo đoàn và giải đáp thông tin lưu trú tại TP. Vũng Tàu.';
+
+  @override
+  String get contactHotlineTitle => 'Hotline & Zalo tư vấn';
+
+  @override
+  String get contactVerifiedBadge => 'Xác thực';
+
+  @override
+  String get contactCallNow => 'Gọi ngay';
+
+  @override
+  String get contactCopyHotlineTooltip => 'Sao chép số Hotline';
+
+  @override
+  String get contactCopiedHotline => 'Đã sao chép số Hotline vào bộ nhớ tạm';
+
+  @override
+  String get contactOpenZalo => 'Nhắn Zalo OA';
+
+  @override
+  String get contactOfficeTitle => 'Văn phòng đón tiếp tại Vũng Tàu';
+
+  @override
+  String get contactMapAction => 'Xem bản đồ đường đi';
+
+  @override
+  String get contactEmailTitle => 'Hòm thư hỗ trợ & đối soát';
+
+  @override
+  String get contactSameDayReply => 'Phản hồi trong ngày';
+
+  @override
+  String get contactSendEmail => 'Gửi Email hỗ trợ';
+
+  @override
+  String get contactCopyEmailTooltip => 'Sao chép địa chỉ Email';
+
+  @override
+  String get contactCopiedEmail => 'Đã sao chép địa chỉ Email vào bộ nhớ tạm';
+
+  @override
+  String get authWelcomeBack => 'Chào mừng trở lại';
+
+  @override
+  String get authLoginSubtitle =>
+      'Đăng nhập để xem kỳ nghỉ và quản lý chuyến đi của bạn tại The Palm Villa.';
+
+  @override
+  String get authIdentifierLabel => 'Email hoặc số điện thoại';
+
+  @override
+  String get authIdentifierHint => 'Nhập email hoặc số điện thoại Việt Nam';
+
+  @override
+  String get authPasswordLabel => 'Mật khẩu';
+
+  @override
+  String get authPasswordHint => 'Nhập mật khẩu';
+
+  @override
+  String get authShowPasswordTooltip => 'Hiện mật khẩu';
+
+  @override
+  String get authHidePasswordTooltip => 'Ẩn mật khẩu';
+
+  @override
+  String get authRememberMe => 'Ghi nhớ đăng nhập';
+
+  @override
+  String get authSigningIn => 'Đang đăng nhập...';
+
+  @override
+  String get authOrDivider => 'HOẶC';
+
+  @override
+  String get authGoogleLoginBtn => 'Đăng nhập với Google';
+
+  @override
+  String get authNoAccountYet => 'Chưa có tài khoản?';
+
+  @override
+  String get authRegisterBtn => 'Đăng ký';
+
+  @override
+  String get authCreateAccountTitle => 'Tạo tài khoản mới';
+
+  @override
+  String get authRegisterSubtitle =>
+      'Trải nghiệm đặt phòng villa nghỉ dưỡng đẳng cấp và nhận ưu đãi độc quyền.';
+
+  @override
+  String get authFullNameLabel => 'Họ và tên';
+
+  @override
+  String get authFullNameHint => 'Nhập họ và tên';
+
+  @override
+  String get authPhoneRequiredLabel => 'Số điện thoại *';
+
+  @override
+  String get authPhoneHint => 'Nhập số điện thoại Việt Nam (vd: 0901234567)';
+
+  @override
+  String get authEmailRequiredLabel => 'Email *';
+
+  @override
+  String get authEmailHint => 'Nhập địa chỉ email';
+
+  @override
+  String get authPasswordCreateHint =>
+      'Tạo mật khẩu (tối thiểu 8 ký tự, gồm chữ và số)';
+
+  @override
+  String get authConfirmPasswordLabel => 'Xác nhận mật khẩu *';
+
+  @override
+  String get authConfirmPasswordHint => 'Nhập lại mật khẩu vừa tạo';
+
+  @override
+  String authPasswordStrengthLabel(String level) {
+    return 'Độ mạnh mật khẩu: $level';
+  }
+
+  @override
+  String get authStrengthWeak => 'Yếu';
+
+  @override
+  String get authStrengthFair => 'Trung bình';
+
+  @override
+  String get authStrengthGood => 'Khá';
+
+  @override
+  String get authStrengthStrong => 'Mạnh';
+
+  @override
+  String get authTermsAgreement =>
+      'Tôi đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của The Palm Villa';
+
+  @override
+  String get authTermsRequiredError =>
+      'Vui lòng đồng ý với Điều khoản dịch vụ và Chính sách bảo mật';
+
+  @override
+  String get authCreatingAccount => 'Đang tạo tài khoản...';
+
+  @override
+  String get authAlreadyHaveAccount => 'Bạn đã có tài khoản?';
+
+  @override
+  String get authForgotQuestionTitle => 'Quên mật khẩu?';
+
+  @override
+  String get authOtpVerifyTitle => 'Xác thực mã OTP';
+
+  @override
+  String get authPasswordChangedTitle => 'Đổi mật khẩu thành công';
+
+  @override
+  String get authForgotRequestSubtitle =>
+      'Nhập email hoặc số điện thoại đã đăng ký để nhận mã xác thực khôi phục mật khẩu.';
+
+  @override
+  String get authForgotOtpSubtitle =>
+      'Nhập 6 chữ số OTP và thiết lập mật khẩu mới.';
+
+  @override
+  String get authForgotSuccessSubtitle =>
+      'Mật khẩu của bạn đã được cập nhật an toàn.';
+
+  @override
+  String get authSendOtpButton => 'Gửi mã xác thực';
+
+  @override
+  String authOtpSentTo(String target) {
+    return 'Mã OTP đã gửi tới: $target';
+  }
+
+  @override
+  String get authOtpSixDigitsLabel => 'Mã OTP gồm 6 chữ số';
+
+  @override
+  String get authNewPasswordLabel => 'Mật khẩu mới';
+
+  @override
+  String authResendOtpCountdown(String seconds) {
+    return 'Gửi lại sau 00:$seconds';
+  }
+
+  @override
+  String get authResendOtpButton => 'Gửi lại mã OTP';
+
+  @override
+  String get authConfirmOtpButton => 'Xác nhận mã OTP';
+
+  @override
+  String get authOtpSuccessBanner =>
+      'Mã OTP đã được xác thực và mật khẩu mới đã sẵn sàng sử dụng.';
+
+  @override
+  String get authBackToLoginButton => 'Quay lại đăng nhập';
+
+  @override
+  String get adminTabFinance => 'Tài chính & Chi trả';
+
+  @override
+  String get adminTabBlog => 'Cẩm nang Blog';
+
+  @override
+  String get adminTabTrustSafety => 'Báo cáo & Khiếu nại';
 }

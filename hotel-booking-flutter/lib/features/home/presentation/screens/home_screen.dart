@@ -42,7 +42,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isDestinationGridMode = false;
   int _destinationGridPage =
       0; // 0-indexed like `PopularDestinationsSection.tsx`
-  static const int _destinationPageSize = 6;
+  static const int _destinationPageSize = 8;
   double _recentCardStepWidth = 220.0;
   double _popularCardStepWidth = 220.0;
 
@@ -248,68 +248,67 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
 
-          // Floating White Search Card (`SearchBar.tsx`)
-          if (!_isDestinationGridMode)
-            Transform.translate(
-              offset: Offset(0, -cardOverlap),
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: isDesktop ? 24 : 12,
-                  right: isDesktop ? 24 : 12,
-                ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1024),
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius:
-                            BorderRadius.circular(isDesktop ? 32 : 28),
-                      ),
-                      padding: EdgeInsets.fromLTRB(
-                        isDesktop ? 32 : 12,
-                        isDesktop ? 24 : 18,
-                        isDesktop ? 32 : 12,
-                        isDesktop ? 12 : 4,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _greeting(currentLocale),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: isDesktop ? 34 : 24,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.6,
-                              color: const Color(0xFF0F172A),
-                            ),
+          // Floating White Search Card (`SearchBar.tsx`) — luôn hiển thị ổn định kể cả khi mở rộng lưới Điểm đến yêu thích
+          Transform.translate(
+            offset: Offset(0, -cardOverlap),
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: isDesktop ? 24 : 12,
+                right: isDesktop ? 24 : 12,
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1024),
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(isDesktop ? 32 : 28),
+                    ),
+                    padding: EdgeInsets.fromLTRB(
+                      isDesktop ? 32 : 12,
+                      isDesktop ? 24 : 18,
+                      isDesktop ? 32 : 12,
+                      isDesktop ? 12 : 4,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _greeting(currentLocale),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: isDesktop ? 34 : 24,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.6,
+                            color: const Color(0xFF0F172A),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            currentLocale == 'vi'
-                                ? 'Trân trọng được chào đón bạn tại thành phố biển Vũng Tàu'
-                                : lookupAppLocalizations(Locale(currentLocale)).homeWelcomeSubtitle,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: isDesktop ? 16 : 13.5,
-                              fontWeight: FontWeight.w400,
-                              color: const Color(0xFF64748B),
-                            ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          currentLocale == 'vi'
+                              ? 'Trân trọng được chào đón bạn tại thành phố biển Vũng Tàu'
+                              : lookupAppLocalizations(Locale(currentLocale))
+                                  .homeWelcomeSubtitle,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: isDesktop ? 16 : 13.5,
+                            fontWeight: FontWeight.w400,
+                            color: const Color(0xFF64748B),
                           ),
-                          SizedBox(height: isDesktop ? 18 : 14),
-                          SourceSearchBar(
-                            key: _bodySearchKey,
-                            onSearchSubmitted: () => context.push('/tim-kiem'),
-                          ),
-                        ],
-                      ),
+                        ),
+                        SizedBox(height: isDesktop ? 18 : 14),
+                        SourceSearchBar(
+                          key: _bodySearchKey,
+                          onSearchSubmitted: () => context.push('/tim-kiem'),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
             ),
+          ),
         ],
       ),
     );
@@ -582,7 +581,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             Text(
                               ref.watch(localeProvider) == 'vi'
                                   ? 'Điểm đến được yêu thích'
-                                  : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homePopularDestinationsTitle,
+                                  : lookupAppLocalizations(
+                                          Locale(ref.watch(localeProvider)))
+                                      .homePopularDestinationsTitle,
                               style: TextStyle(
                                 fontSize: isDesktop ? 26 : 20,
                                 fontWeight: FontWeight.w800,
@@ -599,18 +600,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         label: _isDestinationGridMode
                             ? (ref.watch(localeProvider) == 'vi'
                                 ? 'Thu gọn'
-                                : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeShowLess)
+                                : lookupAppLocalizations(
+                                        Locale(ref.watch(localeProvider)))
+                                    .homeShowLess)
                             : (ref.watch(localeProvider) == 'vi'
                                 ? 'Xem tất cả'
-                                : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeSeeMoreVillas),
+                                : lookupAppLocalizations(
+                                        Locale(ref.watch(localeProvider)))
+                                    .homeSeeMoreVillas),
                         child: Tooltip(
                           message: _isDestinationGridMode
                               ? (ref.watch(localeProvider) == 'vi'
                                   ? 'Thu gọn'
-                                  : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeShowLess)
+                                  : lookupAppLocalizations(
+                                          Locale(ref.watch(localeProvider)))
+                                      .homeShowLess)
                               : (ref.watch(localeProvider) == 'vi'
                                   ? 'Xem tất cả'
-                                  : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeSeeMoreVillas),
+                                  : lookupAppLocalizations(
+                                          Locale(ref.watch(localeProvider)))
+                                      .homeSeeMoreVillas),
                           child: InkWell(
                             onTap: () {
                               setState(() {
@@ -658,10 +667,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Text(
-                        'Chưa có chỗ nghỉ đã duyệt. Hãy đăng nhập host để tạo phòng, sau đó Admin duyệt để hiển thị tại đây.',
+                      child: Text(
+                        lookupAppLocalizations(
+                          Locale(ref.watch(localeProvider)),
+                        ).homeEmptyApprovedVillas,
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                           color: Color(0xFF71717A),
@@ -669,13 +680,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     )
                   else if (!_isDestinationGridMode)
-                    // Horizontal Scrollable Cards with side `<` and `>` navigation buttons
+                    // Giải thuật bố cục thích ứng 8 Điểm đến được yêu thích (`featuredItems`):
+                    // Trên màn hình rộng (>= 960px), dàn 8 căn thành lưới cân đối 4 cột x 2 hàng giúp hiển thị trọn vẹn
+                    // không khuyết ô; trên màn hình hẹp hơn, chuyển sang băng chuyền cuộn ngang kèm nút điều hướng.
                     LayoutBuilder(
                       builder: (context, constraints) {
+                        final activeL10n = lookupAppLocalizations(
+                          Locale(ref.watch(localeProvider)),
+                        );
+                        if (constraints.maxWidth >= 960) {
+                          const cols = 4;
+                          const gap = 16.0;
+                          final cardW =
+                              (constraints.maxWidth - (gap * (cols - 1))) /
+                                  cols;
+                          return Wrap(
+                            spacing: gap,
+                            runSpacing: gap,
+                            children: featuredItems.map((villa) {
+                              return SizedBox(
+                                width: cardW,
+                                child: _PopularDestinationCard(
+                                  villa: villa,
+                                  isFavorite: favorites.contains(villa.id),
+                                  onFavoriteToggle: () {
+                                    ref
+                                        .read(favoritesProvider.notifier)
+                                        .toggleFavorite(villa.id);
+                                  },
+                                  onTap: () =>
+                                      context.push('/villa/${villa.id}'),
+                                ),
+                              );
+                            }).toList(),
+                          );
+                        }
+
                         final double cardW;
-                        if (constraints.maxWidth >= 1100) {
-                          cardW = (constraints.maxWidth - (16 * 3)) / 4;
-                        } else if (constraints.maxWidth >= 820) {
+                        if (constraints.maxWidth >= 820) {
                           cardW = (constraints.maxWidth - (16 * 2)) / 3;
                         } else if (constraints.maxWidth >= 540) {
                           cardW = (constraints.maxWidth - 14) / 2.4;
@@ -725,7 +767,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 left: -6,
                                 child: _CarouselNavButton(
                                   icon: LucideIcons.chevronLeft,
-                                  tooltip: 'Căn trước',
+                                  tooltip: activeL10n.homePrevVillaTooltip,
                                   elevated: true,
                                   onTap: () => _scrollPopularDestinations(-1),
                                 ),
@@ -734,7 +776,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 right: -6,
                                 child: _CarouselNavButton(
                                   icon: LucideIcons.chevronRight,
-                                  tooltip: 'Căn tiếp theo',
+                                  tooltip: activeL10n.homeNextVillaTooltip,
                                   elevated: true,
                                   onTap: () => _scrollPopularDestinations(1),
                                 ),
@@ -745,7 +787,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       },
                     )
                   else
-                    // Expanded Grid View
+                    // Expanded Grid View (8 căn / trang — bố cục 4x2 trên desktop, 2x4 trên tablet)
                     Container(
                       width: double.infinity,
                       padding: EdgeInsets.all(isDesktop ? 24 : 12),
@@ -761,16 +803,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             alignment: WrapAlignment.spaceBetween,
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              const Text(
-                                'Danh sách chỗ nghỉ đã duyệt',
-                                style: TextStyle(
+                              Text(
+                                lookupAppLocalizations(
+                                  Locale(ref.watch(localeProvider)),
+                                ).homeApprovedVillasCountTitle(villas.length),
+                                style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                   color: Color(0xFF18181B),
                                 ),
                               ),
                               Text(
-                                'Trang ${safePageIndex + 1} / $totalPages',
+                                lookupAppLocalizations(
+                                  Locale(ref.watch(localeProvider)),
+                                ).paginationPageOf(
+                                  safePageIndex + 1,
+                                  totalPages,
+                                ),
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
@@ -782,9 +831,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           const SizedBox(height: 16),
                           LayoutBuilder(
                             builder: (context, constraints) {
-                              final cols = constraints.maxWidth >= 900
-                                  ? 3
-                                  : (constraints.maxWidth >= 480 ? 2 : 1);
+                              final cols = constraints.maxWidth >= 960
+                                  ? 4
+                                  : (constraints.maxWidth >= 520 ? 2 : 1);
                               const gap = 14.0;
                               final cardW =
                                   (constraints.maxWidth - (gap * (cols - 1))) /
@@ -818,11 +867,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             alignment: WrapAlignment.center,
                             children: [
                               _PillActionBtn(
-                                label: ref.watch(localeProvider) == 'vi'
-                                    ? 'Quay lại'
-                                    : (ref.watch(localeProvider) == 'ko'
-                                        ? '이전'
-                                        : 'Back'),
+                                label: lookupAppLocalizations(
+                                  Locale(ref.watch(localeProvider)),
+                                ).ctaBack,
                                 leadingIcon: LucideIcons.arrowLeft,
                                 enabled: safePageIndex > 0,
                                 onTap: () {
@@ -835,7 +882,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               _PillActionBtn(
                                 label: ref.watch(localeProvider) == 'vi'
                                     ? 'Xem tiếp'
-                                    : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeSeeNext,
+                                    : lookupAppLocalizations(
+                                            Locale(ref.watch(localeProvider)))
+                                        .homeSeeNext,
                                 trailingIcon: LucideIcons.arrowRight,
                                 enabled: safePageIndex < totalPages - 1,
                                 onTap: () {
@@ -848,7 +897,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               _PillActionBtn(
                                 label: ref.watch(localeProvider) == 'vi'
                                     ? 'Thu gọn'
-                                    : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeShowLess,
+                                    : lookupAppLocalizations(
+                                            Locale(ref.watch(localeProvider)))
+                                        .homeShowLess,
                                 enabled: true,
                                 onTap: () {
                                   setState(() {
@@ -910,7 +961,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       Text(
                         ref.watch(localeProvider) == 'vi'
                             ? 'BÀI VIẾT MỚI'
-                            : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeBlogBadge,
+                            : lookupAppLocalizations(
+                                    Locale(ref.watch(localeProvider)))
+                                .homeBlogBadge,
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
@@ -922,7 +975,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       Text(
                         ref.watch(localeProvider) == 'vi'
                             ? 'Kinh nghiệm lưu trú nổi bật'
-                            : lookupAppLocalizations(Locale(ref.watch(localeProvider))).homeBlogTitle,
+                            : lookupAppLocalizations(
+                                    Locale(ref.watch(localeProvider)))
+                                .homeBlogTitle,
                         style: const TextStyle(
                           fontSize: 30,
                           fontWeight: FontWeight.w700,
@@ -1245,6 +1300,9 @@ class _PopularDestinationCard extends ConsumerWidget {
   final String location;
   final int? basePriceVnd;
   final double rating;
+  final int reviewCount;
+  final int? bedrooms;
+  final int? maxGuests;
   final String imageUrl;
   final VoidCallback onTap;
   final bool isFavorite;
@@ -1261,6 +1319,9 @@ class _PopularDestinationCard extends ConsumerWidget {
             : (villa.tagline.isNotEmpty ? villa.tagline : 'Vũng Tàu'),
         basePriceVnd = villa.basePriceVnd,
         rating = villa.rating,
+        reviewCount = villa.reviewCount,
+        bedrooms = villa.specs.bedrooms > 0 ? villa.specs.bedrooms : null,
+        maxGuests = villa.specs.maxGuests > 0 ? villa.specs.maxGuests : null,
         imageUrl = villa.imageUrls.isNotEmpty
             ? villa.imageUrls.first
             : 'assets/images/19tranphu.jpg';
@@ -1274,6 +1335,9 @@ class _PopularDestinationCard extends ConsumerWidget {
         location = item.location.isNotEmpty ? item.location : 'Vũng Tàu',
         basePriceVnd = item.pricePerNight,
         rating = item.rating,
+        reviewCount = 0,
+        bedrooms = null,
+        maxGuests = null,
         imageUrl = item.imageUrl.isNotEmpty
             ? item.imageUrl
             : 'assets/images/19tranphu.jpg';
@@ -1281,6 +1345,8 @@ class _PopularDestinationCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final formatter = ref.watch(moneyFormatterProvider);
+    final currentLocale = ref.watch(localeProvider);
+    final activeL10n = lookupAppLocalizations(Locale(currentLocale));
 
     return InkWell(
       onTap: onTap,
@@ -1320,12 +1386,14 @@ class _PopularDestinationCard extends ConsumerWidget {
                     right: 8,
                     child: Semantics(
                       button: true,
-                      label: isFavorite ? 'Bỏ yêu thích' : 'Lưu yêu thích',
+                      label: isFavorite
+                          ? activeL10n.homeFavoriteRemove
+                          : activeL10n.homeFavoriteAdd,
                       child: GestureDetector(
                         onTap: onFavoriteToggle,
                         child: Container(
-                          width: 30,
-                          height: 30,
+                          width: 32,
+                          height: 32,
                           decoration: BoxDecoration(
                             color: isFavorite
                                 ? AppColors.primary
@@ -1392,6 +1460,19 @@ class _PopularDestinationCard extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  if (bedrooms != null && maxGuests != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      activeL10n.homeCardSpecsSummary(bedrooms!, maxGuests!),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF475569),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   Row(
                     children: [
@@ -1418,7 +1499,9 @@ class _PopularDestinationCard extends ConsumerWidget {
                       ),
                       const SizedBox(width: 3),
                       Text(
-                        rating.toStringAsFixed(1),
+                        reviewCount > 0
+                            ? '${rating.toStringAsFixed(1)} ($reviewCount)'
+                            : rating.toStringAsFixed(1),
                         style: const TextStyle(
                           color: AppColors.textPrimary,
                           fontSize: 12,

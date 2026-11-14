@@ -2668,4 +2668,293 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get supportCouponCheckAction => 'Check coupon code';
+
+  @override
+  String get homeEmptyApprovedVillas =>
+      'No approved villas are available right now.';
+
+  @override
+  String homeApprovedVillasCountTitle(int count) {
+    return 'Verified Stays ($count)';
+  }
+
+  @override
+  String get homePrevVillaTooltip => 'Previous villa';
+
+  @override
+  String get homeNextVillaTooltip => 'Next villa';
+
+  @override
+  String get homeFavoriteAdd => 'Save to wishlist';
+
+  @override
+  String get homeFavoriteRemove => 'Remove from wishlist';
+
+  @override
+  String homeCardSpecsSummary(int bedrooms, int guests) {
+    return '$bedrooms BR · Up to $guests guests';
+  }
+
+  @override
+  String get searchFilterBtn => 'Filters';
+
+  @override
+  String searchFilterActiveBtn(int count) {
+    return 'Filters ($count)';
+  }
+
+  @override
+  String get searchShowMapBtn => 'Show map';
+
+  @override
+  String get searchHideMapBtn => 'Hide map';
+
+  @override
+  String get searchClearAllBtn => 'Clear all';
+
+  @override
+  String searchFoundStaysCount(int count) {
+    return 'Found $count stays in Vung Tau';
+  }
+
+  @override
+  String favoritesSavedCountSubtitle(int count) {
+    return '$count saved villas';
+  }
+
+  @override
+  String get favoritesSyncOfflineNotice =>
+      'Unable to sync with server — showing locally saved villas.';
+
+  @override
+  String favoritesInvalidCountNotice(int count) {
+    return '$count saved stays are no longer accepting bookings.';
+  }
+
+  @override
+  String get favoritesExploreAction => 'Explore villas';
+
+  @override
+  String get contactEyebrow => 'DIRECT VUNG TAU SUPPORT';
+
+  @override
+  String get contactBrowseVillas => 'Browse Villas';
+
+  @override
+  String get contactHeroTitle =>
+      'Contact our stay advisors & local operations team';
+
+  @override
+  String get contactHeroSubtitle =>
+      'Get help checking live availability, matching villas for your group, and planning your stay in Vung Tau City.';
+
+  @override
+  String get contactHotlineTitle => 'Hotline & Zalo support';
+
+  @override
+  String get contactVerifiedBadge => 'Verified';
+
+  @override
+  String get contactCallNow => 'Call now';
+
+  @override
+  String get contactCopyHotlineTooltip => 'Copy Hotline';
+
+  @override
+  String get contactCopiedHotline => 'Hotline copied to clipboard';
+
+  @override
+  String get contactOpenZalo => 'Chat on Zalo OA';
+
+  @override
+  String get contactOfficeTitle => 'Vung Tau Reception Office';
+
+  @override
+  String get contactMapAction => 'Open directions map';
+
+  @override
+  String get contactEmailTitle => 'Support & billing email';
+
+  @override
+  String get contactSameDayReply => 'Same-day response';
+
+  @override
+  String get contactSendEmail => 'Send support email';
+
+  @override
+  String get contactCopyEmailTooltip => 'Copy Email';
+
+  @override
+  String get contactCopiedEmail => 'Email copied to clipboard';
+
+  @override
+  String get authWelcomeBack => 'Welcome back';
+
+  @override
+  String get authLoginSubtitle =>
+      'Sign in to view your getaways and manage your trips at The Palm Villa.';
+
+  @override
+  String get authIdentifierLabel => 'Email or phone number';
+
+  @override
+  String get authIdentifierHint => 'Enter email or Vietnam phone number';
+
+  @override
+  String get authPasswordLabel => 'Password';
+
+  @override
+  String get authPasswordHint => 'Enter password';
+
+  @override
+  String get authShowPasswordTooltip => 'Show password';
+
+  @override
+  String get authHidePasswordTooltip => 'Hide password';
+
+  @override
+  String get authRememberMe => 'Remember me';
+
+  @override
+  String get authSigningIn => 'Signing in...';
+
+  @override
+  String get authOrDivider => 'OR';
+
+  @override
+  String get authGoogleLoginBtn => 'Sign in with Google';
+
+  @override
+  String get authNoAccountYet => 'Don\'t have an account?';
+
+  @override
+  String get authRegisterBtn => 'Sign up';
+
+  @override
+  String get authCreateAccountTitle => 'Create a new account';
+
+  @override
+  String get authRegisterSubtitle =>
+      'Book verified private vacation villas and unlock member-only offers.';
+
+  @override
+  String get authFullNameLabel => 'Full name';
+
+  @override
+  String get authFullNameHint => 'Enter your full name';
+
+  @override
+  String get authPhoneRequiredLabel => 'Phone number *';
+
+  @override
+  String get authPhoneHint => 'Enter Vietnam phone number (e.g. 0901234567)';
+
+  @override
+  String get authEmailRequiredLabel => 'Email *';
+
+  @override
+  String get authEmailHint => 'Enter email address';
+
+  @override
+  String get authPasswordCreateHint =>
+      'Create password (min 8 chars, letters & numbers)';
+
+  @override
+  String get authConfirmPasswordLabel => 'Confirm password *';
+
+  @override
+  String get authConfirmPasswordHint => 'Re-enter your password';
+
+  @override
+  String authPasswordStrengthLabel(String level) {
+    return 'Password strength: $level';
+  }
+
+  @override
+  String get authStrengthWeak => 'Weak';
+
+  @override
+  String get authStrengthFair => 'Fair';
+
+  @override
+  String get authStrengthGood => 'Good';
+
+  @override
+  String get authStrengthStrong => 'Strong';
+
+  @override
+  String get authTermsAgreement =>
+      'I agree to The Palm Villa Terms of Service and Privacy Policy';
+
+  @override
+  String get authTermsRequiredError =>
+      'Please accept the Terms of Service and Privacy Policy';
+
+  @override
+  String get authCreatingAccount => 'Creating account...';
+
+  @override
+  String get authAlreadyHaveAccount => 'Already have an account?';
+
+  @override
+  String get authForgotQuestionTitle => 'Forgot password?';
+
+  @override
+  String get authOtpVerifyTitle => 'Verify OTP code';
+
+  @override
+  String get authPasswordChangedTitle => 'Password reset complete';
+
+  @override
+  String get authForgotRequestSubtitle =>
+      'Enter your registered email or phone number to receive a 6-digit recovery OTP.';
+
+  @override
+  String get authForgotOtpSubtitle =>
+      'Enter the 6-digit OTP code and set your new password.';
+
+  @override
+  String get authForgotSuccessSubtitle =>
+      'Your password has been updated securely.';
+
+  @override
+  String get authSendOtpButton => 'Send OTP code';
+
+  @override
+  String authOtpSentTo(String target) {
+    return 'OTP sent to: $target';
+  }
+
+  @override
+  String get authOtpSixDigitsLabel => '6-digit OTP code';
+
+  @override
+  String get authNewPasswordLabel => 'New password';
+
+  @override
+  String authResendOtpCountdown(String seconds) {
+    return 'Resend in 00:$seconds';
+  }
+
+  @override
+  String get authResendOtpButton => 'Resend OTP code';
+
+  @override
+  String get authConfirmOtpButton => 'Verify OTP code';
+
+  @override
+  String get authOtpSuccessBanner =>
+      'OTP verified and your new password is ready to use.';
+
+  @override
+  String get authBackToLoginButton => 'Back to sign in';
+
+  @override
+  String get adminTabFinance => 'Finance & Payouts';
+
+  @override
+  String get adminTabBlog => 'Blog CMS';
+
+  @override
+  String get adminTabTrustSafety => 'Reports & Safety';
 }

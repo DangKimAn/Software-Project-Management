@@ -10,10 +10,13 @@ import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../l10n/l10n.dart';
+import '../../../../shared/widgets/app_dialog.dart';
 import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_chat_expressions.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
+import '../../../../shared/widgets/currency_language_selector.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 // CONFLICT-RESOLVED: Giữ luồng MVVM qua `HostPortalViewModel` (không import trực tiếp `host_repository.dart`) kết hợp dịch vụ ghi âm và các widget bong bóng đa phương tiện từ develop.
 import '../../../messages/presentation/widgets/chat_audio_bubble.dart';
@@ -46,6 +49,37 @@ enum HostPortalSection {
   final String label;
   final IconData icon;
   const HostPortalSection(this.keyName, this.label, this.icon);
+
+  /// Phân giải nhãn hiển thị theo ngôn ngữ hiện hành, bảo toàn nguyên vẹn nhãn Tiếng Việt gốc khi `localeCode == 'vi'`.
+  String localizedLabel(AppLocalizations l10n, String localeCode) {
+    if (localeCode == 'vi') return label;
+    switch (this) {
+      case HostPortalSection.overview:
+        return l10n.hostTabOverview;
+      case HostPortalSection.properties:
+        return l10n.hostTabProperties;
+      case HostPortalSection.newProperty:
+        return l10n.hostTabNewProperty;
+      case HostPortalSection.bookings:
+        return l10n.hostTabBookings;
+      case HostPortalSection.calendar:
+        return l10n.hostTabCalendar;
+      case HostPortalSection.guests:
+        return l10n.hostTabGuests;
+      case HostPortalSection.messages:
+        return l10n.hostTabMessages;
+      case HostPortalSection.payouts:
+        return l10n.hostTabPayouts;
+      case HostPortalSection.reviews:
+        return l10n.hostTabReviews;
+      case HostPortalSection.reports:
+        return l10n.hostTabReports;
+      case HostPortalSection.support:
+        return l10n.hostTabSupport;
+      case HostPortalSection.settings:
+        return l10n.hostTabSettings;
+    }
+  }
 
   static HostPortalSection fromSlug(String? slug) {
     final normalized = (slug ?? '').trim().toLowerCase();
@@ -1622,6 +1656,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     required bool isOverview,
     required String eyebrow,
   }) {
+    final activeLocale = ref.watch(localeProvider);
+    final activeL10n = lookupAppLocalizations(Locale(activeLocale));
     return HostFrostedSurface(
       sigma: HostStudioTokens.headerBlurSigma,
       fillColor: isOverview
@@ -1649,7 +1685,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 size: 19,
               ),
               onPressed: () => _navigatePortalRoute(context, '/'),
-              tooltip: 'Về trang chủ',
+              tooltip: activeL10n.ctaBackHome,
             ),
             const SizedBox(width: 4),
           ],
@@ -1657,7 +1693,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             button: true,
             label: 'Về Tổng quan Host',
             child: Tooltip(
-              message: 'Tổng quan Host',
+              message: activeL10n.hostTabOverview,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => _switchSection(HostPortalSection.overview),
@@ -1698,7 +1734,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 ),
                 const SizedBox(height: 1),
                 Text(
-                  _activeSection.label,
+                  _activeSection.localizedLabel(activeL10n, activeLocale),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: HostStudioTokens.headerTitle,
@@ -1709,10 +1745,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           HostStudioCircleButton(
             key: const Key('host_portal_add_property_quick_btn'),
             icon: LucideIcons.plus,
-            tooltip: 'Thêm chỗ nghỉ mới',
+            tooltip: activeL10n.hostTabNewProperty,
             visualSize: 36,
             iconSize: 16.5,
             onTap: () => _switchSection(HostPortalSection.newProperty),
+          ),
+          HeaderCurrencyLanguageButton(
+            showCodePill: width >= 768,
           ),
           const NotificationBell(),
         ],
@@ -1728,10 +1767,22 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   }
 
   Future<void> _handlePortalLogout({required bool inDrawer}) async {
+    // Giải thuật xác nhận hai bước trước khi đăng xuất khỏi Cổng Chủ nhà (`TC-065`):
+    // Hiển thị hộp thoại xác nhận trước khi đóng Drawer, xóa thông báo phiên và thu hồi token trên máy chủ.
+    final activeL10n = lookupAppLocalizations(Locale(ref.read(localeProvider)));
+    final confirmed = await AppDialog.show(
+      context,
+      title: activeL10n.settingsConfirmLogoutTitle,
+      message: activeL10n.settingsConfirmLogout,
+      confirmText: activeL10n.authLogout,
+      cancelText: activeL10n.ctaCancel,
+    );
+    if (confirmed != true || !mounted) return;
     if (inDrawer) {
       Navigator.of(context).pop();
     }
     try {
+      ref.read(notificationsProvider.notifier).clearForLogout();
       await ref.read(authNotifierProvider.notifier).logout();
     } catch (_) {}
     if (mounted) {
@@ -1882,6 +1933,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   }
 
   Widget _buildSidebarNavigation({required bool inDrawer}) {
+    final activeLocale = ref.watch(localeProvider);
+    final activeL10n = lookupAppLocalizations(Locale(activeLocale));
     final pillRadius = BorderRadius.circular(HostStudioTokens.pillRadius);
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
@@ -1926,7 +1979,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          section.label,
+                          section.localizedLabel(activeL10n, activeLocale),
                           style: HostStudioTokens.pillText.copyWith(
                             fontSize: 13.5,
                             fontWeight: _activeSection == section
@@ -1970,7 +2023,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Về trang chủ',
+                      activeL10n.ctaBackHome,
                       style: HostStudioTokens.pillText.copyWith(
                         fontSize: 13.5,
                         color: HostStudioTokens.inkPrimary,
@@ -2001,7 +2054,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Đăng xuất',
+                      activeL10n.authLogout,
                       style: HostStudioTokens.pillText.copyWith(
                         fontSize: 13.5,
                         color: HostStudioTokens.inkPrimary,

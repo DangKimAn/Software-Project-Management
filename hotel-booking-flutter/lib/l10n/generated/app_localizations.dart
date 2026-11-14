@@ -4605,6 +4605,522 @@ abstract class AppLocalizations {
   /// In vi, this message translates to:
   /// **'Kiểm tra mã ưu đãi'**
   String get supportCouponCheckAction;
+
+  /// No description provided for @homeEmptyApprovedVillas.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hiện chưa có căn biệt thự nào đã được phê duyệt trên hệ thống.'**
+  String get homeEmptyApprovedVillas;
+
+  /// No description provided for @homeApprovedVillasCountTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Danh sách chỗ nghỉ đã duyệt ({count})'**
+  String homeApprovedVillasCountTitle(int count);
+
+  /// No description provided for @homePrevVillaTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Căn trước'**
+  String get homePrevVillaTooltip;
+
+  /// No description provided for @homeNextVillaTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Căn tiếp theo'**
+  String get homeNextVillaTooltip;
+
+  /// No description provided for @homeFavoriteAdd.
+  ///
+  /// In vi, this message translates to:
+  /// **'Lưu vào yêu thích'**
+  String get homeFavoriteAdd;
+
+  /// No description provided for @homeFavoriteRemove.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bỏ khỏi yêu thích'**
+  String get homeFavoriteRemove;
+
+  /// No description provided for @homeCardSpecsSummary.
+  ///
+  /// In vi, this message translates to:
+  /// **'{bedrooms} PN · Tối đa {guests} khách'**
+  String homeCardSpecsSummary(int bedrooms, int guests);
+
+  /// No description provided for @searchFilterBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bộ lọc'**
+  String get searchFilterBtn;
+
+  /// No description provided for @searchFilterActiveBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bộ lọc ({count})'**
+  String searchFilterActiveBtn(int count);
+
+  /// No description provided for @searchShowMapBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hiện bản đồ'**
+  String get searchShowMapBtn;
+
+  /// No description provided for @searchHideMapBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Ẩn bản đồ'**
+  String get searchHideMapBtn;
+
+  /// No description provided for @searchClearAllBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xóa tất cả'**
+  String get searchClearAllBtn;
+
+  /// No description provided for @searchFoundStaysCount.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tìm thấy {count} chỗ nghỉ tại Vũng Tàu'**
+  String searchFoundStaysCount(int count);
+
+  /// No description provided for @favoritesSavedCountSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'{count} căn biệt thự đã lưu'**
+  String favoritesSavedCountSubtitle(int count);
+
+  /// No description provided for @favoritesSyncOfflineNotice.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không thể đồng bộ máy chủ — đang hiển thị danh sách lưu trên thiết bị.'**
+  String get favoritesSyncOfflineNotice;
+
+  /// No description provided for @favoritesInvalidCountNotice.
+  ///
+  /// In vi, this message translates to:
+  /// **'Có {count} chỗ nghỉ không còn mở lịch nhận khách.'**
+  String favoritesInvalidCountNotice(int count);
+
+  /// No description provided for @favoritesExploreAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khám phá biệt thự'**
+  String get favoritesExploreAction;
+
+  /// No description provided for @contactEyebrow.
+  ///
+  /// In vi, this message translates to:
+  /// **'HỖ TRỢ TRỰC TIẾP VŨNG TÀU'**
+  String get contactEyebrow;
+
+  /// No description provided for @contactBrowseVillas.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xem danh sách Villa'**
+  String get contactBrowseVillas;
+
+  /// No description provided for @contactHeroTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Liên hệ đội ngũ tư vấn & vận hành lưu trú'**
+  String get contactHeroTitle;
+
+  /// No description provided for @contactHeroSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hỗ trợ kiểm tra lịch trống, tư vấn chọn căn theo đoàn và giải đáp thông tin lưu trú tại TP. Vũng Tàu.'**
+  String get contactHeroSubtitle;
+
+  /// No description provided for @contactHotlineTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hotline & Zalo tư vấn'**
+  String get contactHotlineTitle;
+
+  /// No description provided for @contactVerifiedBadge.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xác thực'**
+  String get contactVerifiedBadge;
+
+  /// No description provided for @contactCallNow.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gọi ngay'**
+  String get contactCallNow;
+
+  /// No description provided for @contactCopyHotlineTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Sao chép số Hotline'**
+  String get contactCopyHotlineTooltip;
+
+  /// No description provided for @contactCopiedHotline.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã sao chép số Hotline vào bộ nhớ tạm'**
+  String get contactCopiedHotline;
+
+  /// No description provided for @contactOpenZalo.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhắn Zalo OA'**
+  String get contactOpenZalo;
+
+  /// No description provided for @contactOfficeTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Văn phòng đón tiếp tại Vũng Tàu'**
+  String get contactOfficeTitle;
+
+  /// No description provided for @contactMapAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xem bản đồ đường đi'**
+  String get contactMapAction;
+
+  /// No description provided for @contactEmailTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hòm thư hỗ trợ & đối soát'**
+  String get contactEmailTitle;
+
+  /// No description provided for @contactSameDayReply.
+  ///
+  /// In vi, this message translates to:
+  /// **'Phản hồi trong ngày'**
+  String get contactSameDayReply;
+
+  /// No description provided for @contactSendEmail.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi Email hỗ trợ'**
+  String get contactSendEmail;
+
+  /// No description provided for @contactCopyEmailTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Sao chép địa chỉ Email'**
+  String get contactCopyEmailTooltip;
+
+  /// No description provided for @contactCopiedEmail.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã sao chép địa chỉ Email vào bộ nhớ tạm'**
+  String get contactCopiedEmail;
+
+  /// No description provided for @authWelcomeBack.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chào mừng trở lại'**
+  String get authWelcomeBack;
+
+  /// No description provided for @authLoginSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đăng nhập để xem kỳ nghỉ và quản lý chuyến đi của bạn tại The Palm Villa.'**
+  String get authLoginSubtitle;
+
+  /// No description provided for @authIdentifierLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Email hoặc số điện thoại'**
+  String get authIdentifierLabel;
+
+  /// No description provided for @authIdentifierHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập email hoặc số điện thoại Việt Nam'**
+  String get authIdentifierHint;
+
+  /// No description provided for @authPasswordLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mật khẩu'**
+  String get authPasswordLabel;
+
+  /// No description provided for @authPasswordHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập mật khẩu'**
+  String get authPasswordHint;
+
+  /// No description provided for @authShowPasswordTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hiện mật khẩu'**
+  String get authShowPasswordTooltip;
+
+  /// No description provided for @authHidePasswordTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Ẩn mật khẩu'**
+  String get authHidePasswordTooltip;
+
+  /// No description provided for @authRememberMe.
+  ///
+  /// In vi, this message translates to:
+  /// **'Ghi nhớ đăng nhập'**
+  String get authRememberMe;
+
+  /// No description provided for @authSigningIn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đang đăng nhập...'**
+  String get authSigningIn;
+
+  /// No description provided for @authOrDivider.
+  ///
+  /// In vi, this message translates to:
+  /// **'HOẶC'**
+  String get authOrDivider;
+
+  /// No description provided for @authGoogleLoginBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đăng nhập với Google'**
+  String get authGoogleLoginBtn;
+
+  /// No description provided for @authNoAccountYet.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chưa có tài khoản?'**
+  String get authNoAccountYet;
+
+  /// No description provided for @authRegisterBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đăng ký'**
+  String get authRegisterBtn;
+
+  /// No description provided for @authCreateAccountTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tạo tài khoản mới'**
+  String get authCreateAccountTitle;
+
+  /// No description provided for @authRegisterSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trải nghiệm đặt phòng villa nghỉ dưỡng đẳng cấp và nhận ưu đãi độc quyền.'**
+  String get authRegisterSubtitle;
+
+  /// No description provided for @authFullNameLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Họ và tên'**
+  String get authFullNameLabel;
+
+  /// No description provided for @authFullNameHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập họ và tên'**
+  String get authFullNameHint;
+
+  /// No description provided for @authPhoneRequiredLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Số điện thoại *'**
+  String get authPhoneRequiredLabel;
+
+  /// No description provided for @authPhoneHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập số điện thoại Việt Nam (vd: 0901234567)'**
+  String get authPhoneHint;
+
+  /// No description provided for @authEmailRequiredLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Email *'**
+  String get authEmailRequiredLabel;
+
+  /// No description provided for @authEmailHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập địa chỉ email'**
+  String get authEmailHint;
+
+  /// No description provided for @authPasswordCreateHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tạo mật khẩu (tối thiểu 8 ký tự, gồm chữ và số)'**
+  String get authPasswordCreateHint;
+
+  /// No description provided for @authConfirmPasswordLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xác nhận mật khẩu *'**
+  String get authConfirmPasswordLabel;
+
+  /// No description provided for @authConfirmPasswordHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập lại mật khẩu vừa tạo'**
+  String get authConfirmPasswordHint;
+
+  /// No description provided for @authPasswordStrengthLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Độ mạnh mật khẩu: {level}'**
+  String authPasswordStrengthLabel(String level);
+
+  /// No description provided for @authStrengthWeak.
+  ///
+  /// In vi, this message translates to:
+  /// **'Yếu'**
+  String get authStrengthWeak;
+
+  /// No description provided for @authStrengthFair.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trung bình'**
+  String get authStrengthFair;
+
+  /// No description provided for @authStrengthGood.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khá'**
+  String get authStrengthGood;
+
+  /// No description provided for @authStrengthStrong.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mạnh'**
+  String get authStrengthStrong;
+
+  /// No description provided for @authTermsAgreement.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tôi đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của The Palm Villa'**
+  String get authTermsAgreement;
+
+  /// No description provided for @authTermsRequiredError.
+  ///
+  /// In vi, this message translates to:
+  /// **'Vui lòng đồng ý với Điều khoản dịch vụ và Chính sách bảo mật'**
+  String get authTermsRequiredError;
+
+  /// No description provided for @authCreatingAccount.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đang tạo tài khoản...'**
+  String get authCreatingAccount;
+
+  /// No description provided for @authAlreadyHaveAccount.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bạn đã có tài khoản?'**
+  String get authAlreadyHaveAccount;
+
+  /// No description provided for @authForgotQuestionTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Quên mật khẩu?'**
+  String get authForgotQuestionTitle;
+
+  /// No description provided for @authOtpVerifyTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xác thực mã OTP'**
+  String get authOtpVerifyTitle;
+
+  /// No description provided for @authPasswordChangedTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đổi mật khẩu thành công'**
+  String get authPasswordChangedTitle;
+
+  /// No description provided for @authForgotRequestSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập email hoặc số điện thoại đã đăng ký để nhận mã xác thực khôi phục mật khẩu.'**
+  String get authForgotRequestSubtitle;
+
+  /// No description provided for @authForgotOtpSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập 6 chữ số OTP và thiết lập mật khẩu mới.'**
+  String get authForgotOtpSubtitle;
+
+  /// No description provided for @authForgotSuccessSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mật khẩu của bạn đã được cập nhật an toàn.'**
+  String get authForgotSuccessSubtitle;
+
+  /// No description provided for @authSendOtpButton.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi mã xác thực'**
+  String get authSendOtpButton;
+
+  /// No description provided for @authOtpSentTo.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mã OTP đã gửi tới: {target}'**
+  String authOtpSentTo(String target);
+
+  /// No description provided for @authOtpSixDigitsLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mã OTP gồm 6 chữ số'**
+  String get authOtpSixDigitsLabel;
+
+  /// No description provided for @authNewPasswordLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mật khẩu mới'**
+  String get authNewPasswordLabel;
+
+  /// No description provided for @authResendOtpCountdown.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi lại sau 00:{seconds}'**
+  String authResendOtpCountdown(String seconds);
+
+  /// No description provided for @authResendOtpButton.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi lại mã OTP'**
+  String get authResendOtpButton;
+
+  /// No description provided for @authConfirmOtpButton.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xác nhận mã OTP'**
+  String get authConfirmOtpButton;
+
+  /// No description provided for @authOtpSuccessBanner.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mã OTP đã được xác thực và mật khẩu mới đã sẵn sàng sử dụng.'**
+  String get authOtpSuccessBanner;
+
+  /// No description provided for @authBackToLoginButton.
+  ///
+  /// In vi, this message translates to:
+  /// **'Quay lại đăng nhập'**
+  String get authBackToLoginButton;
+
+  /// No description provided for @adminTabFinance.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tài chính & Chi trả'**
+  String get adminTabFinance;
+
+  /// No description provided for @adminTabBlog.
+  ///
+  /// In vi, this message translates to:
+  /// **'Cẩm nang Blog'**
+  String get adminTabBlog;
+
+  /// No description provided for @adminTabTrustSafety.
+  ///
+  /// In vi, this message translates to:
+  /// **'Báo cáo & Khiếu nại'**
+  String get adminTabTrustSafety;
 }
 
 class _AppLocalizationsDelegate

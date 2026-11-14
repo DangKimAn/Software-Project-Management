@@ -10,6 +10,8 @@ import '../../features/auth/domain/entities/user.dart';
 import '../../features/auth/presentation/view_models/auth_notifier.dart';
 // CONFLICT-RESOLVED: Tích hợp đa ngôn ngữ động (`context.l10n`) từ `origin/develop` (`cbb008a`) vào menu tài khoản trên thanh đầu trang.
 import '../../l10n/l10n.dart';
+import 'app_dialog.dart';
+import 'app_image.dart';
 import 'app_notification_bell.dart';
 import 'app_semantic_icons.dart';
 import 'currency_language_selector.dart';
@@ -26,19 +28,41 @@ class AppHeaderMenuButton extends ConsumerWidget {
   /// Đổi màu biểu tượng trình đơn sang trắng khi thanh đầu trang đang phủ nổi trên ảnh bìa tối.
   final bool isOverlayTop;
 
+  /// Đường dẫn màn hình hiện tại để bảo toàn ngữ cảnh quay lại (`redirectTo`) khi mở màn hình Đăng nhập / Đăng ký.
+  final String currentPath;
+
   /// Khởi tạo nút trình đơn điều hướng tài khoản trên thanh đầu trang.
   const AppHeaderMenuButton({
     super.key,
     required this.authUser,
     required this.isDesktop,
     required this.isOverlayTop,
+    this.currentPath = '/',
   });
+
+  String _buildAuthRouteWithRedirect(String basePath) {
+    final trimmed = currentPath.trim();
+    if (AuthNotifier.isSafeRedirectPath(trimmed)) {
+      return Uri(
+        path: basePath,
+        queryParameters: <String, String>{'redirectTo': trimmed},
+      ).toString();
+    }
+    return basePath;
+  }
 
   /// Dựng `PopupMenuButton` vùng chạm tối thiểu `48dp` và điều phối chuyển trang hoặc đăng xuất an toàn.
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = authUser;
+    final activeLocale = ref.watch(localeProvider);
+    final activeL10n = lookupAppLocalizations(Locale(activeLocale));
+    final initial = (user != null && user.fullName.trim().isNotEmpty)
+        ? user.fullName.trim().characters.first.toUpperCase()
+        : 'U';
+
     return PopupMenuButton<String>(
+      key: const Key('header_account_menu_button'),
       tooltip: 'Menu',
       offset: const Offset(0, 48),
       color: Colors.white,
@@ -52,10 +76,10 @@ class AppHeaderMenuButton extends ConsumerWidget {
             context.go('/');
             break;
           case 'login':
-            unawaited(context.push('/dang-nhap'));
+            unawaited(context.push(_buildAuthRouteWithRedirect('/dang-nhap')));
             break;
           case 'register':
-            unawaited(context.push('/dang-ky'));
+            unawaited(context.push(_buildAuthRouteWithRedirect('/dang-ky')));
             break;
           case 'profile':
             unawaited(context.push('/account/profile'));
@@ -96,6 +120,16 @@ class AppHeaderMenuButton extends ConsumerWidget {
             unawaited(context.push('/admin'));
             break;
           case 'logout':
+            // Giải thuật xác nhận hai bước trước khi hủy phiên đăng nhập (`TC-065`):
+            // Hiển thị hộp thoại xác nhận rõ ràng trước khi xóa thông báo cục bộ, thu hồi Refresh Token và quay về Trang chủ.
+            final confirmed = await AppDialog.show(
+              context,
+              title: activeL10n.settingsConfirmLogoutTitle,
+              message: activeL10n.settingsConfirmLogout,
+              confirmText: activeL10n.authLogout,
+              cancelText: activeL10n.ctaCancel,
+            );
+            if (confirmed != true || !context.mounted) return;
             ref.read(notificationsProvider.notifier).clearForLogout();
             await ref.read(authNotifierProvider.notifier).logout();
             if (context.mounted) {
@@ -104,38 +138,81 @@ class AppHeaderMenuButton extends ConsumerWidget {
             break;
         }
       },
-      itemBuilder: (context) => _buildMenuItems(context, ref, user),
+      itemBuilder: (context) => _buildMenuItems(context, ref, user, activeL10n),
       child: Container(
         constraints: const BoxConstraints(
-          minWidth: 40,
+          minWidth: 48,
           minHeight: 48,
         ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: 8,
-          vertical: 8,
+        padding: EdgeInsets.symmetric(
+          horizontal: user != null ? 10 : 8,
+          vertical: 6,
         ),
         decoration: BoxDecoration(
-          color: Colors.transparent,
+          color: user != null
+              ? (isOverlayTop
+                  ? Colors.white.withValues(alpha: 0.16)
+                  : const Color(0xFFF8FAFC))
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(999),
+          border: user != null
+              ? Border.all(
+                  color: isOverlayTop
+                      ? Colors.white.withValues(alpha: 0.35)
+                      : const Color(0xFFE2E8F0),
+                )
+              : null,
         ),
-        child: Center(
-          child: Icon(
-            LucideIcons.menu,
-            size: 20,
-            color: isOverlayTop ? Colors.white : AppColors.iconStrong,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              LucideIcons.menu,
+              size: 20,
+              color: isOverlayTop ? Colors.white : AppColors.iconStrong,
+            ),
+            if (user != null) ...[
+              const SizedBox(width: 8),
+              Container(
+                key: const Key('header_user_avatar_badge'),
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: (user.avatarUrl != null &&
+                        user.avatarUrl!.trim().isNotEmpty)
+                    ? AppImage(
+                        url: user.avatarUrl!,
+                        fit: BoxFit.cover,
+                      )
+                    : Center(
+                        child: Text(
+                          initial,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
 
-  // CONFLICT-RESOLVED: Chuyển toàn bộ nhãn mục chọn trong `AppHeaderMenuButton` sang `context.l10n` từ `origin/develop` để hỗ trợ chuyển đổi VI/EN/KO thời gian thực.
+  // CONFLICT-RESOLVED: Chuyển toàn bộ nhãn mục chọn trong `AppHeaderMenuButton` sang `AppLocalizations` từ `origin/develop` để hỗ trợ chuyển đổi VI/EN/KO thời gian thực.
   List<PopupMenuEntry<String>> _buildMenuItems(
     BuildContext context,
     WidgetRef ref,
     User? user,
+    AppLocalizations l10n,
   ) {
-    final l10n = context.l10n;
     final localeCurrencyLabel =
         '${l10n.settingsLanguage} • ${ref.read(effectiveCurrencyProvider).code} (${ref.read(effectiveCurrencyProvider).symbol})';
 

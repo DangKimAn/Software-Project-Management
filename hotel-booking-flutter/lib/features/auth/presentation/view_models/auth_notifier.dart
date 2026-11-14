@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/di/providers.dart';
+import '../../../../core/errors/app_failure.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/socket_service.dart';
 import '../../../../core/notifications/push_notification_service.dart';
@@ -221,10 +222,41 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  /// Mở hộp thoại đăng nhập Google qua `GoogleAuthService` rồi trao đổi `idToken` với `POST /api/auth/google`.
+  /// Mở hộp thoại đăng nhập Google qua `GoogleAuthService` rồi trao đổi `idToken` (hoặc `accessToken` dự phòng trên Web) với `POST /api/auth/google`.
   Future<User> signInWithGoogle() async {
-    final idToken = await _googleAuthService.obtainIdToken();
-    return loginWithGoogle(idToken);
+    try {
+      final idToken = await _googleAuthService.obtainIdToken();
+      return await loginWithGoogle(idToken);
+    } on AuthFailure catch (e) {
+      if (e.code == 'GOOGLE_WEB_ACCESS_TOKEN_FALLBACK') {
+        final fallbackAccessToken =
+            _googleAuthService.consumePendingWebAccessToken();
+        final repo = _repository;
+        if (fallbackAccessToken != null &&
+            fallbackAccessToken.isNotEmpty &&
+            repo is AuthRepositoryImpl) {
+          final epoch = ++_authOpEpoch;
+          final previousUser = state.valueOrNull;
+          try {
+            final session = await repo.loginWithGoogleAccessToken(
+              accessToken: fallbackAccessToken,
+            );
+            if (!mounted || epoch != _authOpEpoch) {
+              return session.user;
+            }
+            state = AsyncValue.data(session.user);
+            await _socket?.connect();
+            return session.user;
+          } catch (innerErr) {
+            if (mounted && epoch != _authOpEpoch) {
+              state = AsyncValue.data(previousUser);
+            }
+            rethrow;
+          }
+        }
+      }
+      rethrow;
+    }
   }
 
   /// Trao đổi trực tiếp chuỗi `idToken` của Google với máy chủ để mở phiên đăng nhập hệ thống.
@@ -420,6 +452,9 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       return defaultRouteForUser(user);
     }
     if (isHostTarget && (!user.isHost || user.isAdmin)) {
+      return defaultRouteForUser(user);
+    }
+    if (pathOnly == '/' && (user.isAdmin || user.isHost || user.isNewHost)) {
       return defaultRouteForUser(user);
     }
 

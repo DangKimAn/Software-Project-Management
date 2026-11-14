@@ -1,12 +1,15 @@
 // CONFLICT-RESOLVED: Gom contact_screen.dart từ thư mục đơn lẻ contact/ vào module support/ và tách riêng import app_header.dart + app_footer.dart.
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_footer.dart';
 import '../../../../shared/widgets/app_header.dart';
@@ -19,7 +22,7 @@ import '../../domain/services/contact_service.dart';
 /// - `tel:` launcher falls back to copying the phone number to clipboard when dialer cannot open.
 /// - Zalo OA only opens verified official `https://zalo.me/...` / `https://oa.zalo.me/...` URLs without pretending
 ///   to auto-fill message text.
-class ContactScreen extends StatefulWidget {
+class ContactScreen extends ConsumerStatefulWidget {
   final String? hotlineOverride;
   final String? zaloOaUrlOverride;
 
@@ -30,10 +33,10 @@ class ContactScreen extends StatefulWidget {
   });
 
   @override
-  State<ContactScreen> createState() => _ContactScreenState();
+  ConsumerState<ContactScreen> createState() => _ContactScreenState();
 }
 
-class _ContactScreenState extends State<ContactScreen> {
+class _ContactScreenState extends ConsumerState<ContactScreen> {
   String get _effectiveHotline =>
       (widget.hotlineOverride ?? AppConfig.hotlineNumber).trim();
 
@@ -64,12 +67,12 @@ class _ContactScreenState extends State<ContactScreen> {
   }
 
   Future<void> _handleCopyHotline() async {
+    final activeL10n = lookupAppLocalizations(Locale(ref.read(localeProvider)));
     final clean = ContactService.normalizePhone(_effectiveHotline);
     final copied = await ContactService.copyTextToClipboard(clean);
     if (!mounted) return;
-    final msg = copied
-        ? 'Đã sao chép số hotline ${ContactService.formatDisplayPhone(clean)} vào bộ nhớ tạm.'
-        : 'Không thể sao chép số hotline trên thiết bị này.';
+    final msg =
+        copied ? activeL10n.contactCopiedHotline : activeL10n.errorTryAgain;
     _showStatusSnackBar(msg);
   }
 
@@ -92,22 +95,22 @@ class _ContactScreenState extends State<ContactScreen> {
   }
 
   Future<void> _handleOpenEmail() async {
+    final activeL10n = lookupAppLocalizations(Locale(ref.read(localeProvider)));
     final result = await ContactService.openEmailDetailed(
       AppFooter.supportEmail,
-      subject: 'Liên hệ đặt phòng The Palm Villa Vũng Tàu',
+      subject: activeL10n.footerEmailSubject,
     );
     if (!mounted) return;
     _showStatusSnackBar(result.message);
   }
 
   Future<void> _handleCopyEmail() async {
+    final activeL10n = lookupAppLocalizations(Locale(ref.read(localeProvider)));
     final copied =
         await ContactService.copyTextToClipboard(AppFooter.supportEmail);
     if (!mounted) return;
     _showStatusSnackBar(
-      copied
-          ? 'Đã sao chép email ${AppFooter.supportEmail} vào bộ nhớ tạm.'
-          : 'Không thể sao chép địa chỉ email trên thiết bị này.',
+      copied ? activeL10n.contactCopiedEmail : activeL10n.errorTryAgain,
     );
   }
 
@@ -179,6 +182,8 @@ class _ContactScreenState extends State<ContactScreen> {
   }
 
   Widget _buildHeroInfo(BuildContext context) {
+    final activeL10n =
+        lookupAppLocalizations(Locale(ref.watch(localeProvider)));
     final screenWidth = MediaQuery.sizeOf(context).width;
     final hotlineVerified = ContactService.isVerifiedHotline(_effectiveHotline);
     final hotlineValidFormat =
@@ -202,7 +207,7 @@ class _ContactScreenState extends State<ContactScreen> {
           children: [
             Expanded(
               child: Text(
-                'LIÊN HỆ THE PALM VILLA',
+                activeL10n.contactEyebrow,
                 style: AppTypography.caption.copyWith(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -224,7 +229,7 @@ class _ContactScreenState extends State<ContactScreen> {
                 color: AppColors.iconStrong,
               ),
               label: Text(
-                'Xem villa',
+                activeL10n.contactBrowseVillas,
                 style: AppTypography.caption.copyWith(
                   fontWeight: FontWeight.w600,
                   color: AppColors.textStrong,
@@ -235,7 +240,7 @@ class _ContactScreenState extends State<ContactScreen> {
         ),
         const SizedBox(height: AppSpacing.xxs),
         Text(
-          'Liên hệ & Hỗ trợ đặt phòng',
+          activeL10n.contactHeroTitle,
           style: AppTypography.displayLarge.copyWith(
             fontSize: screenWidth < 360 ? 22 : 26,
             color: AppColors.textStrong,
@@ -244,7 +249,7 @@ class _ContactScreenState extends State<ContactScreen> {
         ),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          'Kết nối nhanh qua Hotline, Zalo OA hoặc ghé trực tiếp văn phòng tại Vũng Tàu (08:00 – 22:00).',
+          activeL10n.contactHeroSubtitle,
           style: AppTypography.bodyMedium.copyWith(
             color: AppColors.textSecondary,
             height: 1.45,
@@ -257,15 +262,16 @@ class _ContactScreenState extends State<ContactScreen> {
               cardKey: const ValueKey('contact-card-hotline'),
               primaryActionKey: const ValueKey('contact-call-hotline-btn'),
               icon: LucideIcons.phone,
-              title: 'Hotline tư vấn',
+              title: activeL10n.contactHotlineTitle,
               value: hotlineDisplayValue,
-              badgeText: hotlineVerified ? 'Đã xác minh cấu hình' : null,
+              badgeText:
+                  hotlineVerified ? activeL10n.contactVerifiedBadge : null,
               isVerified: hotlineVerified,
-              primaryActionLabel: 'Gọi ngay',
+              primaryActionLabel: activeL10n.contactCallNow,
               onPrimaryTap: _handleCallHotline,
               trailingIconButton: AppIconButton(
                 key: const ValueKey('contact-copy-hotline-btn'),
-                tooltip: 'Sao chép số hotline',
+                tooltip: activeL10n.contactCopyHotlineTooltip,
                 icon: const Icon(
                   LucideIcons.copy,
                   size: 17,
@@ -281,9 +287,9 @@ class _ContactScreenState extends State<ContactScreen> {
               icon: LucideIcons.messageCircle,
               title: 'Zalo OA',
               value: zaloDisplayValue,
-              badgeText: zaloVerified ? 'Đã xác minh cấu hình' : null,
+              badgeText: zaloVerified ? activeL10n.contactVerifiedBadge : null,
               isVerified: zaloVerified,
-              primaryActionLabel: 'Mở Zalo OA',
+              primaryActionLabel: activeL10n.contactOpenZalo,
               onPrimaryTap: _handleOpenZalo,
             ),
             const SizedBox(height: AppSpacing.sm),
@@ -291,11 +297,11 @@ class _ContactScreenState extends State<ContactScreen> {
               cardKey: const ValueKey('contact-card-address'),
               primaryActionKey: const ValueKey('contact-card-map-btn'),
               icon: LucideIcons.mapPin,
-              title: 'Văn phòng Vũng Tàu',
+              title: activeL10n.contactOfficeTitle,
               value: '28 Thi Sách, TP. Vũng Tàu',
               badgeText: '08:00 – 22:00',
               isVerified: true,
-              primaryActionLabel: 'Bản đồ',
+              primaryActionLabel: activeL10n.contactMapAction,
               onPrimaryTap: _handleOpenOfficeMap,
             ),
             const SizedBox(height: AppSpacing.sm),
@@ -303,15 +309,15 @@ class _ContactScreenState extends State<ContactScreen> {
               cardKey: const ValueKey('contact-card-email'),
               primaryActionKey: const ValueKey('contact-card-email-btn'),
               icon: LucideIcons.mail,
-              title: 'Email hỗ trợ',
+              title: activeL10n.contactEmailTitle,
               value: AppFooter.supportEmail,
-              badgeText: 'Phản hồi trong ngày',
+              badgeText: activeL10n.contactSameDayReply,
               isVerified: true,
-              primaryActionLabel: 'Gửi Email',
+              primaryActionLabel: activeL10n.contactSendEmail,
               onPrimaryTap: _handleOpenEmail,
               trailingIconButton: AppIconButton(
                 key: const ValueKey('contact-copy-email-btn'),
-                tooltip: 'Sao chép địa chỉ email',
+                tooltip: activeL10n.contactCopyEmailTooltip,
                 icon: const Icon(
                   LucideIcons.copy,
                   size: 17,
@@ -340,7 +346,7 @@ class _ContactScreenState extends State<ContactScreen> {
                 size: 15,
                 color: AppColors.iconStrong,
               ),
-              label: const Text('Hướng dẫn đặt phòng'),
+              label: Text(activeL10n.footerLinkBookingGuide),
             ),
             OutlinedButton.icon(
               onPressed: () => context.push('/ho-tro/chinh-sach-huy-phong'),
@@ -355,7 +361,7 @@ class _ContactScreenState extends State<ContactScreen> {
                 size: 15,
                 color: AppColors.iconStrong,
               ),
-              label: const Text('Chính sách hủy phòng'),
+              label: Text(activeL10n.footerLinkCancellationPolicy),
             ),
             OutlinedButton.icon(
               onPressed: () => context.push('/ho-tro/cau-hoi-thuong-gap'),
@@ -370,7 +376,7 @@ class _ContactScreenState extends State<ContactScreen> {
                 size: 15,
                 color: AppColors.iconStrong,
               ),
-              label: const Text('Câu hỏi thường gặp'),
+              label: Text(activeL10n.faqTitle),
             ),
           ],
         ),

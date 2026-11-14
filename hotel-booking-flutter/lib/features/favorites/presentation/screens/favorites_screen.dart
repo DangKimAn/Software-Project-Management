@@ -35,6 +35,8 @@ class FavoritesScreen extends ConsumerWidget {
     final wishlistAsync = ref.watch(wishlistDetailProvider);
     final villasAsync = ref.watch(villaListProvider);
     final resolvedGuestVillasAsync = ref.watch(resolvedFavoriteVillasProvider);
+    final activeL10n =
+        lookupAppLocalizations(Locale(ref.watch(localeProvider)));
 
     return Scaffold(
       backgroundColor: AppColors.surfaceBase,
@@ -84,18 +86,17 @@ class FavoritesScreen extends ConsumerWidget {
                       invalidIds.isEmpty &&
                       validFavoriteIds.isNotEmpty &&
                       resolvedGuestVillasAsync.isLoading) {
-                    return const AppLoading(
-                      message: 'Đang tải danh sách yêu thích...',
+                    return AppLoading(
+                      message: activeL10n.loadingFavorites,
                     );
                   }
 
                   if (savedVillas.isEmpty && invalidIds.isEmpty) {
                     return AppEmptyView(
                       icon: LucideIcons.heart,
-                      title: 'Chưa có biệt thự nào được lưu',
-                      description:
-                          'Bấm vào biểu tượng trái tim ở góc ảnh biệt thự để thêm vào danh sách yêu thích.',
-                      actionText: 'Khám phá biệt thự',
+                      title: activeL10n.favoritesEmpty,
+                      description: activeL10n.favoritesEmptyDesc,
+                      actionText: activeL10n.favoritesExploreAction,
                       onAction: () => context.go('/'),
                     );
                   }
@@ -112,16 +113,18 @@ class FavoritesScreen extends ConsumerWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
-                                    'Danh sách yêu thích của bạn',
-                                    style: TextStyle(
+                                  Text(
+                                    activeL10n.settingsMyFavorites,
+                                    style: const TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.w800,
                                     ),
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    'Đã lưu ${savedVillas.length} nơi lưu trú tại Vũng Tàu',
+                                    activeL10n.favoritesSavedCountSubtitle(
+                                      savedVillas.length,
+                                    ),
                                     style: const TextStyle(
                                       fontSize: 13,
                                       color: AppColors.textSecondary,
@@ -137,10 +140,11 @@ class FavoritesScreen extends ConsumerWidget {
                                           color: AppColors.iconMuted,
                                         ),
                                         const SizedBox(width: 8),
-                                        const Expanded(
+                                        Expanded(
                                           child: Text(
-                                            'Không đồng bộ được wishlist từ máy chủ. Dữ liệu lưu cục bộ vẫn được giữ.',
-                                            style: TextStyle(
+                                            activeL10n
+                                                .favoritesSyncOfflineNotice,
+                                            style: const TextStyle(
                                               fontSize: 13,
                                               fontWeight: FontWeight.w600,
                                               color: AppColors.textSecondary,
@@ -153,7 +157,7 @@ class FavoritesScreen extends ConsumerWidget {
                                           ),
                                           onPressed: () => ref.invalidate(
                                               wishlistDetailProvider),
-                                          child: const Text('Thử lại'),
+                                          child: Text(activeL10n.ctaRetry),
                                         ),
                                       ],
                                     ),
@@ -170,7 +174,10 @@ class FavoritesScreen extends ConsumerWidget {
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
-                                            'Có ${invalidIds.length} nơi lưu trú đã lưu hiện không còn khả dụng hoặc đã ngừng hoạt động.',
+                                            activeL10n
+                                                .favoritesInvalidCountNotice(
+                                              invalidIds.length,
+                                            ),
                                             style: const TextStyle(
                                               fontSize: 13,
                                               fontWeight: FontWeight.w600,
@@ -228,8 +235,7 @@ class FavoritesScreen extends ConsumerWidget {
                     ],
                   );
                 },
-                loading: () => AppLoading(
-                    message: context.l10n.loadingFavorites),
+                loading: () => AppLoading(message: activeL10n.loadingFavorites),
                 error: (err, _) => AppErrorView(
                   message: err.toString(),
                   onRetry: () => ref.invalidate(villaListProvider),

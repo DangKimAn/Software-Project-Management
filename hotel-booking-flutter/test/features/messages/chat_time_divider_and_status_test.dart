@@ -65,14 +65,14 @@ void main() {
     });
 
     test('localizeChatPreview translates voice and media previews according to locale', () {
-      const rawVoice = '🎤 Tin nhắn thoại (00:07)';
-      expect(localizeChatPreview(rawVoice, localeCode: 'en'), '🎤 Voice message (00:07)');
-      expect(localizeChatPreview(rawVoice, localeCode: 'ko'), '🎤 음성 메시지 (00:07)');
-      expect(localizeChatPreview(rawVoice, localeCode: 'vi'), '🎤 Tin nhắn thoại (00:07)');
+      const rawVoice = 'Tin nhắn thoại (00:07)';
+      expect(localizeChatPreview(rawVoice, localeCode: 'en'), 'Voice message (00:07)');
+      expect(localizeChatPreview(rawVoice, localeCode: 'ko'), '음성 메시지 (00:07)');
+      expect(localizeChatPreview(rawVoice, localeCode: 'vi'), 'Tin nhắn thoại (00:07)');
 
-      const rawVoiceEn = '🎤 Voice message (00:15)';
-      expect(localizeChatPreview(rawVoiceEn, localeCode: 'vi'), '🎤 Tin nhắn thoại (00:15)');
-      expect(localizeChatPreview(rawVoiceEn, localeCode: 'en'), '🎤 Voice message (00:15)');
+      const rawVoiceEn = '* Voice message (00:15)';
+      expect(localizeChatPreview(rawVoiceEn, localeCode: 'vi'), 'Tin nhắn thoại (00:15)');
+      expect(localizeChatPreview(rawVoiceEn, localeCode: 'en'), 'Voice message (00:15)');
     });
 
     test('shouldShowChatTimeDivider evaluates intervals correctly', () {

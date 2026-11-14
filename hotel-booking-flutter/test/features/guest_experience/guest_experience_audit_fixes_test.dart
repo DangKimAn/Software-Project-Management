@@ -325,12 +325,14 @@ void main() {
     test(
         'computeForMonths calculates checkIn and checkOut across selected months',
         () {
+      // Giải thuật kiểm chứng giới hạn tối đa 30 đêm ở chế độ tìm kiếm theo tháng:
+      // Từ ngày tham chiếu 2026-05-10, khoảng chọn [5, 6] được kẹp tối đa 30 đêm -> checkOut = 2026-06-09 để tương thích maxNights = 30 trên máy chủ.
       final range = SearchDateModeHelper.computeForMonths(
         [5, 6],
         referenceToday: const BookingDate(year: 2026, month: 5, day: 10),
       );
       expect(range.checkIn, const BookingDate(year: 2026, month: 5, day: 10));
-      expect(range.checkOut, const BookingDate(year: 2026, month: 7, day: 1));
+      expect(range.checkOut, const BookingDate(year: 2026, month: 6, day: 9));
     });
 
     test('computeForFlexible calculates weekend, week, and month durations',

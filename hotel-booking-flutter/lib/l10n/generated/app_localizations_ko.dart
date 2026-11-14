@@ -2539,4 +2539,282 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get supportCouponCheckAction => '쿠폰 코드 확인';
+
+  @override
+  String get homeEmptyApprovedVillas => '현재 승인된 빌라가 없습니다.';
+
+  @override
+  String homeApprovedVillasCountTitle(int count) {
+    return '검수 완료 숙소 ($count)';
+  }
+
+  @override
+  String get homePrevVillaTooltip => '이전 빌라';
+
+  @override
+  String get homeNextVillaTooltip => '다음 빌라';
+
+  @override
+  String get homeFavoriteAdd => '위시리스트에 저장';
+
+  @override
+  String get homeFavoriteRemove => '위시리스트에서 제거';
+
+  @override
+  String homeCardSpecsSummary(int bedrooms, int guests) {
+    return '침실 $bedrooms개 · 최대 $guests명';
+  }
+
+  @override
+  String get searchFilterBtn => '필터';
+
+  @override
+  String searchFilterActiveBtn(int count) {
+    return '필터 ($count)';
+  }
+
+  @override
+  String get searchShowMapBtn => '지도 보기';
+
+  @override
+  String get searchHideMapBtn => '지도 숨기기';
+
+  @override
+  String get searchClearAllBtn => '모두 지우기';
+
+  @override
+  String searchFoundStaysCount(int count) {
+    return '붕따우 숙소 $count개 검색됨';
+  }
+
+  @override
+  String favoritesSavedCountSubtitle(int count) {
+    return '저장된 빌라 $count채';
+  }
+
+  @override
+  String get favoritesSyncOfflineNotice => '서버와 동기화할 수 없어 기기에 저장된 목록을 표시합니다.';
+
+  @override
+  String favoritesInvalidCountNotice(int count) {
+    return '현재 예약을 받지 않는 숙소가 $count개 있습니다.';
+  }
+
+  @override
+  String get favoritesExploreAction => '빌라 둘러보기';
+
+  @override
+  String get contactEyebrow => '붕따우 현지 직접 상담';
+
+  @override
+  String get contactBrowseVillas => '빌라 목록 보기';
+
+  @override
+  String get contactHeroTitle => '숙박 상담 및 현지 운영팀에 문의하기';
+
+  @override
+  String get contactHeroSubtitle =>
+      '실시간 일정 확인, 단체 맞춤 빌라 추천 및 붕따우 숙박 안내를 도와드립니다.';
+
+  @override
+  String get contactHotlineTitle => '핫라인 및 Zalo 상담';
+
+  @override
+  String get contactVerifiedBadge => '인증됨';
+
+  @override
+  String get contactCallNow => '전화 걸기';
+
+  @override
+  String get contactCopyHotlineTooltip => '핫라인 번호 복사';
+
+  @override
+  String get contactCopiedHotline => '핫라인 번호가 복사되었습니다';
+
+  @override
+  String get contactOpenZalo => 'Zalo OA 문의';
+
+  @override
+  String get contactOfficeTitle => '붕따우 현지 안내 오피스';
+
+  @override
+  String get contactMapAction => '오시는 길 지도 보기';
+
+  @override
+  String get contactEmailTitle => '고객 지원 및 정산 이메일';
+
+  @override
+  String get contactSameDayReply => '당일 답변';
+
+  @override
+  String get contactSendEmail => '이메일 문의 보내기';
+
+  @override
+  String get contactCopyEmailTooltip => '이메일 주소 복사';
+
+  @override
+  String get contactCopiedEmail => '이메일 주소가 복사되었습니다';
+
+  @override
+  String get authWelcomeBack => '다시 오신 것을 환영합니다';
+
+  @override
+  String get authLoginSubtitle => '로그인하여 더 팜 빌라의 휴가 일정과 여행을 관리하세요.';
+
+  @override
+  String get authIdentifierLabel => '이메일 또는 휴대폰 번호';
+
+  @override
+  String get authIdentifierHint => '이메일 또는 베트남 휴대폰 번호 입력';
+
+  @override
+  String get authPasswordLabel => '비밀번호';
+
+  @override
+  String get authPasswordHint => '비밀번호 입력';
+
+  @override
+  String get authShowPasswordTooltip => '비밀번호 표시';
+
+  @override
+  String get authHidePasswordTooltip => '비밀번호 숨기기';
+
+  @override
+  String get authRememberMe => '로그인 상태 유지';
+
+  @override
+  String get authSigningIn => '로그인 중...';
+
+  @override
+  String get authOrDivider => '또는';
+
+  @override
+  String get authGoogleLoginBtn => 'Google로 로그인';
+
+  @override
+  String get authNoAccountYet => '아직 계정이 없으신가요?';
+
+  @override
+  String get authRegisterBtn => '회원가입';
+
+  @override
+  String get authCreateAccountTitle => '새 계정 만들기';
+
+  @override
+  String get authRegisterSubtitle => '검증된 독채 휴양 빌라를 예약하고 회원 전용 혜택을 받아보세요.';
+
+  @override
+  String get authFullNameLabel => '성명';
+
+  @override
+  String get authFullNameHint => '성명을 입력하세요';
+
+  @override
+  String get authPhoneRequiredLabel => '휴대폰 번호 *';
+
+  @override
+  String get authPhoneHint => '베트남 휴대폰 번호 입력 (예: 0901234567)';
+
+  @override
+  String get authEmailRequiredLabel => '이메일 *';
+
+  @override
+  String get authEmailHint => '이메일 주소 입력';
+
+  @override
+  String get authPasswordCreateHint => '비밀번호 생성 (영문·숫자 포함 최소 8자)';
+
+  @override
+  String get authConfirmPasswordLabel => '비밀번호 확인 *';
+
+  @override
+  String get authConfirmPasswordHint => '비밀번호를 다시 입력하세요';
+
+  @override
+  String authPasswordStrengthLabel(String level) {
+    return '비밀번호 강도: $level';
+  }
+
+  @override
+  String get authStrengthWeak => '약함';
+
+  @override
+  String get authStrengthFair => '보통';
+
+  @override
+  String get authStrengthGood => '양호';
+
+  @override
+  String get authStrengthStrong => '강함';
+
+  @override
+  String get authTermsAgreement => '더 팜 빌라 서비스 이용약관 및 개인정보 처리방침에 동의합니다';
+
+  @override
+  String get authTermsRequiredError => '서비스 이용약관 및 개인정보 처리방침에 동의해 주세요';
+
+  @override
+  String get authCreatingAccount => '계정 생성 중...';
+
+  @override
+  String get authAlreadyHaveAccount => '이미 계정이 있으신가요?';
+
+  @override
+  String get authForgotQuestionTitle => '비밀번호를 잊으셨나요?';
+
+  @override
+  String get authOtpVerifyTitle => 'OTP 인증번호 확인';
+
+  @override
+  String get authPasswordChangedTitle => '비밀번호 변경 완료';
+
+  @override
+  String get authForgotRequestSubtitle =>
+      '가입한 이메일 또는 휴대폰 번호를 입력하여 비밀번호 복구용 6자리 인증번호를 받으세요.';
+
+  @override
+  String get authForgotOtpSubtitle => '6자리 OTP 인증번호를 입력하고 새 비밀번호를 설정하세요.';
+
+  @override
+  String get authForgotSuccessSubtitle => '비밀번호가 안전하게 변경되었습니다.';
+
+  @override
+  String get authSendOtpButton => '인증번호 받기';
+
+  @override
+  String authOtpSentTo(String target) {
+    return 'OTP 발송 대상: $target';
+  }
+
+  @override
+  String get authOtpSixDigitsLabel => '6자리 OTP 인증번호';
+
+  @override
+  String get authNewPasswordLabel => '새 비밀번호';
+
+  @override
+  String authResendOtpCountdown(String seconds) {
+    return '00:$seconds 후 재전송';
+  }
+
+  @override
+  String get authResendOtpButton => 'OTP 다시 보내기';
+
+  @override
+  String get authConfirmOtpButton => 'OTP 인증 확인';
+
+  @override
+  String get authOtpSuccessBanner => 'OTP 인증이 완료되었으며 새 비밀번호를 바로 사용할 수 있습니다.';
+
+  @override
+  String get authBackToLoginButton => '로그인으로 돌아가기';
+
+  @override
+  String get adminTabFinance => '재무 및 정산';
+
+  @override
+  String get adminTabBlog => '블로그 관리';
+
+  @override
+  String get adminTabTrustSafety => '신고 및 안전';
 }

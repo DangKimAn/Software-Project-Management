@@ -42,13 +42,18 @@ void main() {
     role: 'guest',
   );
 
+  // Giải thuật tạo mốc ngày lưu trú động theo thời gian chạy test:
+  // Cộng lùi/tiến tương đối so với DateTime.now() để chuyến đi sắp tới luôn nằm trong tương lai và không bị trượt tab khi qua mốc lịch.
+  String formatIsoDate(DateTime dt) =>
+      '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
   final upcomingBooking = Booking(
     id: 'booking-upcoming-101',
     listingId: 'villa-101',
     propertyName: 'Seaside Sunset Homestay',
     address: '84 Ha Long',
-    checkInDate: '2026-11-04',
-    checkOutDate: '2026-11-06',
+    checkInDate: formatIsoDate(now.add(const Duration(days: 5))),
+    checkOutDate: formatIsoDate(now.add(const Duration(days: 7))),
     nights: 2,
     guestCount: 2,
     totalAmount: 3010000,

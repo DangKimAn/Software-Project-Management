@@ -10,12 +10,13 @@ import '../../../villas/domain/entities/villa.dart';
 /// ngoài ý muốn khi người dùng thay đổi điều kiện lọc ở màn hình Tìm kiếm.
 final popularDestinationsProvider = FutureProvider<List<Villa>>((ref) async {
   // Giải thuật truy vấn danh sách biệt thự nổi bật cố định trên Trang chủ:
-  // Luôn lấy trang đầu (tối đa 36 căn mới nhất) trực tiếp từ `VillaRepository` để các điều kiện lọc
-  // trên màn hình Tìm kiếm không làm thay đổi dữ liệu hiển thị tại Trang chủ.
+  // Ưu tiên xếp hạng đánh giá cao nhất (`rating_desc`) và lấy trang đầu (tối đa 36 căn đã duyệt)
+  // trực tiếp từ `VillaRepository` để mục Điểm đến được yêu thích hiển thị đúng 8 căn chất lượng nhất,
+  // đồng thời không bị biến đổi ngoài ý muốn khi người dùng lọc ở màn hình Tìm kiếm.
   final repository = ref.watch(villaRepositoryProvider);
   return repository.getVillas(
     page: 1,
     limit: 36,
-    sort: 'newest',
+    sort: 'rating_desc',
   );
 });

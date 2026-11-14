@@ -94,6 +94,32 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
+  /// Đăng nhập Google dự phòng trên trình duyệt Web bằng `accessToken` OAuth2 khi GIS Popup không trả về `idToken` (`TC-018`).
+  Future<AuthSession> loginWithGoogleAccessToken({
+    required String accessToken,
+  }) async {
+    final trimmedToken = accessToken.trim();
+    if (trimmedToken.isEmpty) {
+      throw const ValidationFailure(
+        'Google Access Token không được để trống.',
+        code: 'EMPTY_GOOGLE_ACCESS_TOKEN',
+      );
+    }
+    try {
+      final response = await _client.dio.post<Map<String, dynamic>>(
+        '/api/auth/google',
+        data: {
+          'accessToken': trimmedToken,
+        },
+        options:
+            Options(extra: const <String, dynamic>{'skipAuthRefresh': true}),
+      );
+      return await _parseAndPersistSession(response);
+    } catch (e) {
+      throw DioClient.handleError(e);
+    }
+  }
+
   @override
   Future<AuthSession> register({
     required String email,
@@ -123,6 +149,11 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> forgotPassword({required String identifier}) async {
+    await forgotPasswordWithCooldown(identifier: identifier);
+  }
+
+  /// Yêu cầu gửi mã OTP khôi phục mật khẩu và trả về số giây chờ gửi lại từ máy chủ (mặc định `60` giây theo `TC-017`).
+  Future<int> forgotPasswordWithCooldown({required String identifier}) async {
     try {
       final response = await _client.dio.post<Map<String, dynamic>>(
         '/api/auth/forgot-password',
@@ -133,6 +164,14 @@ class AuthRepositoryImpl implements AuthRepository {
             Options(extra: const <String, dynamic>{'skipAuthRefresh': true}),
       );
       DioClient.unwrapEnvelope(response.data);
+      final data = response.data?['data'];
+      if (data is Map) {
+        final cooldown = int.tryParse('${data['resendCooldownSeconds'] ?? ''}');
+        if (cooldown != null && cooldown > 0) {
+          return cooldown;
+        }
+      }
+      return 60;
     } catch (e) {
       throw DioClient.handleError(e);
     }

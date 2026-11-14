@@ -1039,5 +1039,157 @@
   "supportCouponCodeInputLabel": "Coupon code (e.g., PALM2026)",
   "supportCouponAmountInputLabel": "Estimated subtotal (VND)",
   "supportCouponCheckingLabel": "Checking...",
-  "supportCouponCheckAction": "Check coupon code"
+  "supportCouponCheckAction": "Check coupon code",
+  "homeEmptyApprovedVillas": "No approved villas are available right now.",
+  "homeApprovedVillasCountTitle": "Verified Stays ({count})",
+  "@homeApprovedVillasCountTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "homePrevVillaTooltip": "Previous villa",
+  "homeNextVillaTooltip": "Next villa",
+  "homeFavoriteAdd": "Save to wishlist",
+  "homeFavoriteRemove": "Remove from wishlist",
+  "homeCardSpecsSummary": "{bedrooms} BR · Up to {guests} guests",
+  "@homeCardSpecsSummary": {
+    "placeholders": {
+      "bedrooms": {
+        "type": "int"
+      },
+      "guests": {
+        "type": "int"
+      }
+    }
+  },
+  "searchFilterBtn": "Filters",
+  "searchFilterActiveBtn": "Filters ({count})",
+  "@searchFilterActiveBtn": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchShowMapBtn": "Show map",
+  "searchHideMapBtn": "Hide map",
+  "searchClearAllBtn": "Clear all",
+  "searchFoundStaysCount": "Found {count} stays in Vung Tau",
+  "@searchFoundStaysCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "favoritesSavedCountSubtitle": "{count} saved villas",
+  "@favoritesSavedCountSubtitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "favoritesSyncOfflineNotice": "Unable to sync with server — showing locally saved villas.",
+  "favoritesInvalidCountNotice": "{count} saved stays are no longer accepting bookings.",
+  "@favoritesInvalidCountNotice": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "favoritesExploreAction": "Explore villas",
+  "contactEyebrow": "DIRECT VUNG TAU SUPPORT",
+  "contactBrowseVillas": "Browse Villas",
+  "contactHeroTitle": "Contact our stay advisors & local operations team",
+  "contactHeroSubtitle": "Get help checking live availability, matching villas for your group, and planning your stay in Vung Tau City.",
+  "contactHotlineTitle": "Hotline & Zalo support",
+  "contactVerifiedBadge": "Verified",
+  "contactCallNow": "Call now",
+  "contactCopyHotlineTooltip": "Copy Hotline",
+  "contactCopiedHotline": "Hotline copied to clipboard",
+  "contactOpenZalo": "Chat on Zalo OA",
+  "contactOfficeTitle": "Vung Tau Reception Office",
+  "contactMapAction": "Open directions map",
+  "contactEmailTitle": "Support & billing email",
+  "contactSameDayReply": "Same-day response",
+  "contactSendEmail": "Send support email",
+  "contactCopyEmailTooltip": "Copy Email",
+  "contactCopiedEmail": "Email copied to clipboard",
+  "authWelcomeBack": "Welcome back",
+  "authLoginSubtitle": "Sign in to view your getaways and manage your trips at The Palm Villa.",
+  "authIdentifierLabel": "Email or phone number",
+  "authIdentifierHint": "Enter email or Vietnam phone number",
+  "authPasswordLabel": "Password",
+  "authPasswordHint": "Enter password",
+  "authShowPasswordTooltip": "Show password",
+  "authHidePasswordTooltip": "Hide password",
+  "authRememberMe": "Remember me",
+  "authSigningIn": "Signing in...",
+  "authOrDivider": "OR",
+  "authGoogleLoginBtn": "Sign in with Google",
+  "authNoAccountYet": "Don't have an account?",
+  "authRegisterBtn": "Sign up",
+  "authCreateAccountTitle": "Create a new account",
+  "authRegisterSubtitle": "Book verified private vacation villas and unlock member-only offers.",
+  "authFullNameLabel": "Full name",
+  "authFullNameHint": "Enter your full name",
+  "authPhoneRequiredLabel": "Phone number *",
+  "authPhoneHint": "Enter Vietnam phone number (e.g. 0901234567)",
+  "authEmailRequiredLabel": "Email *",
+  "authEmailHint": "Enter email address",
+  "authPasswordCreateHint": "Create password (min 8 chars, letters & numbers)",
+  "authConfirmPasswordLabel": "Confirm password *",
+  "authConfirmPasswordHint": "Re-enter your password",
+  "authPasswordStrengthLabel": "Password strength: {level}",
+  "@authPasswordStrengthLabel": {
+    "placeholders": {
+      "level": {
+        "type": "String"
+      }
+    }
+  },
+  "authStrengthWeak": "Weak",
+  "authStrengthFair": "Fair",
+  "authStrengthGood": "Good",
+  "authStrengthStrong": "Strong",
+  "authTermsAgreement": "I agree to The Palm Villa Terms of Service and Privacy Policy",
+  "authTermsRequiredError": "Please accept the Terms of Service and Privacy Policy",
+  "authCreatingAccount": "Creating account...",
+  "authAlreadyHaveAccount": "Already have an account?",
+  "authForgotQuestionTitle": "Forgot password?",
+  "authOtpVerifyTitle": "Verify OTP code",
+  "authPasswordChangedTitle": "Password reset complete",
+  "authForgotRequestSubtitle": "Enter your registered email or phone number to receive a 6-digit recovery OTP.",
+  "authForgotOtpSubtitle": "Enter the 6-digit OTP code and set your new password.",
+  "authForgotSuccessSubtitle": "Your password has been updated securely.",
+  "authSendOtpButton": "Send OTP code",
+  "authOtpSentTo": "OTP sent to: {target}",
+  "@authOtpSentTo": {
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "authOtpSixDigitsLabel": "6-digit OTP code",
+  "authNewPasswordLabel": "New password",
+  "authResendOtpCountdown": "Resend in 00:{seconds}",
+  "@authResendOtpCountdown": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "authResendOtpButton": "Resend OTP code",
+  "authConfirmOtpButton": "Verify OTP code",
+  "authOtpSuccessBanner": "OTP verified and your new password is ready to use.",
+  "authBackToLoginButton": "Back to sign in",
+  "adminTabFinance": "Finance & Payouts",
+  "adminTabBlog": "Blog CMS",
+  "adminTabTrustSafety": "Reports & Safety"
 }

@@ -30,6 +30,14 @@ class GoogleAuthService {
   final GoogleSignIn? _customGoogleSignIn;
   final bool _enforceConfigGuard;
   GoogleSignIn? _lazyGoogleSignIn;
+  String? _pendingWebAccessToken;
+
+  /// Lấy và xóa một lần chuỗi `accessToken` dự phòng trên trình duyệt Web khi GIS Popup không cấp `idToken`.
+  String? consumePendingWebAccessToken() {
+    final token = _pendingWebAccessToken;
+    _pendingWebAccessToken = null;
+    return token;
+  }
 
   /// Khởi tạo `GoogleAuthService`, cho phép truyền đối tượng `googleSignIn` giả lập khi kiểm thử.
   GoogleAuthService({
@@ -139,6 +147,14 @@ class GoogleAuthService {
       final auth = await account.authentication;
       final idToken = auth.idToken?.trim();
       if (idToken == null || idToken.isEmpty) {
+        final webAccessToken = auth.accessToken?.trim();
+        if (kIsWeb && webAccessToken != null && webAccessToken.isNotEmpty) {
+          _pendingWebAccessToken = webAccessToken;
+          throw const AuthFailure(
+            'Chuyển sang xác thực bằng Google OAuth Access Token trên trình duyệt Web.',
+            'GOOGLE_WEB_ACCESS_TOKEN_FALLBACK',
+          );
+        }
         throw const AuthFailure(
           'Không nhận được Google ID Token hợp lệ từ Google SDK. '
               'Vui lòng kiểm tra cấu hình GOOGLE_SERVER_CLIENT_ID và SHA-1 fingerprint.',
@@ -154,8 +170,13 @@ class GoogleAuthService {
     } on PlatformException catch (e) {
       AppLogger.w('Google Sign-In platform failure');
       final normalizedCode = e.code.toLowerCase();
+      final rawMsgLower = (e.message ?? '').toLowerCase();
       if (normalizedCode.contains('canceled') ||
           normalizedCode.contains('cancelled') ||
+          normalizedCode.contains('popup_closed') ||
+          normalizedCode.contains('access_denied') ||
+          rawMsgLower.contains('popup_closed') ||
+          rawMsgLower.contains('access_denied') ||
           normalizedCode == GoogleSignIn.kSignInCanceledError) {
         throw const GoogleSignInCancelledException();
       }
@@ -184,7 +205,14 @@ class GoogleAuthService {
             : 'Đăng nhập Google thất bại (${e.code}). Vui lòng kiểm tra cấu hình OAuth.',
         e.code,
       );
-    } catch (_) {
+    } catch (err) {
+      final rawErr = err.toString().toLowerCase();
+      if (rawErr.contains('popup_closed') ||
+          rawErr.contains('access_denied') ||
+          rawErr.contains('canceled') ||
+          rawErr.contains('cancelled')) {
+        throw const GoogleSignInCancelledException();
+      }
       AppLogger.e(
         'Unexpected Google Sign-In error',
       );
