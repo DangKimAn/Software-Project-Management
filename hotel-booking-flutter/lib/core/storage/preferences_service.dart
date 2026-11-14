@@ -541,7 +541,9 @@ class PreferencesService {
   /// - English ('en') -> 'en'
   /// - Any other language -> defaults to 'en'
   static String resolveDefaultLocale([String? systemLanguageCode]) {
-    final code = (systemLanguageCode ?? _detectSystemLanguageCode()).toLowerCase().trim();
+    final code = (systemLanguageCode ?? _detectSystemLanguageCode())
+        .toLowerCase()
+        .trim();
     if (code.startsWith('vi')) return 'vi';
     if (code.startsWith('ko')) return 'ko';
     if (code.startsWith('en')) return 'en';
@@ -886,6 +888,44 @@ class PreferencesService {
     }
   }
 
+  // --- Unsaved Profile Draft Storage (strictly isolated from synced `account_profile_*`) ---
+  static const String _keyProfileUnsavedDraftPrefix = 'profile_unsaved_draft';
+
+  // Giải thuật đọc bản nháp hồ sơ chưa lưu theo đúng `userId`, tách biệt hoàn toàn với khóa
+  // hồ sơ đã đồng bộ `account_profile_*` để không làm sai lệch trạng thái máy chủ hoặc rò rỉ PII.
+  Map<String, dynamic>? getProfileDraft(String userId) {
+    final normalizedUserId = userId.trim();
+    if (normalizedUserId.isEmpty) return null;
+    final raw =
+        _getString('${_keyProfileUnsavedDraftPrefix}_$normalizedUserId');
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> saveProfileDraft(
+    String userId,
+    Map<String, dynamic> draftData,
+  ) async {
+    final normalizedUserId = userId.trim();
+    if (normalizedUserId.isEmpty) return;
+    await _setString(
+      '${_keyProfileUnsavedDraftPrefix}_$normalizedUserId',
+      jsonEncode(draftData),
+    );
+  }
+
+  Future<void> clearProfileDraft(String userId) async {
+    final normalizedUserId = userId.trim();
+    if (normalizedUserId.isEmpty) return;
+    await _remove('${_keyProfileUnsavedDraftPrefix}_$normalizedUserId');
+  }
+
   // --- Pending Booking Intent (when unauthenticated user clicks "Đặt ngay") ---
   Map<String, dynamic>? getPendingBookingIntent() {
     final raw = _getString(_keyPendingBookingIntent);
@@ -929,6 +969,7 @@ class PreferencesService {
         _prefs?.getKeys() ?? _memory?.getKeys() ?? const <String>[];
     for (final key in existingKeys.toList()) {
       if (key.startsWith('${_keyAccountProfile}_') ||
+          key.startsWith('${_keyProfileUnsavedDraftPrefix}_') ||
           key.startsWith('host_onboarding_kyc_draft_v2_')) {
         await _remove(key);
       }

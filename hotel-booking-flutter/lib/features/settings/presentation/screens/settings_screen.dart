@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -58,6 +59,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   ProfileDraftData? _unsavedDraft;
   String? _activeUserId;
 
+  // Giải thuật cô lập dữ liệu cá nhân (PII) giữa các phiên tài khoản và khôi phục bản nháp
+  // chưa lưu tương ứng với đúng `userId` hiện tại từ bộ nhớ cục bộ.
   void _enforceUserIsolation(User? currentUser) {
     final newUserId = currentUser?.id;
     if (_activeUserId != newUserId) {
@@ -65,6 +68,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _unsavedDraft = null;
       }
       _activeUserId = newUserId;
+      if (newUserId != null && _unsavedDraft == null) {
+        final persisted = ref
+            .read(profileSettingsActionsProvider)
+            .loadProfileDraft(newUserId);
+        if (persisted != null &&
+            currentUser != null &&
+            persisted.hasChangesComparedTo(currentUser)) {
+          _unsavedDraft = persisted;
+        }
+      }
     }
   }
 
@@ -173,6 +186,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }) async {
     final currentLocale = ref.read(localeProvider);
     final dialogL10n = lookupAppLocalizations(Locale(currentLocale));
+    final displayOldPhone = oldPhone.trim().isEmpty ? '---' : oldPhone.trim();
     final confirmed = await showDialog<bool>(
       context: parentContext,
       builder: (dialogCtx) {
@@ -189,8 +203,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           content: Text(
             newPhone.isEmpty
-                ? dialogL10n.settingsConfirmPhoneRemove(oldPhone)
-                : dialogL10n.settingsConfirmPhoneChange(oldPhone, newPhone),
+                ? dialogL10n.settingsConfirmPhoneRemove(displayOldPhone)
+                : dialogL10n.settingsConfirmPhoneChange(
+                    displayOldPhone,
+                    newPhone,
+                  ),
             style: AppTypography.bodyMedium,
           ),
           actions: [
@@ -277,6 +294,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     if (confirmed != true || !mounted) return;
 
+    unawaited(
+      ref.read(profileSettingsActionsProvider).clearProfileDraft(user.id),
+    );
     setState(() {
       _unsavedDraft = null;
       _activeUserId = null;
@@ -322,8 +342,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               } catch (_) {
                 if (!ctx.mounted) return;
                 setModalState(() {
-                  modalError =
-                      modalL10n.settingsAvatarPickError;
+                  modalError = modalL10n.settingsAvatarPickError;
                 });
                 return;
               }
@@ -553,6 +572,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     bool isSubmitting = false;
     bool isUploadingAvatar = false;
+    bool didSave = false;
     AvatarPickedFile? selectedLocalAvatar;
     String? uploadedAvatarKey;
     String? errorMessage;
@@ -573,10 +593,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
     }
 
+    // Giải thuật chụp và lưu bản nháp hồ sơ chưa lưu xuống bộ nhớ cục bộ mỗi khi hộp thoại đóng trước khi lưu thành công.
     void snapshotDraft() {
       final candidate = buildCurrentDraft();
       if (candidate.hasChangesComparedTo(user)) {
         _unsavedDraft = candidate;
+        unawaited(
+          ref.read(profileSettingsActionsProvider).saveProfileDraft(candidate),
+        );
+      } else if (_unsavedDraft?.userId == user.id) {
+        _unsavedDraft = null;
+        unawaited(
+          ref.read(profileSettingsActionsProvider).clearProfileDraft(user.id),
+        );
       }
     }
 
@@ -612,8 +641,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               } catch (_) {
                 if (!ctx.mounted) return;
                 setModalState(() {
-                  errorMessage =
-                      editL10n.settingsAvatarPickError;
+                  errorMessage = editL10n.settingsAvatarPickError;
                 });
                 return;
               }
@@ -720,6 +748,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     .read(profileSettingsActionsProvider)
                     .cacheSyncedAccountProfile(updatedUser);
 
+                didSave = true;
                 _unsavedDraft = null;
                 if (!ctx.mounted) return;
                 Navigator.of(ctx).pop();
@@ -932,10 +961,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                           const SizedBox(height: 2),
                                           Text(
                                             isUploadingAvatar
-                                                ? editL10n.settingsAvatarUploading
+                                                ? editL10n
+                                                    .settingsAvatarUploading
                                                 : (selectedLocalAvatar != null
-                                                    ? editL10n.settingsAvatarSelectedShort(selectedLocalAvatar!.name)
-                                                    : editL10n.settingsAvatarPickHint),
+                                                    ? editL10n
+                                                        .settingsAvatarSelectedShort(
+                                                            selectedLocalAvatar!
+                                                                .name)
+                                                    : editL10n
+                                                        .settingsAvatarPickHint),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style:
@@ -974,8 +1008,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                         ),
                                         label: Text(
                                           isUploadingAvatar
-                                              ? editL10n.settingsAvatarUploadingShort
-                                              : editL10n.settingsAvatarPickFromDeviceShort,
+                                              ? editL10n
+                                                  .settingsAvatarUploadingShort
+                                              : editL10n
+                                                  .settingsAvatarPickFromDeviceShort,
                                           style: AppTypography.caption.copyWith(
                                             fontWeight: FontWeight.w600,
                                             color: AppColors.textStrong,
@@ -1024,7 +1060,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 ),
                                 controller: dreamDestinationCtrl,
                                 enabled: !busy,
-                                labelText: editL10n.settingsDreamDestinationLabel,
+                                labelText:
+                                    editL10n.settingsDreamDestinationLabel,
                                 hintText: editL10n.settingsDreamDestinationHint,
                                 errorText: fieldErrors['dreamDestination'],
                               ),
@@ -1103,7 +1140,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      if (!didSave && !isSubmitting) {
+        snapshotDraft();
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    });
   }
 
   String _roleLabelForUser(User user, [AppLocalizations? l10n]) {
@@ -1181,10 +1225,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         padding:
                             const EdgeInsets.symmetric(vertical: AppSpacing.s8),
                         child: isInitialLoading
-                             ? _buildLoadingProfileCard(l10n)
-                             : (effectiveUser != null
-                                 ? _buildSignedInProfileCard(effectiveUser, l10n)
-                                 : _buildLoggedOutProfileCard(l10n)),
+                            ? _buildLoadingProfileCard(l10n)
+                            : (effectiveUser != null
+                                ? _buildSignedInProfileCard(effectiveUser, l10n)
+                                : _buildLoggedOutProfileCard(l10n)),
                       ),
 
                       _buildGroupDivider(),
@@ -1285,7 +1329,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               const SizedBox(width: AppSpacing.s12),
                               Expanded(
                                 child: Text(
-                                  lookupAppLocalizations(Locale(currentLocale)).settingsLanguage,
+                                  lookupAppLocalizations(Locale(currentLocale))
+                                      .settingsLanguage,
                                   style: _menuTitleStyle,
                                 ),
                               ),

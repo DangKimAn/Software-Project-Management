@@ -338,7 +338,14 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
     final bookingAsync = ref.watch(bookingDetailProvider(widget.bookingId));
     final methodsAsync = ref.watch(paymentMethodsProvider);
     final liveFormatter = ref.watch(moneyFormatterProvider);
-    if (_frozenCheckoutSnapshot == null && liveFormatter.snapshot != null) {
+    // Giải thuật cố định tỷ giá phiên thanh toán (FX Session Freeze):
+    // Giữ nguyên bản chụp tỷ giá hợp lệ đầu tiên trong suốt phiên checkout để số tiền tham khảo không nhảy loạn,
+    // nhưng tự động khôi phục nếu lúc mở màn hình bản chụp chưa kịp tải hoặc đã hết hạn hoàn toàn.
+    if ((_frozenCheckoutSnapshot == null ||
+            liveFormatter
+                .withFrozenSnapshot(_frozenCheckoutSnapshot)
+                .isFallingBackToVnd) &&
+        liveFormatter.snapshot != null) {
       _frozenCheckoutSnapshot = liveFormatter.snapshot;
     }
     final checkoutFormatter = liveFormatter.withFrozenSnapshot(
@@ -779,20 +786,86 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                                   includeApproximatePrefix:
                                                       false,
                                                 );
+                                                final snap =
+                                                    checkoutFormatter.snapshot;
+                                                String? unitRateLine;
+                                                if (snap != null) {
+                                                  final usdPerVnd =
+                                                      double.tryParse(
+                                                            snap.usdRateDecimal,
+                                                          ) ??
+                                                          0;
+                                                  final krwPerVnd =
+                                                      double.tryParse(
+                                                            snap.krwRateDecimal,
+                                                          ) ??
+                                                          0;
+                                                  final updatedVn = snap
+                                                      .sourceUpdatedAt
+                                                      .toUtc()
+                                                      .add(
+                                                        const Duration(
+                                                          hours: 7,
+                                                        ),
+                                                      );
+                                                  final updatedDate =
+                                                      '${updatedVn.day.toString().padLeft(2, '0')}/${updatedVn.month.toString().padLeft(2, '0')}/${updatedVn.year}';
+                                                  if (checkoutFormatter
+                                                              .effectiveCurrency ==
+                                                          AppCurrency.usd &&
+                                                      usdPerVnd > 0) {
+                                                    final vndPerUsd =
+                                                        (1.0 / usdPerVnd)
+                                                            .round();
+                                                    unitRateLine =
+                                                        '1 USD ≈ ${MoneyFormatter.formatVnd(vndPerUsd)} • $updatedDate';
+                                                  } else if (checkoutFormatter
+                                                              .effectiveCurrency ==
+                                                          AppCurrency.krw &&
+                                                      krwPerVnd > 0) {
+                                                    final vndPer1000Krw =
+                                                        (1000.0 / krwPerVnd)
+                                                            .round();
+                                                    unitRateLine =
+                                                        '1,000 KRW ≈ ${MoneyFormatter.formatVnd(vndPer1000Krw)} • $updatedDate';
+                                                  }
+                                                }
 
-                                                return Text(
-                                                  l10n.fxEstimatedPrice(
-                                                    refTotal.formatted,
-                                                  ),
-                                                  key: const Key(
-                                                    'checkout_fx_estimated_amount',
-                                                  ),
-                                                  style: const TextStyle(
-                                                    fontSize: 15,
-                                                    fontWeight: FontWeight.w700,
-                                                    color:
-                                                        AppColors.textPrimary,
-                                                  ),
+                                                return Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      l10n.fxEstimatedPrice(
+                                                        refTotal.formatted,
+                                                      ),
+                                                      key: const Key(
+                                                        'checkout_fx_estimated_amount',
+                                                      ),
+                                                      style: const TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: AppColors
+                                                            .textPrimary,
+                                                      ),
+                                                    ),
+                                                    if (unitRateLine !=
+                                                        null) ...[
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        unitRateLine,
+                                                        key: const Key(
+                                                          'checkout_fx_unit_rate',
+                                                        ),
+                                                        style: const TextStyle(
+                                                          fontSize: 12,
+                                                          color: AppColors
+                                                              .textSecondary,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ],
                                                 );
                                               },
                                             ),
@@ -1074,7 +1147,8 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                         ),
                                         label: Text(
                                           _isProcessing
-                                              ? l10n.guestPaymentConnectingGateway
+                                              ? l10n
+                                                  .guestPaymentConnectingGateway
                                               : (isHoldExpired
                                                   ? 'Đã hết thời gian giữ chỗ'
                                                   : l10n.fxPayButtonVnd(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -41,20 +42,65 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
   static const int _pageSize = 12;
 
   String _selectedCategory = 'Tất cả';
+  String _debouncedQuery = '';
   int _currentPage = 1;
+  Timer? _searchDebounce;
   final TextEditingController _searchCtrl = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
+  // Giải thuật khử dấu tiếng Việt phục vụ tìm kiếm bài viết cẩm nang không phân biệt dấu và hoa thường.
+  static String _foldAccents(String input) {
+    const accented =
+        'àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ';
+    const plain =
+        'aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd';
+    final lower = input.toLowerCase();
+    final buffer = StringBuffer();
+    for (var i = 0; i < lower.length; i++) {
+      final ch = lower[i];
+      final idx = accented.indexOf(ch);
+      buffer.write(idx >= 0 ? plain[idx] : ch);
+    }
+    return buffer.toString();
+  }
+
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
+  // Giải thuật trì hoãn 300ms khi gõ từ khóa tìm kiếm để giảm tải truy vấn máy chủ mà vẫn lọc tức thời trên giao diện.
+  void _onSearchChanged(String rawValue) {
+    setState(() {});
+    _searchDebounce?.cancel();
+    final trimmed = rawValue.trim();
+    if (trimmed.isEmpty) {
+      if (_debouncedQuery.isNotEmpty) {
+        setState(() {
+          _debouncedQuery = '';
+          _currentPage = 1;
+        });
+      }
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      final next = _searchCtrl.text.trim();
+      if (_debouncedQuery != next) {
+        setState(() {
+          _debouncedQuery = next;
+          _currentPage = 1;
+        });
+      }
+    });
+  }
+
   BlogQueryFilter get _activeFilter => BlogQueryFilter(
         category: _selectedCategory == 'Tất cả' ? null : _selectedCategory,
-        query: null,
+        query: _debouncedQuery.isEmpty ? null : _debouncedQuery,
         page: _currentPage,
         limit: _pageSize,
       );
@@ -88,8 +134,10 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
   }
 
   void _resetFilters() {
+    _searchDebounce?.cancel();
     setState(() {
       _selectedCategory = 'Tất cả';
+      _debouncedQuery = '';
       _currentPage = 1;
       _searchCtrl.clear();
     });
@@ -222,8 +270,12 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                             color: AppColors.iconStrong,
                                           ),
                                           onPressed: () {
+                                            _searchDebounce?.cancel();
                                             _searchCtrl.clear();
-                                            setState(() {});
+                                            setState(() {
+                                              _debouncedQuery = '';
+                                              _currentPage = 1;
+                                            });
                                           },
                                         )
                                       : null,
@@ -247,7 +299,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                     ),
                                   ),
                                 ),
-                                onChanged: (_) => setState(() {}),
+                                onChanged: _onSearchChanged,
                               ),
                               const SizedBox(height: AppSpacing.md),
                               // Category Pill Chips (>=48dp touch height)
@@ -328,16 +380,21 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                     data: (result) {
                       final posts = result.items;
                       final pagination = result.pagination;
-                      final query = _searchCtrl.text.trim().toLowerCase();
-                      final filtered = query.isEmpty
+                      final query = _searchCtrl.text.trim();
+                      final foldedQuery = _foldAccents(query);
+                      final filtered = foldedQuery.isEmpty
                           ? posts
                           : posts
                               .where(
                                 (p) =>
-                                    p.title.toLowerCase().contains(query) ||
-                                    p.excerpt.toLowerCase().contains(query) ||
-                                    p.category.toLowerCase().contains(query) ||
-                                    p.location.toLowerCase().contains(query),
+                                    _foldAccents(p.title)
+                                        .contains(foldedQuery) ||
+                                    _foldAccents(p.excerpt)
+                                        .contains(foldedQuery) ||
+                                    _foldAccents(p.category)
+                                        .contains(foldedQuery) ||
+                                    _foldAccents(p.location)
+                                        .contains(foldedQuery),
                               )
                               .toList();
 
@@ -351,8 +408,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                             ),
                             child: AppEmptyView(
                               title: context.l10n.blogEmptyTitle,
-                              description:
-                                  context.l10n.blogEmptyDescription,
+                              description: context.l10n.blogEmptyDescription,
                               actionText: hasActiveFilter
                                   ? context.l10n.blogClearFilters
                                   : null,
@@ -361,6 +417,11 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                           ),
                         );
                       }
+
+                      final showFeaturedHero = filtered.length >= 2 &&
+                          _selectedCategory == 'Tất cả' &&
+                          query.isEmpty &&
+                          pagination.page == 1;
 
                       return SliverToBoxAdapter(
                         child: Center(
@@ -371,6 +432,15 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
+                                  if (showFeaturedHero) ...[
+                                    _FeaturedBlogBanner(
+                                      post: filtered.first,
+                                      onTap: () => context.push(
+                                        '/blog/${filtered.first.slug}',
+                                      ),
+                                    ),
+                                    const SizedBox(height: AppSpacing.xl),
+                                  ],
                                   LayoutBuilder(
                                     builder: (context, constraints) {
                                       final cols = constraints.maxWidth >= 900
@@ -570,6 +640,15 @@ class BlogPostCard extends ConsumerWidget {
                             ),
                           ),
                         ),
+                        if (localizedPost.publishedAt.isNotEmpty)
+                          Text(
+                            localizedPost.publishedAt,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.textMuted,
+                            ),
+                          ),
                         if (localizedPost.readTime.isNotEmpty)
                           Text(
                             localizedPost.readTime,
@@ -712,8 +791,8 @@ class _BlogPaginationBar extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: p == currentPage
-                      ? AppColors.primary
-                      : AppColors.surfaceBase,
+                        ? AppColors.primary
+                        : AppColors.surfaceBase,
                     borderRadius: AppRadii.roundedPill,
                     border: Border.all(
                       color: p == currentPage
@@ -757,6 +836,181 @@ class _BlogPaginationBar extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Khối bài viết nổi bật (Featured Hero) đầu trang Cẩm nang trên màn hình danh sách.
+class _FeaturedBlogBanner extends ConsumerWidget {
+  final BlogPost post;
+  final VoidCallback onTap;
+
+  const _FeaturedBlogBanner({
+    required this.post,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final locale = ref.watch(localeProvider);
+    final localizedPost = LocaleFormatters.localizeBlogPost(
+      post,
+      localeCode: locale,
+      l10n: context.l10n,
+    );
+    final isWide = MediaQuery.sizeOf(context).width >= 840;
+
+    final imageBlock = BlogCoverImage(
+      rawUrl: localizedPost.coverImage,
+      aspectRatio: isWide ? 16 / 10 : 16 / 9,
+      borderRadius: isWide
+          ? const BorderRadius.horizontal(
+              left: Radius.circular(AppRadii.card),
+            )
+          : const BorderRadius.vertical(
+              top: Radius.circular(AppRadii.card),
+            ),
+    );
+
+    final textBlock = Padding(
+      padding: EdgeInsets.all(isWide ? AppSpacing.xxl : AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xxs,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: AppRadii.roundedPill,
+                ),
+                child: Text(
+                  localizedPost.category,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              if (localizedPost.publishedAt.isNotEmpty)
+                Text(
+                  localizedPost.publishedAt,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              if (localizedPost.readTime.isNotEmpty)
+                Text(
+                  localizedPost.readTime,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textMuted,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            localizedPost.title,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.displayMedium.copyWith(
+              fontSize: isWide ? 24 : 20,
+              fontWeight: FontWeight.w800,
+              height: 1.32,
+              color: AppColors.textStrong,
+            ),
+          ),
+          if (localizedPost.excerpt.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              localizedPost.excerpt,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodyMuted.copyWith(
+                height: 1.55,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.lg),
+          Row(
+            children: [
+              const Icon(
+                LucideIcons.mapPin,
+                size: 16,
+                color: AppColors.iconStrong,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  localizedPost.location,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textStrong,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              const Icon(
+                LucideIcons.arrowUpRight,
+                size: 18,
+                color: AppColors.iconStrong,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    return Semantics(
+      button: true,
+      label: localizedPost.title,
+      child: InkWell(
+        key: ValueKey('blog-featured-${localizedPost.slug}'),
+        onTap: onTap,
+        borderRadius: AppRadii.roundedCard,
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surfaceElevated,
+            borderRadius: AppRadii.roundedCard,
+            border: Border.all(color: AppColors.borderSoft),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: isWide
+              ? IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(flex: 6, child: imageBlock),
+                      Expanded(flex: 5, child: textBlock),
+                    ],
+                  ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    imageBlock,
+                    textBlock,
+                  ],
+                ),
+        ),
+      ),
     );
   }
 }

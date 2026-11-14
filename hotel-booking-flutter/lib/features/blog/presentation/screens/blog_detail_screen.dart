@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -76,9 +77,18 @@ class BlogDetailScreen extends ConsumerWidget {
   }
 
   /// Builds a canonical deep link / share URL for a validated blog [slug].
+  // Giải thuật tạo liên kết chia sẻ chuẩn hóa cho bài viết cẩm nang:
+  // ưu tiên URL Web đầy đủ có giao thức và tên miền hiện tại trên trình duyệt (`kIsWeb`),
+  // đồng thời giữ nguyên cấu trúc deep link ứng dụng trên môi trường di động/máy ảo kiểm thử.
   static String? buildCanonicalShareUrl(String rawSlug) {
     final cleanSlug = BlogContentSanitizer.normalizeSlug(rawSlug);
     if (cleanSlug.isEmpty) return null;
+    if (kIsWeb) {
+      final origin = Uri.base.origin.trim();
+      if (origin.startsWith('http://') || origin.startsWith('https://')) {
+        return '$origin/#/blog/$cleanSlug';
+      }
+    }
     final scheme = AppConfig.deepLinkScheme.trim().isNotEmpty
         ? AppConfig.deepLinkScheme.trim().toLowerCase()
         : 'minhthanhvilla';
@@ -496,7 +506,8 @@ class BlogDetailScreen extends ConsumerWidget {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              context.l10n.blogRelatedArticlesBadge,
+                                              context.l10n
+                                                  .blogRelatedArticlesBadge,
                                               style: const TextStyle(
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w700,
@@ -506,7 +517,8 @@ class BlogDetailScreen extends ConsumerWidget {
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
-                                              context.l10n.blogRelatedArticlesTitle,
+                                              context.l10n
+                                                  .blogRelatedArticlesTitle,
                                               style: const TextStyle(
                                                 fontSize: 22,
                                                 fontWeight: FontWeight.w800,

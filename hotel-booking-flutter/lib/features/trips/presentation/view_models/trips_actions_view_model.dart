@@ -2,6 +2,7 @@
 // (`guest_payment_screen`, `multi_booking_screen`, `payment_result_screen`, `trips_screen`) theo chuẩn MVVM
 // (FLUTTER_RULES.md Mục 2), loại bỏ việc Screen gọi trực tiếp `bookingRepositoryProvider` / `reviewRepositoryProvider`.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../messages/data/conversations_repository.dart';
 import '../../../reviews/presentation/view_models/review_view_model.dart';
 import '../../domain/entities/booking.dart';
 import '../../domain/repositories/booking_repository.dart';
@@ -104,6 +105,19 @@ class TripsActionsViewModel {
     if (listingId.isNotEmpty) {
       _ref.invalidate(listingReviewsProvider(listingId));
     }
+  }
+
+  /// Khởi tạo hoặc mở lại cuộc hội thoại trực tuyến với Chủ nhà gắn liền đơn đặt phòng `bookingId`.
+  // Giải thuật mở luồng nhắn tin trực tiếp với Chủ nhà từ thẻ Chuyến đi sắp tới theo chuẩn MVVM.
+  Future<String> openHostConversation({
+    required String listingId,
+    String? bookingId,
+  }) async {
+    final conv = await _ref
+        .read(conversationsRepositoryProvider)
+        .getOrCreateConversation(listingId, bookingId: bookingId);
+    _ref.invalidate(conversationsListProvider);
+    return conv.id;
   }
 }
 

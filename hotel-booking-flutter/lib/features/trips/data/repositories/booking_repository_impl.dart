@@ -43,11 +43,25 @@ class BookingRepositoryImpl implements BookingRepository {
       final mapData =
           rawData is Map<String, dynamic> ? rawData : <String, dynamic>{};
       final serverMessage = mapData['message']?.toString();
-      if (statusCode == 401 || statusCode == 403) {
+      final lowerMsg = serverMessage?.trim().toLowerCase() ?? '';
+      // Giải thuật bản địa hóa và phân loại chuẩn xác lỗi HTTP 401/403/409 từ Backend đặt phòng:
+      // Tách riêng 403 thành `ForbiddenFailure` (tránh báo nhầm hết hạn phiên đăng nhập khi Host tự đặt villa mình),
+      // đồng thời Việt hóa các thông báo tiếng Anh thô từ máy chủ.
+      if (statusCode == 401) {
         return AuthFailure(
           serverMessage ?? 'Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.',
-          mapData['code']?.toString() ?? 'HTTP_$statusCode',
-          statusCode ?? 401,
+          mapData['code']?.toString() ?? 'UNAUTHORIZED',
+          401,
+        );
+      }
+      if (statusCode == 403) {
+        final localizedForbidden = lowerMsg.contains('book own listing') ||
+                lowerMsg.contains('own listing')
+            ? 'Chủ nhà không thể tự đặt chỗ nghỉ của chính mình.'
+            : (serverMessage ?? 'Bạn không có quyền thực hiện thao tác này.');
+        return ForbiddenFailure(
+          localizedForbidden,
+          mapData['code']?.toString() ?? 'FORBIDDEN',
         );
       }
       if (statusCode == 404) {
@@ -56,8 +70,14 @@ class BookingRepositoryImpl implements BookingRepository {
         );
       }
       if (statusCode == 409) {
+        final localizedConflict = lowerMsg.contains('not available') ||
+                lowerMsg.contains('already booked') ||
+                lowerMsg.contains('date')
+            ? 'Khoảng ngày lưu trú vừa được đặt bởi khách khác. Vui lòng chọn ngày khác.'
+            : (serverMessage ?? 'Dữ liệu xung đột hoặc đã được xử lý.');
         return ConflictFailure(
-          serverMessage ?? 'Dữ liệu xung đột hoặc đã được xử lý.',
+          localizedConflict,
+          code: mapData['code']?.toString() ?? 'CONFLICT',
         );
       }
       if (statusCode == 400 || statusCode == 422) {
@@ -455,8 +475,11 @@ class BookingRepositoryImpl implements BookingRepository {
           await _dio.get<Map<String, dynamic>>('/api/payments/methods');
       final data = _unwrapEnvelope(response.data);
       List<dynamic> rawMethods = [];
-      if (data is Map<String, dynamic> && data['methods'] is List) {
-        rawMethods = data['methods'] as List<dynamic>;
+      if (data is Map<String, dynamic>) {
+        final candidate = data['items'] ?? data['methods'];
+        if (candidate is List) {
+          rawMethods = candidate;
+        }
       } else if (data is List) {
         rawMethods = data;
       }

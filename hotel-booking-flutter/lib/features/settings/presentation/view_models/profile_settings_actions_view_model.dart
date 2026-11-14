@@ -39,9 +39,44 @@ class ProfileSettingsActionsViewModel {
         'school': updatedUser.school ?? '',
         'languages': updatedUser.languages.join(', '),
       });
+      await prefs.clearProfileDraft(updatedUser.id);
     } catch (_) {
       // Bỏ qua lỗi ghi bộ đệm cục bộ khi dữ liệu trên máy chủ đã cập nhật thành công.
     }
+  }
+
+  // Giải thuật khôi phục bản nháp hồ sơ chưa lưu từ bộ nhớ cục bộ theo đúng định danh tài khoản hiện tại.
+  ProfileDraftData? loadProfileDraft(String userId) {
+    final trimmedId = userId.trim();
+    if (trimmedId.isEmpty) return null;
+    try {
+      final raw = _ref.read(preferencesServiceProvider).getProfileDraft(
+            trimmedId,
+          );
+      if (raw == null) return null;
+      final draft = ProfileDraftData.fromJson(raw);
+      return draft.userId == trimmedId ? draft : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Giải thuật lưu bền vững bản nháp hồ sơ chưa lưu xuống khóa riêng biệt theo `userId`.
+  Future<void> saveProfileDraft(ProfileDraftData draft) async {
+    if (draft.userId.trim().isEmpty) return;
+    try {
+      await _ref
+          .read(preferencesServiceProvider)
+          .saveProfileDraft(draft.userId, draft.toJson());
+    } catch (_) {}
+  }
+
+  // Giải thuật xóa bản nháp hồ sơ chưa lưu của người dùng khi đã lưu thành công hoặc đăng xuất.
+  Future<void> clearProfileDraft(String userId) async {
+    if (userId.trim().isEmpty) return;
+    try {
+      await _ref.read(preferencesServiceProvider).clearProfileDraft(userId);
+    } catch (_) {}
   }
 }
 

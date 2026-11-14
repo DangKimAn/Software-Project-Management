@@ -46,6 +46,10 @@ class MessagesViewModel {
   /// Luồng phát trạng thái đối phương đang gõ văn bản (`typing`) theo từng cuộc hội thoại.
   Stream<Map<String, dynamic>> get onTyping => _socket.onTyping;
 
+  /// Luồng phát sự kiện thả biểu cảm tin nhắn (`message:reaction`) thời gian thực.
+  Stream<Map<String, dynamic>> get onMessageReaction =>
+      _socket.onMessageReaction;
+
   /// Luồng thông báo sự kiện kết nối lại Socket.IO thành công để đồng bộ bù tin nhắn bị lỡ.
   Stream<void> get onConnected => _socket.onConnected;
 
@@ -57,6 +61,19 @@ class MessagesViewModel {
   // Giải thuật phát tín hiệu đang nhập văn bản (`typing`) tới phòng hội thoại hiện hành.
   void sendTyping(String conversationId, {required bool isTyping}) {
     _socket.sendTyping(conversationId, isTyping: isTyping);
+  }
+
+  /// Phát sự kiện biểu cảm tin nhắn `reaction` cho `messageId` trong hội thoại `conversationId`.
+  void sendReaction(
+    String conversationId, {
+    required String messageId,
+    required String reaction,
+  }) {
+    _socket.sendReaction(
+      conversationId,
+      messageId: messageId,
+      reaction: reaction,
+    );
   }
 
   /// Đăng ký tham gia phòng lắng nghe sự kiện thời gian thực của cuộc trò chuyện `conversationId`.

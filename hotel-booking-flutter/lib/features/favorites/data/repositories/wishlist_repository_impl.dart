@@ -280,8 +280,14 @@ class WishlistRepositoryImpl implements WishlistRepository {
           .whereType<String>()
           .toList();
 
-      final invalidSet =
-          PreferencesService.normalizeListingIds(invalidIds).toSet();
+      // Giải thuật hợp nhất danh sách mã biệt thự đã ẩn/xóa (`invalidIds`) với bộ nhớ đệm cục bộ:
+      // Đảm bảo các căn bị ẩn hoặc ngừng hoạt động đã được tỉa bỏ trước đó không bao giờ xuất hiện lại sau khi tải lại trang.
+      final persistedInvalid =
+          _effectivePrefs?.getInvalidWishlistIds() ?? const <String>[];
+      final invalidSet = PreferencesService.normalizeListingIds([
+        ...invalidIds,
+        ...persistedInvalid,
+      ]).toSet();
       final combinedIds = PreferencesService.normalizeListingIds([
         ...explicitListingIds,
         ...itemIds,

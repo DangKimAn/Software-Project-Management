@@ -845,6 +845,9 @@ class Booking {
   /// Số điện thoại liên hệ của Chủ nhà.
   final String? hostPhone;
 
+  /// Chính sách hoàn hủy áp dụng của chỗ nghỉ (`'flexible'`, `'moderate'`, `'strict'`).
+  final String cancellationPolicy;
+
   /// Đối tượng bóc tách chi tiết cấu thành giá của đơn đặt phòng.
   final BookingPriceBreakdown? priceBreakdown;
 
@@ -890,9 +893,58 @@ class Booking {
     this.hasReview = false,
     this.hostName,
     this.hostPhone,
+    this.cancellationPolicy = 'moderate',
     this.priceBreakdown,
     this.createdAt,
   });
+
+  /// Giải thuật ước tính tỷ lệ và số tiền hoàn trả dự kiến theo chính sách hủy phòng (`flexible` / `moderate` / `strict`),
+  /// đối chiếu khoảng cách thời gian thực tới mốc nhận phòng tiêu chuẩn `14:00` giờ Việt Nam (`UTC+7`) đồng bộ với Backend.
+  ({int refundPct, int estimatedRefundVnd, String policyKey})
+      estimatePolicyRefund({DateTime? now}) {
+    final policy = cancellationPolicy.trim().toLowerCase();
+    final parsedIn = BookingDate.tryParse(checkInDate.trim());
+    double hoursBeforeCheckIn = 0;
+    if (parsedIn != null) {
+      // Mốc nhận phòng tiêu chuẩn 14:00 ICT (UTC+7) tương đương 07:00 UTC cùng ngày.
+      final checkInUtc = DateTime.utc(
+        parsedIn.year,
+        parsedIn.month,
+        parsedIn.day,
+        7,
+        0,
+      );
+      final refNow = (now ?? DateTime.now()).toUtc();
+      hoursBeforeCheckIn = checkInUtc.difference(refNow).inMinutes / 60.0;
+    }
+
+    int pct;
+    if (hoursBeforeCheckIn <= 0) {
+      pct = 0;
+    } else if (policy == 'flexible') {
+      pct = hoursBeforeCheckIn >= 24 ? 100 : 50;
+    } else if (policy == 'strict') {
+      pct = hoursBeforeCheckIn >= 168 ? 50 : 0;
+    } else {
+      // Chính sách mặc định 'moderate': >= 5 ngày (120h) hoàn 100%, >= 24h hoàn 50%, < 24h hoàn 0%.
+      if (hoursBeforeCheckIn >= 120) {
+        pct = 100;
+      } else if (hoursBeforeCheckIn >= 24) {
+        pct = 50;
+      } else {
+        pct = 0;
+      }
+    }
+
+    final normalizedPolicy =
+        (policy == 'flexible' || policy == 'strict') ? policy : 'moderate';
+    final estimated = ((totalAmount * pct) / 100).round();
+    return (
+      refundPct: pct,
+      estimatedRefundVnd: estimated,
+      policyKey: normalizedPolicy,
+    );
+  }
 
   /// Mốc thời hạn cuối cùng phải hoàn tất thanh toán giữ chỗ (`paymentExpiresAt` ưu tiên hơn `lockedUntil`).
   DateTime? get paymentDeadline => paymentExpiresAt ?? lockedUntil;
@@ -1529,6 +1581,10 @@ class Booking {
           hostMap?['name']?.toString() ??
           json['hostName']?.toString(),
       hostPhone: hostMap?['phone']?.toString() ?? json['hostPhone']?.toString(),
+      cancellationPolicy: (listing?['cancellationPolicy'] ??
+              json['cancellationPolicy'] ??
+              'moderate')
+          .toString(),
       priceBreakdown: breakdown,
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())

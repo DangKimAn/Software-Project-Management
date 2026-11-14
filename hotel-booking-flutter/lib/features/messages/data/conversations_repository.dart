@@ -177,7 +177,9 @@ class ChatMessageItem {
         attachments = ['assets/images/343vothisau.jpg'];
       } else if (contentStr.contains('🎤 Tin nhắn thoại')) {
         resolvedMessageType = 'file';
-        attachments = ['https://pub-67a3f362466e495d9c2f371ca84b6d03.r2.dev/chat/sample_voice.wav'];
+        attachments = [
+          'https://pub-67a3f362466e495d9c2f371ca84b6d03.r2.dev/chat/sample_voice.wav'
+        ];
       }
     }
 
@@ -473,6 +475,9 @@ class ConversationItem {
   /// Đường dẫn ảnh đại diện của người đối thoại phía bên kia.
   final String? otherParticipantAvatar;
 
+  /// Vai trò hệ thống của người đối thoại phía bên kia (`'host'`, `'guest'`, `'admin'`).
+  final String? otherParticipantRole;
+
   /// Nội dung tóm tắt của tin nhắn gần nhất trong cuộc trò chuyện.
   final String? lastMessage;
 
@@ -498,11 +503,38 @@ class ConversationItem {
     this.otherParticipantId,
     this.otherParticipantName,
     this.otherParticipantAvatar,
+    this.otherParticipantRole,
     this.lastMessage,
     this.lastMessageAt,
     this.updatedAt,
     this.unreadCount = 0,
   });
+
+  /// Giải thuật suy xuất nhãn vai trò của người đối thoại (`'Chủ nhà'` / `'Khách hàng'` / `'Quản trị viên'`)
+  /// theo ngữ cảnh người dùng đăng nhập `currentUserId` và ngôn ngữ `localeCode`.
+  String? roleBadgeFor(String currentUserId, {String localeCode = 'vi'}) {
+    final isEn = localeCode.startsWith('en');
+    final isKo = localeCode.startsWith('ko');
+    String rawRole = (otherParticipantRole ?? '').trim().toLowerCase();
+    final uid = currentUserId.trim();
+    if (rawRole.isEmpty && uid.isNotEmpty) {
+      if (guestId.trim() == uid && hostId.trim().isNotEmpty) {
+        rawRole = 'host';
+      } else if (hostId.trim() == uid && guestId.trim().isNotEmpty) {
+        rawRole = 'guest';
+      }
+    }
+    if (rawRole.contains('admin')) {
+      return isEn ? 'Admin' : (isKo ? '관리자' : 'Quản trị viên');
+    }
+    if (rawRole.contains('host')) {
+      return isEn ? 'Host' : (isKo ? '호스트' : 'Chủ nhà');
+    }
+    if (rawRole.contains('guest') || rawRole == 'user') {
+      return isEn ? 'Guest' : (isKo ? '게스트' : 'Khách hàng');
+    }
+    return null;
+  }
 
   /// Kiểm tra xem `currentUserId` có phải là thành viên hợp lệ (`guest` hoặc `host`) của cuộc trò chuyện hay không.
   bool isParticipant(String currentUserId) {
@@ -581,6 +613,7 @@ class ConversationItem {
     String? otherParticipantId,
     String? otherParticipantName,
     String? otherParticipantAvatar,
+    String? otherParticipantRole,
     String? lastMessage,
     String? lastMessageAt,
     String? updatedAt,
@@ -599,6 +632,7 @@ class ConversationItem {
       otherParticipantName: otherParticipantName ?? this.otherParticipantName,
       otherParticipantAvatar:
           otherParticipantAvatar ?? this.otherParticipantAvatar,
+      otherParticipantRole: otherParticipantRole ?? this.otherParticipantRole,
       lastMessage: lastMessage ?? this.lastMessage,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -657,6 +691,10 @@ class ConversationItem {
         (otherParticipant?['avatarUrl'] ?? otherParticipant?['avatar'] ?? '')
             .toString()
             .trim();
+    final otherRole =
+        (otherParticipant?['role'] ?? json['otherParticipantRole'] ?? '')
+            .toString()
+            .trim();
 
     String guestName =
         (json['guestName'] ?? guest?['fullName'] ?? guest?['name'] ?? '')
@@ -708,6 +746,7 @@ class ConversationItem {
       otherParticipantId: otherId.isEmpty ? null : otherId,
       otherParticipantName: otherName.isEmpty ? null : otherName,
       otherParticipantAvatar: otherAvatar.isEmpty ? null : otherAvatar,
+      otherParticipantRole: otherRole.isEmpty ? null : otherRole,
       lastMessage: lastMsgText,
       lastMessageAt: lastMessageAt,
       updatedAt: updatedAt,
@@ -1084,7 +1123,24 @@ class ConversationsRepository {
       }
       throw const ServerFailure('Không thể gửi tin nhắn.');
     } catch (e) {
-      throw DioClient.handleError(e);
+      final failure = DioClient.handleError(e);
+      // Giải thuật Việt hóa thông báo chặn nội dung nhạy cảm 422 từ bộ lọc an toàn hội thoại Backend:
+      if (failure.statusCode == 422 || failure is ValidationFailure) {
+        final lower = failure.message.toLowerCase();
+        if (lower.contains('contact') ||
+            lower.contains('phone') ||
+            lower.contains('email') ||
+            lower.contains('off-platform') ||
+            lower.contains('policy')) {
+          throw ValidationFailure(
+            'Tin nhắn chứa số điện thoại hoặc liên hệ ngoài nền tảng bị hạn chế theo chính sách an toàn giao dịch.',
+            statusCode: failure.statusCode ?? 422,
+            code: failure.code,
+            fieldErrors: failure.fieldErrors,
+          );
+        }
+      }
+      throw failure;
     }
   }
 

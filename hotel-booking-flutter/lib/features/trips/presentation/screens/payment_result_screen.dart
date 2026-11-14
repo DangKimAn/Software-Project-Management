@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../core/errors/app_failure.dart';
 import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../domain/entities/booking.dart';
@@ -168,12 +169,23 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen>
     if (!mounted) return;
 
     if (fetchedPayment == null && fetchedBooking == null) {
+      // Giải thuật chuẩn hóa thông báo lỗi xác minh giao dịch:
+      // Ưu tiên thông điệp nghiệp vụ từ `AppFailure` (404 không tìm thấy giao dịch, mất mạng...) thay vì chuỗi ngoại lệ kỹ thuật thô.
+      String friendlyError =
+          'Không thể kết nối máy chủ để xác minh trạng thái giao dịch.';
+      if (lastError is NotFoundFailure) {
+        friendlyError =
+            'Không tìm thấy thông tin giao dịch hoặc đơn đặt phòng tương ứng trên hệ thống.';
+      } else if (lastError is AppFailure &&
+          lastError.message.trim().isNotEmpty) {
+        friendlyError = lastError.message.trim();
+      } else if (lastError != null) {
+        friendlyError = lastError.toString().replaceFirst('Exception: ', '');
+      }
       setState(() {
         _isVerifying = false;
         _effectiveStatus = 'unverified';
-        _verificationError =
-            lastError?.toString().replaceFirst('Exception: ', '') ??
-                'Không thể kết nối máy chủ để xác minh trạng thái giao dịch.';
+        _verificationError = friendlyError;
       });
       return;
     }
@@ -182,6 +194,18 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen>
       payment: fetchedPayment ?? _paymentRecord,
       booking: fetchedBooking ?? _bookingRecord,
     );
+
+    if (resolvedStatus == 'pending' && _pollCount >= _maxPollAttempts) {
+      setState(() {
+        _paymentRecord = fetchedPayment ?? _paymentRecord;
+        _bookingRecord = fetchedBooking ?? _bookingRecord;
+        _effectiveStatus = 'unverified';
+        _isVerifying = false;
+        _verificationError =
+            'Cổng thanh toán chưa phản hồi xác nhận cuối cùng sau nhiều lần kiểm tra. Vui lòng nhấn "Kiểm tra lại trạng thái" hoặc xem mục Chuyến đi của tôi.';
+      });
+      return;
+    }
 
     setState(() {
       _paymentRecord = fetchedPayment ?? _paymentRecord;

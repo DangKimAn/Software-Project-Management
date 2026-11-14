@@ -51,6 +51,8 @@ class SocketService {
       StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _typingController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _reactionController =
+      StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _connectErrorController =
       StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<void> _connectedController =
@@ -101,6 +103,8 @@ class SocketService {
   Stream<Map<String, dynamic>> get onConversationError =>
       _conversationErrorController.stream;
   Stream<Map<String, dynamic>> get onTyping => _typingController.stream;
+  Stream<Map<String, dynamic>> get onMessageReaction =>
+      _reactionController.stream;
   Stream<Map<String, dynamic>> get onConnectError =>
       _connectErrorController.stream;
   Stream<void> get onConnected => _connectedController.stream;
@@ -371,6 +375,11 @@ class SocketService {
                 _typingController.add(payload);
               }
               break;
+            case 'message:reaction':
+              if (!_reactionController.isClosed) {
+                _reactionController.add(payload);
+              }
+              break;
           }
         }
       } catch (_) {
@@ -442,6 +451,25 @@ class SocketService {
     _emit('conversation:typing', {
       'conversationId': idNum ?? normalized,
       'isTyping': isTyping,
+    });
+  }
+
+  /// Phát sự kiện thả biểu cảm tin nhắn (`message:reaction`) thời gian thực vào phòng hội thoại `conversationId`.
+  void sendReaction(
+    String conversationId, {
+    required String messageId,
+    required String reaction,
+  }) {
+    if (_isDisposed || !_isConnected) return;
+    final convClean = conversationId.trim();
+    final msgClean = messageId.trim();
+    if (convClean.isEmpty || msgClean.isEmpty) return;
+    final convNum = int.tryParse(convClean);
+    final msgNum = int.tryParse(msgClean);
+    _emit('message:reaction', {
+      'conversationId': convNum ?? convClean,
+      'messageId': msgNum ?? msgClean,
+      'reaction': reaction.trim(),
     });
   }
 
@@ -537,6 +565,7 @@ class SocketService {
     _newNotificationController.close();
     _conversationErrorController.close();
     _typingController.close();
+    _reactionController.close();
     _connectErrorController.close();
     _connectedController.close();
   }

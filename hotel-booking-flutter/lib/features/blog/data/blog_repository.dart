@@ -290,6 +290,8 @@ abstract final class BlogContentSanitizer {
   }
 
   /// Normalizes and validates a blog slug from deep links or route parameters.
+  // Giải thuật chuẩn hóa và kiểm duyệt nghiêm ngặt định danh đường dẫn bài viết (slug),
+  // loại bỏ tham số truy vấn, ký tự điều khiển, leo thang thư mục và chỉ chấp nhận chữ thường/chữ số nối bằng dấu gạch ngang.
   static String normalizeSlug(String? rawSlug) {
     if (rawSlug == null) return '';
     var trimmed = rawSlug.trim();
@@ -302,7 +304,7 @@ abstract final class BlogContentSanitizer {
     if (hIdx >= 0) trimmed = trimmed.substring(0, hIdx);
 
     try {
-      trimmed = Uri.decodeComponent(trimmed).trim();
+      trimmed = Uri.decodeComponent(trimmed).trim().toLowerCase();
     } catch (_) {
       return '';
     }
@@ -311,7 +313,7 @@ abstract final class BlogContentSanitizer {
         trimmed.contains('..') ||
         trimmed.contains('/') ||
         trimmed.contains('\\') ||
-        RegExp(r'[<>"\x00-\x1F\s]').hasMatch(trimmed)) {
+        !RegExp(r'^[a-z0-9]+(?:-[a-z0-9]+)*$').hasMatch(trimmed)) {
       return '';
     }
     return trimmed;

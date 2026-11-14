@@ -110,6 +110,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   StreamSubscription<Map<String, dynamic>>? _socketMessageSub;
   StreamSubscription<Map<String, dynamic>>? _socketErrorSub;
   StreamSubscription<Map<String, dynamic>>? _socketTypingSub;
+  StreamSubscription<Map<String, dynamic>>? _socketReactionSub;
   StreamSubscription<void>? _reconnectSub;
   MessagesViewModel? _cachedVm;
 
@@ -137,6 +138,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     _socketMessageSub = vm.onMessageNew.listen(_onSocketMessage);
     _socketErrorSub = vm.onConversationError.listen(_onSocketError);
     _socketTypingSub = vm.onTyping.listen(_onSocketTyping);
+    _socketReactionSub = vm.onMessageReaction.listen(_onSocketReaction);
     _reconnectSub = vm.onConnected.listen((_) => _onSocketReconnected());
 
     if (_selectedConversationId != null &&
@@ -419,6 +421,22 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       setState(() {
         _typingUserByConversation.remove(convId);
       });
+    });
+  }
+
+  // Giải thuật đồng bộ biểu cảm tin nhắn thời gian thực (`message:reaction`):
+  // Cập nhật hoặc gỡ biểu cảm trên bong bóng tin nhắn tương ứng ngay khi đối phương thao tác.
+  void _onSocketReaction(Map<String, dynamic> payload) {
+    if (!mounted) return;
+    final msgId = (payload['messageId'] ?? '').toString().trim();
+    if (msgId.isEmpty) return;
+    final reaction = (payload['reaction'] ?? '').toString().trim();
+    setState(() {
+      if (reaction.isEmpty) {
+        _messageReactions.remove(msgId);
+      } else {
+        _messageReactions[msgId] = reaction;
+      }
     });
   }
 
@@ -775,7 +793,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   }) async {
     final convId = _selectedConversationId;
     final text = rawContent.trim();
-    if (convId == null || convId.isEmpty || (text.isEmpty && (attachments == null || attachments.isEmpty))) return;
+    if (convId == null ||
+        convId.isEmpty ||
+        (text.isEmpty && (attachments == null || attachments.isEmpty))) return;
 
     final currentUserId = ref.read(authNotifierProvider).valueOrNull?.id ?? '';
     if (currentUserId.isEmpty) return;
@@ -857,7 +877,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   AppLocalizations get _currentL10n =>
       lookupAppLocalizations(Locale(ref.read(localeProvider)));
 
-  List<String> _quickRepliesForRole(_ChatPortalRole role, [AppLocalizations? l10n]) {
+  List<String> _quickRepliesForRole(_ChatPortalRole role,
+      [AppLocalizations? l10n]) {
     final loc = l10n ?? _currentL10n;
     switch (role) {
       case _ChatPortalRole.admin:
@@ -1276,7 +1297,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
               children: [
                 Text(
                   loc.chatSelectEmojiTitle,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 15),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
@@ -1549,6 +1571,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     _socketMessageSub?.cancel();
     _socketErrorSub?.cancel();
     _socketTypingSub?.cancel();
+    _socketReactionSub?.cancel();
     _reconnectSub?.cancel();
     _inputCtrl.removeListener(_onInputChanged);
     _scrollController.removeListener(_onScrollChanged);
@@ -1944,7 +1967,19 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  conv.listingTitle,
+                                  [
+                                    if (conv.roleBadgeFor(
+                                          currentUserId,
+                                          localeCode: loc.localeName,
+                                        ) !=
+                                        null)
+                                      conv.roleBadgeFor(
+                                        currentUserId,
+                                        localeCode: loc.localeName,
+                                      )!,
+                                    if (conv.listingTitle.trim().isNotEmpty)
+                                      conv.listingTitle.trim(),
+                                  ].join(' · '),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
@@ -2098,15 +2133,53 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            counterpart,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textStrong,
-                            ),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 2,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                counterpart,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textStrong,
+                                ),
+                              ),
+                              if (conv.roleBadgeFor(
+                                    currentUserId,
+                                    localeCode: loc.localeName,
+                                  ) !=
+                                  null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceMuted,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: AppColors.borderSoft,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    conv.roleBadgeFor(
+                                      currentUserId,
+                                      localeCode: loc.localeName,
+                                    )!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                           Text(
                             conv.listingTitle,
@@ -2174,7 +2247,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                           : TextButton(
                               key: const Key('view_listing_button'),
                               onPressed: () =>
-                                    context.push('/villa/${conv.listingId}'),
+                                  context.push('/villa/${conv.listingId}'),
                               style: TextButton.styleFrom(
                                 minimumSize: const Size(48, 48),
                                 shape: const StadiumBorder(),
@@ -2349,18 +2422,20 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                           );
                                         }
 
-                                        final showTimeDivider = currentDt != null &&
-                                            shouldShowChatTimeDivider(
-                                              currentDt,
-                                              prevDt,
-                                            );
-                                        final timeDividerLabel = currentDt != null
-                                            ? formatChatTimeDivider(
-                                                currentDt,
-                                                localeCode:
-                                                    ref.watch(localeProvider),
-                                              )
-                                            : '';
+                                        final showTimeDivider =
+                                            currentDt != null &&
+                                                shouldShowChatTimeDivider(
+                                                  currentDt,
+                                                  prevDt,
+                                                );
+                                        final timeDividerLabel =
+                                            currentDt != null
+                                                ? formatChatTimeDivider(
+                                                    currentDt,
+                                                    localeCode: ref
+                                                        .watch(localeProvider),
+                                                  )
+                                                : '';
 
                                         final bubble = _buildMessageBubble(
                                           msg,
@@ -2415,7 +2490,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                               color: Colors.white,
                                             ),
                                             label: Text(
-                                              loc.chatNewMessagesCount(unreadBelow),
+                                              loc.chatNewMessagesCount(
+                                                  unreadBelow),
                                               style: const TextStyle(
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w600,
@@ -2492,7 +2568,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                               recordingSeconds: _voiceRecordingSeconds,
                               onCancel: () {
                                 _voiceTimer?.cancel();
-    unawaited(_voiceRecorder.cancel());
+                                unawaited(_voiceRecorder.cancel());
                                 setState(() {
                                   _isRecordingVoice = false;
                                   _voiceRecordingSeconds = 0;
@@ -2503,204 +2579,212 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                           : Row(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                          // 1. Nút '+' tiện ích mở rộng tròn màu hồng
-                          Semantics(
-                            button: true,
-                            label: loc.chatMoreOptions,
-                            child: Tooltip(
-                              message: loc.chatMoreOptions,
-                              child: InkWell(
-                                key: const Key('chat_more_features_btn'),
-                                onTap: () =>
-                                    _showChatMoreOptions(chatRole, conv, loc),
-                                borderRadius: BorderRadius.circular(24),
-                                child: SizedBox(
-                                  width: isCompactComposer ? 40 : 36,
-                                  height: 48,
-                                  child: Center(
-                                    child: Container(
-                                      width: 28,
-                                      height: 28,
-                                      decoration: const BoxDecoration(
-                                        color: AppColors.primary,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        LucideIcons.plus,
-                                        size: 16,
-                                        color: Colors.white,
+                                // 1. Nút '+' tiện ích mở rộng tròn màu hồng
+                                Semantics(
+                                  button: true,
+                                  label: loc.chatMoreOptions,
+                                  child: Tooltip(
+                                    message: loc.chatMoreOptions,
+                                    child: InkWell(
+                                      key: const Key('chat_more_features_btn'),
+                                      onTap: () => _showChatMoreOptions(
+                                          chatRole, conv, loc),
+                                      borderRadius: BorderRadius.circular(24),
+                                      child: SizedBox(
+                                        width: isCompactComposer ? 40 : 36,
+                                        height: 48,
+                                        child: Center(
+                                          child: Container(
+                                            width: 28,
+                                            height: 28,
+                                            decoration: const BoxDecoration(
+                                              color: AppColors.primary,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              LucideIcons.plus,
+                                              size: 16,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          ),
-                          if (!isCompactComposer) ...[
-                            const SizedBox(width: 2),
-                            // 2. Nút Máy ảnh (Camera)
-                            IconButton(
-                              key: const Key('chat_camera_btn'),
-                              onPressed: _openCameraChat,
-                              tooltip: loc.chatCamera,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 36,
-                                minHeight: 48,
-                              ),
-                              icon: const Icon(
-                                LucideIcons.camera,
-                                size: 21,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            // 3. Nút Thư viện ảnh (Gallery)
-                            IconButton(
-                              key: const Key('chat_gallery_btn'),
-                              onPressed: _pickAndSendChatImage,
-                              tooltip: loc.chatGallery,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 36,
-                                minHeight: 48,
-                              ),
-                              icon: const Icon(
-                                LucideIcons.image,
-                                size: 21,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            // 4. Nút Micro thu âm
-                            IconButton(
-                              key: const Key('chat_mic_btn'),
-                              onPressed: _toggleVoiceRecording,
-                              tooltip: _isRecordingVoice
-                                  ? loc.chatStopRecording
-                                  : loc.chatVoiceMessage,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 36,
-                                minHeight: 48,
-                              ),
-                              icon: Icon(
-                                _isRecordingVoice
-                                    ? LucideIcons.square
-                                    : LucideIcons.mic,
-                                size: 21,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(width: 6),
-
-                          // 5. Ô nhập tin nhắn Messenger bo tròn + nút mặt cười
-                          Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                              child: TextField(
-                                key: const Key('chat_message_input'),
-                                controller: _inputCtrl,
-                                focusNode: _inputFocusNode,
-                                textInputAction: TextInputAction.send,
-                                minLines: 1,
-                                maxLines: 4,
-                                style: const TextStyle(
-                                  fontSize: 14.5,
-                                  color: AppColors.textStrong,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: loc.chatInputPlaceholder,
-                                  hintStyle: const TextStyle(
-                                    color: Color(0xFF94A3B8),
-                                    fontSize: 14.5,
-                                  ),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 10,
-                                  ),
-                                  suffixIcon: IconButton(
-                                    key: const Key('chat_input_smile_btn'),
-                                    onPressed: () => _showEmojiSelector(loc),
-                                    tooltip: loc.chatEmojiTooltip,
+                                if (!isCompactComposer) ...[
+                                  const SizedBox(width: 2),
+                                  // 2. Nút Máy ảnh (Camera)
+                                  IconButton(
+                                    key: const Key('chat_camera_btn'),
+                                    onPressed: _openCameraChat,
+                                    tooltip: loc.chatCamera,
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(
                                       minWidth: 36,
-                                      minHeight: 36,
+                                      minHeight: 48,
                                     ),
                                     icon: const Icon(
-                                      LucideIcons.smile,
-                                      size: 20,
+                                      LucideIcons.camera,
+                                      size: 21,
                                       color: AppColors.primary,
                                     ),
                                   ),
-                                ),
-                                onSubmitted: (_) => _sendMessage(),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
+                                  // 3. Nút Thư viện ảnh (Gallery)
+                                  IconButton(
+                                    key: const Key('chat_gallery_btn'),
+                                    onPressed: _pickAndSendChatImage,
+                                    tooltip: loc.chatGallery,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 36,
+                                      minHeight: 48,
+                                    ),
+                                    icon: const Icon(
+                                      LucideIcons.image,
+                                      size: 21,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                  // 4. Nút Micro thu âm
+                                  IconButton(
+                                    key: const Key('chat_mic_btn'),
+                                    onPressed: _toggleVoiceRecording,
+                                    tooltip: _isRecordingVoice
+                                        ? loc.chatStopRecording
+                                        : loc.chatVoiceMessage,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 36,
+                                      minHeight: 48,
+                                    ),
+                                    icon: Icon(
+                                      _isRecordingVoice
+                                          ? LucideIcons.square
+                                          : LucideIcons.mic,
+                                      size: 21,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(width: 6),
 
-                          // 6. Nút Gửi tin nhắn / Cảm xúc nhanh (luôn >= 48x48)
-                          ValueListenableBuilder<TextEditingValue>(
-                            valueListenable: _inputCtrl,
-                            builder: (context, value, _) {
-                              final hasText = value.text.trim().isNotEmpty;
-                              return Semantics(
-                                button: true,
-                                label: hasText
-                                    ? loc.chatSendMessage
-                                    : loc.chatSendQuickEmoji,
-                                child: Tooltip(
-                                  message: hasText
-                                      ? loc.chatSendMessage
-                                      : loc.chatSendQuickEmojiHint,
-                                  child: InkWell(
-                                    key: const Key('chat_send_button'),
-                                    onTap: () {
-                                      if (_inputCtrl.text.trim().isNotEmpty) {
-                                        _sendMessage();
-                                      } else {
-                                        _sendDirectContent(
-                                          resolveAppQuickChatOption(
-                                            _chatQuickEmoji,
-                                          ).sendText,
-                                        );
-                                      }
-                                    },
-                                    onLongPress:
-                                        hasText ? null : () => _chooseQuickEmoji(loc),
-                                    borderRadius: BorderRadius.circular(24),
-                                    child: SizedBox(
-                                      width: 48,
-                                      height: 48,
-                                      child: Center(
-                                        child: hasText
-                                            ? const Icon(
-                                                LucideIcons.send,
-                                                size: 21,
-                                                color: AppColors.primary,
-                                              )
-                                            : Icon(
-                                                resolveAppQuickChatOption(
-                                                  _chatQuickEmoji,
-                                                ).icon,
-                                                size: 21,
-                                                color: AppColors.primary,
-                                              ),
+                                // 5. Ô nhập tin nhắn Messenger bo tròn + nút mặt cười
+                                Expanded(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(22),
+                                    ),
+                                    child: TextField(
+                                      key: const Key('chat_message_input'),
+                                      controller: _inputCtrl,
+                                      focusNode: _inputFocusNode,
+                                      textInputAction: TextInputAction.send,
+                                      minLines: 1,
+                                      maxLines: 4,
+                                      style: const TextStyle(
+                                        fontSize: 14.5,
+                                        color: AppColors.textStrong,
                                       ),
+                                      decoration: InputDecoration(
+                                        hintText: loc.chatInputPlaceholder,
+                                        hintStyle: const TextStyle(
+                                          color: Color(0xFF94A3B8),
+                                          fontSize: 14.5,
+                                        ),
+                                        border: InputBorder.none,
+                                        isDense: true,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 10,
+                                        ),
+                                        suffixIcon: IconButton(
+                                          key:
+                                              const Key('chat_input_smile_btn'),
+                                          onPressed: () =>
+                                              _showEmojiSelector(loc),
+                                          tooltip: loc.chatEmojiTooltip,
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(
+                                            minWidth: 36,
+                                            minHeight: 36,
+                                          ),
+                                          icon: const Icon(
+                                            LucideIcons.smile,
+                                            size: 20,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      ),
+                                      onSubmitted: (_) => _sendMessage(),
                                     ),
                                   ),
                                 ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
+                                const SizedBox(width: 4),
+
+                                // 6. Nút Gửi tin nhắn / Cảm xúc nhanh (luôn >= 48x48)
+                                ValueListenableBuilder<TextEditingValue>(
+                                  valueListenable: _inputCtrl,
+                                  builder: (context, value, _) {
+                                    final hasText =
+                                        value.text.trim().isNotEmpty;
+                                    return Semantics(
+                                      button: true,
+                                      label: hasText
+                                          ? loc.chatSendMessage
+                                          : loc.chatSendQuickEmoji,
+                                      child: Tooltip(
+                                        message: hasText
+                                            ? loc.chatSendMessage
+                                            : loc.chatSendQuickEmojiHint,
+                                        child: InkWell(
+                                          key: const Key('chat_send_button'),
+                                          onTap: () {
+                                            if (_inputCtrl.text
+                                                .trim()
+                                                .isNotEmpty) {
+                                              _sendMessage();
+                                            } else {
+                                              _sendDirectContent(
+                                                resolveAppQuickChatOption(
+                                                  _chatQuickEmoji,
+                                                ).sendText,
+                                              );
+                                            }
+                                          },
+                                          onLongPress: hasText
+                                              ? null
+                                              : () => _chooseQuickEmoji(loc),
+                                          borderRadius:
+                                              BorderRadius.circular(24),
+                                          child: SizedBox(
+                                            width: 48,
+                                            height: 48,
+                                            child: Center(
+                                              child: hasText
+                                                  ? const Icon(
+                                                      LucideIcons.send,
+                                                      size: 21,
+                                                      color: AppColors.primary,
+                                                    )
+                                                  : Icon(
+                                                      resolveAppQuickChatOption(
+                                                        _chatQuickEmoji,
+                                                      ).icon,
+                                                      size: 21,
+                                                      color: AppColors.primary,
+                                                    ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
                     ),
                   ),
                 ),
@@ -2772,6 +2856,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
             child: InkWell(
               key: ValueKey<String>('reaction_${item.code}_$msgKey'),
               onTap: () {
+                final nextReaction = isSelected ? '' : item.code;
                 setState(() {
                   if (isSelected) {
                     _messageReactions.remove(msgKey);
@@ -2780,6 +2865,14 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                   }
                   _reactionActiveMsgKey = null;
                 });
+                final activeConvId = _selectedConversationId;
+                if (activeConvId != null && activeConvId.isNotEmpty) {
+                  ref.read(messagesViewModelProvider).sendReaction(
+                        activeConvId,
+                        messageId: msgKey,
+                        reaction: nextReaction,
+                      );
+                }
               },
               borderRadius: BorderRadius.circular(20),
               child: Padding(
@@ -2864,7 +2957,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
               child: CircleAvatar(
                 backgroundColor: Colors.black54,
                 child: IconButton(
-                  icon: const Icon(LucideIcons.x, color: Colors.white, size: 20),
+                  icon:
+                      const Icon(LucideIcons.x, color: Colors.white, size: 20),
                   onPressed: () => Navigator.pop(ctx),
                 ),
               ),
@@ -3067,19 +3161,24 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                       padding: EdgeInsets.only(
                                         bottom: isImageOnly
                                             ? 0
-                                            : (displayCaption != null ? AppSpacing.s8 : 0),
+                                            : (displayCaption != null
+                                                ? AppSpacing.s8
+                                                : 0),
                                       ),
                                       child: _isAudioUrl(attachmentUrl)
-                                          ? _buildAudioBubble(attachmentUrl, isMe: isMe)
+                                          ? _buildAudioBubble(attachmentUrl,
+                                              isMe: isMe)
                                           : ChatImageBubble(
                                               imageUrl: attachmentUrl,
                                               borderRadius: bubbleRadius,
                                               maxWidth: maxBubbleWidth,
-                                              onTap: () => _openFullScreenImage(context, attachmentUrl),
+                                              onTap: () => _openFullScreenImage(
+                                                  context, attachmentUrl),
                                             ),
                                     ),
                                 ],
-                                if (displayCaption != null && displayCaption.isNotEmpty)
+                                if (displayCaption != null &&
+                                    displayCaption.isNotEmpty)
                                   Text(
                                     displayCaption,
                                     softWrap: true,
@@ -3265,11 +3364,11 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
   bool _isSending = false;
 
   List<String> _quickQuestionsFor(AppLocalizations l10n) => [
-    l10n.hostMsgQuestion1,
-    l10n.hostMsgQuestion2,
-    l10n.hostMsgQuestion3,
-    l10n.hostMsgQuestion4,
-  ];
+        l10n.hostMsgQuestion1,
+        l10n.hostMsgQuestion2,
+        l10n.hostMsgQuestion3,
+        l10n.hostMsgQuestion4,
+      ];
 
   @override
   void dispose() {
@@ -3419,7 +3518,9 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                           ),
                                           const SizedBox(height: 3),
                                           Text(
-                                            l10n.hostMsgHostLabel(villa.host?.fullName ?? l10n.hostMsgDefaultHost),
+                                            l10n.hostMsgHostLabel(
+                                                villa.host?.fullName ??
+                                                    l10n.hostMsgDefaultHost),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
