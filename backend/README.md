@@ -38,20 +38,20 @@ Mọi phản hồi từ hệ thống `/api/*` đều tuân thủ nghiêm ngặt 
 
 ---
 
-## 2. Cấu trúc 25 Phân hệ Nghiệp vụ (`src/modules/`)
+## 2. Cấu trúc 21 Phân hệ Nghiệp vụ (`src/modules/`)
 
 | Nhóm miền (Domain Group) | Các mô-đun thành phần (`src/modules/*`) | Trách nhiệm cốt lõi |
 | :--- | :--- | :--- |
 | **Xác thực & Người dùng** | `auth`, `users`, `notifications` | Đăng ký/Đăng nhập, OTP băm mật mã, Google OAuth 2.0, JWT xoay vòng qua HttpOnly Cookie, RBAC, FCM Push & thông báo trong ứng dụng. |
 | **Danh mục & Thị giác AI** | `listings`, `amenities`, `blogs`, `wishlist`, `ai`, `exchange-rates` | Tra cứu biệt thự công khai theo khu vực/bản đồ & kiểm tra lịch trống, phân tích nhãn ảnh biệt thự & bóc tách CCCD (`gpt-4.1-mini`), tỷ giá ngoại tệ. |
 | **Đặt phòng & Thanh toán** | `bookings`, `payments`, `coupons`, `reviews`, `conversations` | Máy trạng thái đơn đặt phòng 11 trạng thái, khóa ngày `booking_date_locks`, thanh toán lũy đẳng VNPay/MoMo/VietQR, áp mã giảm giá, nhắn tin thời gian thực Socket.IO. |
-| **Vận hành Chủ nhà (Host)** | `host-onboarding`, `host-applications`, `verifications`, `host-listings`, `host-sheet-sync`, `host-bank-account`, `payouts`, `banks`, `uploads` | Hồ sơ đăng ký Host, xác minh KYC qua Cloudflare R2 Private Signed URL, quản lý lịch 30 ngày, đồng bộ hai chiều Google Sheets, đối soát doanh thu. |
+| **Vận hành Chủ nhà (Host)** | `host-kyc`, `host-listings`, `host-sheet-sync`, `payouts`, `uploads` | Hồ sơ đăng ký Host & xác minh KYC hợp nhất qua Cloudflare R2 Private Signed URL, quản lý lịch 30 ngày, đồng bộ hai chiều Google Sheets, tài khoản ngân hàng VietQR & đối soát doanh thu. |
 | **Quản trị & An toàn Sàn** | `admin`, `reports` | Thống kê toàn sàn, kiểm duyệt tin đăng, cấu hình phí nền tảng (*Platform Fee*), phê duyệt giải ngân 2 lớp (*Maker–Checker*), xử lý báo cáo vi phạm. |
 
 ### Tiến trình nền bất đồng bộ (Background Workers)
 
 Khi máy chủ khởi chạy (`src/server.ts`), hai tiến trình nền tự động kích hoạt và hỗ trợ dừng an toàn (*Graceful Shutdown* khi nhận tín hiệu `SIGINT`/`SIGTERM`):
-1. **`booking-expiration.service.ts`:** Quét định kỳ mỗi `30s` để thu hồi các đơn `pending_payment` quá hạn giữ chỗ `15 phút`, giải phóng khóa ngày trong `booking_date_locks` và ghi lịch sử trạng thái.
+1. **`modules/bookings/booking-expiration.service.ts`:** Quét định kỳ mỗi `30s` để thu hồi các đơn `pending_payment` quá hạn giữ chỗ `15 phút`, giải phóng khóa ngày trong `booking_date_locks` và ghi lịch sử trạng thái.
 2. **`host-sheet-sync.worker.ts`:** Đồng bộ hai chiều lịch đặt phòng và trạng thái phòng trống giữa hệ thống cơ sở dữ liệu và bảng tính Google Sheets riêng của từng Chủ nhà.
 
 ---
@@ -65,12 +65,12 @@ cp .env.example .env
 ```
 
 Các nhóm biến môi trường bắt buộc và trọng yếu:
-- **Máy chủ & Mạng:** `PORT` (mặc định `7000` khi chạy cục bộ, `5000` trong Docker), `NODE_ENV`, `CLIENT_ORIGIN`, `CORS_ORIGINS`.
+- **Máy chủ & Mạng:** `PORT` (mặc định `7000` đồng bộ trên cả môi trường phát triển cục bộ và Docker), `NODE_ENV`, `CLIENT_ORIGIN`, `CORS_ORIGINS`.
 - **MySQL / TiDB:** `MYSQLHOST`, `MYSQLPORT`, `MYSQLDATABASE`, `MYSQLUSER`, `MYSQLPASSWORD`, `MYSQL_SSL`, `MYSQL_SSL_CA`.
 - **Bảo mật & Mật mã (tối thiểu 32 ký tự):** `JWT_SECRET_KEY`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `TOKEN_HASH_SECRET`, `OTP_HASH_SECRET`, `COOKIE_SECRET`.
 - **AI Thị giác máy tính (OpenAI Vision):** `OPENAI_API_KEY`, `OPENAI_VISION_MODEL=gpt-4.1-mini`.
 - **Cloudflare R2:** `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `R2_PRIVATE_BUCKET`, `R2_PRIVATE_SIGNED_URL_EXPIRES_SECONDS`.
-- **Thanh toán, FCM & Google Sheets:** `VNPAY_*`, `MOMO_*`, `FIREBASE_SERVICE_ACCOUNT_PATH`, `GOOGLE_SHEETS_SYNC_ENABLED`, `GOOGLE_SHEETS_SERVICE_ACCOUNT_PATH`.
+- **Thanh toán, Tỷ giá, FCM & Google Sheets:** `VNPAY_*`, `MOMO_*`, `EXCHANGE_RATE_*`, `FIREBASE_SERVICE_ACCOUNT_PATH`, `GOOGLE_SHEETS_SYNC_ENABLED`, `GOOGLE_SHEETS_SERVICE_ACCOUNT_PATH`.
 
 ---
 
@@ -126,6 +126,6 @@ npm start
 # Chạy bộ kiểm thử nhanh (Auth, Listings, Bookings)
 npm run test:quick
 
-# Thực thi toàn bộ 25 bộ kiểm thử tích hợp (Auth/RBAC, Tương tranh đặt phòng, Thanh toán, AI Vision, Sheet Sync...)
+# Thực thi toàn bộ 30 bộ kiểm thử tích hợp (Auth/RBAC, Tương tranh đặt phòng, Thanh toán, AI Vision, Sheet Sync...)
 npm test
 ```

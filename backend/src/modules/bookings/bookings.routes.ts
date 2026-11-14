@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP đặt phòng cho khách (`/api/bookings`) và quản lý đơn cho chủ nhà (`hostBookingsRoutes`):
+ * - Áp dụng chuỗi middleware xác thực (`authenticate`), kiểm tra vai trò (`requireRole`), giới hạn tần suất tạo đơn (`Limiter`) và kiểm chứng schema đầu vào (`validate`).
+ */
+
 import express from "express";
 
 import {

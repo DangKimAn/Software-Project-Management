@@ -12,8 +12,8 @@ process.env.REFRESH_TOKEN_COOKIE_PATH = "/api/auth";
 
 const authService = require("../dist/modules/auth/auth.service");
 const User = require("../dist/models/user").default;
-const hostOnboardingService = require("../dist/modules/host-onboarding/host-onboarding.service");
-const hostVerificationsService = require("../dist/modules/verifications/verifications.service");
+const hostOnboardingService = require("../dist/modules/host-kyc/host-application.service");
+const hostVerificationsService = require("../dist/modules/host-kyc/host-verification.service");
 const hostListingsService = require("../dist/modules/host-listings/host-listings.service");
 const adminListingsService = require("../dist/modules/admin/admin.service");
 

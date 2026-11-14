@@ -43,7 +43,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
             myBookingsProvider.overrideWith((ref) => Future.value([])),
             activePendingBookingProvider.overrideWithValue(null),
           ],
@@ -70,8 +71,10 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
-            myBookingsProvider.overrideWith((ref) => Future.value([testPendingBooking])),
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            myBookingsProvider
+                .overrideWith((ref) => Future.value([testPendingBooking])),
             activePendingBookingProvider.overrideWithValue(testPendingBooking),
           ],
           child: const MaterialApp(
@@ -140,8 +143,10 @@ void main() {
         ProviderScope(
           overrides: [
             appRouterProvider.overrideWithValue(testRouter),
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
-            myBookingsProvider.overrideWith((ref) => Future.value([testPendingBooking])),
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            myBookingsProvider
+                .overrideWith((ref) => Future.value([testPendingBooking])),
             activePendingBookingProvider.overrideWithValue(testPendingBooking),
           ],
           child: MaterialApp.router(

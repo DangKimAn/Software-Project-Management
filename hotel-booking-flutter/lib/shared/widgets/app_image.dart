@@ -114,9 +114,10 @@ class AppImage extends StatelessWidget {
     final raw = (imageUrl ?? url)?.trim() ?? '';
     Widget content;
     final dpr = MediaQuery.devicePixelRatioOf(context);
-    final int? targetCacheWidth = (width != null && width!.isFinite && width! > 0)
-        ? (width! * dpr).round().clamp(1, 2048)
-        : null;
+    final int? targetCacheWidth =
+        (width != null && width!.isFinite && width! > 0)
+            ? (width! * dpr).round().clamp(1, 2048)
+            : null;
 
     if (raw.isEmpty) {
       content = _buildPlaceholder();

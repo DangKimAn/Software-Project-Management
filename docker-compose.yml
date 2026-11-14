@@ -29,11 +29,12 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+    # CONFLICT-RESOLVED: Đồng bộ cổng Backend Container từ 5000 sang 7000 để thống nhất với backend/src/config/env.ts, backend/.env.example và hotel-booking-flutter/config/dev.json
     ports:
-      - "127.0.0.1:5000:5000"
+      - "127.0.0.1:7000:7000"
     environment:
       NODE_ENV: ${NODE_ENV:-development}
-      PORT: 5000
+      PORT: 7000
       MYSQLHOST: mysql
       MYSQLPORT: 3306
       MYSQLDATABASE: ${MYSQL_DATABASE:-booking_room}

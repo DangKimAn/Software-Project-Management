@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 ///
 /// Strictly adheres to FLUTTER_RULES.md & Source goc palette tokens.
 /// Hardcoding random hex colors across screens is strictly forbidden.
+/// Bảng mã màu chuẩn của hệ thống thiết kế Light Luxury cho ứng dụng The Palm Villa.
+///
+/// Quy tập toàn bộ màu thương hiệu Coral (`primary`), màu chữ phân cấp tương phản WCAG,
+/// mặt nền, đường viền và màu trạng thái vào một nguồn duy nhất, cấm rải mã màu trực tiếp trên giao diện.
 abstract final class AppColors {
   // Brand Colors
   static const primary = Color(0xFFFF385C);

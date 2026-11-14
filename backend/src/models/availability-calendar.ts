@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý lịch khả dụng theo từng ngày của chỗ nghỉ, giá ghi đè, khóa chủ nhà/quản trị và phiên bản đồng bộ.
+ */
 import {
     CreationOptional,
     DataTypes,

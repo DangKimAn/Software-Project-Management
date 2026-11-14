@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP quản trị tài khoản người dùng bổ trợ (`/api/admin/users`):
+ * - Kết hợp chuỗi middleware xác thực `authenticate`, phân quyền `requireRole("admin")` và kiểm chứng dữ liệu `validate` cho tác vụ cập nhật ảnh đại diện người dùng.
+ */
+
 import express from "express";
 
 import { updateAdminUserAvatar } from "../users/users.controller";

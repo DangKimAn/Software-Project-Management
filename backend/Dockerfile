@@ -25,7 +25,8 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=5000
+# CONFLICT-RESOLVED: Đồng bộ cổng mặc định từ 5000 sang 7000 để khớp với env.ts, docker-compose.yml và Flutter config/dev.json
+ENV PORT=7000
 
 # Install curl for Docker health checks
 RUN apk add --no-cache curl
@@ -41,13 +42,15 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/database ./database
 
-# Change file ownership to non-root user
+# Create writable runtime cache/upload/backup directories and change file ownership to non-root user
+RUN mkdir -p /app/data/cache /app/uploads /app/backups && chown -R appuser:appgroup /app
 USER appuser
 
-EXPOSE 5000
+# CONFLICT-RESOLVED: Mở cổng 7000 và kiểm tra sức khỏe theo biến PORT (mặc định 7000) thay vì cổng 5000 cũ
+EXPOSE 7000
 
 # Container healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:5000/api/health || exit 1
+  CMD curl -f http://localhost:${PORT:-7000}/api/health || exit 1
 
 CMD ["node", "dist/index.js"]

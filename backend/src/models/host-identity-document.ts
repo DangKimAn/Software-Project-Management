@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu metadata giấy tờ định danh KYC trên kho riêng tư R2 và kết quả bóc tách AI Vision.
+ */
 import {
     CreationOptional,
     DataTypes,

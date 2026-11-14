@@ -22,14 +22,14 @@ const {
     buildReservedDates,
     createBookingDateLocks,
     releaseBookingDateLocksForBooking,
-} = require("../dist/services/booking-date-lock.service");
+} = require("../dist/modules/bookings/booking-date-lock.service");
 const {
     assertBookingStatusTransition,
     transitionBookingStatus,
 } = require("../dist/modules/bookings/booking-state-machine");
 const bookingsService = require("../dist/modules/bookings/bookings.service");
 const { calculateBookingPricing } = require("../dist/modules/bookings/booking-pricing.service");
-const { buildBookingDateOverlapWhere, buildActiveBookingStatusWhere } = require("../dist/common/booking-availability");
+const { buildBookingDateOverlapWhere, buildActiveBookingStatusWhere } = require("../dist/modules/bookings/booking-availability");
 
 const originals: PatchEntry[] = [];
 

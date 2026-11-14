@@ -10,15 +10,16 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../core/network/dio_client.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
-import '../../../booking_inquiry/domain/services/contact_service.dart';
+import '../../../support/domain/services/contact_service.dart';
 import '../../domain/account_profile_models.dart';
-import '../../services/avatar_upload_service.dart';
+
 import '../view_models/account_settings_view_model.dart';
+import '../view_models/profile_settings_actions_view_model.dart';
 
 /// Account & Settings tab (`Hồ sơ & Tài khoản`).
 ///
@@ -301,8 +302,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
               AvatarPickedFile? picked;
               try {
-                final picker = ref.read(avatarPickerServiceProvider);
-                picked = await picker.pickAvatarFromDevice();
+                picked = await ref
+                    .read(profileSettingsActionsProvider)
+                    .pickAvatarFromDevice();
               } on AvatarPickException catch (e) {
                 if (!ctx.mounted) return;
                 setModalState(() {
@@ -330,8 +332,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               });
 
               try {
-                final uploadService = ref.read(avatarUploadServiceProvider);
-                final presigned = await uploadService.uploadAvatarToR2(picked);
+                final presigned = await ref
+                    .read(profileSettingsActionsProvider)
+                    .uploadAvatarToR2(picked);
                 await ref.read(authNotifierProvider.notifier).updateAvatar(
                       url: presigned.publicUrl,
                       key: presigned.key,
@@ -581,8 +584,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
               AvatarPickedFile? picked;
               try {
-                final picker = ref.read(avatarPickerServiceProvider);
-                picked = await picker.pickAvatarFromDevice();
+                picked = await ref
+                    .read(profileSettingsActionsProvider)
+                    .pickAvatarFromDevice();
               } on AvatarPickException catch (e) {
                 if (!ctx.mounted) return;
                 setModalState(() {
@@ -609,8 +613,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               });
 
               try {
-                final uploadService = ref.read(avatarUploadServiceProvider);
-                final presigned = await uploadService.uploadAvatarToR2(picked);
+                final presigned = await ref
+                    .read(profileSettingsActionsProvider)
+                    .uploadAvatarToR2(picked);
                 avatarUrlCtrl.text = presigned.publicUrl;
                 uploadedAvatarKey = presigned.key;
                 await ref.read(authNotifierProvider.notifier).updateAvatar(
@@ -695,21 +700,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       avatarUrl: newAvatarUrl.isNotEmpty ? newAvatarUrl : null,
                     );
 
-                try {
-                  final prefs = ref.read(preferencesServiceProvider);
-                  await prefs.saveAccountProfile(updatedUser.id, {
-                    'fullName': updatedUser.fullName,
-                    'phone': updatedUser.phone ?? '',
-                    'bio': updatedUser.bio ?? '',
-                    'location': updatedUser.location ?? '',
-                    'job': updatedUser.job ?? '',
-                    'dreamDestination': updatedUser.dreamDestination ?? '',
-                    'school': updatedUser.school ?? '',
-                    'languages': updatedUser.languages.join(', '),
-                  });
-                } catch (_) {
-                  // Ignore local cache write failure when backend update succeeded.
-                }
+                await ref
+                    .read(profileSettingsActionsProvider)
+                    .cacheSyncedAccountProfile(updatedUser);
 
                 _unsavedDraft = null;
                 if (!ctx.mounted) return;
@@ -1651,23 +1644,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: SizedBox(
               width: 54,
               height: 54,
-              child: (user.avatarUrl != null &&
-                      user.avatarUrl!.trim().isNotEmpty)
-                  ? AppImage(
-                      url: user.avatarUrl!.trim(),
-                      fit: BoxFit.cover,
-                    )
-                  : Center(
-                      child: Text(
-                        user.firstName.isNotEmpty
-                            ? user.firstName[0].toUpperCase()
-                            : 'U',
-                        style: AppTypography.displayMedium.copyWith(
-                          color: AppColors.textStrong,
-                          fontSize: 20,
+              child:
+                  (user.avatarUrl != null && user.avatarUrl!.trim().isNotEmpty)
+                      ? AppImage(
+                          url: user.avatarUrl!.trim(),
+                          fit: BoxFit.cover,
+                        )
+                      : Center(
+                          child: Text(
+                            user.firstName.isNotEmpty
+                                ? user.firstName[0].toUpperCase()
+                                : 'U',
+                            style: AppTypography.displayMedium.copyWith(
+                              color: AppColors.textStrong,
+                              fontSize: 20,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
             ),
           ),
         ),

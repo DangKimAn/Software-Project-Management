@@ -3,6 +3,7 @@ import 'app_currency.dart';
 
 /// Controls whether Guest display currency tracks the active language (`automatic`)
 /// or stays pinned to an explicit user choice (`manual`).
+/// Chế độ lựa chọn tiền tệ hiển thị của Khách: tự động bám theo ngôn ngữ giao diện (`automatic`) hoặc ghim cố định theo lựa chọn thủ công (`manual`).
 enum CurrencySelectionMode {
   automatic,
   manual,
@@ -12,6 +13,9 @@ enum CurrencySelectionMode {
 ///
 /// Formula enforced across the app:
 /// `effectiveCurrency = manualCurrencyOverride ?? AppCurrency.defaultForLocale(locale)`
+/// Đối tượng bất biến lưu trữ tùy chọn đơn vị tiền tệ hiển thị của Khách.
+///
+/// Tuân thủ công thức đồng bộ: `effectiveCurrency = manualCurrencyOverride ?? AppCurrency.defaultForLocale(locale)`.
 class CurrencyPreference {
   static const int currentSchemaVersion = 1;
 
@@ -37,6 +41,8 @@ class CurrencyPreference {
       mode == CurrencySelectionMode.manual ? _manualCurrency : null;
 
   /// Resolves the effective display currency synchronously without race conditions.
+  /// Giải thuật phân giải đồng bộ đơn vị tiền tệ hiển thị hiệu lực mà không phát sinh tranh chấp bất đồng bộ:
+  /// Nếu cờ tính năng đa tiền tệ tắt (`!featureEnabled`) thì cưỡng bức trả về `VND`; ngược lại ưu tiên `manualCurrencyOverride` trước khi suy diễn từ `localeCode`.
   AppCurrency resolveEffectiveCurrency(
     String localeCode, {
     bool featureEnabled = true,
@@ -58,6 +64,10 @@ class CurrencyPreference {
 
   /// Safely restores or migrates stored preference data without throwing on
   /// legacy formats, partial upgrades, or corrupted strings.
+  /// Giải thuật khôi phục và di trú an toàn cấu hình tiền tệ từ chuỗi lưu trữ cục bộ (`fromStorageString`):
+  /// 1. Chuỗi rỗng hoặc `null`: mặc định về chế độ tự động `CurrencyPreference.automatic()`.
+  /// 2. Di trú tương thích ngược (chuỗi không bắt đầu bằng `'{'`): nhận diện `'automatic'`/`'auto'` hoặc mã tiền tệ trực tiếp (`'VND'`, `'USD'`, `'KRW'`).
+  /// 3. Giải mã đối tượng JSON chuẩn: đọc khóa `'mode'` và `'currency'` (hoặc `'manualCurrency'`), chỉ kích hoạt `manual` khi cả hai hợp lệ; mọi dữ liệu hỏng đều quay về `automatic` không ném ngoại lệ.
   static CurrencyPreference fromStorageString(String? raw) {
     if (raw == null || raw.trim().isEmpty) {
       return const CurrencyPreference.automatic();

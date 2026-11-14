@@ -6,27 +6,25 @@ import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/storage/preferences_service.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
-import '../../../blog/data/blog_repository.dart';
+import '../../../blog/presentation/view_models/blog_view_model.dart';
 import '../../../search/presentation/widgets/source_search_bar.dart';
 import '../../../villas/domain/entities/villa.dart';
+import '../view_models/home_view_model.dart';
 
-/// Dedicated provider for Popular Destinations on HomeScreen (`PopularDestinationsSection.tsx`)
-/// independent of `villaFilterProvider` / `villaListProvider` so Search filters never pollute Home.
-final popularDestinationsProvider = FutureProvider<List<Villa>>((ref) async {
-  final repository = ref.watch(villaRepositoryProvider);
-  return repository.getVillas(
-    page: 1,
-    limit: 36,
-    sort: 'newest',
-  );
-});
+export '../view_models/home_view_model.dart';
 
+/// Màn hình Trang chủ kết hợp ảnh bìa lớn, thẻ tìm kiếm nổi, danh sách đã xem gần đây, điểm đến yêu thích và cẩm nang du lịch.
+///
+/// Tự động ghim thanh tìm kiếm thu gọn lên `AppTopHeader` khi người dùng cuộn qua vùng tìm kiếm chính ở đầu trang.
+///
 /// Complete 1:1 port of `Source goc/frontend/src/views/pages/Home/HomePage.tsx`,
 /// `Hero.tsx`, `SearchBar.tsx` (`variant="home"`), `RecentlyViewedSection.tsx`,
 /// `PopularDestinationsSection.tsx`, `PopularDestinationCard.tsx`, and `BlogHighlightsSection.tsx`.
 class HomeScreen extends ConsumerStatefulWidget {
+  /// Khởi tạo màn hình Trang chủ `HomeScreen`.
   const HomeScreen({super.key});
 
   @override
@@ -35,6 +33,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _recentScrollController = ScrollController();
   final ScrollController _popularScrollController = ScrollController();
   final GlobalKey _bodySearchKey = GlobalKey();
   bool _isPinnedByScroll = false;
@@ -43,6 +42,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _destinationGridPage =
       0; // 0-indexed like `PopularDestinationsSection.tsx`
   static const int _destinationPageSize = 6;
+  double _recentCardStepWidth = 220.0;
   double _popularCardStepWidth = 220.0;
 
   @override
@@ -53,6 +53,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
+    // Giải thuật ghim thanh tìm kiếm theo ngưỡng cuộn dọc (Scroll-Threshold Header Pinning):
+    // Phân biệt ngưỡng đổi nền thanh điều hướng (pastHero: 120px desktop / 80px mobile)
+    // và ngưỡng ghim thanh tìm kiếm thu gọn lên đỉnh (searchTriggerOffset: 300px desktop / 200px mobile).
     final offset = _scrollController.offset;
 
     final screenWidth = MediaQuery.sizeOf(context).width;
@@ -76,8 +79,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _recentScrollController.dispose();
     _popularScrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollRecentlyViewed(int direction) {
+    if (!_recentScrollController.hasClients) return;
+    final position = _recentScrollController.position;
+    final target = (position.pixels + (direction * _recentCardStepWidth))
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    _recentScrollController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   void _scrollPopularDestinations(int direction) {
@@ -284,96 +300,153 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  /// Matches `RecentlyViewedSection.tsx` & `ListingCard.tsx` (`bg-white py-12 sm:py-14`, `max-w-[74rem]`, `rounded-3xl`).
+  /// Recently Viewed section styled consistently with Popular Destinations:
+  /// single-row header (eyebrow + title on left, compact clear pill on right)
+  /// and horizontal scrollable compact cards with `<` / `>` carousel buttons.
   Widget _buildRecentlyViewedSection(
     BuildContext context,
     List<RecentlyViewedItem> items,
   ) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isDesktop = screenWidth >= 768;
+    final favorites = ref.watch(favoritesProvider);
+    final recentItems = items.take(8).toList();
+
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: AppColors.divider)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 36),
+      padding: EdgeInsets.fromLTRB(
+        isDesktop ? 24 : 16,
+        isDesktop ? 28 : 20,
+        isDesktop ? 24 : 16,
+        isDesktop ? 40 : 28,
+      ),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1184),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.end,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'LỊCH SỬ XEM',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 2.0,
-                          color: AppColors.primary,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'LỊCH SỬ XEM',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.8,
+                            color: AppColors.primary,
+                          ),
                         ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Đã xem gần đây',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.5,
-                          color: Color(0xFF18181B),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Đã xem gần đây',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: isDesktop ? 26 : 20,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.4,
+                            color: const Color(0xFF0F172A),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  TextButton(
-                    onPressed: () =>
-                        ref.read(recentlyViewedProvider.notifier).clear(),
-                    child: const Text(
-                      'Xóa lịch sử xem',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF71717A),
-                      ),
+                      ],
                     ),
+                  ),
+                  const SizedBox(width: 12),
+                  _ClearRecentlyViewedButton(
+                    onTap: () =>
+                        ref.read(recentlyViewedProvider.notifier).clear(),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final cols = constraints.maxWidth >= 1024
-                      ? 4
-                      : (constraints.maxWidth >= 720
-                          ? 3
-                          : (constraints.maxWidth >= 480 ? 2 : 1));
-                  const gap = 16.0;
-                  final cardWidth =
-                      (constraints.maxWidth - (gap * (cols - 1))) / cols;
+                  final double cardW;
+                  if (constraints.maxWidth >= 1100) {
+                    cardW = (constraints.maxWidth - (16 * 3)) / 4;
+                  } else if (constraints.maxWidth >= 820) {
+                    cardW = (constraints.maxWidth - (16 * 2)) / 3;
+                  } else if (constraints.maxWidth >= 540) {
+                    cardW = (constraints.maxWidth - 14) / 2.4;
+                  } else {
+                    cardW = ((constraints.maxWidth - 12) / 2.15)
+                        .clamp(150.0, 210.0);
+                  }
+                  _recentCardStepWidth = cardW + 12.0;
 
-                  return Wrap(
-                    spacing: gap,
-                    runSpacing: gap,
-                    children: items.take(8).map((item) {
-                      return SizedBox(
-                        width: cardWidth,
-                        child: _ListingCardWidget(
-                          id: item.id,
-                          name: item.title,
-                          address: item.location,
-                          pricePerNight: item.pricePerNight,
-                          rating: item.rating,
-                          imageUrl: item.imageUrl,
-                          onTap: () => context.push('/villa/${item.id}'),
+                  return SizedBox(
+                    width: constraints.maxWidth,
+                    child: Stack(
+                      alignment: AlignmentDirectional.centerStart,
+                      clipBehavior: Clip.none,
+                      children: [
+                        SingleChildScrollView(
+                          key: const ValueKey<String>(
+                            'recently-viewed-horizontal-scroll',
+                          ),
+                          controller: _recentScrollController,
+                          scrollDirection: Axis.horizontal,
+                          clipBehavior: Clip.none,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (var i = 0; i < recentItems.length; i++) ...[
+                                if (i > 0) const SizedBox(width: 12),
+                                SizedBox(
+                                  width: cardW,
+                                  child: _PopularDestinationCard
+                                      .fromRecentlyViewed(
+                                    item: recentItems[i],
+                                    isFavorite:
+                                        favorites.contains(recentItems[i].id),
+                                    onFavoriteToggle: () {
+                                      ref
+                                          .read(favoritesProvider.notifier)
+                                          .toggleFavorite(recentItems[i].id);
+                                    },
+                                    onTap: () => context
+                                        .push('/villa/${recentItems[i].id}'),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                      );
-                    }).toList(),
+                        if (recentItems.length > 2) ...[
+                          Positioned(
+                            left: -6,
+                            child: _CarouselNavButton(
+                              icon: LucideIcons.chevronLeft,
+                              tooltip: 'Căn đã xem trước',
+                              elevated: true,
+                              onTap: () => _scrollRecentlyViewed(-1),
+                            ),
+                          ),
+                          Positioned(
+                            right: -6,
+                            child: _CarouselNavButton(
+                              icon: LucideIcons.chevronRight,
+                              tooltip: 'Căn đã xem tiếp theo',
+                              elevated: true,
+                              onTap: () => _scrollRecentlyViewed(1),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   );
                 },
               ),
@@ -810,6 +883,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       children: [
                         const Text(
                           'Nội dung tập trung vào nhu cầu thực tế khi đặt villa tại Vũng Tàu, từ nhóm gia đình đến nhóm bạn đông người.',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 14,
                             height: 1.7,
@@ -824,12 +899,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
-                                  'Xem tất cả bài viết',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.primary,
+                                Flexible(
+                                  child: Text(
+                                    'Xem tất cả bài viết',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primary,
+                                    ),
                                   ),
                                 ),
                                 SizedBox(width: 8),
@@ -1001,26 +1080,122 @@ class _CarouselNavButton extends StatelessWidget {
   }
 }
 
+/// Compact right-aligned pill action for clearing recently viewed history
+/// without wrapping below the section title.
+class _ClearRecentlyViewedButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ClearRecentlyViewedButton({
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Xóa lịch sử xem',
+      child: Tooltip(
+        message: 'Xóa lịch sử xem',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minWidth: 44,
+              minHeight: 44,
+              maxWidth: 168,
+            ),
+            child: Align(
+              alignment: Alignment.bottomRight,
+              child: Material(
+                color: const Color(0xFFF8FAFC),
+                shape: const StadiumBorder(
+                  side: BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  key: const ValueKey<String>('clear-recently-viewed-btn'),
+                  onTap: onTap,
+                  customBorder: const StadiumBorder(),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          LucideIcons.trash2,
+                          size: 13.5,
+                          color: AppColors.iconMuted,
+                        ),
+                        SizedBox(width: 5),
+                        Flexible(
+                          child: Text(
+                            'Xóa lịch sử',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              height: 1.2,
+                              color: Color(0xFF475569),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Popular Destination Card styled after the reference card UI (rounded card, top image with circular heart icon, title + mapPin location + price/rating).
 class _PopularDestinationCard extends ConsumerWidget {
-  final Villa villa;
+  final String title;
+  final String location;
+  final int? basePriceVnd;
+  final double rating;
+  final String imageUrl;
   final VoidCallback onTap;
   final bool isFavorite;
   final VoidCallback? onFavoriteToggle;
 
-  const _PopularDestinationCard({
-    required this.villa,
+  _PopularDestinationCard({
+    required Villa villa,
     required this.onTap,
     this.isFavorite = false,
     this.onFavoriteToggle,
-  });
+  })  : title = villa.name,
+        location = villa.address.isNotEmpty
+            ? villa.address
+            : (villa.tagline.isNotEmpty ? villa.tagline : 'Vũng Tàu'),
+        basePriceVnd = villa.basePriceVnd,
+        rating = villa.rating,
+        imageUrl = villa.imageUrls.isNotEmpty
+            ? villa.imageUrls.first
+            : 'assets/images/19tranphu.jpg';
+
+  _PopularDestinationCard.fromRecentlyViewed({
+    required RecentlyViewedItem item,
+    required this.onTap,
+    this.isFavorite = false,
+    this.onFavoriteToggle,
+  })  : title = item.title,
+        location = item.location.isNotEmpty ? item.location : 'Vũng Tàu',
+        basePriceVnd = item.pricePerNight,
+        rating = item.rating,
+        imageUrl = item.imageUrl.isNotEmpty
+            ? item.imageUrl
+            : 'assets/images/19tranphu.jpg';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final formatter = ref.watch(moneyFormatterProvider);
-    final thumbUrl = villa.imageUrls.isNotEmpty
-        ? villa.imageUrls.first
-        : 'assets/images/19tranphu.jpg';
 
     return InkWell(
       onTap: onTap,
@@ -1051,7 +1226,7 @@ class _PopularDestinationCard extends ConsumerWidget {
                       top: Radius.circular(17),
                     ),
                     child: AppImage(
-                      url: thumbUrl,
+                      url: imageUrl,
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -1101,7 +1276,7 @@ class _PopularDestinationCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    villa.name,
+                    title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -1121,11 +1296,7 @@ class _PopularDestinationCard extends ConsumerWidget {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          villa.address.isNotEmpty
-                              ? villa.address
-                              : (villa.tagline.isNotEmpty
-                                  ? villa.tagline
-                                  : 'Vũng Tàu'),
+                          location,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -1142,7 +1313,7 @@ class _PopularDestinationCard extends ConsumerWidget {
                       Expanded(
                         child: Text(
                           formatter.formatPriceOrContact(
-                            villa.basePriceVnd,
+                            basePriceVnd,
                             context: MoneyDisplayContext.villaCard,
                           ),
                           maxLines: 1,
@@ -1162,7 +1333,7 @@ class _PopularDestinationCard extends ConsumerWidget {
                       ),
                       const SizedBox(width: 3),
                       Text(
-                        villa.rating.toStringAsFixed(1),
+                        rating.toStringAsFixed(1),
                         style: const TextStyle(
                           color: AppColors.textPrimary,
                           fontSize: 12,
@@ -1181,146 +1352,6 @@ class _PopularDestinationCard extends ConsumerWidget {
   }
 }
 
-/// Exact port of `ListingCard.tsx` in Flat Minimal UI (no rating pill badge, no card border).
-class _ListingCardWidget extends ConsumerWidget {
-  final String id;
-  final String name;
-  final String address;
-  final int pricePerNight;
-  final double rating;
-  final String imageUrl;
-  final VoidCallback onTap;
-
-  const _ListingCardWidget({
-    required this.id,
-    required this.name,
-    required this.address,
-    required this.pricePerNight,
-    required this.rating,
-    required this.imageUrl,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final formatter = ref.watch(moneyFormatterProvider);
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AspectRatio(
-            aspectRatio: 4 / 3,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: AppImage(url: imageUrl, fit: BoxFit.cover),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF0F172A),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          LucideIcons.star,
-                          size: 14,
-                          color: AppColors.iconStrong,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          rating.toStringAsFixed(1),
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                RichText(
-                  text: TextSpan(
-                    style: DefaultTextStyle.of(context).style,
-                    children: [
-                      TextSpan(
-                        text: formatter.formatPriceOrContact(
-                          pricePerNight,
-                          context: MoneyDisplayContext.villaCard,
-                        ),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      TextSpan(
-                        text: ' ${formatter.l10n.pricePerNightUnit}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                          color: Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.only(top: 2),
-                      child: Icon(
-                        LucideIcons.mapPin,
-                        size: 14,
-                        color: AppColors.iconMuted,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        address,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          height: 1.4,
-                          color: Color(0xFF64748B),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Exact port of `BlogPostCard.tsx` in Flat Minimal UI (no category badge box, no card border).
 class _BlogPostCardWidget extends StatelessWidget {
   final BlogPost post;
@@ -1333,107 +1364,124 @@ class _BlogPostCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: SizedBox(
-              height: 192,
-              width: double.infinity,
-              child: AppImage(
-                url: post.coverImage,
-                fit: BoxFit.cover,
+    return Semantics(
+      button: true,
+      label: '${post.title}, chuyên mục ${post.category}',
+      child: InkWell(
+        key: ValueKey<String>('home-blog-card-${post.slug}'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: SizedBox(
+                height: 192,
+                width: double.infinity,
+                child: AppImage(
+                  url: post.coverImage,
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      post.category,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          post.category,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      '•',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF94A3B8),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      post.readTime,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 54,
-                  child: Text(
+                      if (post.readTime.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        const Text(
+                          '•',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF94A3B8),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 132),
+                          child: Text(
+                            post.readTime,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
                     post.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      height: 1.45,
+                      height: 1.4,
                       color: Color(0xFF020617),
                     ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 76,
-                  child: Text(
-                    post.excerpt,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      height: 1.65,
-                      color: Color(0xFF475569),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Icon(
-                      LucideIcons.mapPin,
-                      size: 14,
-                      color: AppColors.iconStrong,
-                    ),
-                    const SizedBox(width: 6),
+                  if (post.excerpt.isNotEmpty) ...[
+                    const SizedBox(height: 8),
                     Text(
-                      post.location,
+                      post.excerpt,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
+                        height: 1.55,
+                        color: Color(0xFF475569),
                       ),
                     ),
                   ],
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(
+                        LucideIcons.mapPin,
+                        size: 14,
+                        color: AppColors.iconStrong,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          post.location,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

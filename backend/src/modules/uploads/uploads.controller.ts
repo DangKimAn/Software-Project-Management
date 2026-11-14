@@ -8,6 +8,9 @@ import {
     type PresignUploadInput,
 } from "./uploads.service";
 
+/**
+ * Điểm cuối điều khiển cấp chữ ký tải tệp Presigned URL lên kho công khai Cloudflare R2 sau khi xác thực kích thước và định dạng ảnh.
+ */
 export const createPresignedUploadUrl: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 

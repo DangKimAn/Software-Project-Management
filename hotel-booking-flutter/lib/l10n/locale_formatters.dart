@@ -6,6 +6,7 @@ import 'generated/app_localizations.dart';
 
 /// Structured localized copy for async error states, strictly separating
 /// device/network offline errors from backend server errors (Rule 5).
+/// Mô hình thông điệp lỗi đã bản địa hóa cho các trạng thái bất đồng bộ, tách biệt nghiêm ngặt lỗi mất mạng thiết bị với lỗi máy chủ (`HTTP 5xx`).
 class LocalizedErrorCopy {
   final String title;
   final String message;
@@ -30,6 +31,12 @@ class LocalizedErrorCopy {
 /// - Currency ALWAYS remains integer VND (`₫`) across all locales; never converts currency.
 /// - Calendar dates ALWAYS use `Asia/Ho_Chi_Minh` pure dates (`BookingDate`, `YYYY-MM-DD`).
 /// - Server errors (`ServerFailure` / HTTP 5xx) are NEVER misclassified as offline/network errors.
+/// Tập hợp tiện ích định dạng ngày tháng, tiền tệ VND và bản địa hóa trạng thái nghiệp vụ cho `vi`, `en`, `ko`.
+///
+/// Tuân thủ nghiêm ngặt quy tắc cốt lõi của The Palm Villa:
+/// - Giá gốc luôn giữ nguyên số nguyên VND (`₫`), không bao giờ tự ý nhân chia tỷ giá khi đổi ngôn ngữ.
+/// - Ngày lịch luôn xử lý thuần túy theo múi giờ `Asia/Ho_Chi_Minh` (`BookingDate`, `YYYY-MM-DD`).
+/// - Lỗi máy chủ (`ServerFailure` / `HTTP 5xx`) tuyệt đối không bị phân loại nhầm thành lỗi mất kết nối mạng.
 abstract final class LocaleFormatters {
   static final NumberFormat _vndNumberFormat = NumberFormat('#,###', 'vi_VN');
 
@@ -95,12 +102,14 @@ abstract final class LocaleFormatters {
 
   /// Resolves [AppLocalizations] for a language code (`vi`, `en`, `ko`),
   /// defaulting to Vietnamese (`vi`) if an unsupported code is passed.
+  /// Phân giải đối tượng `AppLocalizations` cho mã ngôn ngữ `localeCode` (`vi`, `en`, `ko`), mặc định về `vi` nếu không được hỗ trợ.
   static AppLocalizations resolveL10n([String localeCode = 'vi']) {
     final normalized = normalizeLanguageCode(localeCode);
     return lookupAppLocalizations(Locale(normalized));
   }
 
   /// Normalizes a locale string (e.g. `vi_VN`, `en-US`, `ko_KR`) to `vi`, `en`, or `ko`.
+  /// Giải thuật chuẩn hóa mã ngôn ngữ đầu vào (như `vi_VN`, `en-US`, `ko_KR`) về đúng một trong ba mã chuẩn `vi`, `en` hoặc `ko`.
   static String normalizeLanguageCode(String? rawCode) {
     if (rawCode == null || rawCode.trim().isEmpty) return 'vi';
     final primary = rawCode.trim().toLowerCase().split(RegExp(r'[-_]')).first;
@@ -112,6 +121,7 @@ abstract final class LocaleFormatters {
 
   /// Formats an integer VND amount (e.g. `3500000` -> `"3.500.000 ₫"`).
   /// Never converts currency when switching locale; localizes only the missing-price fallback.
+  /// Định dạng số tiền nguyên dương theo đơn vị VND (`3.500.000 ₫`) hoặc trả về nhãn liên hệ báo giá khi `amount` rỗng hay không dương.
   static String formatVnd(
     int? amount, {
     String localeCode = 'vi',
@@ -128,6 +138,7 @@ abstract final class LocaleFormatters {
   /// - `vi`: `"Từ 3.500.000 ₫ / đêm"`
   /// - `en`: `"From 3.500.000 ₫ / night"`
   /// - `ko`: `"1박당 3.500.000 ₫부터"`
+  /// Định dạng giá khởi điểm mỗi đêm với nhãn đa ngôn ngữ nhưng vẫn bảo toàn số tiền nguyên VND.
   static String formatPriceFromPerNight(
     int? amount, {
     String localeCode = 'vi',
@@ -145,6 +156,7 @@ abstract final class LocaleFormatters {
   /// - `vi`: `"Thứ 7: 5.200.000 ₫"`
   /// - `en`: `"Sat: 5.200.000 ₫"`
   /// - `ko`: `"토요일: 5.200.000 ₫"`
+  /// Định dạng nhãn giá đêm Thứ Bảy theo ngôn ngữ hiện hành, trả về `null` nếu không có dữ liệu giá dương.
   static String? formatSaturdayPrice(
     int? amount, {
     String localeCode = 'vi',
@@ -162,6 +174,7 @@ abstract final class LocaleFormatters {
   /// - `vi`: `15/10/2026`
   /// - `en`: `Oct 15, 2026` (or `15/10/2026` when [numeric] is true)
   /// - `ko`: `2026. 10. 15.`
+  /// Định dạng đối tượng ngày thuần túy `BookingDate` sang biểu diễn ngày tháng phù hợp với từng ngôn ngữ (`vi`, `en`, `ko`).
   static String formatBookingDate(
     BookingDate date, {
     String localeCode = 'vi',
@@ -186,6 +199,7 @@ abstract final class LocaleFormatters {
   /// - `vi`: `15/10 (T5)`
   /// - `en`: `15/10 (Thu)`
   /// - `ko`: `10/15 (목)`
+  /// Định dạng ngày lưu trú kèm thứ trong tuần viết tắt phục vụ bảng chi tiết giá từng đêm.
   static String formatNightlyDateWithWeekday(
     BookingDate date, {
     String localeCode = 'vi',
@@ -210,6 +224,7 @@ abstract final class LocaleFormatters {
   /// - `vi`: `Tháng 10, 2026`
   /// - `en`: `October 2026`
   /// - `ko`: `2026년 10월`
+  /// Định dạng tiêu đề tháng và năm cho bộ chọn lịch theo chuẩn văn hóa của từng ngôn ngữ.
   static String formatMonthYear(
     int year,
     int month, {
@@ -232,6 +247,7 @@ abstract final class LocaleFormatters {
   /// - `vi`: `15/10/2026 – 17/10/2026 (2 đêm)`
   /// - `en`: `Oct 15, 2026 – Oct 17, 2026 (2 nights)`
   /// - `ko`: `2026. 10. 15. – 2026. 10. 17. (2박)`
+  /// Định dạng khoảng ngày lưu trú nửa mở `[checkIn, checkOut)` kèm tổng số đêm đã bản địa hóa số ít / số nhiều.
   static String formatStayRange(
     BookingDate checkIn,
     BookingDate checkOut, {
@@ -252,6 +268,7 @@ abstract final class LocaleFormatters {
   /// - 05:00..11:59 -> `"Chào buổi sáng!"` / `"Good morning!"` / `"좋은 아침입니다!"`
   /// - 12:00..17:59 -> `"Chào buổi chiều!"` / `"Good afternoon!"` / `"좋은 오후입니다!"`
   /// - 18:00..04:59 -> `"Chào buổi tối!"` / `"Good evening!"` / `"좋은 저녁입니다!"`
+  /// Giải thuật chọn câu chào theo khung giờ trong ngày (chuẩn hóa modulo 24 cho cả số âm): sáng (`05..11`), chiều (`12..17`) và tối (`18..04`).
   static String greetingForHour(
     int hour, {
     String localeCode = 'vi',
@@ -272,6 +289,10 @@ abstract final class LocaleFormatters {
   ///
   /// CRITICAL RULE 5: Never converts a backend server error (`ServerFailure` / HTTP 5xx)
   /// into a device offline / network connection error.
+  /// Giải thuật phân loại và bản địa hóa lỗi ứng dụng theo thứ tự ưu tiên chặt chẽ:
+  /// 1. Kiểm tra lỗi máy chủ (`ServerFailure`, `SERVER_ERROR`, `statusCode >= 500`) trước tiên để không bao giờ đổ lỗi nhầm cho mạng người dùng.
+  /// 2. Kiểm tra nhóm lỗi tầng truyền tải / ngoại tuyến (`OfflineFailure`, `TimeoutFailure`, `DnsFailure`, `ConnectionRefusedFailure`, `CertificateFailure`).
+  /// 3. Phân nhánh tiếp theo các mã trạng thái nghiệp vụ xác thực (`401`/`403`), không tìm thấy (`404`), giới hạn tần suất (`429`) và dữ liệu không hợp lệ (`409`/`422`).
   static LocalizedErrorCopy localizeFailure(
     Object error, {
     String localeCode = 'vi',
@@ -430,6 +451,7 @@ abstract final class LocaleFormatters {
 
   /// Localizes [VillaBadgeType] without altering the priority order
   /// (`featured > newVilla > nearBeach > saltwater > group`).
+  /// Bản địa hóa nhãn huy hiệu biệt thự `VillaBadgeType` mà không làm thay đổi thứ tự ưu tiên hiển thị.
   static String localizeVillaBadge(
     VillaBadgeType badge, {
     String localeCode = 'vi',
@@ -451,6 +473,7 @@ abstract final class LocaleFormatters {
   }
 
   /// Localizes booking state machine status codes (`pending_payment`, `paid`, `confirmed`, etc.).
+  /// Bản địa hóa các mã trạng thái trong máy trạng thái đơn đặt phòng (`pending_payment`, `paid`, `confirmed`, ...).
   static String localizeBookingStatus(
     String rawStatus, {
     String localeCode = 'vi',
@@ -493,6 +516,7 @@ abstract final class LocaleFormatters {
   }
 
   /// Localizes Host listing status codes (`draft`, `pending_approval`, `published`, `hidden`, `rejected`).
+  /// Bản địa hóa mã trạng thái bài đăng chỗ nghỉ trên cổng Chủ nhà (`draft`, `pending_approval`, `published`, `hidden`, `rejected`).
   static String localizeHostListingStatus(
     String rawStatus, {
     String localeCode = 'vi',
@@ -518,6 +542,7 @@ abstract final class LocaleFormatters {
   }
 
   /// Localizes Admin user account status codes (`active`, `suspended`, `inactive`).
+  /// Bản địa hóa mã trạng thái tài khoản người dùng trên cổng Quản trị (`active`, `suspended`, `inactive`).
   static String localizeAdminUserStatus(
     String rawStatus, {
     String localeCode = 'vi',

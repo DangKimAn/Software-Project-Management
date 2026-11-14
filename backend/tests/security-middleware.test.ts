@@ -21,7 +21,7 @@ const authService = require("../dist/modules/auth/auth.service");
 const {
     createHostDocStreamToken,
     verifyHostDocStreamToken,
-} = require("../dist/modules/host-applications/host-application.service");
+} = require("../dist/modules/host-kyc/host-application.service");
 const { isSafeExternalHttpUrl } = require("../dist/common/url-security");
 const { vnpayCallbackPayloadSchema } = require("../dist/modules/payments/payments.validator");
 const { shutdownServer } = require("../dist/server");

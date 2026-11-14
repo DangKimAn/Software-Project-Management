@@ -1,3 +1,6 @@
+/// Hệ thống thang khoảng cách (Spacing Scale) theo bội số 4 logical pixel cho toàn bộ bố cục giao diện.
+///
+/// Cung cấp cả tên ngữ nghĩa (`xxs`..`xxxl`), bí danh số học (`s4`..`s40`) và lề chuẩn cho màn hình / thẻ.
 abstract final class AppSpacing {
   static const double xxs = 4.0;
   static const double xs = 8.0;

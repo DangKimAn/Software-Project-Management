@@ -1,3 +1,8 @@
+/**
+ * Lược đồ kiểm chứng dữ liệu đầu vào bằng Zod cho phân hệ người dùng (`users`):
+ * - Ràng buộc nghiêm ngặt trường cập nhật hồ sơ cá nhân (`strict()`), đường dẫn ảnh đại diện hợp lệ, tham số phân trang tìm kiếm và trạng thái tài khoản quản trị.
+ */
+
 import { z } from "zod";
 
 import { isSafeExternalHttpUrl } from "../../common/url-security";
@@ -69,8 +74,14 @@ const baseProfileBodySchema = z.object({
     languages: languagesSchema,
 });
 
+/**
+ * Schema kiểm chứng nghiêm ngặt các trường người dùng được phép tự cập nhật trên hồ sơ cá nhân.
+ */
 export const updateMeBodySchema = baseProfileBodySchema.strict();
 
+/**
+ * Schema kiểm chứng URL ảnh đại diện hợp lệ khi cập nhật avatar.
+ */
 export const updateAvatarBodySchema = z
     .object({
         url: z
@@ -85,6 +96,9 @@ export const updateAvatarBodySchema = z
     })
     .strict();
 
+/**
+ * Schema kiểm chứng dữ liệu cập nhật thông tin người dùng dành cho quản trị viên.
+ */
 export const adminUpdateUserBodySchema = baseProfileBodySchema
     .extend({
         email: z.string().trim().email("email is invalid").transform((value) => value.toLowerCase()).optional(),
@@ -98,12 +112,18 @@ export const adminUpdateUserBodySchema = baseProfileBodySchema
         path: ["roles"],
     });
 
+/**
+ * Schema kiểm chứng trạng thái tài khoản mục tiêu khi quản trị viên khóa hoặc kích hoạt lại người dùng.
+ */
 export const updateUserStatusBodySchema = z
     .object({
         status: userStatusSchema,
     })
     .strict();
 
+/**
+ * Schema kiểm chứng bộ lọc từ khóa, vai trò, trạng thái và phân trang danh sách người dùng.
+ */
 export const listUsersQuerySchema = z
     .object({
         page: z.coerce.number().int().min(1).default(1),

@@ -7,16 +7,20 @@ import { getEnv } from "./env";
 const env = getEnv();
 const caPath = env.dbSslCa ? path.resolve(process.cwd(), env.dbSslCa) : undefined;
 
-// Allow override via env: MYSQL_SSL_REJECT_UNAUTHORIZED=false
-// Needed for providers with self-signed certs (PlanetScale, Aiven, Railway, etc.)
+/**
+ * Giải thuật quyết định chế độ kiểm tra chứng chỉ TLS (`rejectUnauthorized`) khi kết nối MySQL qua SSL:
+ * - Cho phép cấu hình tường minh qua `MYSQL_SSL_REJECT_UNAUTHORIZED`, mặc định bật nghiêm ngặt trên môi trường `production`.
+ */
 const sslRejectUnauthorized = (() => {
     const raw = process.env.MYSQL_SSL_REJECT_UNAUTHORIZED;
     if (raw === "false") return false;
     if (raw === "true") return true;
-    // Default: strict in production, relaxed in dev
     return env.nodeEnv === "production";
 })();
 
+/**
+ * Khởi tạo bể kết nối Sequelize MySQL chuẩn hóa múi giờ `+00:00`, bảng mã `utf8mb4` và cảnh báo truy vấn chậm (`> 500ms`).
+ */
 export const sequelize = new Sequelize(env.dbName, env.dbUser, env.dbPassword, {
     host: env.dbHost,
     port: env.dbPort,
@@ -35,10 +39,10 @@ export const sequelize = new Sequelize(env.dbName, env.dbUser, env.dbPassword, {
             : {}),
     },
     pool: {
-        max: 10,          // Tối đa 10 connections
-        min: env.nodeEnv === "test" ? 0 : 2,           // Trong test mode không giữ connection idle tối thiểu
-        acquire: 30000,   // Timeout khi lấy connection: 30s
-        idle: env.nodeEnv === "test" ? 1000 : 60000,   // Đóng connection idle sau 1s trong test, 60s trong dev/prod
+        max: 10,
+        min: env.nodeEnv === "test" ? 0 : 2,
+        acquire: 30000,
+        idle: env.nodeEnv === "test" ? 1000 : 60000,
     },
     define: {
         charset: "utf8mb4",

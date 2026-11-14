@@ -9,14 +9,18 @@ import '../../../../core/errors/app_failure.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/app_text_field.dart';
-import '../../data/services/google_auth_service.dart';
+
 import '../../domain/entities/user.dart';
 import '../view_models/auth_notifier.dart';
 import '../validation/auth_validation.dart';
 
+/// Màn hình đăng ký tài khoản mới (`/dang-ky`), tích hợp bộ đo độ mạnh mật khẩu trực quan 4 mức,
+/// kiểm tra định dạng số điện thoại/email và hỗ trợ đăng ký nhanh bằng tài khoản Google.
 class RegisterScreen extends ConsumerStatefulWidget {
+  /// Đường dẫn nội bộ cần chuyển tiếp sau khi tạo tài khoản thành công (nếu có).
   final String? redirectTo;
 
+  /// Khởi tạo `RegisterScreen`.
   const RegisterScreen({super.key, this.redirectTo});
 
   @override
@@ -51,7 +55,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     super.dispose();
   }
 
-  /// Evaluates 4 password rules matching `getPasswordStrength` in `RegisterPage.tsx`.
+  // Giải thuật chấm điểm độ mạnh mật khẩu theo 4 tiêu chí: độ dài >= 8, có cả chữ hoa & thường, có chữ số và có ký tự đặc biệt.
   ({int score, String label, Color color}) _getPasswordStrength(String pwd) {
     var score = 0;
     if (pwd.length >= 8) score++;

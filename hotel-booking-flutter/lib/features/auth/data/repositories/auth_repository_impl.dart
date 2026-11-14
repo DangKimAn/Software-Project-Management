@@ -7,12 +7,21 @@ import '../../domain/entities/auth_session.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
 
+/// Triển khai cụ thể của `AuthRepository` kết hợp `DioClient` và bộ nhớ an toàn `SecureStorageService`.
+///
+/// Quản lý toàn bộ vòng đời lưu trữ khóa phiên (Access Token, Refresh Token và Refresh Cookie),
+/// khôi phục phiên tự động khi khởi động ứng dụng, xác thực Google OAuth và hủy phiên an toàn khi đăng xuất.
 class AuthRepositoryImpl implements AuthRepository {
   final DioClient _client;
   final SecureStorageService _storage;
 
+  /// Khởi tạo `AuthRepositoryImpl` với khách mạng `_client` và dịch vụ lưu trữ bảo mật `_storage`.
   const AuthRepositoryImpl(this._client, this._storage);
 
+  // Giải thuật bóc tách và lưu trữ bền vững phiên đăng nhập mới (`_parseAndPersistSession`):
+  // Bước 1: Mở khung bao phản hồi API, giải mã `AuthSession` và kiểm tra tính toàn vẹn của `token` cùng `user.id`.
+  // Bước 2: Xóa sạch phiên cũ (`clearAuthSession`) để tuyệt đối không kế thừa nhầm Refresh Token của tài khoản trước.
+  // Bước 3: Lưu `token` mới, lưu `refreshToken` (nếu có) và đồng bộ header `Set-Cookie` vào kho lưu trữ bảo mật.
   Future<AuthSession> _parseAndPersistSession(
     Response<Map<String, dynamic>> response,
   ) async {
@@ -152,12 +161,20 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
+  /// Làm mới Access Token thông qua cơ chế xoay vòng khóa phiên của `DioClient`.
   Future<String?> refreshSession() {
     return _client.refreshAccessToken();
   }
 
+  /// Khôi phục người dùng hiện hành từ kho khóa bảo mật kết hợp hợp nhất dữ liệu `/api/auth/me` và `/api/users/me`.
   @override
   Future<User?> getCurrentUser() async {
+    // Giải thuật khôi phục phiên đăng nhập hiện hành (`getCurrentUser`):
+    // Bước 1: Kiểm tra `authToken` trong `SecureStorageService`; nếu trống nhưng còn Refresh Cookie / Refresh Token (hoặc trên Web),
+    //         chủ động gọi `refreshAccessToken()` để xin cấp lại Access Token mới trước khi bỏ cuộc.
+    // Bước 2: Truy vấn `/api/auth/me` lấy thông tin định danh & vai trò cốt lõi, sau đó gọi bổ sung `/api/users/me`
+    //         để hợp nhất đầy đủ các trường hồ sơ mở rộng (`bio`, `location`, `school`, `languages`).
+    // Bước 3: Nếu máy chủ trả về lỗi `401` không thể phục hồi, dọn sạch phiên cục bộ và trả về `null`.
     try {
       var token = await _storage.getAuthToken();
       if (token == null || token.trim().isEmpty) {

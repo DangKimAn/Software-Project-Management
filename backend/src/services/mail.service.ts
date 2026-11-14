@@ -23,6 +23,10 @@ type SendMailInput = {
 
 let transporter: Transporter | null = null;
 
+/**
+ * Giải thuật dò tìm tuần tự đường dẫn tệp biểu trưng thương hiệu (`app_icon.png`) trên các vị trí triển khai
+ * (`src/assets`, `dist/assets` hoặc thư mục ứng dụng Flutter) để đính kèm nội tuyến CID vào email HTML.
+ */
 export const resolveBrandLogoPath = (): string | null => {
     const candidates = [
         path.resolve(__dirname, "../assets/app_icon.png"),
@@ -40,6 +44,11 @@ export const resolveBrandLogoPath = (): string | null => {
     return null;
 };
 
+/**
+ * Giải thuật khởi tạo lười và lưu đệm đơn bản (Lazy Singleton) đối tượng `Transporter` SMTP của `nodemailer`:
+ * - Kiểm tra đầy đủ thông số máy chủ thư (`host`, `user`, `password`) và tự động bật TLS trực tiếp (`secure: true`)
+ *   khi kết nối cổng chuẩn SMTPS `465`.
+ */
 const getTransporter = () => {
     const mailConfig = getMailConfig();
 
@@ -64,11 +73,19 @@ const getTransporter = () => {
     return transporter;
 };
 
+/**
+ * Kiểm tra bắt tay kết nối và xác thực thông tin đăng nhập tới máy chủ SMTP (`transporter.verify()`).
+ */
 export const verifyMailConnection = async () => {
     await getTransporter().verify();
     logger.info("Mail transporter verified successfully");
 };
 
+/**
+ * Giải thuật gửi thư điện tử giao dịch (OTP, thông báo đặt phòng/thanh toán) qua SMTP:
+ * - Tự động phát hiện tham chiếu ảnh nội tuyến `cid:the_palm_villa_logo` trong thân HTML để đính kèm
+ *   tệp logo thương hiệu không trùng lặp trước khi chuyển phát qua `nodemailer` và ghi log đối soát `messageId`.
+ */
 export const sendMail = async (input: SendMailInput) => {
     const mailConfig = getMailConfig();
 

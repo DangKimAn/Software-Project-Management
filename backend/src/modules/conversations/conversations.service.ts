@@ -1,14 +1,15 @@
 import { Op, QueryTypes, type Transaction } from "sequelize";
 
 import { ApiError } from "../../common/api-error";
+import { isSafeExternalHttpUrl } from "../../common/url-security";
 import sequelize from "../../config/database";
 import Conversation from "../../models/conversation";
 import ConversationParticipant from "../../models/conversation-participant";
 import Message, { MessageAttachment, MessageDocument, MessageType } from "../../models/message";
 import { emitMessageNew } from "../../socket/socket";
 import { sendPushToUser } from "../../services/fcm-push.service";
-import { sanitizeAndModerateText, sanitizeUserText } from "../../services/trust-safety-service";
-import { assertBasicUserExists } from "../../services/user-access-service";
+import { sanitizeAndModerateText, sanitizeUserText } from "../../common/text-moderation";
+import { assertBasicUserExists } from "../users/user-access.service";
 import type { AuthenticatedUser } from "../auth/auth.service";
 
 export type ConversationQuery = {
@@ -27,6 +28,7 @@ export type CreateConversationInput = {
     hostUserId?: number;
     participantId?: number;
     bookingId?: number;
+    support?: boolean;
     firstMessage?: string;
 };
 
@@ -73,6 +75,7 @@ type ConversationListRow = {
     otherUserId: number | null;
     otherFullName: string | null;
     otherAvatarUrl: string | null;
+    otherRole?: string | null;
 };
 
 type ConversationAccessRow = {
@@ -92,19 +95,32 @@ const attachmentTypePattern = /^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/i;
 const maxMessageLength = 2000;
 const defaultPageLimit = 30;
 
+/**
+ * Ép kiểu định danh người dùng đăng nhập sang số nguyên để đối chiếu khóa ngoại hội thoại.
+ */
 const getCurrentUserId = (user: AuthenticatedUser) => Number(user.id);
 
+/**
+ * Ghi nhật ký gỡ lỗi luồng tin nhắn trên môi trường phát triển, tự động tắt trên môi trường `production` để tránh rò rỉ dữ liệu hội thoại.
+ */
 const debugMessaging = (...args: unknown[]) => {
     if (process.env.NODE_ENV !== "production") {
         console.log(...args);
     }
 };
 
+/**
+ * Chuẩn hóa tham số phân trang hội thoại/tin nhắn trong biên an toàn (`page >= 1`, `1 <= limit <= 100`, mặc định 30).
+ */
 const toPagination = (page?: number, limit?: number) => ({
     page: Math.max(1, page ?? 1),
     limit: Math.min(100, Math.max(1, limit ?? defaultPageLimit)),
 });
 
+/**
+ * Giải thuật làm sạch và kiểm duyệt nội dung tin nhắn (`normalizeMessageContent`):
+ * Lọc XSS/ký tự nguy hiểm và kiểm duyệt nội dung qua `sanitizeAndModerateText`, đồng thời khống chế độ dài tối đa 2000 ký tự (`maxMessageLength`).
+ */
 const normalizeMessageContent = (value: string | undefined, allowEmpty = false) => {
     const content = sanitizeAndModerateText(value ?? "", {
         field: "content",
@@ -123,6 +139,9 @@ const normalizeMessageContent = (value: string | undefined, allowEmpty = false) 
     return content;
 };
 
+/**
+ * Tiện ích ném lỗi xác thực `422` chuẩn hóa kèm đường dẫn trường thuộc tính tệp đính kèm bị lỗi.
+ */
 const throwAttachmentValidationError = (path: string, msg: string): never => {
     throw new ApiError(422, "Validation error", [
         {
@@ -132,6 +151,9 @@ const throwAttachmentValidationError = (path: string, msg: string): never => {
     ]);
 };
 
+/**
+ * Phân tích cú pháp chuỗi URL đính kèm sang đối tượng `URL` chuẩn hoặc ném lỗi xác thực `422` nếu sai định dạng.
+ */
 const parseAttachmentUrl = (value: string, path: string): URL => {
     try {
         return new URL(value);
@@ -140,12 +162,24 @@ const parseAttachmentUrl = (value: string, path: string): URL => {
     }
 };
 
+/**
+ * Giải thuật chuẩn hóa và lọc bảo mật tệp đính kèm tin nhắn (`normalizeAttachments`):
+ * 1. Kiểm tra định dạng URL và bắt buộc vượt qua `isSafeExternalHttpUrl` để ngăn chèn liên kết SSRF nội bộ / metadata cloud / IPv6 ánh xạ.
+ * 2. Làm sạch chuỗi `type` và `name` qua `sanitizeUserText` để triệt tiêu mã độc XSS lưu trữ.
+ */
 const normalizeAttachments = (attachments: MessageAttachment[], messageType: MessageType) =>
     attachments.map((attachment, index) => {
         const url = parseAttachmentUrl(attachment.url, `attachments.${index}.url`);
 
         if (!["http:", "https:"].includes(url.protocol)) {
             throwAttachmentValidationError(`attachments.${index}.url`, "attachments.url must use http or https");
+        }
+
+        if (!isSafeExternalHttpUrl(url.toString())) {
+            throwAttachmentValidationError(
+                `attachments.${index}.url`,
+                "attachments.url must reference a safe public http(s) resource",
+            );
         }
 
         const type = attachment.type ? sanitizeUserText(attachment.type, "singleLine").toLowerCase() : null;
@@ -165,6 +199,9 @@ const normalizeAttachments = (attachments: MessageAttachment[], messageType: Mes
         };
     });
 
+/**
+ * Truy vấn thông tin tối thiểu của chỗ nghỉ (`listingId`, `hostId`, `status`, `title`) phục vụ khởi tạo hội thoại hoặc ném lỗi `404` nếu không tồn tại/đã xóa mềm.
+ */
 const getListingOrThrow = async (listingId: number, transaction?: Transaction) => {
     const rows = await sequelize.query<ListingAccessRow & { status?: string }>(
         `
@@ -192,6 +229,9 @@ const getListingOrThrow = async (listingId: number, transaction?: Transaction) =
     return rows[0];
 };
 
+/**
+ * Truy vấn cặp định danh `guestUserId` - `hostUserId` và `listingId` của đơn đặt phòng để kiểm tra phân quyền hội thoại chống BOLA/IDOR.
+ */
 const getBookingAccess = async (bookingId: number, transaction?: Transaction) => {
     const rows = await sequelize.query<ConversationAccessRow>(
         `
@@ -218,6 +258,10 @@ const getBookingAccess = async (bookingId: number, transaction?: Transaction) =>
     return rows[0];
 };
 
+/**
+ * Giải thuật sinh khóa chống trùng lặp hội thoại trực tiếp bất biến theo thứ tự hai bên (`buildPairDedupeKey`):
+ * Sắp xếp tăng dần `[leftUserId, rightUserId]` để khóa `direct:min:max` (hoặc `listing:id:min:max`) luôn duy nhất bất kể ai là người khởi tạo trước.
+ */
 const buildPairDedupeKey = (leftUserId: number, rightUserId: number, listingId?: number) => {
     const [firstUserId, secondUserId] = [leftUserId, rightUserId].sort((left, right) => left - right);
 
@@ -226,9 +270,16 @@ const buildPairDedupeKey = (leftUserId: number, rightUserId: number, listingId?:
         : `direct:${firstUserId}:${secondUserId}`;
 };
 
+/**
+ * Sinh khóa định danh duy nhất cho hội thoại gắn với chỗ nghỉ theo đúng vai trò `listing:{listingId}:guest:{guestUserId}:host:{hostUserId}`.
+ */
 const buildListingConversationDedupeKey = (listingId: number, guestUserId: number, hostUserId: number) =>
     `listing:${listingId}:guest:${guestUserId}:host:${hostUserId}`;
 
+/**
+ * Giải thuật kiểm tra tính toàn vẹn hai bên tham gia hội thoại (`ensureTwoPartyConversation`):
+ * Ràng buộc `guestUserId` và `hostUserId` đều là số nguyên dương hợp lệ và khác nhau (`guestUserId !== hostUserId`), chặn hội thoại tự nhắn cho chính mình.
+ */
 const ensureTwoPartyConversation = (guestUserId: number | null, hostUserId: number | null) => {
     const normalizedGuestUserId = Number(guestUserId);
     const normalizedHostUserId = Number(hostUserId);
@@ -249,6 +300,9 @@ const ensureTwoPartyConversation = (guestUserId: number | null, hostUserId: numb
     };
 };
 
+/**
+ * Xác định vai trò trực tiếp (`"guest"` hoặc `"host"`) của người dùng dựa trên hai cột khóa ngoại trên bản ghi `Conversation`.
+ */
 const getConversationDirectRole = (
     conversation: { guestUserId: number | null; hostUserId: number | null },
     userId: number,
@@ -264,6 +318,10 @@ const getConversationDirectRole = (
     return null;
 };
 
+/**
+ * Giải thuật đồng bộ bảng thành viên hội thoại `ConversationParticipant` bất biến (idempotent upsert):
+ * Sử dụng `bulkCreate` kèm `updateOnDuplicate: ["role"]` để đảm bảo cả `guest` và `host` luôn có bản ghi theo dõi trạng thái đọc mà không gây lỗi trùng khóa.
+ */
 const ensureConversationParticipants = async (
     conversationId: number,
     guestUserId: number,
@@ -296,6 +354,9 @@ const ensureConversationParticipants = async (
     );
 };
 
+/**
+ * Tuần tự hóa dòng kết quả truy vấn hội thoại thành cấu trúc phản hồi API kèm thông tin chỗ nghỉ và đối phương trò chuyện (`otherParticipant`).
+ */
 const serializeConversationRow = (row: ConversationListRow) => ({
     id: Number(row.conversationId),
     conversationId: Number(row.conversationId),
@@ -321,10 +382,14 @@ const serializeConversationRow = (row: ConversationListRow) => ({
               userId: Number(row.otherUserId),
               fullName: row.otherFullName ?? "Người dùng",
               avatarUrl: row.otherAvatarUrl ?? null,
+              ...(row.otherRole ? { role: row.otherRole } : {}),
           }
         : null,
 });
 
+/**
+ * Tuần tự hóa bản ghi tin nhắn sang định dạng chuẩn đồng bộ cho cả REST API và sự kiện thời gian thực Socket.IO.
+ */
 const serializeMessage = (message: MessageDocument): SerializedMessage => ({
     id: Number(message.messageId),
     messageId: Number(message.messageId),
@@ -339,6 +404,11 @@ const serializeMessage = (message: MessageDocument): SerializedMessage => ({
     updatedAt: message.updatedAt ?? null,
 });
 
+/**
+ * Giải thuật truy vấn danh sách hội thoại phân trang của người dùng chống BOLA/IDOR:
+ * 1. Ràng buộc điều kiện thành viên trực tiếp (`guest_user_id`, `host_user_id` hoặc `conversation_participant.user_id = :userId`) bằng SQL tham số hóa.
+ * 2. Tính số lượng tin nhắn chưa đọc (`unreadCount`) dựa trên mốc `last_read_at`, lấy ảnh bìa chỗ nghỉ, nhận diện vai trò `admin` của đối phương và sắp xếp giảm dần theo `sortAt`.
+ */
 const getConversationRowsForUser = async (
     userId: number,
     query: ConversationQuery,
@@ -410,6 +480,16 @@ const getConversationRowsForUser = async (
                 other_user.user_id AS otherUserId,
                 other_user.full_name AS otherFullName,
                 other_user.avatar_url AS otherAvatarUrl,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM user_role ur_admin
+                        INNER JOIN roles r_admin ON r_admin.role_id = ur_admin.role_id
+                        WHERE ur_admin.user_id = other_user.user_id
+                          AND r_admin.code = 'admin'
+                    ) THEN 'admin'
+                    ELSE NULL
+                END AS otherRole,
                 COALESCE(
                     c.last_message_at,
                     (
@@ -505,6 +585,9 @@ const getConversationRowsForUser = async (
     };
 };
 
+/**
+ * Truy vấn chi tiết một hội thoại cụ thể thuộc quyền truy cập của `userId` hoặc ném lỗi `404` nếu không tồn tại/không có quyền tham gia (chống BOLA).
+ */
 const getConversationForUser = async (conversationId: number, userId: number) => {
     const result = await getConversationRowsForUser(userId, { page: 1, limit: 1 }, conversationId);
     const row = result.items[0];
@@ -516,6 +599,12 @@ const getConversationForUser = async (conversationId: number, userId: number) =>
     return serializeConversationRow(row);
 };
 
+/**
+ * Giải thuật ghi nhận tin nhắn mới nguyên tử trong phạm vi giao dịch DB (`createMessageInTransaction`):
+ * 1. Tạo bản ghi `Message` (dùng nhãn dự phòng `[image]`/`[file]` khi gửi tệp không kèm chữ).
+ * 2. Cập nhật đồng bộ bản xem trước `lastMessage` và `lastMessageAt` trên bảng `Conversation`.
+ * 3. Đánh dấu mốc đã đọc `lastReadAt = now` cho chính người gửi trên `ConversationParticipant`.
+ */
 const createMessageInTransaction = async (
     conversationId: number,
     senderId: number,
@@ -567,6 +656,9 @@ const createMessageInTransaction = async (
     return message;
 };
 
+/**
+ * Liệt kê danh sách hội thoại phân trang của người dùng hiện tại theo bộ lọc vai trò (`guest`/`host`) hoặc chưa đọc (`unreadOnly`).
+ */
 export const getConversations = async (user: AuthenticatedUser, query: ConversationQuery) => {
     const userId = getCurrentUserId(user);
     const result = await getConversationRowsForUser(userId, query);
@@ -579,10 +671,16 @@ export const getConversations = async (user: AuthenticatedUser, query: Conversat
     };
 };
 
+/**
+ * Giải thuật khởi tạo hoặc tái sử dụng hội thoại hai chiều an toàn trong giao dịch DB (`createConversation`):
+ * 1. Phân giải người tham gia theo ngữ cảnh: kiểm tra thành viên đơn đặt phòng (`bookingId` chống BOLA), xác định chủ nhà thực tế từ `listings.host_id` (chặn tự nhắn cho chỗ nghỉ của mình), hoặc định tuyến tự động tới Quản trị viên đang hoạt động khi `support = true`.
+ * 2. Sinh khóa khử trùng lặp `dedupeKey` (tương thích ngược với `legacyDedupeKey`) để tái sử dụng hội thoại sẵn có thay vì tạo bản ghi trùng.
+ * 3. Đồng bộ `ConversationParticipant` và ghi tin nhắn mở đầu (`firstMessage`) nguyên tử nếu được cung cấp.
+ */
 export const createConversation = async (user: AuthenticatedUser, input: CreateConversationInput) => {
     const currentUserId = getCurrentUserId(user);
 
-    if (!input.listingId && !input.bookingId && !input.participantId && !input.hostUserId) {
+    if (!input.listingId && !input.bookingId && !input.participantId && !input.hostUserId && !input.support) {
         throw new ApiError(422, "Validation error", [
             {
                 path: "listingId",
@@ -633,6 +731,39 @@ export const createConversation = async (user: AuthenticatedUser, input: CreateC
                 throw new ApiError(403, "Bạn không thể nhắn tin cho chính chỗ nghỉ của mình.");
             }
 
+        } else if (!bookingId && input.support && !input.participantId && !input.hostUserId) {
+            // Giải thuật định tuyến hội thoại hỗ trợ Quản trị viên (supportAdmin):
+            // Tự động chọn tài khoản Admin đang hoạt động đầu tiên để tạo hội thoại thật trong CSDL thay cho ID giả 'admin_support'.
+            const adminRows = await sequelize.query<{ userId: number }>(
+                `
+                SELECT u.user_id AS userId
+                FROM users u
+                INNER JOIN user_role ur ON ur.user_id = u.user_id
+                INNER JOIN roles r ON r.role_id = ur.role_id
+                WHERE r.code = 'admin'
+                  AND u.status = 'active'
+                  AND u.deleted_at IS NULL
+                  AND u.user_id <> ?
+                ORDER BY u.user_id ASC
+                LIMIT 1
+                `,
+                {
+                    replacements: [currentUserId],
+                    type: QueryTypes.SELECT,
+                    transaction,
+                },
+            );
+            const supportAdminId = Number(adminRows[0]?.userId ?? 0);
+            if (!supportAdminId) {
+                throw new ApiError(404, "Hiện chưa có Quản trị viên trực tuyến để mở hội thoại hỗ trợ.");
+            }
+            if (user.roles?.includes("host")) {
+                guestUserId = supportAdminId;
+                hostUserId = currentUserId;
+            } else {
+                guestUserId = currentUserId;
+                hostUserId = supportAdminId;
+            }
         } else if (!bookingId) {
             hostUserId = input.participantId ?? input.hostUserId ?? null;
             guestUserId = currentUserId;
@@ -649,11 +780,12 @@ export const createConversation = async (user: AuthenticatedUser, input: CreateC
 
         const participants = ensureTwoPartyConversation(guestUserId, hostUserId);
 
-        if (!bookingId && currentUserId === hostUserId) {
+        if (!bookingId && !input.support && currentUserId === hostUserId) {
             throw new ApiError(403, "Bạn không thể nhắn tin cho chính chỗ nghỉ của mình.");
         }
 
-        await assertBasicUserExists(hostUserId, transaction);
+        const targetOtherUserId = currentUserId === hostUserId ? guestUserId : hostUserId;
+        await assertBasicUserExists(targetOtherUserId, transaction);
 
         const dedupeKey = bookingId
             ? `booking:${bookingId}`
@@ -775,6 +907,11 @@ export const createConversation = async (user: AuthenticatedUser, input: CreateC
     };
 };
 
+/**
+ * Giải thuật xác thực quyền thành viên hội thoại chống BOLA/IDOR kèm cơ chế tự động bù đắp bản ghi (`assertConversationParticipant`):
+ * 1. Truy vấn `Conversation` (`404` nếu không tồn tại) và kiểm tra bản ghi `ConversationParticipant`.
+ * 2. Nếu chưa có bản ghi thành viên nhưng `userId` khớp với `guestUserId` hoặc `hostUserId` gốc trên `Conversation`, tự động khởi tạo bản ghi `ConversationParticipant` tương ứng; ngược lại ném `403 Forbidden`.
+ */
 export const assertConversationParticipant = async (
     conversationId: number,
     userId: number,
@@ -821,6 +958,12 @@ export const assertConversationParticipant = async (
     );
 };
 
+/**
+ * Giải thuật tải phân trang cửa sổ tin nhắn mới nhất theo trình tự thời gian tự nhiên (`getConversationMessages`):
+ * 1. Xác thực quyền thành viên hội thoại qua `assertConversationParticipant`.
+ * 2. Truy vấn CSDL giảm dần (`createdAt DESC, messageId DESC`) để trang 1 luôn lấy đúng `limit` tin nhắn mới nhất, sau đó đảo lại theo chiều tăng dần thời gian để hiển thị khung chat tự nhiên.
+ * 3. Tự động cập nhật mốc đã đọc `lastReadAt` khi người dùng mở trang đầu tiên (`page === 1`).
+ */
 export const getConversationMessages = async (
     conversationId: number,
     user: AuthenticatedUser,
@@ -829,20 +972,37 @@ export const getConversationMessages = async (
     const userId = getCurrentUserId(user);
     const { page, limit } = toPagination(query.page, query.limit);
     const participant = await assertConversationParticipant(conversationId, userId);
-    const [items, totalItems] = await Promise.all([
+    // Giải thuật phân trang cửa sổ tin nhắn mới nhất (latest-window chronological pagination):
+    // - Truy vấn CSDL giảm dần theo (createdAt DESC, messageId DESC) để trang 1 luôn chứa N tin nhắn mới nhất (không bị kẹt ở 50 tin đầu tiên).
+    // - Sau khi lấy cửa sổ trang, sắp xếp lại tăng dần theo thời gian (createdAt ASC, messageId ASC) để khung chat hiển thị từ trên xuống dưới tự nhiên.
+    // CONFLICT-RESOLVED: Khắc phục lỗi sort({ createdAt: 1 }) làm ẩn toàn bộ tin nhắn mới từ tin thứ 51 trở đi.
+    const [rawItems, totalItems] = await Promise.all([
         Message.find({ conversationId })
-            .sort({ createdAt: 1, messageId: 1 })
+            .sort({ createdAt: -1, messageId: -1 })
             .skip((page - 1) * limit)
             .limit(limit),
         Message.countDocuments({ conversationId }),
     ]);
 
-    participant.lastReadAt = new Date();
-    await participant.save();
+    const chronologicalItems = [...rawItems].sort((left, right) => {
+        const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+        const rightTime = right.createdAt ? new Date(right.createdAt).getTime() : 0;
+        if (leftTime !== rightTime) {
+            return leftTime - rightTime;
+        }
+        return Number(left.messageId ?? 0) - Number(right.messageId ?? 0);
+    });
+
+    if (page === 1) {
+        participant.lastReadAt = new Date();
+        await participant.save();
+    }
+
+    const serializedItems = chronologicalItems.map(serializeMessage);
 
     return {
-        items: items.map(serializeMessage),
-        messages: items.map(serializeMessage),
+        items: serializedItems,
+        messages: serializedItems,
         pagination: {
             page,
             limit,
@@ -852,6 +1012,12 @@ export const getConversationMessages = async (
     };
 };
 
+/**
+ * Giải thuật gửi tin nhắn hội thoại an toàn đồng bộ DB - Socket.IO - Thông báo đẩy FCM (`sendConversationMessage`):
+ * 1. Làm sạch/kiểm duyệt nội dung (`normalizeMessageContent`) và lọc bảo mật tệp đính kèm chống SSRF/XSS (`normalizeAttachments`).
+ * 2. Mở giao dịch DB với khóa dòng bi quan (`LOCK.UPDATE`) trên `Conversation`, xác thực người gửi thuộc cặp `guest`/`host` (chống BOLA), đồng bộ thành viên và ghi tin nhắn nguyên tử.
+ * 3. Sau khi commit giao dịch thành công, phát sự kiện thời gian thực `emitMessageNew` qua Socket.IO và gửi thông báo đẩy bất đồng bộ `sendPushToUser` tới người nhận.
+ */
 export const sendConversationMessage = async (
     conversationId: number,
     user: AuthenticatedUser,
@@ -985,6 +1151,9 @@ export const sendConversationMessage = async (
     };
 };
 
+/**
+ * Đánh dấu toàn bộ tin nhắn trong hội thoại là đã đọc đối với người dùng hiện tại sau khi xác thực quyền thành viên (`assertConversationParticipant`).
+ */
 export const markConversationRead = async (conversationId: number, user: AuthenticatedUser) => {
     const userId = getCurrentUserId(user);
     const participant = await assertConversationParticipant(conversationId, userId);

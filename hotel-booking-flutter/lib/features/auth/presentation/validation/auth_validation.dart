@@ -1,8 +1,17 @@
 import '../../../../core/errors/app_failure.dart';
 
-/// Mirrors backend auth.validator.ts; the server remains authoritative.
+/// Bộ quy tắc kiểm tra hợp lệ dữ liệu biểu mẫu xác thực đồng bộ với `auth.validator.ts` trên máy chủ.
+///
+/// Bao gồm thẩm định định danh đa năng (email / tên đăng nhập / số điện thoại), định dạng số điện thoại Việt Nam,
+/// cấu trúc địa chỉ email, độ phức tạp mật khẩu và trích xuất lỗi theo từng trường dữ liệu từ `AppFailure`.
 abstract final class AuthValidation {
+  /// Kiểm tra định danh đăng nhập `value` (chấp nhận số điện thoại hợp lệ, email hợp lệ hoặc tên đăng nhập `3..255` ký tự).
+  ///
+  /// Trả về chuỗi thông báo lỗi tiếng Việt nếu không hợp lệ, hoặc `null` khi đạt yêu cầu.
   static String? identifier(String? value) {
+    // Giải thuật xác thực định danh đa định dạng:
+    // Chấp nhận nếu thỏa mãn biểu thức số điện thoại Việt Nam, biểu thức email tiêu chuẩn,
+    // hoặc chuỗi ký tự chữ-số kèm `._-` có độ dài từ 3 đến 255 ký tự.
     final text = value?.trim() ?? '';
     if (text.isEmpty) {
       return 'Vui lòng nhập email, tên đăng nhập hoặc số điện thoại';
@@ -15,6 +24,9 @@ abstract final class AuthValidation {
     return 'Email, tên đăng nhập hoặc số điện thoại không hợp lệ';
   }
 
+  /// Kiểm tra định dạng số điện thoại Việt Nam `value` (bắt đầu bằng `0` hoặc `+84` theo sau bởi đúng 9 chữ số).
+  ///
+  /// Khi `required` là `false`, cho phép để trống và trả về `null`.
   static String? phone(String? value, {bool required = false}) {
     final text = value?.trim() ?? '';
     if (text.isEmpty) {
@@ -25,6 +37,7 @@ abstract final class AuthValidation {
         : 'Số điện thoại cần có 10 số hoặc bắt đầu bằng +84';
   }
 
+  /// Kiểm tra tính hợp lệ của địa chỉ email `value` (tối đa 255 ký tự, đúng cấu trúc tên miền có dấu chấm).
   static String? email(String? value) {
     final text = value?.trim() ?? '';
     if (text.isEmpty) return 'Vui lòng nhập email';
@@ -34,6 +47,7 @@ abstract final class AuthValidation {
         : 'Email không hợp lệ';
   }
 
+  /// Kiểm tra độ mạnh tối thiểu của mật khẩu `value`: độ dài `8..128` ký tự và bắt buộc chứa cả chữ cái lẫn chữ số.
   static String? password(String? value) {
     final text = value?.trim() ?? '';
     if (text.length < 8 || text.length > 128) {
@@ -46,6 +60,7 @@ abstract final class AuthValidation {
     return null;
   }
 
+  /// Trích xuất bản đồ lỗi chi tiết theo tên trường (`path` -> `msg`) từ ngoại lệ `AppFailure` do máy chủ trả về.
   static Map<String, String> fieldErrors(Object error) => error is AppFailure
       ? {
           for (final field in error.fieldErrors)

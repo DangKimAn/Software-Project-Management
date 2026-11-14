@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP trích xuất và kiểm tra giấy tờ định danh bằng AI Vision:
+ * - Kết hợp chuỗi middleware xác thực (`authenticate`), giới hạn tần suất chống lạm dụng tài nguyên AI (`Limiter`) và bộ lọc tải tệp ảnh bộ nhớ `multer`.
+ */
+
 import express from "express";
 import multer from "multer";
 

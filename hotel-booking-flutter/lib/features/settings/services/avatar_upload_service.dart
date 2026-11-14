@@ -165,6 +165,7 @@ class AvatarUploadService {
           'filename':
               file.name.trim().isNotEmpty ? file.name.trim() : 'avatar.jpg',
           'contentType': resolvedMime,
+          'size': file.sizeBytes,
         },
       );
       final body = presignResponse.data ?? const <String, dynamic>{};

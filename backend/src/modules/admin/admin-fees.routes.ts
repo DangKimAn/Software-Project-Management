@@ -1,3 +1,9 @@
+/**
+ * Định tuyến HTTP quản trị phí nền tảng (`/api/admin/fees`):
+ * - Áp dụng chuỗi middleware xác thực JWT (`authenticate`) và kiểm tra vai trò quản trị viên (`requireRole("admin")` / `authorize`).
+ * - Cung cấp các endpoint xem trạng thái phí hiện tại (`GET /current`), lên lịch biểu phí mới (`POST /schedule`) và hủy lịch (`POST /cancel`).
+ */
+
 import express from "express";
 import { body } from "express-validator";
 

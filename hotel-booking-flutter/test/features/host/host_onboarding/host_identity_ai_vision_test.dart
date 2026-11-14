@@ -12,6 +12,22 @@ import 'package:hotel_booking_flutter/features/host/presentation/screens/host_on
 import 'package:hotel_booking_flutter/features/host/services/host_file_picker_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// CONFLICT-RESOLVED: Hợp nhất 16 tệp ảnh định danh về nguồn duy nhất backend/tests/fixtures/identity/ thay vì nhân bản trong hotel-booking-flutter/test/fixtures/identity/.
+// Giải thuật phân giải đường dẫn URI đa nền tảng (Cross-Platform Fixture URI Resolution):
+// Xác định tệp ảnh mẫu qua `File.fromUri` tương thích cả khi chạy lệnh kiểm thử từ thư mục con `hotel-booking-flutter/` lẫn thư mục gốc monorepo.
+File _resolveSharedIdentityFixture(String fileName) {
+  final cwdUri = Directory.current.uri;
+  final fromSubproject = File.fromUri(
+    cwdUri.resolve('../backend/tests/fixtures/identity/$fileName'),
+  );
+  if (fromSubproject.existsSync()) {
+    return fromSubproject;
+  }
+  return File.fromUri(
+    cwdUri.resolve('backend/tests/fixtures/identity/$fileName'),
+  );
+}
+
 // =============================================================================
 // TEST DOUBLES & MOCKS
 // =============================================================================
@@ -65,6 +81,7 @@ class _FakeFilePickerService implements HostFilePickerService {
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = 'Chọn tài liệu',
+    bool imageOnly = false,
   }) async =>
       nextFile;
 
@@ -361,28 +378,28 @@ void main() {
     });
 
     test('verifies all CI/CD mock fixtures exist', () {
-      final fixtures = [
-        'test/fixtures/identity/mock_cccd_front.jpg',
-        'test/fixtures/identity/mock_cccd_back.jpg',
-        'test/fixtures/identity/mock_cmnd_front.jpg',
-        'test/fixtures/identity/mock_cmnd_back.jpg',
-        'test/fixtures/identity/mock_passport.jpg',
-        'test/fixtures/identity/mock_gplx_front.jpg',
-        'test/fixtures/identity/mock_gplx_back.jpg',
-        'test/fixtures/identity/mock_invalid_utility_bill.jpg',
-        'test/fixtures/identity/mock_cccd_lifetime_elderly.jpg',
-        'test/fixtures/identity/mock_cccd_back_held.jpg',
-        'test/fixtures/identity/mock_cccd_photocopy_bw.jpg',
-        'test/fixtures/identity/mock_cccd_expired.jpg',
-        'test/fixtures/identity/mock_cccd_upside_down.jpg',
-        'test/fixtures/identity/mock_cccd_glare.jpg',
-        'test/fixtures/identity/mock_cccd_front_held.jpg',
+      const fixtureNames = [
+        'mock_cccd_front.jpg',
+        'mock_cccd_back.jpg',
+        'mock_cmnd_front.jpg',
+        'mock_cmnd_back.jpg',
+        'mock_passport.jpg',
+        'mock_gplx_front.jpg',
+        'mock_gplx_back.jpg',
+        'mock_invalid_utility_bill.jpg',
+        'mock_cccd_lifetime_elderly.jpg',
+        'mock_cccd_back_held.jpg',
+        'mock_cccd_photocopy_bw.jpg',
+        'mock_cccd_expired.jpg',
+        'mock_cccd_upside_down.jpg',
+        'mock_cccd_glare.jpg',
+        'mock_cccd_front_held.jpg',
       ];
 
-      for (final fixture in fixtures) {
-        final file = File(fixture);
+      for (final name in fixtureNames) {
+        final file = _resolveSharedIdentityFixture(name);
         expect(file.existsSync(), isTrue,
-            reason: '$fixture must exist for CI/CD');
+            reason: '$name must exist in shared CI/CD identity fixtures');
       }
     });
 
@@ -451,8 +468,9 @@ void main() {
   });
 
   group('Host Onboarding AI CCCD Extraction Widget Tests', () {
-    // Load mock CCCD front image from CI/CD test fixtures with in-memory fallback
-    final mockFixtureFile = File('test/fixtures/identity/mock_cccd_front.jpg');
+    // Load mock CCCD front image from shared CI/CD test fixtures with in-memory fallback
+    final mockFixtureFile =
+        _resolveSharedIdentityFixture('mock_cccd_front.jpg');
     final sampleImageBytes = mockFixtureFile.existsSync()
         ? mockFixtureFile.readAsBytesSync()
         : Uint8List.fromList(<int>[

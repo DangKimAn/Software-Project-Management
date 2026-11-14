@@ -11,7 +11,7 @@ import 'package:hotel_booking_flutter/core/storage/preferences_service.dart';
 import 'package:hotel_booking_flutter/features/host/data/host_repository.dart';
 import 'package:hotel_booking_flutter/features/host/domain/host_models.dart';
 import 'package:hotel_booking_flutter/features/host/onboarding/host_onboarding_services.dart';
-import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_header.dart';
 
 class _InMemorySecureStorage extends SecureStorageService {
   final String? _authToken;
@@ -151,7 +151,8 @@ void main() {
           adapter.captured[0].headers['Authorization'],
           'Bearer eyJhbGciOiJIUzI1NiJ9.secret-jwt',
         );
-        expect(adapter.captured[1].headers.containsKey('Authorization'), isFalse);
+        expect(
+            adapter.captured[1].headers.containsKey('Authorization'), isFalse);
         expect(adapter.captured[1].headers.containsKey('Cookie'), isFalse);
       },
     );

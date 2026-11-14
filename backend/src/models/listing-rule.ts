@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu nội quy lưu trú chi tiết (giờ giấc, vật nuôi, hút thuốc, tổ chức tiệc) gắn với chỗ nghỉ.
+ */
 import {
     CreationOptional,
     DataTypes,

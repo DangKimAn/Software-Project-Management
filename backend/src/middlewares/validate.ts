@@ -15,6 +15,11 @@ const toValidationErrors = (issues: Array<{ path: PropertyKey[]; message: string
         msg: issue.message,
     }));
 
+/**
+ * Giải thuật xác thực lược đồ nghiêm ngặt bằng Zod cho `body`, `query` và `params`:
+ * - Áp dụng `safeParse` trên từng phân vùng dữ liệu và lưu kết quả đã chuẩn hóa vào `req.validatedData` để chặn trường lạ (Mass Assignment).
+ * - Trả về lỗi `AppError(422)` kèm danh sách đường dẫn trường vi phạm nếu kiểm tra thất bại.
+ */
 export const validate = (schemas: RequestSchemas): RequestHandler => {
     return (req, _res, next) => {
         const validatedData = {

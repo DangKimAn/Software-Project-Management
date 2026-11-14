@@ -1,3 +1,9 @@
+/**
+ * Định tuyến HTTP kiểm duyệt và quản trị chỗ ở (`/api/admin/listings`):
+ * - Áp dụng middleware xác thực (`authenticate`), phân quyền `admin` và kiểm tra tham số định danh chỗ ở.
+ * - Hỗ trợ duyệt danh sách chờ duyệt (`GET /pending`), xem chi tiết, phê duyệt, từ chối và chuyển quyền sở hữu chủ nhà (`transfer-host`).
+ */
+
 import express from "express";
 import { body, param, query } from "express-validator";
 

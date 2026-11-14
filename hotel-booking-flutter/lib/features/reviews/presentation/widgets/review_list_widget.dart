@@ -2,43 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
-import '../../data/repositories/review_repository_impl.dart';
-import '../../domain/entities/review_item.dart';
-import '../../domain/repositories/review_repository.dart';
+import '../view_models/review_view_model.dart';
 
-final reviewRepositoryProvider = Provider<ReviewRepository>((ref) {
-  final client = ref.watch(dioClientProvider);
-  return ReviewRepositoryImpl(client);
-});
+export '../view_models/review_view_model.dart';
 
-typedef ListingReviewsQuery = ({
-  String listingId,
-  int? rating,
-  int limit,
-});
-
-final listingReviewsQueryProvider = FutureProvider.autoDispose
-    .family<List<ReviewItem>, ListingReviewsQuery>((ref, query) async {
-  final repo = ref.watch(reviewRepositoryProvider);
-  return repo.getListingReviews(
-    query.listingId,
-    page: 1,
-    limit: query.limit,
-    rating: query.rating,
-  );
-});
-
-final listingReviewsProvider = FutureProvider.autoDispose
-    .family<List<ReviewItem>, String>((ref, listingId) async {
-  final repo = ref.watch(reviewRepositoryProvider);
-  return repo.getListingReviews(listingId);
-});
-
+/// Danh sách hiển thị điểm trung bình, bộ lọc theo hạng sao (`1..5`) và các nhận xét của khách lưu trú.
+///
+/// Giải thuật mở rộng cửa sổ hiển thị tăng dần kết hợp nạp trang máy chủ:
+/// - Tính số trang API cần nạp `requiredPages = ceil(_visibleLimit / 20)` kẹp trong đoạn `[1, 50]`.
+/// - Mỗi lần nhấn `Xem thêm đánh giá` tăng `_visibleLimit` thêm `6` mục và tự động nạp trang kế tiếp khi chạm ngưỡng dữ liệu đã tải.
 class ReviewListWidget extends ConsumerStatefulWidget {
   final String listingId;
   final double averageRating;
@@ -57,15 +33,18 @@ class ReviewListWidget extends ConsumerStatefulWidget {
 
 class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
   static const int _pageSize = 6;
+  static const int _apiPageLimit = 20;
   int? _selectedRating;
   int _visibleLimit = _pageSize;
 
   @override
   Widget build(BuildContext context) {
+    final requiredPages =
+        ((_visibleLimit + _apiPageLimit - 1) ~/ _apiPageLimit).clamp(1, 50);
     final query = (
       listingId: widget.listingId,
       rating: _selectedRating,
-      limit: _visibleLimit,
+      pageCount: requiredPages,
     );
     final reviewsAsync = ref.watch(listingReviewsQueryProvider(query));
 
@@ -156,8 +135,13 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
               );
             }
 
-            final hasMore = reviews.length >= _visibleLimit &&
-                reviews.length < widget.totalReviews;
+            final visibleReviews = reviews.take(_visibleLimit).toList();
+            final hasMoreLoaded = reviews.length > visibleReviews.length;
+            final canFetchNextServerPage =
+                reviews.length >= requiredPages * _apiPageLimit &&
+                    (_selectedRating != null ||
+                        reviews.length < widget.totalReviews);
+            final hasMore = hasMoreLoaded || canFetchNextServerPage;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,11 +149,11 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                 ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: reviews.length,
+                  itemCount: visibleReviews.length,
                   separatorBuilder: (_, __) =>
                       const SizedBox(height: AppSpacing.s24),
                   itemBuilder: (context, index) {
-                    final review = reviews[index];
+                    final review = visibleReviews[index];
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [

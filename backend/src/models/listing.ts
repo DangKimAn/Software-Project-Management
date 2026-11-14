@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý thực thể chỗ nghỉ (villa/homestay): tọa độ địa lý, cấu hình phòng, biểu giá và trạng thái kiểm duyệt.
+ */
 import {
     CreationOptional,
     DataTypes,

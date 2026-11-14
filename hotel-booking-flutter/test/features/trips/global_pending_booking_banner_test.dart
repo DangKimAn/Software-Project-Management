@@ -6,7 +6,7 @@ import 'package:hotel_booking_flutter/app/router/app_router.dart';
 import 'package:hotel_booking_flutter/features/trips/domain/entities/booking.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/view_models/trips_view_model.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/widgets/global_pending_booking_banner.dart';
-import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_header.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 void main() {

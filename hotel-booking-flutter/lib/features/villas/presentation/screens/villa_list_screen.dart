@@ -10,13 +10,16 @@ import '../../../../shared/animations/shimmer_loading.dart';
 import '../../../../shared/animations/source_animations.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/vung_tau_map_picker.dart';
 import '../../../search/presentation/widgets/source_search_bar.dart';
 import '../widgets/property_card.dart';
 
+/// Màn hình danh sách tìm kiếm và khám phá biệt thự tích hợp thanh lọc, bản đồ Vũng Tàu trực tiếp và phân trang.
+///
 /// Complete port of `Source goc/frontend/src/views/pages/Search/SearchPage.tsx`.
 class VillaListScreen extends ConsumerStatefulWidget {
+  /// Khởi tạo màn hình danh sách biệt thự `VillaListScreen`.
   const VillaListScreen({super.key});
 
   @override
@@ -231,6 +234,9 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                   const SizedBox(height: 14),
                                   LayoutBuilder(
                                     builder: (context, constraints) {
+                                      // Giải thuật chia cột lưới đáp ứng theo chiều rộng vùng chứa (Responsive Grid Column Sizing):
+                                      // Tự động chuyển đổi 3 cột (>= 960px), 2 cột (>= 620px) hoặc 1 cột trên thiết bị di động,
+                                      // tính chính xác bề rộng mỗi thẻ cardW = (maxWidth - gap * (cols - 1)) / cols kèm hiệu ứng xuất hiện lệch pha.
                                       final cols = constraints.maxWidth >= 960
                                           ? 3
                                           : constraints.maxWidth >= 620
@@ -376,8 +382,6 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                       ),
                     ),
                   ),
-
-                  const SliverToBoxAdapter(child: AppFooter()),
                 ],
               ),
             ),

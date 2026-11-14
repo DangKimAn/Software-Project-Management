@@ -64,7 +64,8 @@ docs/ai-fix/
 **/.env.production.local
 !**/.env.example
 !**/.env.*.example
-goldens
+# Golden test diff failure artifacts (keep master snapshots in test/goldens/ trackable)
+**/test/**/failures/
 
 # Certificates, keys and credentials
 certs/
@@ -103,7 +104,7 @@ Setup Notifications/
 **/doc/api/
 app.*.symbols
 app.*.map.txt
-
+rule.md
 # Android build artifacts & keystores
 **/.gradle/
 **/android/.gradle/

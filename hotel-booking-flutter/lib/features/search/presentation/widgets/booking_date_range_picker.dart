@@ -6,12 +6,20 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/date/booking_date.dart';
 import '../../../../shared/animations/source_animations.dart';
 
+/// Nút bọc từng ô ngày trên lịch với hiệu ứng nảy đàn hồi nhẹ, tự động tắt chuyển động khi hệ điều hành bật giảm hiệu ứng.
+///
 /// `@keyframes datePop` interactive day cell wrapper respecting reduced motion.
 class DatePopButton extends StatefulWidget {
+  /// Cho biết ô ngày hiện tại có đang là mốc đầu hoặc mốc cuối của khoảng chọn hay không.
   final bool isSelected;
+
+  /// Hàm gọi lại khi người dùng chạm vào ô ngày hợp lệ.
   final VoidCallback? onTap;
+
+  /// Widget nội dung hiển thị bên trong ô ngày.
   final Widget child;
 
+  /// Khởi tạo nút ô ngày `DatePopButton`.
   const DatePopButton({
     super.key,
     required this.isSelected,
@@ -55,14 +63,30 @@ class _DatePopButtonState extends State<DatePopButton> {
   }
 }
 
+/// Bộ chọn khoảng ngày nhận - trả phòng tương tác trực tiếp với lịch kín phòng theo quy ước nửa mở `[checkIn, checkOut)`.
+///
+/// Ngăn người dùng chọn ngày quá khứ (theo múi giờ Việt Nam `UTC+7`) hoặc chọn khoảng ngày cắt ngang qua đêm đã có khách đặt,
+/// đồng thời hỗ trợ nghiệp vụ trả phòng vào đúng buổi sáng ngày khách kế tiếp nhận phòng.
 class BookingDateRangePicker extends StatefulWidget {
+  /// Ngày nhận phòng khởi tạo ban đầu (nếu có).
   final BookingDate? initialCheckIn;
+
+  /// Ngày trả phòng khởi tạo ban đầu (nếu có).
   final BookingDate? initialCheckOut;
+
+  /// Tập hợp các đêm đã kín phòng truyền dưới dạng đối tượng `BookingDate`.
   final Set<BookingDate> bookedDates;
+
+  /// Tập hợp các đêm đã kín phòng truyền dưới dạng chuỗi chuẩn ISO (`YYYY-MM-DD`).
   final Set<String> bookedDatesIso;
+
+  /// Ngày tối thiểu được phép bắt đầu chọn (mặc định là hôm nay theo giờ Việt Nam).
   final BookingDate? minDate;
+
+  /// Hàm gọi lại trả về cặp `(checkIn, checkOut)` mỗi khi người dùng thay đổi lựa chọn.
   final ValueChanged<(BookingDate?, BookingDate?)> onRangeSelected;
 
+  /// Khởi tạo bộ chọn khoảng ngày lưu trú `BookingDateRangePicker`.
   const BookingDateRangePicker({
     super.key,
     this.initialCheckIn,
@@ -85,7 +109,9 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
   BookingDate? _checkOut;
   String? _errorMessage;
 
-  BookingDate get _effectiveMinDate => widget.minDate ?? BookingDate.today();
+  // Giải thuật chuẩn hóa mốc ngày tối thiểu khả dụng theo múi giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7):
+  // Luôn khóa các ngày quá khứ theo BookingDate.todayVn() thay vì giờ hệ thống thiết bị để tránh lệch ngày khi thiết bị khác múi giờ.
+  BookingDate get _effectiveMinDate => widget.minDate ?? BookingDate.todayVn();
 
   Set<BookingDate> get _effectiveBookedDates {
     if (widget.bookedDatesIso.isEmpty) return widget.bookedDates;
@@ -96,6 +122,12 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
     };
   }
 
+  /// Tìm đêm đã kín phòng sớm nhất nằm sau `_checkIn` khi người dùng đang trong bước chọn ngày trả phòng.
+  ///
+  /// Theo quy ước khoảng nửa mở `[checkIn, checkOut)`, đúng ngày `earliest` này VẪN ĐƯỢC PHÉP chọn làm
+  /// ngày trả phòng (khách trả phòng trước 12:00 trưa, đoàn kế tiếp nhận phòng từ 14:00 chiều),
+  /// nhưng mọi ngày nằm sau `earliest` đều bị khóa để không cắt ngang đêm đã đặt.
+  ///
   /// Finds the earliest booked night strictly after [_checkIn] when selecting check-out.
   /// Per half-open interval `[checkIn, checkOut)`, this earliest booked date IS allowed
   /// as a check-out date, while dates strictly after it are blocked.
@@ -117,7 +149,7 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
     super.initState();
     _checkIn = widget.initialCheckIn;
     _checkOut = widget.initialCheckOut;
-    final seed = _checkIn ?? widget.minDate ?? BookingDate.today();
+    final seed = _checkIn ?? widget.minDate ?? BookingDate.todayVn();
     _currentMonth = DateTime(seed.year, seed.month);
   }
 
@@ -131,6 +163,7 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
     }
   }
 
+  /// Kiểm tra xem ngày `day` có hợp lệ để làm mốc trả phòng `checkOut` cho `_checkIn` hiện tại hay không.
   bool _canUseDayAsCheckOut(BookingDate day) {
     if (_checkIn == null || _checkOut != null) return false;
     if (!day.isAfter(_checkIn!)) return false;
@@ -141,6 +174,20 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
     );
   }
 
+  /// Xử lý máy trạng thái chọn ngày nhận / trả phòng và kiểm tra ràng buộc không vắt qua đêm đã kín.
+  ///
+  /// Giải thuật xử lý chọn ngày theo khoảng nửa mở `[checkIn, checkOut)`:
+  /// 1. **Chặn ngày quá khứ**: Bỏ qua thao tác nếu `day < _effectiveMinDate` (`BookingDate.todayVn()`).
+  /// 2. **Xử lý khi chạm vào ngày có trong `booked` (đêm đã kín)**:
+  ///    - Ngoại lệ biên trả phòng nửa mở `[checkIn, checkOut)`: Nếu đã có `_checkIn`, chưa có `_checkOut`,
+  ///      `day > _checkIn` và toàn bộ các đêm trong `[_checkIn, day)` đều trống (`_canUseDayAsCheckOut(day)`),
+  ///      cho phép chốt `_checkOut = day` (trả phòng buổi sáng cùng ngày khách sau nhận phòng buổi chiều).
+  ///    - Mọi trường hợp còn lại (chọn làm `checkIn` hoặc vắt qua đêm đã đặt trước đó) đều báo lỗi `'Ngày này đã kín'`.
+  /// 3. **Xử lý khi chạm vào ngày trống**:
+  ///    - Nếu chưa có `_checkIn` hoặc đã chọn đủ cặp `(_checkIn, _checkOut)`: khởi tạo lượt chọn mới `_checkIn = day, _checkOut = null`.
+  ///    - Nếu đang chờ chọn `_checkOut` mà chạm vào ngày `<= _checkIn`: dời mốc bắt đầu `_checkIn = day`.
+  ///    - Nếu chạm vào ngày `> _checkIn`: đối soát `BookingDate.isRangeAvailable` trên đoạn nửa mở `[_checkIn, day)`;
+  ///      nếu có bất kỳ đêm kín nào xen giữa thì chặn lại và báo `'Ngày này đã kín'`, ngược lại hoàn tất cặp ngày.
   void _onDayTapped(BookingDate day) {
     if (day.isBefore(_effectiveMinDate)) {
       return;
@@ -204,6 +251,9 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
     final monthFormat = DateFormat('MMMM yyyy', 'vi_VN');
     final monthTitle = monthFormat.format(_currentMonth);
 
+    // Giải thuật tính số ngày trong tháng và độ lệch thứ đầu tháng (Thứ Hai = cột 0 .. Chủ Nhật = cột 6):
+    // Dùng DateTime(year, month + 1, 0).day để lấy ngày cuối cùng của tháng hiện tại (xử lý chính xác năm nhuận),
+    // chèn (firstWeekday - 1) ô rỗng đầu lưới để căn thẳng hàng từng ngày với nhãn thứ T2..CN.
     final daysInMonth =
         DateTime(_currentMonth.year, _currentMonth.month + 1, 0).day;
     final firstWeekday = DateTime(_currentMonth.year, _currentMonth.month, 1)
@@ -286,6 +336,8 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
               return Expanded(
                 child: Text(
                   w,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   style: AppTypography.caption.copyWith(
                     fontWeight: FontWeight.w600,
@@ -425,15 +477,25 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
                     )
                   : null,
             ),
+            // Giải thuật co chữ thích ứng trong ô lịch tròn 36x36 (`FittedBox`):
+            // Bọc số ngày 2 chữ số (`10`–`31`) trong `Padding` + `FittedBox(fit: BoxFit.scaleDown)`
+            // để không bao giờ bị ngắt thành 2 dòng ở mức phóng chữ `1.8x–2.0x`.
             child: Center(
-              child: Text(
-                '$dayNumber',
-                style: AppTypography.bodyMedium.copyWith(
-                  color: textColor,
-                  fontWeight: (isSelectedEnd || isInRange)
-                      ? FontWeight.w700
-                      : FontWeight.w500,
-                  decoration: textDecoration,
+              child: Padding(
+                padding: const EdgeInsets.all(3),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '$dayNumber',
+                    maxLines: 1,
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: textColor,
+                      fontWeight: (isSelectedEnd || isInRange)
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                      decoration: textDecoration,
+                    ),
+                  ),
                 ),
               ),
             ),

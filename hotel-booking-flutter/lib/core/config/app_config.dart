@@ -5,6 +5,10 @@ import 'package:flutter/services.dart';
 ///
 /// NOTE: Dart define flags are compiled into the binary and can be inspected.
 /// Do NOT store sensitive private keys, database passwords, or OAuth client secrets here.
+/// Trung tâm quản lý cấu hình biên dịch (`--dart-define`) và kiểm định an toàn môi trường khởi chạy.
+///
+/// Chịu trách nhiệm chuẩn hóa URL máy chủ API, xác thực định dạng Hotline / Zalo OA chính thức,
+/// phát hiện cấu hình mẫu chưa xác minh và cưỡng chế giao thức HTTPS trên môi trường `staging` / `prod` / `Release`.
 final class AppConfig {
   AppConfig._();
 
@@ -47,6 +51,12 @@ final class AppConfig {
   static const enableLogging =
       bool.fromEnvironment('ENABLE_LOGGING', defaultValue: true);
 
+  // CONFLICT-RESOLVED: Cho phép cấu hình `staging.json` / `prod.json` trỏ về backend cục bộ `http://localhost:7000`
+  // khi chạy đồ án trên máy local (bật tường minh `ALLOW_LOCAL_API_IN_NON_DEV=true`), thay vì gắn tên miền giả `minhthanhvilla.com`,
+  // nhưng vẫn giữ mặc định `false` để chặn HTTP/localhost ngoài ý muốn khi không bật cờ này.
+  static const allowLocalApiInNonDev =
+      bool.fromEnvironment('ALLOW_LOCAL_API_IN_NON_DEV', defaultValue: false);
+
   /// Feature flag allowing instant rollback of foreign currency display back to pure VND.
   static const enableMultiCurrencyDisplay = bool.fromEnvironment(
     'ENABLE_MULTI_CURRENCY_DISPLAY',
@@ -75,6 +85,8 @@ final class AppConfig {
 
   /// Normalizes a raw API base URL by stripping trailing slashes and any redundant `/api` suffix
   /// so endpoint paths like `/api/listings` never produce `/api/api/listings`.
+  /// Giải thuật chuẩn hóa URL gốc của API: cắt bỏ dấu `/` thừa ở cuối và lặp lại việc tước hậu tố `/api`
+  /// để khi ghép với đường dẫn `/api/...` không bao giờ sinh lỗi nhân đôi `/api/api/...`.
   static String normalizeApiBaseUrl(String rawUrl) {
     var normalized = rawUrl.trim();
     while (normalized.endsWith('/')) {
@@ -316,6 +328,7 @@ final class AppConfig {
   /// Resolves the expected environment from explicit entrypoint argument, native build flavor
   /// (`appFlavor`), or build mode (`kReleaseMode`), without ever comparing `AppConfig.environment`
   /// against itself.
+  /// Giải thuật phân giải môi trường kỳ vọng theo thứ tự ưu tiên: tham số tường minh -> `buildFlavor` bản địa -> chế độ biên dịch (`prod` khi Release, `dev` khi Debug/Profile).
   static String resolveExpectedEnvironment({
     String? explicitExpectedEnvironment,
     String? buildFlavor,
@@ -337,6 +350,11 @@ final class AppConfig {
   }
 
   /// Validates environment consistency, flavor alignment, and HTTPS security at startup.
+  /// Giải thuật cổng kiểm định bảo mật cấu hình khi khởi chạy (Startup Security Gate):
+  /// 1. Đối chiếu tên môi trường thuộc tập hỗ trợ (`dev`, `staging`, `prod`) và khớp hoàn toàn với `expectedEnvironment` cũng như `buildFlavor`.
+  /// 2. Chặn tuyệt đối bản biên dịch `Release` chạy với `APP_ENV="dev"` hoặc chứa URL giữ chỗ (placeholder).
+  /// 3. Phân tích cú pháp `API_BASE_URL`, từ chối thông tin xác thực nhúng (`userInfo`), cưỡng chế `https` cho mọi môi trường khác `dev` hoặc bản `Release`,
+  ///    đồng thời ngăn môi trường `prod` trỏ nhầm vào máy chủ nội bộ / `dev` / `staging`.
   static void validate({
     required String expectedEnvironment,
     String? currentEnvironment,
@@ -346,6 +364,7 @@ final class AppConfig {
     String? buildFlavor,
     bool isReleaseBuild = kReleaseMode,
     bool enforceVerifiedContactsInProd = false,
+    bool? allowLocalApiOverride,
   }) {
     final env = (currentEnvironment ?? environment).trim().toLowerCase();
     final expected = expectedEnvironment.trim().toLowerCase();
@@ -409,8 +428,17 @@ final class AppConfig {
     final isStagingHost =
         hostLower.startsWith('staging.') || hostLower.startsWith('staging-');
 
-    // Staging, Production, and any Release build must strictly use HTTPS.
-    if ((env != 'dev' || isReleaseBuild) && uri.scheme != 'https') {
+    // Giải thuật kiểm soát ngoại lệ Loopback cục bộ có điều kiện:
+    // Chỉ cho phép `http://localhost` / `127.0.0.1` / `10.0.2.2` ở chế độ `staging`/`prod`/`Release` khi cờ
+    // `ALLOW_LOCAL_API_IN_NON_DEV` được bật tường minh phục vụ chạy đồ án local; mọi tên miền từ xa vẫn bắt buộc HTTPS.
+    final effectiveAllowLocalApi =
+        allowLocalApiOverride ?? allowLocalApiInNonDev;
+    final isPermittedLocalLoopback = effectiveAllowLocalApi && isLocalHost;
+
+    // Staging, Production, and any Release build must strictly use HTTPS unless local loopback is explicitly permitted.
+    if ((env != 'dev' || isReleaseBuild) &&
+        uri.scheme != 'https' &&
+        !isPermittedLocalLoopback) {
       throw StateError(
         'Invalid API_BASE_URL "$rawUrl": Production, Staging, and Release builds MUST use secure HTTPS.',
       );
@@ -418,7 +446,7 @@ final class AppConfig {
 
     // Prevent production or release builds from accidentally pointing at a development or staging API.
     if ((env == 'prod' || (isReleaseBuild && env != 'staging')) &&
-        (isDevHost || isStagingHost)) {
+        ((isDevHost && !isPermittedLocalLoopback) || isStagingHost)) {
       throw StateError(
         'Invalid API_BASE_URL "$rawUrl": Production/Release build cannot target non-production host "${uri.host}".',
       );

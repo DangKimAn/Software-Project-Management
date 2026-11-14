@@ -11,26 +11,38 @@ import '../../../../core/network/dio_client.dart';
 import '../../../../shared/animations/animated_heart_button.dart';
 import '../../../../shared/animations/fade_slide_in.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_loading.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../../reviews/presentation/widgets/review_list_widget.dart';
 import '../../../search/presentation/widgets/booking_date_range_picker.dart';
-import '../../../trips/presentation/view_models/trips_view_model.dart';
 import '../../../villas/domain/entities/villa.dart';
+import '../view_models/villa_detail_view_model.dart';
 import '../../../villas/presentation/widgets/property_card.dart';
 import '../../../villas/presentation/widgets/property_image_carousel.dart';
 import '../widgets/booking_action_bar.dart';
 import '../widgets/daily_price_breakdown.dart';
 import '../widgets/mobile_spec_summary.dart';
 import '../widgets/property_faq_section.dart';
+import '../widgets/similar_villas_carousel_sizing.dart';
 
+export '../widgets/similar_villas_carousel_sizing.dart';
+
+/// Màn hình Chi tiết biệt thự tích hợp bộ chọn lịch khả dụng, dự toán chi phí, kiểm tra mã ưu đãi và khởi tạo đơn đặt phòng.
+///
+/// Phối hợp hai tầng hiển thị giá minh bạch:
+/// - Dự toán tổng chi phí tức thì qua `VillaDetailPricingCalculator` trên khoảng nửa mở `[_checkIn, _checkOut)`,
+///   tính gộp một lần bằng VNĐ gốc trước khi quy đổi ngoại tệ tham khảo (`FX-16`) để tránh sai số làm tròn cộng dồn.
+/// - Bảng chi tiết từng đêm `DailyPriceBreakdown` nạp bất đồng bộ từ `villaNightlyPricingProvider` để phản ánh
+///   chính xác giá ghi đè lịch máy chủ và trạng thái kín phòng của từng ngày cụ thể.
+///
 /// Complete port of `Source goc/frontend/src/views/pages/ListingDetail/ListingDetailPage.tsx`.
 class VillaDetailScreen extends ConsumerStatefulWidget {
+  /// Mã định danh của biệt thự cần hiển thị chi tiết.
   final String villaId;
 
+  /// Khởi tạo màn hình chi tiết biệt thự `VillaDetailScreen`.
   const VillaDetailScreen({super.key, required this.villaId});
 
   @override
@@ -69,9 +81,11 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     super.dispose();
   }
 
+  /// Tính số đêm lưu trú hiệu lực của khoảng nửa mở `[_checkIn, _checkOut)`.
   int _calculateNights() =>
       VillaDetailPricingCalculator.calculateNights(_checkIn, _checkOut);
 
+  /// Tính bảng bóc tách tiền phòng, phụ thu khách vượt chuẩn, phí vệ sinh/dịch vụ và giảm giá ưu đãi cho `villa`.
   ({
     int nights,
     int weekendNights,
@@ -91,6 +105,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     );
   }
 
+  /// Đối soát mã ưu đãi người dùng nhập với máy chủ dựa trên khoảng ngày lưu trú, số khách và tiền phòng tạm tính.
   Future<void> _applyCoupon(Villa villa) async {
     final code = _couponCtrl.text.trim().toUpperCase();
     if (code.isEmpty || _checkIn == null || _checkOut == null) return;
@@ -102,7 +117,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     });
 
     try {
-      final res = await ref.read(bookingRepositoryProvider).validateCoupon(
+      final res = await ref.read(villaDetailViewModelProvider).validateCoupon(
             code: code,
             listingId: villa.id,
             checkInDate: _checkIn!.toIsoDate(),
@@ -134,6 +149,12 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     }
   }
 
+  /// Xác thực ràng buộc đặt phòng (`minNights`, `maxNights`, phiên đăng nhập) và điều hướng sang bước thanh toán.
+  ///
+  /// Giải thuật xử lý đặt phòng nhiều chặng:
+  /// 1. Kiểm tra đủ cặp ngày `[_checkIn, _checkOut)` và đối chiếu số đêm nằm trong đoạn `[villa.minNights, villa.maxNights]`.
+  /// 2. Nếu người dùng chưa đăng nhập, lưu tạm `PendingBookingIntent` vào bộ nhớ cục bộ rồi chuyển sang `/dang-nhap`.
+  /// 3. Nếu đã đăng nhập, tạo đơn giữ chỗ qua `VillaDetailViewModel.createBooking` và chuyển tới `/thanh-toan/:id`.
   Future<void> _handleBookNow(Villa villa) async {
     if (_checkIn == null || _checkOut == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -168,12 +189,12 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
 
     final user = ref.read(authNotifierProvider).valueOrNull;
     if (user == null) {
-      await ref.read(preferencesServiceProvider).setPendingBookingIntent({
-        'listingId': villa.id,
-        'checkInDate': _checkIn!.toIsoDate(),
-        'checkOutDate': _checkOut!.toIsoDate(),
-        'guestsCount': _guestsCount,
-      });
+      await ref.read(villaDetailViewModelProvider).savePendingBookingIntent(
+            listingId: villa.id,
+            checkInDate: _checkIn!.toIsoDate(),
+            checkOutDate: _checkOut!.toIsoDate(),
+            guestsCount: _guestsCount,
+          );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -186,15 +207,15 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
 
     setState(() => _isSubmittingBooking = true);
     try {
-      final booking = await ref.read(bookingRepositoryProvider).createBooking(
-            listingId: villa.id,
-            checkInDate: _checkIn!.toIsoDate(),
-            checkOutDate: _checkOut!.toIsoDate(),
-            guestsCount: _guestsCount,
-            specialRequests: _specialRequestsCtrl.text.trim(),
-            couponCode: _appliedCouponCode,
-          );
-      ref.invalidate(myBookingsProvider);
+      final booking =
+          await ref.read(villaDetailViewModelProvider).createBooking(
+                listingId: villa.id,
+                checkInDate: _checkIn!.toIsoDate(),
+                checkOutDate: _checkOut!.toIsoDate(),
+                guestsCount: _guestsCount,
+                specialRequests: _specialRequestsCtrl.text.trim(),
+                couponCode: _appliedCouponCode,
+              );
       if (!mounted) return;
       setState(() => _isSubmittingBooking = false);
 
@@ -258,7 +279,9 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
           });
         }
 
-        final checkIn = _checkIn ?? BookingDate.today().addDays(1);
+        // Giải thuật tính khoảng ngày nhận/trả phòng mặc định theo múi giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7):
+        // Mặc định nhận phòng vào ngày mai (todayVn + 1) và lưu trú 2 đêm để không chọn nhầm ngày quá khứ theo giờ máy.
+        final checkIn = _checkIn ?? BookingDate.todayVn().addDays(1);
         final checkOut = _checkOut ?? checkIn.addDays(2);
         final pricingParams = (
           villaId: villa.id,
@@ -590,6 +613,11 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                                 if (recs.isEmpty) {
                                   return const SizedBox.shrink();
                                 }
+                                final carouselHeight =
+                                    computeSimilarVillasCarouselHeight(
+                                  context,
+                                  recs,
+                                );
                                 return Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -600,7 +628,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                                     ),
                                     const SizedBox(height: 12),
                                     SizedBox(
-                                      height: 360,
+                                      height: carouselHeight,
                                       child: ListView.separated(
                                         scrollDirection: Axis.horizontal,
                                         itemCount: recs.length,
@@ -646,7 +674,6 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                   ),
                 ),
               ),
-              const SliverToBoxAdapter(child: AppFooter()),
             ],
           ),
 
@@ -1035,6 +1062,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     );
   }
 
+  /// Dựng lưới tiện nghi thích ứng từ `1` đến `3` cột tùy theo bề rộng khung nhìn và hệ số phóng chữ `TextScaler`.
   Widget _buildAmenitiesGrid(BuildContext context, List<String> amenities) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1347,6 +1375,7 @@ class _PolicyItem extends StatelessWidget {
   }
 }
 
+/// Hộp thoại toàn màn hình trình chiếu bộ sưu tập ảnh biệt thự, hỗ trợ lọc nhanh theo nhãn không gian phòng (`ChoiceChip`).
 class _FullscreenGalleryModal extends StatefulWidget {
   final Villa villa;
 

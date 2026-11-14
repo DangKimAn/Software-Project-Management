@@ -1,3 +1,9 @@
+/**
+ * Định tuyến HTTP xác thực người dùng (`/api/auth`):
+ * - Áp dụng bộ giới hạn tần suất chuyên biệt chống Brute-Force/Spam OTP (`Limiter`), kiểm chứng schema đầu vào (`validate` + Zod)
+ *   và middleware xác thực phiên (`authenticate`) cho endpoint thông tin tài khoản hiện hành.
+ */
+
 import express from "express";
 import type { RequestHandler } from "express";
 

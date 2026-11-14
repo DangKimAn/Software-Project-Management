@@ -1,3 +1,9 @@
+/**
+ * Bộ điều phối HTTP giao dịch thanh toán và cổng callback VNPay/MoMo (`payments`):
+ * - Điều phối tra cứu phương thức khả dụng, khởi tạo phiên thanh toán, xem lịch sử/chi tiết giao dịch,
+ *   xử lý chuyển hướng Return URL về ứng dụng/web và phản hồi IPN Webhook máy chủ-máy chủ theo định dạng chuẩn của từng cổng.
+ */
+
 import { getEnv } from "../../config/env";
 import type { RequestHandler } from "express";
 
@@ -22,12 +28,18 @@ import {
     processVnpayWebhook,
 } from "./payments.service";
 
+/**
+ * Trả về danh sách các cổng thanh toán trực tuyến cùng trạng thái sẵn sàng cấu hình.
+ */
 export const getPaymentMethods: RequestHandler = asyncHandler(async (_req, res) => {
     return sendSuccess(res, {
         data: getPaymentMethodAvailability(),
     });
 });
 
+/**
+ * Khởi tạo giao dịch thanh toán cho đơn đặt phòng và trả về URL chuyển hướng sang cổng thanh toán.
+ */
 export const createPaymentRequest: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -41,6 +53,9 @@ export const createPaymentRequest: RequestHandler = asyncHandler(async (req, res
     });
 });
 
+/**
+ * Truy vấn thông tin chi tiết và trạng thái đối soát của một giao dịch thanh toán.
+ */
 export const getPaymentById: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -52,6 +67,9 @@ export const getPaymentById: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Liệt kê phân trang lịch sử các giao dịch thanh toán của người dùng hiện tại.
+ */
 export const getMyPaymentHistory: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -63,6 +81,9 @@ export const getMyPaymentHistory: RequestHandler = asyncHandler(async (req, res)
     });
 });
 
+/**
+ * Xử lý callback chuyển hướng trình duyệt Return URL từ VNPay, đối soát kết quả và điều hướng về giao diện đích.
+ */
 export const handleVnpayReturn: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -99,6 +120,9 @@ export const handleVnpayReturn: RequestHandler = asyncHandler(async (req, res) =
     });
 });
 
+/**
+ * Xử lý thông báo tức thời IPN Webhook từ máy chủ VNPay và phản hồi mã `RspCode` chuẩn giao thức.
+ */
 export const handleVnpayWebhook: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -111,6 +135,9 @@ export const handleVnpayWebhook: RequestHandler = asyncHandler(async (req, res) 
     return res.status(200).json(result);
 });
 
+/**
+ * Xử lý callback chuyển hướng Return URL từ cổng MoMo và điều hướng người dùng về trang kết quả thanh toán.
+ */
 export const handleMomoReturn: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -147,6 +174,9 @@ export const handleMomoReturn: RequestHandler = asyncHandler(async (req, res) =>
     });
 });
 
+/**
+ * Xử lý thông báo IPN Webhook từ máy chủ MoMo và trả về mã đối soát `resultCode` chuẩn.
+ */
 export const handleMomoWebhook: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 

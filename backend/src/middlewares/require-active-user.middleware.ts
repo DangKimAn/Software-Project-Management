@@ -2,6 +2,9 @@ import type { RequestHandler } from "express";
 
 import { ApiError } from "../common/api-error";
 
+/**
+ * Giải thuật kiểm tra trạng thái tài khoản hoạt động (`status === "active"`), chặn các tài khoản bị khóa/đình chỉ thực thi nghiệp vụ.
+ */
 export const requireActiveUser: RequestHandler = (req, _res, next) => {
     if (!req.user) {
         return next(new ApiError(401, "Unauthorized"));

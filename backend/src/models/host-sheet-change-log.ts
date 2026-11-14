@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize ghi nhật ký biến động hai chiều giữa ứng dụng và bảng tính Google Sheets của chủ nhà.
+ */
 import {
     CreationOptional,
     DataTypes,

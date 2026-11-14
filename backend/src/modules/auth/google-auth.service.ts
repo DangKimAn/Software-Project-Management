@@ -30,6 +30,16 @@ type GoogleAuthContext = {
     userAgent?: string | null;
 };
 
+/**
+ * Giải thuật xác thực mật mã học Google ID Token (chuẩn OpenID Connect JWT):
+ * - Dùng `OAuth2Client.verifyIdToken` kiểm tra chữ ký số RSA đối chiếu chứng chỉ JWK công khai của Google
+ *   cùng hạn hiệu lực thời gian (`exp`, `iat`).
+ * - Ràng buộc chặt đối tượng thụ hưởng `aud === googleClientId` (chống tấn công dùng lại ID Token
+ *   cấp cho ứng dụng khác - confused deputy attack).
+ * - Kiểm tra nguồn phát hành `iss` thuộc danh sách trắng của Google (`accounts.google.com` hoặc
+ *   `https://accounts.google.com`) và bắt buộc `email_verified === true` để ngăn chặn chiếm đoạt
+ *   tài khoản thông qua địa chỉ email chưa được xác minh chủ sở hữu.
+ */
 const defaultGoogleIdTokenVerifier: GoogleIdTokenVerifier = async (idToken) => {
     const clientId = getEnv().googleClientId;
 
@@ -77,10 +87,19 @@ const defaultGoogleIdTokenVerifier: GoogleIdTokenVerifier = async (idToken) => {
 
 let googleIdTokenVerifier: GoogleIdTokenVerifier = defaultGoogleIdTokenVerifier;
 
+/**
+ * Thay thế hàm xác thực Google ID Token phục vụ kiểm thử tự động cô lập,
+ * tự động khôi phục bộ xác thực OIDC mặc định khi không truyền đối số.
+ */
 export const setGoogleIdTokenVerifierForTests = (verifier?: GoogleIdTokenVerifier) => {
     googleIdTokenVerifier = verifier ?? defaultGoogleIdTokenVerifier;
 };
 
+/**
+ * Giải thuật xác thực Google ID Token có chuẩn hóa ngoại lệ:
+ * - Ủy quyền kiểm tra chữ ký số và claims cho `googleIdTokenVerifier` hiện hành,
+ *   ánh xạ mọi ngoại lệ thư viện bên dưới về `ApiError(401)` đồng nhất để tránh rò rỉ chi tiết nội bộ.
+ */
 export const verifyGoogleIdToken = async (idToken: string) => {
     try {
         return await googleIdTokenVerifier(idToken);
@@ -93,6 +112,12 @@ export const verifyGoogleIdToken = async (idToken: string) => {
     }
 };
 
+/**
+ * Giải thuật đồng bộ thuộc tính hồ sơ đã xác minh từ Google sang tài khoản nội bộ:
+ * - Chỉ nâng cấp cờ `isEmailVerified` khi Google xác nhận `emailVerified === true` và chỉ điền
+ *   `avatarUrl` khi hồ sơ nội bộ chưa có ảnh đại diện, tránh ghi đè dữ liệu tùy chỉnh của người dùng
+ *   và chỉ thực thi thao tác ghi DB khi có thay đổi thực tế.
+ */
 const applyVerifiedGoogleProfile = async (user: UserDocument, profile: VerifiedGoogleProfile) => {
     let shouldSave = false;
 
@@ -111,6 +136,18 @@ const applyVerifiedGoogleProfile = async (user: UserDocument, profile: VerifiedG
     }
 };
 
+/**
+ * Giải thuật xác thực OAuth Google và liên kết tài khoản xã hội an toàn:
+ * 1. Xác thực chữ ký số, `aud`, `iss` và `email_verified` của `idToken` để thu nhận định danh bất biến `sub`.
+ * 2. Ưu tiên tra cứu liên kết `SocialAccount` theo khóa `("google", sub)`; nếu bản ghi liên kết mồ côi
+ *    (tài khoản `User` đã bị xóa) thì thu dọn bản ghi cũ trước khi xử lý tiếp.
+ * 3. Nếu chưa có liên kết theo `sub`, đối chiếu người dùng nội bộ theo `email` chuẩn hóa đã xác minh:
+ *    - Nếu tìm thấy tài khoản hiện hữu: kiểm tra quyền đăng nhập, chặn xung đột `409` nếu tài khoản đó
+ *      đã liên kết với một `providerUid` Google khác (chống chiếm quyền/ghi đè liên kết trái phép),
+ *      hoặc thiết lập liên kết `SocialAccount` mới một cách bất biến (Idempotent).
+ *    - Nếu chưa tồn tại tài khoản: khởi tạo nguyên tử người dùng xã hội mới kèm liên kết `SocialAccount`.
+ * 4. Khởi tạo phiên đăng nhập mới (`issueAuthSession`) gồm Access Token và Refresh Token lưu băm.
+ */
 export const authenticateWithGoogleIdToken = async (
     idToken: string,
     context: GoogleAuthContext = {},

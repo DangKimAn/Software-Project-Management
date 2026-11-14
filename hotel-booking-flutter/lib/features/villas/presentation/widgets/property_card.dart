@@ -12,12 +12,24 @@ import '../../domain/entities/villa.dart';
 import 'property_image_carousel.dart';
 import 'property_specs_row.dart';
 
+/// Thẻ hiển thị tóm tắt thông tin biệt thự theo phong cách tối giản sang trọng trên lưới tìm kiếm và trang chủ.
+///
+/// Bao gồm vòng quay ảnh tỷ lệ `4:3` tích hợp `Hero`, nút thả tim yêu thích, huy hiệu ưu tiên duy nhất,
+/// điểm đánh giá, hàng thông số chuẩn thứ tự nghiệp vụ và khối hiển thị giá xác thực.
 class PropertyCard extends StatelessWidget {
+  /// Thực thể dữ liệu biệt thự cần hiển thị.
   final Villa villa;
+
+  /// Hàm gọi lại khi người dùng chạm mở trang chi tiết biệt thự.
   final VoidCallback onTap;
+
+  /// Cho biết biệt thự hiện tại có nằm trong danh sách yêu thích của người dùng hay không.
   final bool isFavorite;
+
+  /// Hàm gọi lại khi người dùng bấm nút chuyển đổi trạng thái yêu thích.
   final VoidCallback? onFavoriteToggle;
 
+  /// Khởi tạo thẻ biệt thự `PropertyCard`.
   const PropertyCard({
     super.key,
     required this.villa,
@@ -152,31 +164,56 @@ class PropertyCard extends StatelessWidget {
 
                 const SizedBox(height: 12),
 
-                // Price Display + "Còn trống" text (no pill/frame)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: PriceDisplay(
-                        basePriceVnd: villa.basePriceVnd,
-                        saturdayPriceVnd: villa.saturdayPriceVnd,
+                // Giải thuật phân bố dòng giá và trạng thái thích ứng tỷ lệ phóng chữ (TextScaler):
+                // Khi thẻ hẹp (< 260dp) hoặc phông chữ phóng to (scale >= 1.35), xếp dọc nhãn trạng thái
+                // xuống dưới PriceDisplay để khối giá giữ trọn chiều rộng thẻ, tránh bị ép gãy nhiều dòng.
+                LayoutBuilder(
+                  builder: (context, priceConstraints) {
+                    final scale = MediaQuery.textScalerOf(context).scale(1.0);
+                    final stackVertically =
+                        scale >= 1.35 || priceConstraints.maxWidth < 260;
+                    final statusLabel = Text(
+                      context.l10n.statusAvailable,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
                       ),
-                    ),
-                    Flexible(
-                      flex: 0,
-                      child: Text(
-                        context.l10n.statusAvailable,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
+                    );
+                    if (stackVertically) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          PriceDisplay(
+                            basePriceVnd: villa.basePriceVnd,
+                            saturdayPriceVnd: villa.saturdayPriceVnd,
+                          ),
+                          const SizedBox(height: 4),
+                          statusLabel,
+                        ],
+                      );
+                    }
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: PriceDisplay(
+                            basePriceVnd: villa.basePriceVnd,
+                            saturdayPriceVnd: villa.saturdayPriceVnd,
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
+                        const SizedBox(width: 8),
+                        Flexible(
+                          flex: 0,
+                          child: statusLabel,
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),

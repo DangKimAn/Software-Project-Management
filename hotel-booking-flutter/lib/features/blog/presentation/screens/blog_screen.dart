@@ -10,9 +10,9 @@ import '../../../../core/errors/app_failure.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
-import '../../data/blog_repository.dart';
+import '../view_models/blog_view_model.dart';
 
 /// Port of `Source goc/frontend/src/views/pages/Blog/BlogPage.tsx`
 /// adhering to The Palm Light Luxury Design System (FLUTTER_RULES.md).
@@ -142,7 +142,6 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
     return Scaffold(
       backgroundColor: AppColors.surfaceBase,
       body: SafeArea(
-        bottom: false,
         child: Column(
           children: [
             const AppTopHeader(currentPath: '/cam-nang'),
@@ -428,7 +427,6 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                       );
                     },
                   ),
-                  const SliverToBoxAdapter(child: AppFooter()),
                 ],
               ),
             ),
@@ -542,6 +540,8 @@ class BlogPostCard extends StatelessWidget {
                           ),
                           child: Text(
                             post.category,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: AppTypography.caption.copyWith(
                               fontWeight: FontWeight.w700,
                               color: AppColors.textStrong,
@@ -551,6 +551,8 @@ class BlogPostCard extends StatelessWidget {
                         if (post.readTime.isNotEmpty)
                           Text(
                             post.readTime,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: AppTypography.caption.copyWith(
                               color: AppColors.textMuted,
                             ),
@@ -573,7 +575,7 @@ class BlogPostCard extends StatelessWidget {
                       const SizedBox(height: AppSpacing.xs),
                       Text(
                         post.excerpt,
-                        maxLines: 3,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.bodyMuted.copyWith(
                           height: 1.55,

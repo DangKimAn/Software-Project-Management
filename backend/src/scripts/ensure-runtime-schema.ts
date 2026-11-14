@@ -847,6 +847,10 @@ const ensureHostSheetSyncSchema = async () => {
     }
 };
 
+/**
+ * Kịch bản đồng bộ lũy đẳng (idempotent runtime DDL) đảm bảo toàn bộ bảng, cột, chỉ mục, ENUM và ràng buộc CHECK
+ * thiết yếu tồn tại và tương thích trước khi máy chủ nhận lưu lượng.
+ */
 export const ensureRuntimeSchema = async () => {
     await ensureUsersSchema();
     await ensureUserProfilesSchema();

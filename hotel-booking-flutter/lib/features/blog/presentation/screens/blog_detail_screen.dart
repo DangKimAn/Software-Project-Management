@@ -13,9 +13,9 @@ import '../../../../core/errors/app_failure.dart';
 import '../../../../shared/animations/fade_slide_in.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
-import '../../../booking_inquiry/domain/services/contact_service.dart';
-import '../../data/blog_repository.dart';
+import '../../../../shared/widgets/app_header.dart';
+import '../../../support/domain/services/contact_service.dart';
+import '../view_models/blog_view_model.dart';
 import 'blog_screen.dart';
 
 /// Port of `Source goc/frontend/src/views/pages/Blog/BlogDetailPage.tsx`
@@ -236,7 +236,6 @@ class BlogDetailScreen extends ConsumerWidget {
       return Scaffold(
         backgroundColor: AppColors.background,
         body: SafeArea(
-          bottom: false,
           child: Column(
             children: [
               const AppTopHeader(currentPath: '/blog'),
@@ -258,7 +257,6 @@ class BlogDetailScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        bottom: false,
         child: Column(
           children: [
             const AppTopHeader(currentPath: '/blog'),
@@ -580,7 +578,6 @@ class BlogDetailScreen extends ConsumerWidget {
                               ),
                             ),
                           ),
-                        const AppFooter(),
                       ],
                     ),
                   );

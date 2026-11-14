@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize ghi nhật ký phát thông báo đa kênh (in-app, email, push) có khóa lũy đẳng chống gửi trùng sự kiện.
+ */
 import {
     CreationOptional,
     DataTypes,

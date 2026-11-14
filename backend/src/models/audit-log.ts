@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu nhật ký kiểm toán bất biến ghi nhận hành vi quản trị và thay đổi dữ liệu nhạy cảm.
+ */
 import {
     CreationOptional,
     DataTypes,

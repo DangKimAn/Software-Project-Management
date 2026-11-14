@@ -1,8 +1,8 @@
 import { Op, UniqueConstraintError, type Transaction } from "sequelize";
-import { releaseBookingDateLocksForBooking } from "../../services/booking-date-lock.service";
-import { expirePendingPaymentBookingInTransaction } from "../../services/booking-expiration.service";
+import { releaseBookingDateLocksForBooking } from "../bookings/booking-date-lock.service";
+import { expirePendingPaymentBookingInTransaction } from "../bookings/booking-expiration.service";
 import { ApiError } from "../../common/api-error";
-import { cancellationReasons } from "../../common/booking-display-status";
+import { cancellationReasons } from "../bookings/booking-display-status";
 import sequelize from "../../config/database";
 import { getEnv } from "../../config/env";
 import { logger } from "../../config/logger";
@@ -14,8 +14,8 @@ import CouponRedemption from "../../models/coupon-redemption";
 import Payment, { PaymentDocument, PaymentMethod, PaymentStatus } from "../../models/payment";
 import PaymentTransaction, { type PaymentTransactionStatus } from "../../models/payment-transaction";
 import Refund from "../../models/refund";
-import { toVnpayAmount } from "../../utils/money";
-import { writeAuditLog } from "../../services/audit-log-service";
+import { toVnpayAmount } from "../../common/money";
+import { writeAuditLog } from "../../services/audit-log.service";
 import {
     buildVnpayPaymentUrl,
     normalizeVnpayPayload,
@@ -80,10 +80,22 @@ const reusablePaymentStatuses: PaymentStatus[] = ["pending", "paid"];
 const finalTransactionStatuses = new Set<PaymentTransactionStatus>(["succeeded", "failed", "cancelled"]);
 
 
+/**
+ * Kiểm tra người dùng hiện tại có vai trò quản trị viên (`admin`) hay không.
+ */
 const isAdmin = (user: AuthenticatedUser) => user.roles.includes("admin");
+/**
+ * Kiểm tra người dùng hiện tại có vai trò chủ nhà (`host`) hay không.
+ */
 const isHost = (user: AuthenticatedUser) => user.roles.includes("host");
+/**
+ * Ép kiểu giá trị số tiền/số lượng từ DB (DECIMAL/string/null) sang kiểu `number` mặc định `0`.
+ */
 const toNumber = (value: unknown) => Number(value ?? 0);
 
+/**
+ * Tuần tự hóa đối tượng lỗi khi gửi thông báo thành cấu trúc JSON an toàn để ghi log chẩn đoán.
+ */
 const serializeNotificationError = (error: unknown) => {
     if (error instanceof Error) {
         return {
@@ -98,6 +110,11 @@ const serializeNotificationError = (error: unknown) => {
     };
 };
 
+/**
+ * Giải thuật cô lập lỗi tác vụ phụ thông báo (Fault-Isolated Side Effect):
+ * - Thực thi hàm gửi thông báo bất đồng bộ và bắt mọi ngoại lệ để ghi cảnh báo, đảm bảo lỗi kênh
+ *   Email/Push/Socket không bao giờ làm hỏng kết quả giao dịch thanh toán đã commit trong DB.
+ */
 const safeNotify = async (
     label: string,
     fn: () => Promise<void>,
@@ -114,6 +131,11 @@ const safeNotify = async (
     }
 };
 
+/**
+ * Giải thuật trì hoãn tác vụ thông báo ra sau thời điểm commit giao dịch (Deferred Post-Commit Outbox In-Memory):
+ * - Đẩy hàm gửi thông báo vào hàng đợi tạm trong phạm vi giao dịch DB để chỉ kích hoạt đúng một lần
+ *   sau khi transaction đã commit thành công, ngăn gửi thông báo giả nếu transaction bị rollback.
+ */
 const enqueueNotification = (
     notifications: NotificationSideEffect[],
     label: string,
@@ -127,18 +149,29 @@ const enqueueNotification = (
     });
 };
 
+/**
+ * Thực thi tuần tự danh sách các tác vụ thông báo đã xếp hàng sau khi giao dịch thanh toán commit thành công.
+ */
 const runNotificationSideEffects = async (notifications: NotificationSideEffect[]) => {
     for (const notification of notifications) {
         await safeNotify(notification.label, notification.fn, notification.metadata);
     }
 };
 
+/**
+ * Giải thuật xác định thời điểm hết hạn thanh toán của đơn đặt phòng:
+ * - Ưu tiên mốc khóa lịch giữ chỗ `booking.lockedUntil`, dự phòng cộng `paymentHoldMinutes` từ thời điểm hiện tại.
+ */
 function getBookingPaymentExpiresAt(booking: BookingDocument): Date {
     const env = getEnv();
 
     return booking.lockedUntil ?? new Date(Date.now() + env.paymentHoldMinutes * 60 * 1000);
 }
 
+/**
+ * Giải thuật kiểm tra điều kiện tiên quyết về trạng thái và thời hạn giữ chỗ trước khi khởi tạo giao dịch:
+ * - Từ chối bằng lỗi `409 Conflict` nếu booking đã sang trạng thái kết thúc/hủy/quá hạn hoặc `lockedUntil <= now`.
+ */
 function assertBookingCanCreatePayment(booking: BookingDocument): void {
     const now = Date.now();
 
@@ -165,6 +198,11 @@ function assertBookingCanCreatePayment(booking: BookingDocument): void {
     }
 }
 
+/**
+ * Giải thuật xác định số tiền thanh toán tin cậy phía máy chủ (Server-Authoritative Pricing):
+ * - Luôn đọc trực tiếp từ `booking.totalAmount` trong DB thay vì tin dữ liệu phía client truyền lên,
+ *   ràng buộc giá trị hữu hạn dương để chống tấn công sửa số tiền thanh toán.
+ */
 const getTrustedBookingPaymentAmount = (booking: BookingDocument) => {
     const amount = toNumber(booking.totalAmount);
 
@@ -175,6 +213,9 @@ const getTrustedBookingPaymentAmount = (booking: BookingDocument) => {
     return amount;
 };
 
+/**
+ * Tổng hợp trạng thái sẵn sàng của các cổng thanh toán tích hợp (`vnpay`, `momo`) dựa trên cấu hình môi trường hiện hành.
+ */
 export const getPaymentMethodAvailability = () => {
     const env = getEnv();
     const isVnpayAvailable = Boolean(env.vnpayTmnCode && env.vnpayHashSecret && env.vnpayReturnUrl);
@@ -200,6 +241,11 @@ export const getPaymentMethodAvailability = () => {
     };
 };
 
+/**
+ * Kiểm tra phân quyền sở hữu và trạng thái hợp lệ để thanh toán đơn đặt phòng:
+ * - Chỉ chính khách đặt phòng (`booking.guestUserId === user.id`) mới được phép tạo giao dịch và
+ *   booking bắt buộc đang ở trạng thái `"pending_payment"`.
+ */
 const assertBookingCanBePaidByUser = (booking: BookingDocument, user: AuthenticatedUser) => {
     if (String(booking.guestUserId) !== user.id) {
         throw new ApiError(403, "Forbidden");
@@ -210,6 +256,10 @@ const assertBookingCanBePaidByUser = (booking: BookingDocument, user: Authentica
     }
 };
 
+/**
+ * Kiểm tra quyền truy cập chi tiết giao dịch thanh toán (RBAC + Ownership):
+ * - Chỉ cho phép khách đặt phòng của đơn đó, chủ nhà sở hữu chỗ ở của đơn đó, hoặc quản trị viên (`admin`).
+ */
 const assertCanViewPayment = (booking: BookingDocument, user: AuthenticatedUser) => {
     if (
         String(booking.guestUserId) === user.id ||
@@ -222,6 +272,12 @@ const assertCanViewPayment = (booking: BookingDocument, user: AuthenticatedUser)
     throw new ApiError(403, "Forbidden");
 };
 
+/**
+ * Giải thuật suy diễn trạng thái kết quả đối soát của giao dịch thanh toán muộn (Late Payment Resolution):
+ * - Phát hiện cờ `latePaymentAfterBookingExpired` trong `providerPayload` khi tiền về sau lúc phiên giữ chỗ đã hết hạn.
+ * - Ánh xạ sang `"refunded"` nếu yêu cầu hoàn tiền đã hoàn tất (`refundStatus === "succeeded"`),
+ *   ngược lại trả về `"refund_pending"` để giao diện không hiển thị nhầm đơn đã được xác nhận phòng.
+ */
 const getLatePaymentPayload = (payment: PaymentDocument) => {
     const providerPayload = payment.providerPayload ?? {};
     const isLatePayment = providerPayload.latePaymentAfterBookingExpired === true;
@@ -241,6 +297,10 @@ const getLatePaymentPayload = (payment: PaymentDocument) => {
             ? providerPayload.refundStatus
             : "pending";
 
+    // Giải thuật xác định trạng thái kết quả của giao dịch thanh toán muộn (late payment):
+    // Giao dịch đến sau khi hết thời gian giữ chỗ bắt buộc phải hoàn tiền:
+    // trả về 'refunded' khi đã hoàn tất hoàn tiền ('succeeded'), ngược lại trả về 'refund_pending'.
+    // CONFLICT-RESOLVED: Không trả về payment.status ('paid') khi refundStatus === 'succeeded' gây hiển thị nhầm "Thanh toán thành công".
     return {
         isLatePayment: true,
         requiresRefund: refundStatus !== "succeeded",
@@ -249,10 +309,13 @@ const getLatePaymentPayload = (payment: PaymentDocument) => {
             typeof providerPayload.latePaymentReason === "string"
                 ? providerPayload.latePaymentReason
                 : "late_payment_after_booking_expired",
-        paymentResultStatus: refundStatus === "succeeded" ? payment.status : "refund_pending",
+        paymentResultStatus: refundStatus === "succeeded" ? "refunded" : "refund_pending",
     };
 };
 
+/**
+ * Chuẩn hóa đối tượng `PaymentDocument` sang DTO phản hồi API, tích hợp trạng thái đối soát hoàn tiền thanh toán muộn.
+ */
 const serializePayment = (payment: PaymentDocument, paymentUrl?: string | null) => {
     const latePayment = getLatePaymentPayload(payment);
 
@@ -279,6 +342,9 @@ const serializePayment = (payment: PaymentDocument, paymentUrl?: string | null) 
     };
 };
 
+/**
+ * Truy vấn bản ghi `Booking` gắn với giao dịch thanh toán; ném `ApiError(404)` nếu không tìm thấy.
+ */
 const getPaymentBooking = async (payment: PaymentDocument) => {
     const booking = await Booking.findOne({ bookingId: payment.bookingId });
 
@@ -289,11 +355,18 @@ const getPaymentBooking = async (payment: PaymentDocument) => {
     return booking;
 };
 
+/**
+ * Trích xuất địa chỉ IP đầu tiên của client từ chuỗi `X-Forwarded-For` hoặc trả về `127.0.0.1` mặc định.
+ */
 const getClientIp = (value?: string | null) => {
     const firstForwardedIp = value?.split(",")[0]?.trim();
     return firstForwardedIp || "127.0.0.1";
 };
 
+/**
+ * Giải thuật tái dựng có điều kiện URL thanh toán VNPay cho giao dịch đang chờ (`pending`),
+ * đồng bộ lại `providerTxnRef` nếu chưa được lưu.
+ */
 const maybeBuildVnpayUrl = async (
     booking: BookingDocument,
     payment: PaymentDocument,
@@ -319,6 +392,10 @@ const maybeBuildVnpayUrl = async (
     return result.paymentUrl;
 };
 
+/**
+ * Kiểm tra giao dịch thanh toán đang chờ (`pending`) còn thời hạn hiệu lực (`expiresAt > now`)
+ * để tái sử dụng bất biến (Idempotent Reuse) thay vì phát sinh bản ghi giao dịch mới trùng lặp.
+ */
 const isPendingPaymentReusable = (payment: PaymentDocument) => {
     if (payment.status !== "pending") {
         return false;
@@ -331,6 +408,11 @@ const isPendingPaymentReusable = (payment: PaymentDocument) => {
     return payment.expiresAt.getTime() > Date.now();
 };
 
+/**
+ * Giải thuật hủy hiệu lực giao dịch thanh toán đang chờ cũ khi khởi tạo phiên thanh toán thay thế:
+ * - Chuyển trạng thái `Payment` sang `"expired"` và đánh dấu các bản ghi `PaymentTransaction` tương ứng
+ *   sang `"cancelled"` nguyên tử trong cùng giao dịch DB.
+ */
 const expirePendingPayment = async (payment: PaymentDocument, transaction: Transaction) => {
     if (payment.status !== "pending") {
         return;
@@ -358,6 +440,11 @@ const expirePendingPayment = async (payment: PaymentDocument, transaction: Trans
     }
 };
 
+/**
+ * Giải thuật kiểm tra đối khớp số tiền thực thu từ VNPay bằng số nguyên chính xác tuyệt đối:
+ * - Ràng buộc `vnp_Amount` chỉ gồm các chữ số và đối chiếu qua `BigInt(payload.vnp_Amount) === toVnpayAmount(payment.amount)`
+ *   (đơn vị VND * 100), triệt tiêu hoàn toàn sai số số thực dấu phẩy động và chống sửa số tiền thanh toán.
+ */
 const isVnpayAmountMatching = (payload: VnpayPayload, payment: PaymentDocument) => {
     if (!payload.vnp_Amount || !/^\d+$/.test(payload.vnp_Amount)) {
         return false;
@@ -370,6 +457,10 @@ const isVnpayAmountMatching = (payload: VnpayPayload, payment: PaymentDocument) 
     }
 };
 
+/**
+ * Giải thuật phân tích chuỗi thời điểm thanh toán `vnp_PayDate` (`yyyyMMddHHmmss` múi giờ GMT+7)
+ * sang đối tượng `Date` chuẩn UTC.
+ */
 const parseVnpayPayDate = (value?: string | null) => {
     if (!value || !/^\d{14}$/.test(value)) {
         return null;
@@ -385,6 +476,9 @@ const parseVnpayPayDate = (value?: string | null) => {
     return new Date(Date.UTC(year, month, day, hour - 7, minute, second));
 };
 
+/**
+ * Giải thuật chuyển đổi dấu thời gian `responseTime` (epoch milliseconds) từ callback MoMo sang đối tượng `Date`.
+ */
 const parseMomoResponseTime = (value?: string | null) => {
     if (!value || !/^\d+$/.test(value)) {
         return null;
@@ -399,6 +493,10 @@ const parseMomoResponseTime = (value?: string | null) => {
     return new Date(timestamp);
 };
 
+/**
+ * Lọc danh sách trắng các trường đối soát thiết yếu của VNPay trước khi lưu JSON vào DB,
+ * loại bỏ trường chữ ký `vnp_SecureHash` và các tham số không cần thiết.
+ */
 const sanitizeVnpayPayloadForStorage = (payload: VnpayPayload) => ({
     vnp_TxnRef: payload.vnp_TxnRef ?? null,
     vnp_Amount: payload.vnp_Amount ?? null,
@@ -409,6 +507,11 @@ const sanitizeVnpayPayloadForStorage = (payload: VnpayPayload) => ({
     vnp_BankCode: payload.vnp_BankCode ?? null,
 });
 
+/**
+ * Giải thuật ánh xạ mã lỗi phản hồi VNPay (`vnp_ResponseCode`, `vnp_TransactionStatus`) sang trạng thái `PaymentStatus`:
+ * - Mã `"24"` -> khách hủy giao dịch (`"cancelled"`); mã `"11"` hoặc trạng thái `"02"` -> hết hạn (`"expired"`);
+ *   các mã khác -> thất bại (`"failed"`).
+ */
 const getFailedVnpayStatus = (payload: VnpayPayload): PaymentStatus => {
     if (payload.vnp_ResponseCode === "24") {
         return "cancelled";
@@ -421,6 +524,13 @@ const getFailedVnpayStatus = (payload: VnpayPayload): PaymentStatus => {
     return "failed";
 };
 
+/**
+ * Giải thuật ghi nhận sử dụng mã giảm giá bất biến (Idempotent Coupon Redemption) khi quyết toán thành công:
+ * - Khóa bi quan mức dòng (`SELECT ... FOR UPDATE`) trên cả `CouponRedemption` và `Coupon` để chống Race Condition
+ *   khi nhiều callback thanh toán đến đồng thời.
+ * - Bắt ngoại lệ `UniqueConstraintError` làm chốt chặn Idempotency thứ hai ở tầng DB, đảm bảo mỗi `bookingId`
+ *   chỉ tăng `Coupon.usedCount` đúng một lần duy nhất.
+ */
 const redeemBookingCouponIfNeeded = async (booking: BookingDocument, transaction: Transaction) => {
     if (!booking.couponId || !booking.discountAmount || Number(booking.discountAmount) <= 0) {
         return;
@@ -495,6 +605,11 @@ const redeemBookingCouponIfNeeded = async (booking: BookingDocument, transaction
     });
 };
 
+/**
+ * Giải thuật đối soát và giải phóng giữ chỗ khi giao dịch thất bại sau thời điểm hết hạn khóa lịch:
+ * - Nếu booking đang `"pending_payment"` và `lockedUntil <= now`, giải phóng khóa lịch phòng (`releaseBookingDateLocksForBooking`),
+ *   chuyển trạng thái máy hữu hạn sang `"payment_expired"` và xếp hàng thông báo hết hạn sau khi commit.
+ */
 const expireBookingAfterFailedPayment = async (
     booking: BookingDocument,
     transaction: Transaction,
@@ -545,6 +660,11 @@ const expireBookingAfterFailedPayment = async (
     return true;
 };
 
+/**
+ * Giải thuật phát hiện giao dịch thanh toán thành công muộn sau khi phiên giữ chỗ đã hết hiệu lực:
+ * - Đánh dấu là thanh toán muộn nếu booking đã chuyển sang trạng thái hết hạn/hủy/từ chối, hoặc vẫn ở
+ *   `"pending_payment"` nhưng thời điểm thanh toán thực tế `paidAt` vượt quá mốc khóa giữ chỗ (`lockedUntil` / `expiresAt`).
+ */
 const isLateSuccessfulPaymentForBooking = (
     booking: BookingDocument,
     payment: PaymentDocument,
@@ -561,6 +681,11 @@ const isLateSuccessfulPaymentForBooking = (
         (booking.lockedUntil ?? payment.expiresAt)!.getTime() < paidAt.getTime()
     );
 
+/**
+ * Giải thuật khởi tạo yêu cầu hoàn tiền bất biến (Idempotent Refund Creation) cho giao dịch thanh toán muộn:
+ * - Truy vấn có khóa bi quan `FOR UPDATE` theo bộ khóa `(bookingId, paymentId, reason: "late_payment_after_booking_expired")`
+ *   để đảm bảo các callback trùng lặp chỉ tạo tối đa một bản ghi `Refund` duy nhất.
+ */
 const createLatePaymentRefundIfMissing = async (
     booking: BookingDocument,
     payment: PaymentDocument,
@@ -605,6 +730,14 @@ const createLatePaymentRefundIfMissing = async (
     };
 };
 
+/**
+ * Giải thuật xử lý đối soát giao dịch thanh toán thành công muộn (Late Payment Reconciliation & Auto-Refund Queueing):
+ * 1. Ghi nhận tiền đã thu (`payment.status = "paid"`) kèm cờ `latePaymentAfterBookingExpired` và `refundRequired = true`
+ *    nhằm bảo toàn dấu vết dòng tiền thực tế mà không xác nhận nhầm phòng đã hết giữ chỗ.
+ * 2. Nếu booking vẫn treo ở `"pending_payment"`, giải phóng khóa ngày đặt phòng và chuyển sang `"payment_expired"`.
+ * 3. Khởi tạo bản ghi hoàn tiền bất biến (`createLatePaymentRefundIfMissing`), ghi nhật ký kiểm toán
+ *    `"payment.late.refund_pending"` và đẩy thông báo hoàn tiền vào hàng đợi hậu commit.
+ */
 const markLateSuccessfulPaymentForManualReview = async (params: {
     booking: BookingDocument;
     payment: PaymentDocument;
@@ -717,6 +850,9 @@ const markLateSuccessfulPaymentForManualReview = async (params: {
     return bookingStatusChanged;
 };
 
+/**
+ * Ánh xạ trạng thái tổng thể của `Payment` sang trạng thái chi tiết của bản ghi đối soát `PaymentTransaction`.
+ */
 const toPaymentTransactionStatus = (paymentStatus: PaymentStatus): PaymentTransactionStatus => {
     if (paymentStatus === "paid") {
         return "succeeded";
@@ -733,6 +869,11 @@ const toPaymentTransactionStatus = (paymentStatus: PaymentStatus): PaymentTransa
     return "pending";
 };
 
+/**
+ * Giải thuật định vị và khóa bi quan bản ghi `PaymentTransaction` phục vụ xử lý callback:
+ * - Ưu tiên tra cứu theo khóa giao dịch phía cổng thanh toán `(provider, "payment", providerTransactionNo)` có `lock: true`
+ *   (`SELECT ... FOR UPDATE`), nếu chưa có mới lùi về tra cứu theo mã tham chiếu nội bộ `providerTxnRef`.
+ */
 const findPaymentTransactionForCallback = async (params: {
     payment: PaymentDocument;
     provider: PaymentMethod;
@@ -771,6 +912,11 @@ const findPaymentTransactionForCallback = async (params: {
     });
 };
 
+/**
+ * Giải thuật chống va chạm/gắn nhầm mã giao dịch cổng thanh toán giữa hai đơn thanh toán khác nhau:
+ * - Đảm bảo `providerTransactionNo` nếu đã từng được ghi nhận thì bắt buộc thuộc về đúng `payment.paymentId` hiện tại,
+ *   ném lỗi `409 Conflict` nếu phát hiện tái sử dụng mã giao dịch sang đơn khác.
+ */
 const assertProviderTransactionBelongsToPayment = (params: {
     existingTransaction: InstanceType<typeof PaymentTransaction> | null;
     payment: PaymentDocument;
@@ -785,6 +931,12 @@ const assertProviderTransactionBelongsToPayment = (params: {
     }
 };
 
+/**
+ * Giải thuật kiểm tra bất biến Idempotency cho callback trùng lặp từ cổng thanh toán (Return URL & Webhook IPN):
+ * - Xác nhận callback đã được áp dụng hoàn tất trước đó khi `existingTransaction` đã ở trạng thái kết thúc
+ *   (`succeeded`, `failed`, `cancelled`) khớp với `expectedTransactionStatus` và trạng thái `Payment` hiện tại
+ *   cũng đã hội tụ tương ứng, giúp bỏ qua an toàn mọi lần gọi lại mà không nhân đôi tác vụ phụ.
+ */
 const isCallbackAlreadyApplied = (params: {
     paymentStatus: PaymentStatus;
     existingTransaction: InstanceType<typeof PaymentTransaction> | null;
@@ -815,6 +967,10 @@ const isCallbackAlreadyApplied = (params: {
     return false;
 };
 
+/**
+ * Giải thuật cập nhật hoặc thêm mới bất biến (Idempotent Upsert) bản ghi lịch sử giao dịch `PaymentTransaction`
+ * từ dữ liệu callback đã xác thực trong cùng giao dịch cơ sở dữ liệu.
+ */
 const upsertPaymentTransactionFromCallback = async (params: {
     existingTransaction: InstanceType<typeof PaymentTransaction> | null;
     payment: PaymentDocument;
@@ -867,6 +1023,18 @@ const upsertPaymentTransactionFromCallback = async (params: {
     );
 };
 
+/**
+ * Giải thuật khởi tạo giao dịch thanh toán an toàn với khóa bi quan và tái sử dụng bất biến (Idempotent Payment Creation):
+ * 1. Mở giao dịch DB và khóa bi quan bản ghi `Booking` (`SELECT ... FOR UPDATE` / `lock: true`) để chống hai yêu cầu
+ *    tạo thanh toán chạy song song trên cùng một đơn đặt phòng.
+ * 2. Kiểm tra quyền sở hữu của khách, đối soát tự động trạng thái hết hạn giữ chỗ và lấy số tiền tin cậy từ DB.
+ * 3. Khóa và kiểm tra các bản ghi `Payment` hiện hữu của booking:
+ *    - Nếu đã có giao dịch `"paid"`, trả về ngay kết quả hiện hữu (Idempotent).
+ *    - Nếu đang có giao dịch `"pending"` cùng phương thức, còn hạn và khớp số tiền, tái sử dụng bản ghi đó để cấp lại URL cổng thanh toán.
+ *    - Ngược lại, hủy hiệu lực toàn bộ các giao dịch `"pending"` cũ trước khi cấp mã `paymentId` mới, tạo URL ký số
+ *      (VNPay/MoMo) và ghi đồng bộ cặp `Payment` + `PaymentTransaction`.
+ * 4. Chỉ phát thông báo chờ thanh toán sau khi giao dịch DB đã commit thành công.
+ */
 export const createPayment = async (
     user: AuthenticatedUser,
     input: CreatePaymentInput,
@@ -1093,6 +1261,9 @@ export const createPayment = async (
     return result.payment;
 };
 
+/**
+ * Truy vấn chi tiết một giao dịch thanh toán theo `paymentId` kèm kiểm tra phân quyền truy cập (`assertCanViewPayment`).
+ */
 export const getPaymentDetail = async (user: AuthenticatedUser, paymentId: number) => {
     const payment = await Payment.findOne({ paymentId });
 
@@ -1106,6 +1277,9 @@ export const getPaymentDetail = async (user: AuthenticatedUser, paymentId: numbe
     return serializePayment(payment);
 };
 
+/**
+ * Truy vấn phân trang danh sách lịch sử thanh toán của người dùng hiện tại, sắp xếp mới nhất trước.
+ */
 export const getMyPayments = async (user: AuthenticatedUser, query: ListPaymentsQuery) => {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
@@ -1139,10 +1313,17 @@ export const getMyPayments = async (user: AuthenticatedUser, query: ListPayments
     };
 };
 
+/**
+ * Kiểm tra kết quả giao dịch VNPay thành công theo quy ước kép:
+ * - Bắt buộc `vnp_ResponseCode === "00"` và `vnp_TransactionStatus` (nếu có mặt) cũng bằng `"00"`.
+ */
 const isSuccessfulVnpayPayload = (payload: VnpayPayload) =>
     payload.vnp_ResponseCode === "00" &&
     (payload.vnp_TransactionStatus === undefined || payload.vnp_TransactionStatus === "00");
 
+/**
+ * Tra cứu không khóa bản ghi `Payment` theo mã tham chiếu `vnp_TxnRef` phục vụ kiểm tra sơ bộ hoặc ghi audit lỗi.
+ */
 const findPaymentByVnpayPayload = async (payload: VnpayPayload) => {
     const txnRef = payload.vnp_TxnRef;
 
@@ -1153,6 +1334,21 @@ const findPaymentByVnpayPayload = async (payload: VnpayPayload) => {
     return Payment.findOne({ providerTxnRef: txnRef });
 };
 
+/**
+ * Giải thuật quyết toán giao dịch VNPay bảo đảm bất biến Idempotency và chống Race Condition:
+ * 1. Xác thực chữ ký `HMAC-SHA512` thời gian hằng định (`verifyVnpayPayload`) trước khi chạm cơ sở dữ liệu.
+ * 2. Mở giao dịch DB và khóa bi quan mức dòng (`SELECT ... FOR UPDATE` / `lock: true`) theo thứ tự cố định
+ *    `Payment` -> `Booking` -> `PaymentTransaction` để tuần tự hóa đồng thời Return URL và IPN Webhook, tránh Deadlock.
+ * 3. Đối khớp chính xác số tiền thực thu bằng số nguyên `BigInt` (`isVnpayAmountMatching`) và kiểm tra tính sở hữu
+ *    của `providerTransactionNo` (`assertProviderTransactionBelongsToPayment`).
+ * 4. Đảm bảo bất biến Idempotency:
+ *    - Chặn hạ cấp trạng thái nếu `payment.status === "paid"` nhưng sau đó nhận callback thất bại trễ.
+ *    - Thoát sớm không tác dụng phụ nếu `isCallbackAlreadyApplied` xác nhận callback trùng lặp đã được áp dụng.
+ * 5. Nếu thanh toán thành công: phân nhánh giữa thanh toán muộn sau khi hết giữ chỗ (`markLateSuccessfulPaymentForManualReview`
+ *    để tạo hoàn tiền tự động) và thanh toán đúng hạn (chuyển `Booking` sang `"paid"`, tiêu thụ coupon một lần,
+ *    chỉ bật `shouldSendConfirmationEmail` khi `previousPaymentStatus !== "paid"`).
+ * 6. Chỉ thực thi hàng đợi thông báo sau khi giao dịch DB commit hoàn tất, đảm bảo thông báo và xác nhận đơn chỉ phát đúng một lần.
+ */
 const updatePaymentFromVnpayPayload = async (payload: VnpayPayload) => {
     if (!verifyVnpayPayload(payload)) {
         throw new ApiError(400, "Invalid VNPay signature");
@@ -1347,6 +1543,9 @@ const updatePaymentFromVnpayPayload = async (payload: VnpayPayload) => {
     return result.payment;
 };
 
+/**
+ * Trích xuất siêu dữ liệu đối soát an toàn của callback VNPay phục vụ ghi nhật ký kiểm toán (`audit_logs`).
+ */
 const buildVnpayAuditMetadata = (payload: VnpayPayload, outcome: string) => ({
     provider: "vnpay",
     outcome,
@@ -1357,6 +1556,9 @@ const buildVnpayAuditMetadata = (payload: VnpayPayload, outcome: string) => ({
     amount: payload.vnp_Amount ?? null,
 });
 
+/**
+ * Ghi nhật ký kiểm toán cho sự kiện Return URL hoặc Webhook IPN của VNPay kèm địa chỉ IP và User-Agent nguồn gọi.
+ */
 const writePaymentCallbackAudit = async (
     action: string,
     payload: VnpayPayload,
@@ -1374,6 +1576,9 @@ const writePaymentCallbackAudit = async (
     });
 };
 
+/**
+ * Phân loại mã kết quả thất bại chuẩn hóa từ ngoại lệ phát sinh trong quá trình xử lý callback VNPay.
+ */
 const getVnpayCallbackFailureOutcome = (error: unknown) => {
     if (!(error instanceof ApiError)) {
         return "error";
@@ -1394,6 +1599,11 @@ const getVnpayCallbackFailureOutcome = (error: unknown) => {
     return `http_${error.statusCode}`;
 };
 
+/**
+ * Giải thuật xử lý luồng chuyển hướng trình duyệt Return URL từ VNPay:
+ * - Chuẩn hóa tham số `vnp_*`, ủy quyền quyết toán bất biến qua `updatePaymentFromVnpayPayload`
+ *   (an toàn khi đua đồng thời với IPN Webhook) và luôn ghi nhật ký kiểm toán cho cả nhánh thành công lẫn thất bại.
+ */
 export const processVnpayReturn = async (
     input: Record<string, unknown>,
     context: PaymentCallbackContext = {},
@@ -1427,6 +1637,13 @@ export const processVnpayReturn = async (
     }
 };
 
+/**
+ * Giải thuật xử lý thông báo tức thời máy chủ-máy chủ (IPN Webhook) từ VNPay:
+ * - Kiểm tra tuần tự chữ ký `HMAC-SHA512` (`RspCode: "97"`), sự tồn tại của đơn thanh toán (`RspCode: "01"`)
+ *   và đối khớp số tiền nguyên VND (`RspCode: "04"`) theo đúng giao thức phản hồi chuẩn của VNPay.
+ * - Thực thi quyết toán bất biến Idempotent qua `updatePaymentFromVnpayPayload` và trả `RspCode: "00"`
+ *   kể cả khi VNPay gửi lại IPN trùng lặp, ngăn cổng thanh toán retry vô hạn.
+ */
 export const processVnpayWebhook = async (
     input: Record<string, unknown>,
     context: PaymentCallbackContext = {},
@@ -1483,6 +1700,9 @@ export const processVnpayWebhook = async (
     };
 };
 
+/**
+ * Lọc danh sách trắng các trường đối soát của callback MoMo để lưu trữ JSON vào DB mà không lưu chữ ký thô.
+ */
 const sanitizeMomoPayloadForStorage = (payload: MomoPayload) => ({
     partnerCode: payload.partnerCode ?? null,
     orderId: payload.orderId ?? null,
@@ -1498,8 +1718,17 @@ const sanitizeMomoPayloadForStorage = (payload: MomoPayload) => ({
     extraData: payload.extraData ?? null,
 });
 
+/**
+ * Kiểm tra giao dịch MoMo thành công dựa trên mã kết quả `resultCode === "0"`.
+ */
 const isSuccessfulMomoPayload = (payload: MomoPayload) => payload.resultCode === "0";
 
+/**
+ * Giải thuật ánh xạ mã `resultCode` khác 0 của MoMo sang trạng thái `PaymentStatus`:
+ * - `"1006"` -> người dùng từ chối xác nhận thanh toán (`"cancelled"`).
+ * - `"7000"` / `"7002"` -> giao dịch đang được xử lý bất đồng bộ (`"pending"`).
+ * - Các mã lỗi còn lại -> thất bại (`"failed"`).
+ */
 const getFailedMomoStatus = (payload: MomoPayload): PaymentStatus => {
     if (payload.resultCode === "1006") {
         return "cancelled";
@@ -1512,6 +1741,9 @@ const getFailedMomoStatus = (payload: MomoPayload): PaymentStatus => {
     return "failed";
 };
 
+/**
+ * Tra cứu không khóa bản ghi `Payment` theo mã tham chiếu `orderId` từ callback MoMo.
+ */
 const findPaymentByMomoPayload = async (payload: MomoPayload) => {
     const orderId = payload.orderId;
 
@@ -1522,6 +1754,18 @@ const findPaymentByMomoPayload = async (payload: MomoPayload) => {
     return Payment.findOne({ providerTxnRef: orderId });
 };
 
+/**
+ * Giải thuật quyết toán giao dịch MoMo bảo đảm bất biến Idempotency và chống Race Condition:
+ * 1. Xác thực chữ ký `HMAC-SHA256` thời gian hằng định (`verifyMomoPayload`).
+ * 2. Mở giao dịch DB và khóa bi quan mức dòng (`SELECT ... FOR UPDATE` / `lock: true`) theo thứ tự cố định
+ *    `Payment` -> `Booking` -> `PaymentTransaction` nhằm tuần tự hóa các lời gọi Return URL và IPN chồng lấn.
+ * 3. Kiểm tra khớp tuyệt đối số tiền nguyên dương VND (`isMomoAmountMatching`) và ràng buộc quyền sở hữu mã `transId`.
+ * 4. Bảo toàn bất biến Idempotency: không cho phép ghi đè giao dịch đã `"paid"` bằng callback lỗi đến muộn,
+ *    và trả về ngay kết quả hiện hữu nếu `isCallbackAlreadyApplied` phát hiện callback trùng lặp.
+ * 5. Xử lý phân nhánh thanh toán đúng hạn (chuyển trạng thái `Booking` sang `"paid"`, tiêu thụ coupon một lần,
+ *    đánh dấu gửi thông báo đúng một lần) hoặc thanh toán muộn sau khi hết hạn giữ chỗ (tạo yêu cầu hoàn tiền tự động).
+ * 6. Chạy hàng đợi thông báo sau khi commit giao dịch DB thành công.
+ */
 const updatePaymentFromMomoPayload = async (payload: MomoPayload) => {
     if (!verifyMomoPayload(payload)) {
         throw new ApiError(400, "Invalid MoMo signature");
@@ -1723,6 +1967,9 @@ const updatePaymentFromMomoPayload = async (payload: MomoPayload) => {
     return result.payment;
 };
 
+/**
+ * Đóng gói siêu dữ liệu đối soát callback MoMo phục vụ ghi nhận nhật ký kiểm toán (`audit_logs`).
+ */
 const buildMomoAuditMetadata = (payload: MomoPayload, outcome: string) => ({
     provider: "momo",
     outcome,
@@ -1734,6 +1981,9 @@ const buildMomoAuditMetadata = (payload: MomoPayload, outcome: string) => ({
     amount: payload.amount ?? null,
 });
 
+/**
+ * Ghi nhật ký kiểm toán cho sự kiện Return URL hoặc IPN Webhook từ cổng thanh toán MoMo.
+ */
 const writeMomoPaymentCallbackAudit = async (
     action: string,
     payload: MomoPayload,
@@ -1751,6 +2001,9 @@ const writeMomoPaymentCallbackAudit = async (
     });
 };
 
+/**
+ * Ánh xạ ngoại lệ xử lý callback MoMo sang nhãn kết quả chuẩn hóa phục vụ kiểm toán.
+ */
 const getMomoCallbackFailureOutcome = (error: unknown) => {
     if (!(error instanceof ApiError)) {
         return "error";
@@ -1771,6 +2024,10 @@ const getMomoCallbackFailureOutcome = (error: unknown) => {
     return `http_${error.statusCode}`;
 };
 
+/**
+ * Giải thuật xử lý luồng chuyển hướng trình duyệt Return URL từ MoMo:
+ * - Chuẩn hóa payload, gọi quyết toán bất biến `updatePaymentFromMomoPayload` và ghi nhận đầy đủ nhật ký kiểm toán.
+ */
 export const processMomoReturn = async (
     input: Record<string, unknown>,
     context: PaymentCallbackContext = {},
@@ -1804,6 +2061,12 @@ export const processMomoReturn = async (
     }
 };
 
+/**
+ * Giải thuật xử lý thông báo tức thời máy chủ-máy chủ (IPN Webhook) từ MoMo:
+ * - Xác thực chữ ký `HMAC-SHA256` (`resultCode: 97`), kiểm tra đơn hàng tồn tại (`resultCode: 1`) và đối khớp
+ *   số tiền nguyên VND (`resultCode: 4`) trước khi thực thi quyết toán bất biến qua `updatePaymentFromMomoPayload`.
+ * - Luôn phản hồi `resultCode: 0` sau khi xác nhận thành công (kể cả khi IPN gửi lặp lại) để hoàn tất chu trình đối soát với MoMo.
+ */
 export const processMomoWebhook = async (
     input: Record<string, unknown>,
     context: PaymentCallbackContext = {},

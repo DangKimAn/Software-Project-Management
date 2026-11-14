@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP thông báo người dùng (`/api/notifications`):
+ * - Bắt buộc xác thực (`authenticate`) và áp dụng giới hạn tần suất (`Limiter`) cho các thao tác đồng bộ FCM device token và cập nhật trạng thái đọc.
+ */
+
 import express from "express";
 
 import { authenticate } from "../../middlewares/authenticate.middleware";

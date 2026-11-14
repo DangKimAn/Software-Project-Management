@@ -273,6 +273,11 @@ const readEnv = (...names: string[]) => {
 };
 
 
+/**
+ * Giải thuật nạp, ép kiểu và kiểm định an ninh toàn bộ biến môi trường hệ thống (`AppEnv`):
+ * - Chặn biến chứa placeholder chưa giải tham chiếu (`${...}`), từ chối khóa bí mật yếu hoặc trùng nhau giữa Access/Refresh/Hash/OTP trên môi trường `production`.
+ * - Cấm kết nối MySQL bằng tài khoản `root` và cấm truyền Refresh Token qua `body`/`header` ngoài môi trường phát triển nội bộ.
+ */
 export const getEnv = (): AppEnv => {
     const nodeEnv = process.env.NODE_ENV ?? "development";
     const jwtSecret = assertProductionValue(

@@ -10,6 +10,12 @@ import {
     verifyAuthToken,
 } from "../modules/auth/auth.service";
 
+/**
+ * Giải thuật xác thực yêu cầu HTTP bằng JWT Access Token:
+ * - Bước 1: Trích xuất Bearer token từ header `Authorization` (từ chối `401` nếu thiếu).
+ * - Bước 2: Giải mã và kiểm tra chữ ký/hạn dùng JWT, sau đó truy vấn lại bản ghi `User` thực tế từ CSDL để không tin tưởng mù quáng vào claim cũ.
+ * - Bước 3: Kiểm tra trạng thái hoạt động của tài khoản (`assertUserCanAuthenticate`) và gắn ngữ cảnh quyền hạn mới nhất vào `req.user`.
+ */
 export const authenticate: RequestHandler = asyncHandler(async (req, _res, next) => {
     const token = extractAuthToken(req);
 

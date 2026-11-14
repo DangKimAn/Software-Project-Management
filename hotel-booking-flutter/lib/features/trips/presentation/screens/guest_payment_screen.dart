@@ -7,19 +7,29 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/security/url_security_validator.dart';
-import '../../../../core/utils/currency_formatter.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_loading.dart';
 import '../../domain/entities/booking.dart';
 import '../view_models/trips_view_model.dart';
 
-/// Complete port of `Source goc/frontend/src/views/pages/GuestPayment/index.tsx` (`/thanh-toan/:bookingId`).
+/// Màn hình xác nhận chi tiết đơn đặt phòng và thanh toán trực tuyến (`/thanh-toan/:bookingId`).
+///
+/// Chịu trách nhiệm:
+/// - Hiển thị đồng hồ đếm ngược thời gian giữ chỗ trực tiếp (`computeRemainingPaymentSeconds`) và khóa nút thanh toán ngay khi hết hạn.
+/// - Đóng băng tỷ giá tham chiếu ngoại tệ trong suốt phiên thanh toán (`_frozenCheckoutSnapshot`) nhưng luôn chốt thu bằng VND.
+/// - Tái sử dụng phiên thanh toán đang chờ (`_activePaymentSession`) cho cùng phương thức để tránh tạo trùng giao dịch,
+///   thẩm định bảo mật URL cổng thanh toán bằng `UrlSecurityValidator.isValidPaymentGatewayUrl` trước khi mở trình duyệt ngoài.
+/// - Không bao giờ gán cứng `status=paid` sau khi mở cổng thanh toán; tự động đối soát lại khi ứng dụng trở về tiền cảnh (`resumed`).
 class GuestPaymentScreen extends ConsumerStatefulWidget {
+  /// Mã định danh đơn đặt phòng cần thực hiện thanh toán.
   final String bookingId;
+
+  /// Hàm mở đường dẫn cổng thanh toán bên ngoài (cho phép tiêm giả lập khi kiểm thử đơn vị).
   final Future<bool> Function(Uri uri)? externalUrlLauncher;
 
+  /// Khởi tạo `GuestPaymentScreen`.
   const GuestPaymentScreen({
     super.key,
     required this.bookingId,
@@ -42,11 +52,7 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
   PaymentSessionResult? _activePaymentSession;
   ExchangeRateSnapshot? _frozenCheckoutSnapshot;
 
-  // Coupon validation state (if guest validates a coupon code before payment)
-  final TextEditingController _couponController = TextEditingController();
-  bool _isValidatingCoupon = false;
-  CouponValidationResult? _couponResult;
-  String? _couponError;
+  // CONFLICT-RESOLVED: Loại bỏ trạng thái nhập coupon chỉ hiển thị giả ở client sau khi tạo booking vì backend đã khóa cứng booking.totalAmount & booking.discountAmount lúc POST /api/bookings.
 
   static const List<PaymentMethodAvailability> _defaultMethodAvailability = [
     PaymentMethodAvailability(
@@ -73,7 +79,6 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _countdownTimer?.cancel();
-    _couponController.dispose();
     super.dispose();
   }
 
@@ -84,6 +89,9 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
     }
   }
 
+  // Giải thuật đối soát phiên thanh toán khi người dùng quay lại ứng dụng từ trình duyệt cổng thanh toán (`resumed`):
+  // Truy vấn song song bản ghi `payment` và `booking` mới nhất, phân giải trạng thái qua `deriveAuthoritativePaymentStatus`
+  // rồi chuyển hướng sang màn hình biên lai `/thanh-toan/ket-qua` để hiển thị kết quả xác thực.
   Future<void> _verifyActivePaymentOnResume() async {
     final session = _activePaymentSession;
     if (session == null || _isVerifyingResume || !mounted) return;
@@ -94,9 +102,9 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
     });
 
     try {
-      final repo = ref.read(bookingRepositoryProvider);
-      final verifiedPayment = await repo.getPaymentById(session.paymentId);
-      final verifiedBooking = await repo.getBookingById(widget.bookingId);
+      final actions = ref.read(tripsActionsViewModelProvider);
+      final verifiedPayment = await actions.getPaymentById(session.paymentId);
+      final verifiedBooking = await actions.getBookingById(widget.bookingId);
 
       if (!mounted) return;
       setState(() => _isVerifyingResume = false);
@@ -126,24 +134,17 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
     PaymentSessionResult? payment,
     Booking? booking,
   }) {
-    if (payment != null) {
-      if (payment.isRefundPending) return 'refund_pending';
-      if (payment.isRefunded) return 'refunded';
-      if (payment.isPaid) return 'paid';
-      if (payment.isExpired) return 'expired';
-      if (payment.isCancelled) return 'cancelled';
-      if (payment.isFailed) return 'failed';
-    }
-    if (booking != null) {
-      if (booking.effectiveStatus == 'refund_pending') return 'refund_pending';
-      if (booking.effectiveStatus == 'refunded') return 'refunded';
-      if (booking.isPaid) return 'paid';
-      if (booking.isExpired) return 'expired';
-      if (booking.isCancelled) return 'cancelled';
-    }
-    return 'pending';
+    final resolved = deriveAuthoritativePaymentStatus(
+      payment: payment,
+      booking: booking,
+      initialStatusHint: 'pending',
+    );
+    return resolved == 'unverified' ? 'pending' : resolved;
   }
 
+  // Giải thuật đồng bộ bộ đếm ngược giữ chỗ trên màn hình thanh toán (`_syncCountdown`):
+  // Khởi chạy `Timer.periodic` mỗi giây cập nhật số giây còn lại từ `booking.computeRemainingPaymentSeconds()`;
+  // khi chạm mốc `0` sẽ dừng đồng hồ ngay để vô hiệu hóa thao tác gửi thanh toán muộn.
   void _syncCountdown(Booking booking) {
     final bookingKey =
         '${booking.id}_${booking.status}_${booking.paymentStatus}_${booking.paymentDeadline?.toIso8601String()}_${booking.remainingPaymentSeconds}';
@@ -198,52 +199,12 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
     return trimmed;
   }
 
-  Future<void> _handleValidateCoupon(Booking booking) async {
-    final code = _couponController.text.trim().toUpperCase();
-    if (code.isEmpty) {
-      setState(() {
-        _couponResult = null;
-        _couponError = 'Vui lòng nhập mã giảm giá.';
-      });
-      return;
-    }
-
-    setState(() {
-      _isValidatingCoupon = true;
-      _couponError = null;
-    });
-
-    try {
-      final result = await ref.read(bookingRepositoryProvider).validateCoupon(
-            code: code,
-            bookingAmount: booking.subtotalAmount > 0
-                ? booking.subtotalAmount
-                : booking.totalAmount,
-            listingId: booking.listingId,
-          );
-      if (!mounted) return;
-      setState(() {
-        _isValidatingCoupon = false;
-        if (result.valid && result.discountAmount > 0) {
-          _couponResult = result;
-          _couponError = null;
-        } else {
-          _couponResult = null;
-          _couponError = result.message ??
-              CouponValidationResult.localizeRejectionReason(result.reason) ??
-              'Mã giảm giá không hợp lệ.';
-        }
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isValidatingCoupon = false;
-        _couponResult = null;
-        _couponError = e.toString().replaceFirst('Exception: ', '');
-      });
-    }
-  }
-
+  // Giải thuật kiểm tra điều kiện, khởi tạo phiên thanh toán cổng trực tuyến và chuyển hướng an toàn (`_submitPayment`):
+  // Bước 1: Chặn gửi nếu đơn đã thanh toán, đã hủy, quá hạn giữ chỗ (`_remainingSeconds <= 0`) hoặc cổng chưa cấu hình.
+  // Bước 2: Tái sử dụng `_activePaymentSession` nếu cùng `bookingId` và `method` đang chờ để chống nhân bản phiên giao dịch;
+  //         ngược lại gọi `createPayment` tạo phiên mới.
+  // Bước 3: Xác thực tên miền URL cổng thanh toán bằng `UrlSecurityValidator.isValidPaymentGatewayUrl`, mở trình duyệt ngoài,
+  //         và chuyển sang `/thanh-toan/ket-qua` với trạng thái khởi điểm `'pending'` để chờ máy chủ đối soát thực tế.
   Future<void> _submitPayment(
     Booking booking,
     List<PaymentMethodAvailability> methods,
@@ -307,7 +268,7 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
         paymentSession = _activePaymentSession!;
       } else {
         paymentSession =
-            await ref.read(bookingRepositoryProvider).createPayment(
+            await ref.read(tripsActionsViewModelProvider).createPayment(
                   bookingId: booking.id,
                   method: _selectedMethod,
                 );
@@ -664,23 +625,21 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                           _PaymentDetailRow(
                                             label:
                                                 'Tiền phòng (${booking.nights} đêm)',
-                                            value: CurrencyFormatter.formatVnd(
+                                            value: MoneyFormatter.formatVnd(
                                               pb.baseNightsAmount,
                                             ),
                                           ),
                                           if (pb.weekendSurchargeAmount > 0)
                                             _PaymentDetailRow(
                                               label: 'Phụ thu cuối tuần',
-                                              value:
-                                                  CurrencyFormatter.formatVnd(
+                                              value: MoneyFormatter.formatVnd(
                                                 pb.weekendSurchargeAmount,
                                               ),
                                             ),
                                           if (pb.surchargeAmount > 0)
                                             _PaymentDetailRow(
                                               label: 'Phụ thu vượt tiêu chuẩn',
-                                              value:
-                                                  CurrencyFormatter.formatVnd(
+                                              value: MoneyFormatter.formatVnd(
                                                 pb.surchargeAmount,
                                               ),
                                             ),
@@ -688,38 +647,60 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                             _PaymentDetailRow(
                                               label:
                                                   'Phụ thu khách vượt tiêu chuẩn',
-                                              value:
-                                                  CurrencyFormatter.formatVnd(
+                                              value: MoneyFormatter.formatVnd(
                                                 pb.extraGuestFeeAmount,
                                               ),
                                             ),
                                           if (pb.cleaningFee > 0)
                                             _PaymentDetailRow(
                                               label: 'Phí vệ sinh',
-                                              value:
-                                                  CurrencyFormatter.formatVnd(
+                                              value: MoneyFormatter.formatVnd(
                                                 pb.cleaningFee,
                                               ),
                                             ),
                                           if (pb.serviceFee > 0)
                                             _PaymentDetailRow(
                                               label: 'Phí dịch vụ',
-                                              value:
-                                                  CurrencyFormatter.formatVnd(
+                                              value: MoneyFormatter.formatVnd(
                                                 pb.serviceFee,
                                               ),
                                             ),
-                                          if (pb.discountAmount > 0)
+                                          if (pb.discountAmount > 0 ||
+                                              booking.discountAmount > 0)
                                             _PaymentDetailRow(
-                                              label: booking.couponCode !=
+                                              label: (booking.couponCode ??
+                                                              pb.couponCode) !=
                                                           null &&
-                                                      booking.couponCode!
+                                                      (booking.couponCode ??
+                                                              pb.couponCode)!
+                                                          .trim()
                                                           .isNotEmpty
-                                                  ? 'Giảm giá (${booking.couponCode})'
+                                                  ? 'Giảm giá (${(booking.couponCode ?? pb.couponCode)!.trim()})'
                                                   : 'Giảm giá ưu đãi',
                                               value:
-                                                  '-${CurrencyFormatter.formatVnd(pb.discountAmount)}',
+                                                  '-${MoneyFormatter.formatVnd(pb.discountAmount > 0 ? pb.discountAmount : booking.discountAmount)}',
                                             ),
+                                          const Padding(
+                                            padding: EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                            child: Divider(
+                                              height: 1,
+                                              color: AppColors.divider,
+                                            ),
+                                          ),
+                                        ] else if (booking.discountAmount >
+                                            0) ...[
+                                          _PaymentDetailRow(
+                                            label: booking.couponCode != null &&
+                                                    booking.couponCode!
+                                                        .trim()
+                                                        .isNotEmpty
+                                                ? 'Giảm giá (${booking.couponCode!.trim()})'
+                                                : 'Giảm giá ưu đãi',
+                                            value:
+                                                '-${MoneyFormatter.formatVnd(booking.discountAmount)}',
+                                          ),
                                           const Padding(
                                             padding: EdgeInsets.symmetric(
                                               vertical: 12,
@@ -866,7 +847,7 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                                     ),
                                                   ),
                                                   Text(
-                                                    CurrencyFormatter.formatVnd(
+                                                    MoneyFormatter.formatVnd(
                                                       booking.totalAmount,
                                                     ),
                                                     style: const TextStyle(
@@ -886,10 +867,16 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                   ),
                                   const SizedBox(height: 16),
 
-                                  // Coupon check section (if guest wants to verify a coupon eligibility)
+                                  // Giải thuật hiển thị minh bạch ưu đãi sau khi khóa đơn đặt phòng:
+                                  // Backend cố định `booking.totalAmount` và `booking.discountAmount` ngay khi `POST /api/bookings`,
+                                  // đồng thời `POST /api/payments` luôn thu đúng `booking.totalAmount`.
+                                  // CONFLICT-RESOLVED: Loại bỏ ô nhập coupon giả sau bước tạo đơn để số tiền hiển thị luôn khớp 100% với số tiền cổng VNPay/MoMo thu.
                                   if (booking.canPayNow && !isHoldExpired) ...[
                                     Container(
-                                      padding: const EdgeInsets.all(16),
+                                      key: const Key(
+                                        'checkout_coupon_locked_info_box',
+                                      ),
+                                      padding: const EdgeInsets.all(14),
                                       decoration: BoxDecoration(
                                         color: Colors.white,
                                         borderRadius: BorderRadius.circular(16),
@@ -897,176 +884,38 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                           color: AppColors.borderSoft,
                                         ),
                                       ),
-                                      child: Column(
+                                      child: Row(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          const Text(
-                                            'Mã ưu đãi / Giảm giá',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w700,
-                                              color: AppColors.textPrimary,
-                                            ),
+                                          Icon(
+                                            (pb != null &&
+                                                        pb.discountAmount >
+                                                            0) ||
+                                                    booking.discountAmount > 0
+                                                ? LucideIcons.ticketCheck
+                                                : LucideIcons.info,
+                                            size: 18,
+                                            color: AppColors.iconStrong,
                                           ),
-                                          const SizedBox(height: 10),
-                                          LayoutBuilder(
-                                            builder: (context, constraints) {
-                                              final textScale =
-                                                  MediaQuery.textScalerOf(
-                                                          context)
-                                                      .scale(1.0);
-                                              final stackVertically =
-                                                  constraints.maxWidth < 290 ||
-                                                      textScale >= 1.5;
-
-                                              final inputField = ConstrainedBox(
-                                                constraints:
-                                                    const BoxConstraints(
-                                                  minHeight: 48,
-                                                ),
-                                                child: TextField(
-                                                  controller: _couponController,
-                                                  textCapitalization:
-                                                      TextCapitalization
-                                                          .characters,
-                                                  style: const TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                  decoration: InputDecoration(
-                                                    hintText:
-                                                        'Nhập mã coupon...',
-                                                    hintStyle: const TextStyle(
-                                                      fontSize: 13,
-                                                      fontWeight:
-                                                          FontWeight.w400,
-                                                      color:
-                                                          AppColors.textMuted,
-                                                    ),
-                                                    filled: true,
-                                                    fillColor:
-                                                        AppColors.surfaceBase,
-                                                    contentPadding:
-                                                        const EdgeInsets
-                                                            .symmetric(
-                                                      horizontal: 14,
-                                                      vertical: 12,
-                                                    ),
-                                                    enabledBorder:
-                                                        OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              12),
-                                                      borderSide:
-                                                          const BorderSide(
-                                                        color: AppColors.border,
-                                                      ),
-                                                    ),
-                                                    focusedBorder:
-                                                        OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              12),
-                                                      borderSide:
-                                                          const BorderSide(
-                                                        color: AppColors
-                                                            .textPrimary,
-                                                        width: 1.4,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              );
-
-                                              final applyBtn = ConstrainedBox(
-                                                constraints:
-                                                    const BoxConstraints(
-                                                  minHeight: 48,
-                                                ),
-                                                child: OutlinedButton(
-                                                  style:
-                                                      OutlinedButton.styleFrom(
-                                                    minimumSize:
-                                                        const Size(96, 48),
-                                                    foregroundColor:
-                                                        AppColors.textPrimary,
-                                                    side: const BorderSide(
-                                                      color:
-                                                          AppColors.textPrimary,
-                                                    ),
-                                                    shape:
-                                                        RoundedRectangleBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              12),
-                                                    ),
-                                                    textStyle: const TextStyle(
-                                                      fontSize: 13,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                    ),
-                                                  ),
-                                                  onPressed: _isValidatingCoupon
-                                                      ? null
-                                                      : () =>
-                                                          _handleValidateCoupon(
-                                                            booking,
-                                                          ),
-                                                  child: Text(
-                                                    _isValidatingCoupon
-                                                        ? 'Đang kiểm tra...'
-                                                        : 'Áp dụng',
-                                                  ),
-                                                ),
-                                              );
-
-                                              if (stackVertically) {
-                                                return Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment
-                                                          .stretch,
-                                                  children: [
-                                                    inputField,
-                                                    const SizedBox(height: 8),
-                                                    applyBtn,
-                                                  ],
-                                                );
-                                              }
-                                              return Row(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.center,
-                                                children: [
-                                                  Expanded(child: inputField),
-                                                  const SizedBox(width: 10),
-                                                  applyBtn,
-                                                ],
-                                              );
-                                            },
-                                          ),
-                                          if (_couponError != null) ...[
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              _couponError!,
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(
+                                              ((pb != null &&
+                                                          pb.discountAmount >
+                                                              0) ||
+                                                      booking.discountAmount >
+                                                          0)
+                                                  ? 'Đơn đặt phòng đã áp dụng ưu đãi${(booking.couponCode ?? pb?.couponCode)?.trim().isNotEmpty == true ? " (${(booking.couponCode ?? pb?.couponCode)!.trim()})" : ""} giảm ${MoneyFormatter.formatVnd(pb != null && pb.discountAmount > 0 ? pb.discountAmount : booking.discountAmount)}. Tổng thanh toán ${MoneyFormatter.formatVnd(booking.totalAmount)} đã được cố định cho cổng thanh toán.'
+                                                  : 'Mã giảm giá được áp dụng tại bước tạo đặt phòng. Tổng thanh toán gửi sang cổng VNPay/MoMo được cố định theo đơn đã tạo (${MoneyFormatter.formatVnd(booking.totalAmount)}).',
                                               style: const TextStyle(
-                                                fontSize: 12,
-                                                color: AppColors.error,
-                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                                height: 1.4,
+                                                color: AppColors.textSecondary,
+                                                fontWeight: FontWeight.w500,
                                               ),
                                             ),
-                                          ],
-                                          if (_couponResult != null &&
-                                              _couponResult!.valid) ...[
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              'Mã ${_couponResult!.code} hợp lệ: giảm ${CurrencyFormatter.formatVnd(_couponResult!.discountAmount)}${_couponResult!.description != null ? " (${_couponResult!.description})" : ""}.',
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                color: AppColors.success,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -1229,8 +1078,7 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                               : (isHoldExpired
                                                   ? 'Đã hết thời gian giữ chỗ'
                                                   : l10n.fxPayButtonVnd(
-                                                      CurrencyFormatter
-                                                          .formatVnd(
+                                                      MoneyFormatter.formatVnd(
                                                         booking.totalAmount,
                                                       ),
                                                       _selectedMethod
@@ -1263,7 +1111,6 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                             ),
                           ),
                         ),
-                        const AppFooter(),
                       ],
                     ),
                   );

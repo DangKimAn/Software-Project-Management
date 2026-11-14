@@ -614,6 +614,7 @@ void main() {
     );
   });
 
+  // CONFLICT-RESOLVED: Bỏ tiền tố thư mục con lặp tên 'goldens/' vì tệp kiểm thử đã nằm tại test/goldens/.
   group('Golden Master Snapshots (Stub Data Only)', () {
     testWidgets('Golden snapshot: 320dp mobile @ 1.0x and 1.6x scale (vi)',
         (tester) async {
@@ -627,7 +628,7 @@ void main() {
       );
       await expectLater(
         find.byType(GoldenResponsiveShowcase),
-        matchesGoldenFile('goldens/showcase_320dp_scale_1.0_vi.png'),
+        matchesGoldenFile('showcase_320dp_scale_1.0_vi.png'),
       );
 
       await _pumpShowcaseAtViewport(
@@ -640,7 +641,7 @@ void main() {
       );
       await expectLater(
         find.byType(GoldenResponsiveShowcase),
-        matchesGoldenFile('goldens/showcase_320dp_scale_1.6_vi.png'),
+        matchesGoldenFile('showcase_320dp_scale_1.6_vi.png'),
       );
     });
 
@@ -656,7 +657,7 @@ void main() {
       );
       await expectLater(
         find.byType(GoldenResponsiveShowcase),
-        matchesGoldenFile('goldens/showcase_390dp_scale_1.3_en.png'),
+        matchesGoldenFile('showcase_390dp_scale_1.3_en.png'),
       );
 
       await _pumpShowcaseAtViewport(
@@ -669,7 +670,7 @@ void main() {
       );
       await expectLater(
         find.byType(GoldenResponsiveShowcase),
-        matchesGoldenFile('goldens/showcase_390dp_scale_1.3_ko.png'),
+        matchesGoldenFile('showcase_390dp_scale_1.3_ko.png'),
       );
     });
 
@@ -685,7 +686,7 @@ void main() {
       );
       await expectLater(
         find.byType(GoldenResponsiveShowcase),
-        matchesGoldenFile('goldens/showcase_768dp_tablet_scale_1.0_vi.png'),
+        matchesGoldenFile('showcase_768dp_tablet_scale_1.0_vi.png'),
       );
 
       await _pumpShowcaseAtViewport(
@@ -698,7 +699,7 @@ void main() {
       );
       await expectLater(
         find.byType(GoldenResponsiveShowcase),
-        matchesGoldenFile('goldens/showcase_768dp_tablet_scale_1.6_vi.png'),
+        matchesGoldenFile('showcase_768dp_tablet_scale_1.6_vi.png'),
       );
     });
   });

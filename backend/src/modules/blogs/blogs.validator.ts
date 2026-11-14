@@ -1,3 +1,8 @@
+/**
+ * Lược đồ kiểm chứng dữ liệu đầu vào bằng Zod cho phân hệ bài viết (`blogs`):
+ * - Kiểm tra tham số phân trang, bộ lọc trạng thái, định dạng `slug`/`blogId`, danh sách trắng URL ảnh bìa an toàn và nội dung tạo/cập nhật bài viết.
+ */
+
 import { z } from "zod";
 
 import { isSafeExternalHttpUrl } from "../../common/url-security";
@@ -34,6 +39,9 @@ const coverImageSchema = z
 
 const contentSchema = z.array(z.string().trim().min(1).max(5000)).min(1).max(50);
 
+/**
+ * Schema kiểm chứng tham số phân trang và từ khóa tìm kiếm danh sách bài viết công khai.
+ */
 export const blogListQuerySchema = z.object({
     q: z.string().trim().min(1).max(255).optional(),
     category: z.string().trim().min(1).max(255).optional(),
@@ -41,18 +49,30 @@ export const blogListQuerySchema = z.object({
     limit: z.coerce.number().int().positive().max(50).optional(),
 });
 
+/**
+ * Schema mở rộng bộ lọc trạng thái xuất bản khi truy vấn danh sách bài viết ở trang quản trị.
+ */
 export const adminBlogListQuerySchema = blogListQuerySchema.extend({
     status: z.enum(blogStatusValues).optional(),
 });
 
+/**
+ * Schema kiểm chứng định dạng chuỗi `slug` trên đường dẫn chi tiết bài viết.
+ */
 export const blogSlugParamSchema = z.object({
     slug: z.string().trim().min(1).max(255),
 });
 
+/**
+ * Schema kiểm chứng tham số định danh số nguyên dương `blogId`.
+ */
 export const blogIdParamSchema = z.object({
     blogId: z.coerce.number().int().positive(),
 });
 
+/**
+ * Schema kiểm chứng dữ liệu tạo mới bài viết gồm tiêu đề, tóm tắt, nội dung, ảnh bìa hợp lệ và trạng thái.
+ */
 export const createBlogBodySchema = z.object({
     slug: z.string().trim().min(1).max(255).optional(),
     title: z.string().trim().min(1).max(255),
@@ -66,6 +86,9 @@ export const createBlogBodySchema = z.object({
     publishedAt: nullableTrimmedString(64),
 });
 
+/**
+ * Schema kiểm chứng dữ liệu cập nhật từng phần bài viết, bắt buộc có ít nhất một trường thay đổi.
+ */
 export const updateBlogBodySchema = createBlogBodySchema.partial().refine(
     (value) => Object.keys(value).length > 0,
     "At least one field is required",

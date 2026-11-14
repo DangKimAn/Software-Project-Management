@@ -1,3 +1,6 @@
+/**
+ * Điểm xuất tập trung (barrel) toàn bộ các mô hình thực thể Sequelize ORM của hệ thống.
+ */
 export { default as Amenity } from "./amenity";
 export { default as AuditLog } from "./audit-log";
 export { default as AvailabilityCalendar } from "./availability-calendar";

@@ -2,6 +2,9 @@ import "dotenv/config";
 
 import sequelize from "../config/database";
 
+/**
+ * Kịch bản đồng bộ lũy đẳng (idempotent DDL) lược đồ cho các phân hệ hội thoại, tin nhắn, xác minh chủ nhà và chi trả.
+ */
 const tableExists = async (tableName: string) => {
     const [rows] = await sequelize.query(
         `

@@ -899,7 +899,8 @@ class PreferencesService {
     await _remove(_keyAccountProfile);
     await _remove('host_onboarding_kyc_draft_v2');
 
-    final existingKeys = _prefs?.getKeys() ?? _memory?.getKeys() ?? const <String>[];
+    final existingKeys =
+        _prefs?.getKeys() ?? _memory?.getKeys() ?? const <String>[];
     for (final key in existingKeys.toList()) {
       if (key.startsWith('${_keyAccountProfile}_') ||
           key.startsWith('host_onboarding_kyc_draft_v2_')) {

@@ -33,6 +33,10 @@ const isOperatorFilter = (value: unknown): value is OperatorFilter =>
     !isDate(value) &&
     ["$in", "$gte", "$lte"].some((key) => key in value);
 
+/**
+ * Giải thuật biên dịch bộ lọc cú pháp giản lược (`SimpleFilter`) sang mệnh đề `WhereOptions` an toàn của Sequelize:
+ * - Hỗ trợ đệ quy toán tử hợp `$or` sang `[Op.or]`, ánh xạ `null` sang `[Op.is]: null`, và chỉ chấp nhận các toán tử so sánh trong danh sách trắng (`$in`, `$gte`, `$lte`).
+ */
 export const buildWhere = <T>(filter: SimpleFilter<T> = {} as SimpleFilter<T>): WhereOptions => {
     const where: Record<string | symbol, unknown> = {};
 
@@ -77,6 +81,9 @@ export const buildWhere = <T>(filter: SimpleFilter<T> = {} as SimpleFilter<T>): 
     return where as never;
 };
 
+/**
+ * Giải thuật chuyển đổi đặc tả sắp xếp `{ field: 1 | -1 }` sang cấu trúc `Order` của Sequelize (`ASC` / `DESC`).
+ */
 const buildOrder = (sort?: SortSpec): Order | undefined => {
     if (!sort) {
         return undefined;
@@ -90,6 +97,9 @@ const buildOrder = (sort?: SortSpec): Order | undefined => {
 
 const toPlain = <TModel extends Model>(row: TModel) => row.get({ plain: true });
 
+/**
+ * Lớp trình bao truy vấn bất đồng bộ kiểu chuỗi phương thức (`sort`, `skip`, `limit`, `lean`) trên nền Sequelize MySQL.
+ */
 export class MySqlQuery<TModel extends Model> implements PromiseLike<TModel[]> {
     private sortSpec?: SortSpec;
     private offsetValue?: number;
@@ -150,6 +160,9 @@ export class MySqlQuery<TModel extends Model> implements PromiseLike<TModel[]> {
     }
 }
 
+/**
+ * Giải thuật khởi tạo đối tượng truy vấn `MySqlQuery` từ mô hình Sequelize và bộ lọc `SimpleFilter`.
+ */
 export const buildDocumentQuery = <TModel extends Model, TFilter>(
     model: {
         findAll(options: FindOptions): Promise<TModel[]>;
@@ -163,6 +176,9 @@ export const buildDocumentQuery = <TModel extends Model, TFilter>(
         }),
     );
 
+/**
+ * Giải thuật tìm một bản ghi đầu tiên khớp bộ lọc `SimpleFilter`.
+ */
 export const findOneByFilter = async <TModel extends Model, TFilter>(
     model: {
         findOne(options: FindOptions): Promise<TModel | null>;
@@ -173,6 +189,9 @@ export const findOneByFilter = async <TModel extends Model, TFilter>(
         where: buildWhere(filter),
     });
 
+/**
+ * Giải thuật đếm tổng số bản ghi khớp bộ lọc `SimpleFilter`.
+ */
 export const countDocumentsByFilter = async <TModel extends Model, TFilter>(
     model: {
         count(options: FindOptions): Promise<number>;
@@ -183,6 +202,9 @@ export const countDocumentsByFilter = async <TModel extends Model, TFilter>(
         where: buildWhere(filter),
     });
 
+/**
+ * Giải thuật xóa tối đa 1 bản ghi (`LIMIT 1`) khớp bộ lọc `SimpleFilter`.
+ */
 export const deleteOneByFilter = async <TModel extends Model, TFilter>(
     model: {
         destroy(options: FindOptions & { limit?: number }): Promise<number>;
@@ -194,6 +216,9 @@ export const deleteOneByFilter = async <TModel extends Model, TFilter>(
         limit: 1,
     });
 
+/**
+ * Giải thuật cập nhật tối đa 1 bản ghi (`LIMIT 1`) khớp bộ lọc `SimpleFilter`.
+ */
 export const updateOneByFilter = async <TModel extends Model, TFilter>(
     model: {
         update(
@@ -209,6 +234,9 @@ export const updateOneByFilter = async <TModel extends Model, TFilter>(
         limit: 1,
     });
 
+/**
+ * Giải thuật giải mã chuỗi JSON an toàn có giá trị dự phòng (`fallback`) khi dữ liệu rỗng hoặc sai định dạng.
+ */
 export const parseJsonValue = <T>(value: unknown, fallback: T): T => {
     if (value === null || value === undefined || value === "") {
         return fallback;
@@ -225,8 +253,14 @@ export const parseJsonValue = <T>(value: unknown, fallback: T): T => {
     }
 };
 
+/**
+ * Giải thuật tuần tự hóa giá trị bất kỳ sang chuỗi JSON lưu cột văn bản MySQL.
+ */
 export const stringifyJsonValue = (value: unknown) => JSON.stringify(value);
 
+/**
+ * Giải thuật nhận diện đối tượng tùy chọn truy vấn gốc `FindOptions` của Sequelize.
+ */
 export const isFindOptions = (value: unknown): value is FindOptions =>
     typeof value === "object" &&
     value !== null &&

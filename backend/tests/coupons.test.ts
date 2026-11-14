@@ -119,7 +119,7 @@ describe("Module coupons (CP-01 to CP-18)", () => {
         const User = require("../dist/models/user").default;
         patch(User, "findById", async (id: string | number) => usersMap.get(String(id)) ?? null);
 
-        const auditLogService = require("../dist/services/audit-log-service");
+        const auditLogService = require("../dist/services/audit-log.service");
         patch(auditLogService, "writeAuditLog", async () => {});
 
         patch(sequelize, "transaction", async (arg1: any, arg2?: any) => {

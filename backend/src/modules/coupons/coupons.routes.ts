@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP kiểm tra mã giảm giá của khách và quản trị mã giảm giá (`adminCouponsRoutes`):
+ * - Áp dụng middleware xác thực (`authenticate`), giới hạn tần suất dò mã giảm giá (`Limiter`), phân quyền `admin` cho nhánh quản trị và kiểm chứng `validate`.
+ */
+
 import express from "express";
 
 import {

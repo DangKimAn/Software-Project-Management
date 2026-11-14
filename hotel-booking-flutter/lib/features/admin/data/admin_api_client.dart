@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
+import 'package:hotel_booking_flutter/features/admin/domain/admin_status_helper.dart';
 
 class AdminRevenuePoint {
   const AdminRevenuePoint({
@@ -865,8 +868,9 @@ class AdminRepository {
     String userId,
     String status,
   ) async {
+    // CONFLICT-RESOLVED: Chuẩn hóa các trạng thái khóa ('blocked', 'locked') về 'suspended' trước khi gửi API.
     final normalizedStatus =
-        status.trim().toLowerCase() == 'blocked' ? 'suspended' : status.trim();
+        AdminStatusHelper.normalizeOutboundUserStatus(status);
     final res = await _dio.patch<dynamic>(
       '/api/users/$userId/status',
       data: {'status': normalizedStatus},
@@ -995,6 +999,28 @@ class AdminRepository {
       '/api/admin/host-applications/$applicationId',
     );
     return _unwrapMap(res.data);
+  }
+
+  /// Giải thuật tải luồng byte tài liệu KYC riêng tư cho Admin không lộ token trên URL:
+  /// Sử dụng phiên Dio đã xác thực (`Authorization: Bearer`) kết hợp header `X-Document-Stream-Token`
+  /// thay vì truyền `streamToken` trên URL query string.
+  Future<Uint8List> fetchAdminHostDocumentBytes(
+    String applicationId,
+    String documentId, {
+    String? streamToken,
+  }) async {
+    final trimmedToken = streamToken?.trim() ?? '';
+    final res = await _dio.get<List<int>>(
+      '/api/admin/host-applications/$applicationId/documents/$documentId/file',
+      options: Options(
+        responseType: ResponseType.bytes,
+        headers: <String, dynamic>{
+          if (trimmedToken.isNotEmpty) 'X-Document-Stream-Token': trimmedToken,
+        },
+      ),
+    );
+    final raw = res.data ?? const <int>[];
+    return raw is Uint8List ? raw : Uint8List.fromList(raw);
   }
 
   Future<void> approveHostApplication(String applicationId) async {

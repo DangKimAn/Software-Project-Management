@@ -1,11 +1,11 @@
 import { ApiError } from "../../common/api-error";
-import { getCoverImage, serializeListingImage, toApiListingStatus } from "../../common/listing-mappers";
+import { getCoverImage, serializeListingImage, toApiListingStatus } from "../listings/listing-mappers";
 import {
     getListingAmenityIdsForListing,
     getListingImagesForListing,
     getListingImagesMap,
     getListingRulesForListing,
-} from "../../common/listing-relations";
+} from "../listings/listing-relations";
 import { sanitizeText } from "../../common/sanitization";
 import sequelize from "../../config/database";
 import Amenity from "../../models/amenity";
@@ -13,8 +13,8 @@ import Listing, { ListingDocument } from "../../models/listing";
 import { Op, type Transaction } from "sequelize";
 import User from "../../models/user";
 import type { AuthenticatedUser } from "../auth/auth.service";
-import { writeAuditLog } from "../../services/audit-log-service";
-import { isHostVerifiedForPublishing } from "../../services/host-verification-status-service";
+import { writeAuditLog } from "../../services/audit-log.service";
+import { isHostVerifiedForPublishing } from "../host-kyc/host-status-sync.service";
 import {
     notifyListingApproved,
     notifyListingRejected,
@@ -37,17 +37,26 @@ export type AdminListingActionContext = {
 
 export const adminListingsMaxPageLimit = 50;
 
+/**
+ * Giải thuật chuẩn hóa và kẹp biên tham số phân trang cho trang kiểm duyệt Admin (`page >= 1`, `1 <= limit <= 50`).
+ */
 const toPagination = (page?: number, limit?: number) => ({
     page: Math.max(1, page ?? 1),
     limit: Math.min(adminListingsMaxPageLimit, Math.max(1, limit ?? 10)),
 });
 
+/**
+ * Giải thuật kiểm tra đặc quyền kiểm duyệt chỗ nghỉ (RBAC Guard): chỉ cho phép tài khoản có vai trò `admin` thao tác; ném lỗi 403 nếu vi phạm.
+ */
 const assertCanModerateListings = (user: AuthenticatedUser) => {
     if (!user.roles.includes("admin")) {
         throw new ApiError(403, "Forbidden");
     }
 };
 
+/**
+ * Giải thuật tuần tự hóa hồ sơ chỗ nghỉ phục vụ hàng đợi kiểm duyệt của Admin, trích xuất ảnh bìa (`getCoverImage`) và ánh xạ trạng thái API hiển thị.
+ */
 const serializeAdminListing = (listing: ListingDocument, images = listing.images ?? []) => {
     const safeImages = Array.isArray(images) ? images : [];
     const coverImage = getCoverImage(safeImages);
@@ -79,6 +88,9 @@ const serializeAdminListing = (listing: ListingDocument, images = listing.images
     };
 };
 
+/**
+ * Giải thuật truy vấn chỗ nghỉ chưa xóa mềm trong phạm vi giao dịch kiểm duyệt; ném lỗi 404 nếu bản ghi không tồn tại.
+ */
 const getListingOrThrow = async (listingId: number, transaction?: Transaction) => {
     const listing = await Listing.findOne({
         where: {
@@ -95,6 +107,10 @@ const getListingOrThrow = async (listingId: number, transaction?: Transaction) =
     return listing;
 };
 
+/**
+ * Giải thuật truy vấn phân trang hàng đợi các chỗ nghỉ đang chờ kiểm duyệt (`status = "pending_approval"`, `deletedAt = null`):
+ * Tải song song danh sách bản ghi và tổng số dòng, đồng thời gom nạp hàng loạt hình ảnh qua `getListingImagesMap` để khử truy vấn N+1.
+ */
 export const listPendingAdminListings = async (actor: AuthenticatedUser, query: AdminListingQuery) => {
     assertCanModerateListings(actor);
 
@@ -125,6 +141,11 @@ export const listPendingAdminListings = async (actor: AuthenticatedUser, query: 
     };
 };
 
+/**
+ * Giải thuật phê duyệt xuất bản chỗ nghỉ trong giao dịch CSDL:
+ * - Xác thực quyền Admin, kiểm tra bất biến trạng thái hiện tại bắt buộc là `pending_approval` (lỗi 409 nếu sai lệch) và tài khoản Chủ nhà đã được xác minh hợp lệ (`isHostVerifiedForPublishing`, lỗi 422 nếu chưa).
+ * - Chuyển trạng thái sang `active`, ghi dấu `approvedBy`/`approvedAt`, xóa lý do từ chối cũ, ghi audit log, phát thông báo duyệt thành công cho Host và đẩy đồng bộ Google Sheet.
+ */
 export const approveAdminListing = async (
     listingId: number,
     admin: AuthenticatedUser,
@@ -176,6 +197,11 @@ export const approveAdminListing = async (
     return result;
 };
 
+/**
+ * Giải thuật từ chối kiểm duyệt chỗ nghỉ trong giao dịch CSDL:
+ * - Xác thực quyền Admin, trạng thái `pending_approval` và làm sạch chống XSS lý do từ chối (ném lỗi 422 nếu rỗng sau làm sạch).
+ * - Chuyển trạng thái sang `rejected`, lưu lý do từ chối, xóa dấu phê duyệt cũ, ghi audit log, gửi thông báo chỉnh sửa cho Host và kích hoạt đồng bộ Google Sheet bất đồng bộ.
+ */
 export const rejectAdminListing = async (
     listingId: number,
     admin: AuthenticatedUser,
@@ -236,6 +262,11 @@ export const rejectAdminListing = async (
         return serializeAdminListing(listing);
     });
 
+/**
+ * Giải thuật chuyển nhượng quyền sở hữu chỗ nghỉ sang tài khoản Chủ nhà mới bởi Quản trị viên:
+ * - Kiểm tra quyền Admin, xác thực tài khoản Host đích tồn tại và đang `active`, trả về sớm nếu trùng chủ cũ (idempotent).
+ * - Cập nhật `listing.hostId`, ghi nhật ký kiểm toán đối chứng `(previousHostId, newHostId)` trong giao dịch CSDL và phát tác vụ đồng bộ Google Sheet cho cả chủ cũ lẫn chủ mới.
+ */
 export const transferAdminListingHost = async (
     listingId: number,
     newHostId: number,
@@ -297,6 +328,10 @@ export const transferAdminListingHost = async (
     return result;
 };
 
+/**
+ * Giải thuật tổng hợp hồ sơ thẩm định chi tiết một chỗ nghỉ cho Quản trị viên:
+ * Nạp song song (`Promise.all`) thông tin xác minh của Chủ nhà, danh sách tiện ích, hình ảnh chuẩn hóa và nội quy lưu trú.
+ */
 export async function getAdminListingDetail(listingId: number) {
     const listing = await Listing.findOne({
         where: {

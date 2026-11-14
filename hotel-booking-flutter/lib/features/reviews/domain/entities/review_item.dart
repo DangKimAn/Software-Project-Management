@@ -1,3 +1,4 @@
+/// Thực thể miền biểu diễn một đánh giá lưu trú của khách hàng kèm phản hồi của Chủ nhà.
 class ReviewItem {
   final String id;
   final double rating;
@@ -17,6 +18,8 @@ class ReviewItem {
     this.createdAt,
   });
 
+  /// Giải thuật giải mã JSON đánh giá đa cấu trúc:
+  /// Hợp nhất khóa định danh (`reviewId` hoặc `id`), bóc thông tin người đánh giá trực tiếp hoặc lồng trong `user`, và phân tích an toàn mốc `createdAt`.
   factory ReviewItem.fromJson(Map<String, dynamic> json) {
     return ReviewItem(
       id: (json['reviewId'] ?? json['id'])?.toString() ?? '',

@@ -1,3 +1,9 @@
+/**
+ * Bộ điều phối HTTP xác thực và quản lý phiên đăng nhập (`auth`):
+ * - Điều phối đăng ký, đăng nhập mật khẩu/Google OAuth, xoay vòng Refresh Token qua HttpOnly Cookie,
+ *   đăng xuất thu hồi phiên, cấp phát/xác thực OTP (đặt lại mật khẩu, xác minh email/số điện thoại) và tra cứu thông tin người dùng hiện tại.
+ */
+
 import type { Request, RequestHandler, Response } from "express";
 
 import { ApiError } from "../../common/api-error";
@@ -34,6 +40,9 @@ const writeAuthCookies = (res: Response, session: { accessToken: string; refresh
     res.cookie(getEnv().refreshCookieName, session.refreshToken, buildRefreshCookieOptions());
 };
 
+/**
+ * Xử lý đăng ký tài khoản mới, khởi tạo phiên xác thực và thiết lập HttpOnly Cookie cho cặp token.
+ */
 export const register: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -78,6 +87,9 @@ export const register: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Xác thực thông tin đăng nhập cục bộ, kiểm tra khóa tạm thời chống Brute-Force và cấp phiên đăng nhập mới.
+ */
 export const login: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -115,6 +127,9 @@ export const login: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Thu hồi phiên Refresh Token hiện tại trong cơ sở dữ liệu và xóa toàn bộ cookie xác thực trên trình duyệt.
+ */
 export const logout: RequestHandler = asyncHandler(async (req, res) => {
     const refreshToken = extractRefreshToken(req);
 
@@ -130,6 +145,9 @@ export const logout: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Thực hiện xoay vòng Refresh Token một lần (Single-Use Rotation) và cấp lại cặp Access/Refresh Token mới.
+ */
 export const refresh: RequestHandler = asyncHandler(async (req, res) => {
     const refreshToken = extractRefreshToken(req);
 
@@ -151,6 +169,9 @@ export const refresh: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Tiếp nhận yêu cầu cấp phát mã OTP theo mục đích xác thực kèm giới hạn tần suất gửi.
+ */
 export const sendOtp: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -166,6 +187,9 @@ export const sendOtp: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Khởi tạo luồng quên mật khẩu bằng cách phát hành mã OTP đặt lại mật khẩu một cách chống dò tìm tài khoản.
+ */
 export const forgotPassword: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -184,6 +208,9 @@ export const forgotPassword: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Xác thực mã OTP một lần để đặt mật khẩu mới và thu hồi toàn diện các phiên đăng nhập cũ.
+ */
 export const resetPassword: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -203,6 +230,9 @@ export const resetPassword: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Xác thực mã OTP để đánh dấu số điện thoại của tài khoản đã được xác minh.
+ */
 export const verifyPhone: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -214,6 +244,9 @@ export const verifyPhone: RequestHandler = asyncHandler(async (req, res) => {
         data: result,
     });
 });
+/**
+ * Xác thực mã OTP để đánh dấu địa chỉ email của tài khoản đã được xác minh.
+ */
 export const verifyEmail: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -226,6 +259,9 @@ export const verifyEmail: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Xác thực Google ID Token, liên kết hoặc tạo tài khoản xã hội an toàn và cấp phiên đăng nhập.
+ */
 export const loginWithGoogle: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -244,6 +280,9 @@ export const loginWithGoogle: RequestHandler = asyncHandler(async (req, res) => 
     });
 });
 
+/**
+ * Trả về thông tin hồ sơ và vai trò đã đồng bộ của người dùng đang đăng nhập hiện tại.
+ */
 export const getCurrentUser: RequestHandler = (req, res) => {
     const user = req.user!;
     const role = user.roles.includes("admin")

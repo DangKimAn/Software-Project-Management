@@ -93,7 +93,7 @@ jobs:
           ALLOW_DATABASE_ROOT_USER: "true"
         run: |
           npm run db:ensure-runtime-schema
-          npm run db:migrate || true
+          npm run db:migrate
 
       # 3. CHẠY KIỂM THỬ
       - name: Chạy Unit & Integration Tests

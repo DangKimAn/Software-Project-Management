@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+/// Trường nhập văn bản chuẩn hóa theo hệ thống thiết kế Light Luxury.
+///
+/// Giải thuật bảo vệ dữ liệu nhạy cảm và vùng chạm chuẩn:
+/// - Khi bật chế độ mật khẩu (`obscureText == true`), tự động tắt gợi ý bàn phím (`enableSuggestions`), tự sửa lỗi (`autocorrect`), học cá nhân hóa IME (`enableIMEPersonalizedLearning`) và cưỡng bức `maxLines = 1`.
+/// - Đảm bảo vùng chạm tối thiểu `48x48` logical pixel cho `prefixIcon` và `suffixIcon` theo `FLUTTER_RULES.md`.
 class AppTextField extends StatelessWidget {
   final TextEditingController? controller;
   final String? initialValue;

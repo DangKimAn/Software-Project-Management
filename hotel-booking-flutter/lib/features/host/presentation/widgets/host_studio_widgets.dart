@@ -4,9 +4,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-/// Scoped Studio Minimalist tokens for the Host Portal shell & Overview
-/// (soft porcelain canvas, frosted header/dock, borderless Bento cards,
-/// and sleek SF Pro Display / SF Pro Text weights).
+/// Bộ token thiết kế phong cách Studio Minimalist dành riêng cho khung giao diện và màn hình Tổng quan của Host Portal (nền sứ dịu, thanh điều hướng kính mờ, thẻ Bento không viền và thang chữ thanh thoát).
 abstract final class HostStudioTokens {
   // ── Surfaces & Frosted Layers ──
   static const Color canvas = Color(0xFFF2F4F7);
@@ -166,8 +164,9 @@ abstract final class HostStudioTokens {
   );
 }
 
-/// Real [BackdropFilter] frosted glass surface for Host header & bottom dock.
+/// Lớp nền kính mờ thực sự dùng `BackdropFilter` cho thanh tiêu đề và thanh điều hướng đáy của Host Portal.
 class HostFrostedSurface extends StatelessWidget {
+  /// Khởi tạo bề mặt kính mờ với độ nhòe `sigma` và màu phủ `fillColor`.
   const HostFrostedSurface({
     super.key,
     required this.child,
@@ -187,6 +186,7 @@ class HostFrostedSurface extends StatelessWidget {
   final List<BoxShadow>? boxShadow;
   final EdgeInsetsGeometry? padding;
 
+  /// Dựng khung kính mờ với bóng đổ ngoài và góc bo tròn đồng nhất.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -213,8 +213,9 @@ class HostFrostedSurface extends StatelessWidget {
   }
 }
 
-/// Soft grouped Bento container with specular white rim and whisper shadow.
+/// Khung nhóm thẻ Bento bo góc mềm kèm viền sáng trắng và bóng đổ nhẹ cho từng phân khu trên Host Portal.
 class HostStudioGroupCard extends StatelessWidget {
+  /// Khởi tạo khung nhóm thẻ Bento với tiêu đề `title` và thành phần phụ `trailing` tùy chọn.
   const HostStudioGroupCard({
     super.key,
     required this.child,
@@ -228,6 +229,7 @@ class HostStudioGroupCard extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final Widget child;
 
+  /// Dựng bố cục nhóm thẻ Bento tự động xuống dòng thanh tiêu đề khi màn hình hẹp.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -275,9 +277,9 @@ class HostStudioGroupCard extends StatelessWidget {
   }
 }
 
-/// Borderless pure-white Bento KPI card with thin metric icon, soft circular
-/// `↗` affordance badge, Medium-weight figure, and Regular muted label.
+/// Thẻ chỉ số KPI Bento nền trắng không viền đi kèm biểu tượng mảnh, nút điều hướng tròn góc phải và giá trị tự động thu phóng chống tràn.
 class HostStudioKpiCard extends StatelessWidget {
+  /// Khởi tạo thẻ KPI dành cho bảng điều khiển Host.
   const HostStudioKpiCard({
     super.key,
     required this.label,
@@ -291,6 +293,7 @@ class HostStudioKpiCard extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
 
+  /// Dựng thẻ KPI có hỗ trợ trợ năng `Semantics` và co chữ `FittedBox`.
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(HostStudioTokens.cardRadius);
@@ -366,8 +369,9 @@ class HostStudioKpiCard extends StatelessWidget {
   }
 }
 
-/// Accessible 48x48 hit-target wrapping a crisp borderless circular icon button.
+/// Nút bấm biểu tượng tròn không viền đảm bảo vùng chạm trợ năng tối thiểu 48x48dp.
 class HostStudioCircleButton extends StatelessWidget {
+  /// Khởi tạo nút biểu tượng tròn kèm chú thích `tooltip` cho trình đọc màn hình.
   const HostStudioCircleButton({
     super.key,
     required this.icon,
@@ -387,6 +391,7 @@ class HostStudioCircleButton extends StatelessWidget {
   final double iconSize;
   final Color? circleColor;
 
+  /// Dựng nút biểu tượng tròn tách biệt kích thước hiển thị và vùng nhận chạm 48x48dp.
   @override
   Widget build(BuildContext context) {
     final disabled = onTap == null;
@@ -435,9 +440,9 @@ class HostStudioCircleButton extends StatelessWidget {
   }
 }
 
-/// Clean circular initials badge for guest rows (uses Container + BoxShape.circle,
-/// never CircleAvatar).
+/// Huy hiệu tròn hiển thị chữ cái viết tắt tên khách hàng (dùng `Container` + `BoxShape.circle`, không dùng `CircleAvatar`).
 class HostStudioInitialsBadge extends StatelessWidget {
+  /// Khởi tạo huy hiệu chữ cái viết tắt từ họ tên `name`.
   const HostStudioInitialsBadge({
     super.key,
     required this.name,
@@ -447,6 +452,7 @@ class HostStudioInitialsBadge extends StatelessWidget {
   final String name;
   final double size;
 
+  // Giải thuật trích xuất tối đa 2 chữ cái đầu (từ đầu tiên và từ cuối cùng) hỗ trợ an toàn cụm ký tự Unicode tiếng Việt:
   static String _computeInitials(String raw) {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) return 'KH';
@@ -462,23 +468,29 @@ class HostStudioInitialsBadge extends StatelessWidget {
     return '$first$last'.toUpperCase();
   }
 
+  /// Dựng huy hiệu tròn với chữ viết tắt tự thu nhỏ trong khung cố định.
   @override
   Widget build(BuildContext context) {
+    // Giải thuật co giãn chữ tự động trong huy hiệu tròn cố định khi phóng chữ 1.3x–2.0x:
     return Container(
       width: size,
       height: size,
+      padding: const EdgeInsets.all(3),
       decoration: const BoxDecoration(
         color: HostStudioTokens.softCircle,
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
-      child: Text(
-        _computeInitials(name),
-        maxLines: 1,
-        style: HostStudioTokens.pillText.copyWith(
-          fontSize: size * 0.34,
-          fontWeight: FontWeight.w500,
-          color: HostStudioTokens.inkPrimary,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          _computeInitials(name),
+          maxLines: 1,
+          style: HostStudioTokens.pillText.copyWith(
+            fontSize: size * 0.34,
+            fontWeight: FontWeight.w500,
+            color: HostStudioTokens.inkPrimary,
+          ),
         ),
       ),
     );

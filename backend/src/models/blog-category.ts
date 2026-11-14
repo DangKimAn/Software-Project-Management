@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý danh mục phân loại bài viết cẩm nang du lịch và đánh giá biệt thự.
+ */
 import {
     CreationOptional,
     DataTypes,

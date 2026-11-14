@@ -6,6 +6,10 @@ import { createGzip } from "node:zlib";
 import { getEnv } from "../config/env";
 import { logger } from "../config/logger";
 
+/**
+ * Giải thuật dọn dẹp bản sao lưu cơ sở dữ liệu cũ quá hạn lưu trữ (retention policy):
+ * Quét thư mục backup, lọc các tệp `.sql.gz` có mtime cũ hơn ngưỡng `retentionDays` và xóa bất đồng bộ.
+ */
 const cleanupOldBackups = async (backupDir: string, retentionDays: number) => {
     const files = await fs.readdir(backupDir);
     const threshold = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
@@ -25,6 +29,11 @@ const cleanupOldBackups = async (backupDir: string, retentionDays: number) => {
     );
 };
 
+/**
+ * Giải thuật sao lưu MySQL an toàn không khóa bảng (`--single-transaction`):
+ * Khởi tạo thư mục quyền 0700, stream dữ liệu từ tiến trình `mysqldump` qua bộ nén Gzip vào tệp quyền 0600,
+ * sau đó kích hoạt chính sách thu hồi bản sao lưu cũ.
+ */
 const runBackup = async () => {
     const env = getEnv();
     const backupDir = path.resolve(process.cwd(), env.backupDir);

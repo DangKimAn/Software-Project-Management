@@ -22,7 +22,7 @@ const Review = require("../dist/models/review").default;
 const publicListingsService = require("../dist/modules/listings/listings.service");
 const hostListingsService = require("../dist/modules/host-listings/host-listings.service");
 const adminListingsService = require("../dist/modules/admin/admin.service");
-const locationGroups = require("../dist/common/vung-tau-location-groups");
+const locationGroups = require("../dist/modules/listings/vung-tau-location-groups");
 
 const originalGetPublicListings = publicListingsService.getPublicListings;
 

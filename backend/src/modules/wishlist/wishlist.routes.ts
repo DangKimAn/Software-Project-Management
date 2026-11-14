@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP danh sách yêu thích cá nhân (`/api/wishlist`):
+ * - Bắt buộc xác thực phiên (`authenticate`) và kiểm chứng định danh `listingId` (`validate`) trên các thao tác thêm/xóa.
+ */
+
 import express from "express";
 
 import { authenticate } from "../../middlewares/authenticate.middleware";

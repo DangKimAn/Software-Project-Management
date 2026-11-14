@@ -16,6 +16,16 @@ const MAX_FUTURE_DRIFT_MS = 48 * 60 * 60 * 1000;
 const MIN_VALID_TIMESTAMP_MS = Date.UTC(2020, 0, 1);
 
 /**
+ * Giải thuật chuẩn hóa số thực dương hữu hạn hoặc chuỗi số (kể cả ký pháp khoa học như `3.9e-5`)
+ * sang chuỗi thập phân chính tắc không chứa số mũ (`"0.000039"`), loại bỏ sai số làm tròn dấu phẩy động:
+ * 1. Tách cấu trúc bằng biểu thức chính quy thành dấu, phần nguyên (`wholeDigits`), phần lẻ (`fracDigits`)
+ *    và bậc mũ cơ số 10 (`exp` thuộc đoạn `[-100, 100]`); bác bỏ số âm, số `0`, `NaN`, `Infinity`.
+ * 2. Ghép dãy chữ số có nghĩa `combined` (bỏ các chữ số `0` ở đầu) và tính độ dịch dấu phẩy `scale = fracDigits.length - exp`.
+ * 3. Tái tạo chuỗi thập phân theo 3 miền giá trị của `scale`:
+ *    - Nếu `scale <= 0`: nối thêm `-scale` chữ số `0` vào bên phải `combined`.
+ *    - Nếu `combined.length <= scale`: đệm `0` bên trái tạo dạng `0.<padded>` và cắt `0` vô nghĩa ở đuôi.
+ *    - Nếu `combined.length > scale`: chèn dấu chấm tại vị trí `combined.length - scale` và khử `0` thừa ở cuối.
+ *
  * Converts a finite positive number or numeric string (including scientific notation like `3.9e-5`)
  * into a canonical plain decimal string without scientific notation (`"0.000039"`).
  */
@@ -68,6 +78,14 @@ export const normalizePositiveRateDecimal = (raw: unknown): string | null => {
     return decPart ? `${intPart}.${decPart}` : intPart;
 };
 
+/**
+ * Giải thuật chuẩn hóa mốc thời gian đa định dạng (Unix timestamp giây/mili-giây, chuỗi ngày `YYYY-MM-DD`,
+ * hoặc chuỗi ISO-8601) về chuỗi UTC ISO-8601 chính tắc:
+ * - Tự động phân biệt đơn vị số học: nếu giá trị số hữu hạn `< 10^12` thì quy đổi từ giây sang mili-giây (`raw * 1000`),
+ *   ngược lại giữ nguyên mili-giây; nếu là chuỗi ngày `YYYY-MM-DD` thì gắn mốc `T00:00:00.000Z`.
+ * - Ràng buộc cửa sổ thời gian hợp lệ: Bác bỏ (`null`) mọi mốc trước `2020-01-01T00:00:00.000Z` hoặc lệch về
+ *   tương lai quá `48 giờ` so với `nowMs` (`nowMs + MAX_FUTURE_DRIFT_MS`) để chống dữ liệu lỗi/trôi đồng hồ.
+ */
 export const normalizeIsoUtcTimestamp = (raw: unknown, nowMs = Date.now()): string | null => {
     if (typeof raw !== "string" && typeof raw !== "number") {
         return null;
@@ -104,6 +122,15 @@ export const normalizeIsoUtcTimestamp = (raw: unknown, nowMs = Date.now()): stri
     return new Date(parsedMs).toISOString();
 };
 
+/**
+ * Giải thuật kiểm định toàn diện gói báo giá tỷ giá thượng nguồn (cơ sở `1 VND` sang `USD` và `KRW`):
+ * 1. Kiểm tra định danh nguồn `source` khác rỗng và chuẩn hóa thời gian cập nhật `sourceUpdatedAt`.
+ * 2. Chuẩn hóa chuỗi số thập phân dương hữu hạn cho `USD` và `KRW` qua `normalizePositiveRateDecimal`.
+ * 3. Kiểm tra miền biên kinh tế an toàn (Sanity Bounds) chống dữ liệu hỏng hoặc đảo nghịch cơ số:
+ *    - `USD` phải thuộc `[0.00001, 0.0002]` (tương ứng `1 USD` nằm trong khoảng `5.000` đến `100.000` VND).
+ *    - `KRW` phải thuộc `[0.01, 0.25]` (tương ứng `1 KRW` nằm trong khoảng `4` đến `100` VND).
+ * 4. Ném ngoại lệ tức thời nếu vi phạm bất kỳ điều kiện nào để bảo vệ bộ nhớ đệm khỏi tỷ giá độc hại.
+ */
 export const validateUpstreamQuotes = (
     candidate: {
         source: unknown;
@@ -150,6 +177,12 @@ export const validateUpstreamQuotes = (
     };
 };
 
+/**
+ * Giải thuật phát hiện biến động tỷ giá đột biến bất thường (Rate Spike Detection) so với bản chụp gần nhất:
+ * - Tính độ lệch tương đối cho từng ngoại tệ theo công thức: `relDiff = |nextRate - prevRate| / prevRate`.
+ * - Trả về `true` nếu biến động của USD hoặc KRW vượt quá ngưỡng `threshold` (mặc định `0.25` = `25%`),
+ *   kích hoạt cơ chế kiểm chứng chéo bắt buộc với nhà cung cấp dự phòng trước khi lưu bộ nhớ đệm.
+ */
 export const hasSuspiciousRateJump = (
     previous: Pick<ExchangeRatePayload, "rates">,
     next: Pick<UpstreamQuoteResult, "rates">,
@@ -169,6 +202,13 @@ export const hasSuspiciousRateJump = (
     return usdRelDiff > threshold || krwRelDiff > threshold;
 };
 
+/**
+ * Giải thuật đối chiếu chéo độ nhất quán (Cross-Provider Consistency Check) giữa hai nguồn tỷ giá độc lập:
+ * - Tính sai số tương đối giữa nguồn chính (`primary`) và nguồn dự phòng (`secondary`) theo công thức:
+ *   `diff = |primaryRate - secondaryRate| / secondaryRate`.
+ * - Trả về `true` khi cả tỷ giá USD và KRW của nguồn dự phòng đều dương và độ lệch tương đối không vượt quá
+ *   ngưỡng `maxDivergence` (mặc định `0.10` = `10%`).
+ */
 export const areQuotesConsistent = (
     primary: Pick<UpstreamQuoteResult, "rates">,
     secondary: Pick<UpstreamQuoteResult, "rates">,
@@ -188,6 +228,13 @@ export const areQuotesConsistent = (
     return usdDiff <= maxDivergence && krwDiff <= maxDivergence;
 };
 
+/**
+ * Giải thuật phân tích và tái xác thực bản chụp tỷ giá lưu bền vững từ đĩa cứng (`ExchangeRatePayload`):
+ * - Giải mã chuỗi JSON an toàn trong khối `try/catch`, kiểm tra các bất biến lược đồ (`baseCurrency === "VND"`,
+ *   `displayOnly === true`, `rates.VND === "1"`) và mốc thời gian `fetchedAt`.
+ * - Thực thi lại toàn bộ quy trình kiểm định `validateUpstreamQuotes` trên cặp tỷ giá `USD`/`KRW`;
+ *   trả về `null` an toàn (không ném lỗi) nếu tệp snapshot bị hỏng cấu trúc hoặc vi phạm miền giá trị.
+ */
 export const parseStoredExchangeRateSnapshot = (
     raw: unknown,
     nowMs = Date.now(),

@@ -32,6 +32,14 @@ export type ExchangeRatesServiceOptions = {
 const BASE_BACKOFF_MS = 30_000;
 const MAX_BACKOFF_MS = 15 * 60_000;
 
+/**
+ * Dịch vụ quản lý và quy đổi tỷ giá ngoại tệ hiển thị (cơ sở `1 VND` -> `USD`, `KRW`) vận hành theo:
+ * - Kiến trúc bộ nhớ đệm đa tầng (Multi-tier Cache): Bộ nhớ RAM (`cachedSnapshot`) -> Tệp JSON bền vững
+ *   trên đĩa (`ensureDiskHydrated` / `persistSnapshotToDisk`) -> Nguồn thượng nguồn chính & dự phòng
+ *   kèm suy giảm an toàn về tiền tệ gốc `VND`.
+ * - Cơ chế gộp yêu cầu đồng thời `Single-Flight` (`inFlightRefresh`) chống sập bộ nhớ đệm (Cache Stampede).
+ * - Cơ chế giãn cách thử lại lũy thừa có nhiễu ngẫu nhiên (`Exponential Backoff with Jitter`) khi nhà cung cấp lỗi.
+ */
 export class ExchangeRatesService {
     private readonly enabled: boolean;
     private readonly primaryProvider: ExchangeRateProviderAdapter;
@@ -52,6 +60,10 @@ export class ExchangeRatesService {
     private fallbackCooldownUntilMs = 0;
     private fallbackFailureCount = 0;
 
+    /**
+     * Khởi tạo dịch vụ tỷ giá với thông số vòng đời bộ nhớ đệm (`cacheTtlMs`, `freshMaxAgeMs`, `maxStaleAgeMs`),
+     * đường dẫn tệp snapshot trên đĩa và cặp nhà cung cấp chính/dự phòng (`Frankfurter` / `OpenErApi`).
+     */
     constructor(options?: ExchangeRatesServiceOptions) {
         const env = getEnv();
         this.nowFn = options?.nowFn ?? Date.now;
@@ -79,6 +91,18 @@ export class ExchangeRatesService {
         this.fallbackProvider = options?.fallbackProvider ?? (preferSecondary ? defaultPrimary : defaultSecondary);
     }
 
+    /**
+     * Giải thuật lấy bảng tỷ giá ngoại tệ theo kiến trúc đệm đa tầng kết hợp `Stale-While-Revalidate`:
+     * 1. Nếu tính năng tỷ giá bị tắt cấu hình, ném `ExchangeRatesUnavailableError` để hệ thống hiển thị giá gốc `VND`.
+     * 2. Nạp lười dữ liệu từ tầng đĩa lên tầng RAM lần đầu tiên qua `ensureDiskHydrated()`.
+     * 3. Kiểm tra bản chụp khả dụng trong RAM (`getUsableCachedSnapshot`):
+     *    - Nếu có bản chụp hợp lệ và tuổi lần tải `fetchAgeMs = max(0, nowMs - fetchedAt) >= cacheTtlMs`,
+     *      phục vụ tức thời bản chụp đã xác thực cho người dùng đồng thời kích hoạt làm mới ngầm
+     *      không chặn luồng qua `triggerSingleFlightRefresh()`.
+     *    - Nếu `fetchAgeMs < cacheTtlMs`, trả về trực tiếp từ RAM với độ trễ `O(1)`.
+     * 4. Nếu cả RAM và đĩa đều chưa có bản chụp còn hạn, ủy quyền cho `triggerSingleFlightRefresh()`
+     *    để gộp mọi truy vấn đồng thời vào một tiến trình tải thượng nguồn duy nhất.
+     */
     async getExchangeRates(): Promise<ExchangeRatePayload> {
         if (!this.enabled) {
             throw new ExchangeRatesUnavailableError(
@@ -106,6 +130,13 @@ export class ExchangeRatesService {
         return this.triggerSingleFlightRefresh();
     }
 
+    /**
+     * Giải thuật đánh giá tính khả dụng và phân loại độ tươi của bản chụp tỷ giá trong RAM:
+     * - Tính tuổi dữ liệu gốc `sourceAgeMs = nowMs - Date.parse(sourceUpdatedAt)`.
+     * - Trả về `null` nếu dữ liệu không hữu hạn hoặc đã quá ngưỡng chịu lỗi tối đa `maxStaleAgeMs` (mặc định 7 ngày).
+     * - Gắn cờ `isStale = true` khi `sourceAgeMs > freshMaxAgeMs`, cho phép tiếp tục phục vụ quy đổi hiển thị
+     *   suy giảm an toàn trong trường hợp các API tỷ giá bên ngoài bị gián đoạn tạm thời.
+     */
     private getUsableCachedSnapshot(nowMs: number): ExchangeRatePayload | null {
         if (!this.cachedSnapshot) {
             return null;
@@ -121,6 +152,12 @@ export class ExchangeRatesService {
         };
     }
 
+    /**
+     * Giải thuật nạp bản chụp tỷ giá bền vững từ đĩa vào RAM (`loadSnapshotFromDisk` / Disk Hydration):
+     * - Sử dụng chốt boolean `diskHydrated` để đảm bảo thao tác đọc I/O chỉ thực thi đúng một lần khi khởi động.
+     * - Đọc tệp `snapshotFilePath` và kiểm định lại toàn bộ cấu trúc, biên tỷ giá qua `parseStoredExchangeRateSnapshot`.
+     * - Chịu lỗi êm ái: Bỏ qua mã lỗi `ENOENT` khi tệp chưa được khởi tạo lần đầu và ghi cảnh báo nếu tệp hỏng.
+     */
     private async ensureDiskHydrated(): Promise<void> {
         if (this.diskHydrated) {
             return;
@@ -148,6 +185,12 @@ export class ExchangeRatesService {
         }
     }
 
+    /**
+     * Giải thuật lưu bền vững bản chụp tỷ giá xuống đĩa cứng theo cơ chế ghi nguyên tử (Atomic Write-and-Rename):
+     * - Đảm bảo thư mục cha tồn tại, ghi trọn vẹn chuỗi JSON vào tệp tạm gắn định danh `<pid>.<timestamp>.tmp`,
+     *   sau đó đổi tên nguyên tử (`fs.rename`) đè lên `snapshotFilePath` để ngăn chặn tình trạng đọc phải tệp
+     *   ghi dở dang (corrupted/partial file) khi mất điện hoặc khởi động lại tiến trình.
+     */
     private async persistSnapshotToDisk(snapshot: ExchangeRatePayload): Promise<void> {
         try {
             const dir = path.dirname(this.snapshotFilePath);
@@ -163,6 +206,12 @@ export class ExchangeRatesService {
         }
     }
 
+    /**
+     * Giải thuật gộp yêu cầu đồng thời `Single-Flight` (Request Coalescing) chống sập bộ nhớ đệm (Cache Stampede):
+     * - Nếu đang có tiến trình làm mới thượng nguồn (`inFlightRefresh !== null`), trả về ngay cùng một `Promise`
+     *   đang chạy cho tất cả các truy vấn đến đồng thời, đảm bảo chỉ phát sinh đúng 1 yêu cầu mạng duy nhất.
+     * - Tự động giải phóng chốt `inFlightRefresh = null` trong khối `finally` ngay khi `Promise` kết thúc.
+     */
     private triggerSingleFlightRefresh(): Promise<ExchangeRatePayload> {
         if (this.inFlightRefresh) {
             return this.inFlightRefresh;
@@ -177,6 +226,14 @@ export class ExchangeRatesService {
         return promise;
     }
 
+    /**
+     * Giải thuật tính thời gian giãn cách thử lại theo cấp số nhân có nhiễu ngẫu nhiên (`Exponential Backoff with Jitter`):
+     * - Sinh nhiễu ngẫu nhiên `jitterMs = floor(jitterFn() * 5000)` trong khoảng `[0, 4999]` ms để phân tán tải thử lại.
+     * - Nếu lỗi là `UpstreamHttpError` có chỉ thị `retryAfterSeconds` (như HTTP 429), lấy `max(retryAfterSeconds * 1000, BASE_BACKOFF_MS) + jitterMs`
+     *   và kẹp trần tối đa `60 phút`.
+     * - Ngược lại, tính bậc mũ `expShift = min(max(failureCount - 1, 0), 5)` và áp dụng công thức:
+     *   `min(BASE_BACKOFF_MS * 2^expShift, MAX_BACKOFF_MS) + jitterMs` (tăng dần từ `30s` lên trần `15 phút` cộng jitter).
+     */
     private computeBackoffMs(error: unknown, failureCount: number): number {
         const jitterMs = Math.floor(this.jitterFn() * 5_000);
         if (error instanceof UpstreamHttpError && error.retryAfterSeconds !== undefined) {
@@ -187,6 +244,12 @@ export class ExchangeRatesService {
         return Math.min(BASE_BACKOFF_MS * (1 << expShift), MAX_BACKOFF_MS) + jitterMs;
     }
 
+    /**
+     * Giải thuật dựng gói dữ liệu tỷ giá quy đổi tiền tệ chuẩn (`ExchangeRatePayload`) từ báo giá thượng nguồn:
+     * - Thiết lập tiền tệ gốc bất biến `baseCurrency = "VND"` (`rates.VND = "1"`) và ánh xạ hệ số quy đổi
+     *   `1 VND -> USD`, `1 VND -> KRW` (phục vụ công thức quy đổi hiển thị `targetAmount = vndAmount * rate`),
+     *   đồng thời đánh dấu `isStale` nếu tuổi dữ liệu gốc vượt ngưỡng `freshMaxAgeMs`.
+     */
     private buildPayloadFromQuotes(quotes: UpstreamQuoteResult, nowMs: number): ExchangeRatePayload {
         const sourceAgeMs = Math.max(0, nowMs - Date.parse(quotes.sourceUpdatedAt));
         return {
@@ -205,6 +268,19 @@ export class ExchangeRatesService {
         };
     }
 
+    /**
+     * Giải thuật điều phối làm mới tỷ giá đa tầng có kiểm chứng chéo đột biến và suy giảm an toàn (Multi-tier Failover):
+     * 1. Tầng 1 - Nhà cung cấp chính (`primaryProvider`): Truy vấn khi không bị cách ly cooldown. Nếu phát hiện
+     *    tỷ giá nhảy vọt `> 25%` so với bản chụp trước (`hasSuspiciousRateJump`), tự động gọi chéo `fallbackProvider`:
+     *    chỉ chấp nhận nếu hai nguồn nhất quán (`<= 10%` qua `areQuotesConsistent`), hoặc dùng báo giá ổn định của
+     *    nguồn dự phòng; nếu không xác minh được thì bác bỏ dữ liệu dị thường và áp dụng `Exponential Backoff`.
+     * 2. Tầng 2 - Nhà cung cấp dự phòng (`fallbackProvider`): Tự động chuyển mạch dự phòng khi nguồn chính lỗi/cooldown,
+     *    kiểm tra chống nhảy vọt `> 25%`, cập nhật bộ nhớ RAM và ghi bền vững xuống đĩa (`persistSnapshotToDisk`).
+     * 3. Tầng 3 - Suy giảm về bản chụp đệm (RAM/Đĩa): Khi cả hai nguồn thượng nguồn đều sự cố, phục vụ bản chụp
+     *    đã xác thực còn trong hạn `maxStaleAgeMs` (<= 7 ngày) kèm cờ `isStale = true`.
+     * 4. Tầng 4 - Dự phòng tĩnh an toàn về tiền tệ gốc `VND`: Từ chối cấp tỷ giá giả hoặc quá hạn > 7 ngày, ném
+     *    `ExchangeRatesUnavailableError` kèm `retryAfterSeconds` và `fallbackCurrency: "VND"` để giao diện hiển thị giá VND.
+     */
     private async performRefresh(): Promise<ExchangeRatePayload> {
         const nowMs = this.nowFn();
         const previousSnapshot = this.cachedSnapshot;
@@ -334,6 +410,9 @@ export class ExchangeRatesService {
 
 let defaultExchangeRatesService: ExchangeRatesService | null = null;
 
+/**
+ * Khởi tạo lười (Lazy Singleton) và trả về thực thể dịch vụ tỷ giá `ExchangeRatesService` dùng chung toàn tiến trình.
+ */
 export const getExchangeRatesService = (): ExchangeRatesService => {
     if (!defaultExchangeRatesService) {
         defaultExchangeRatesService = new ExchangeRatesService();
@@ -341,6 +420,9 @@ export const getExchangeRatesService = (): ExchangeRatesService => {
     return defaultExchangeRatesService;
 };
 
+/**
+ * Ghi đè hoặc đặt lại thực thể singleton `ExchangeRatesService` phục vụ cô lập trạng thái trong kiểm thử tự động.
+ */
 export const setExchangeRatesServiceForTesting = (service: ExchangeRatesService | null): void => {
     defaultExchangeRatesService = service;
 };

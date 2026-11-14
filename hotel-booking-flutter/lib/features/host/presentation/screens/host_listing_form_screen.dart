@@ -1,0 +1,4427 @@
+// CONFLICT-RESOLVED: Chuẩn hóa tên tệp và lớp từ tiếng Việt không dấu sang tiếng Anh quốc tế (host_listing_form_screen.dart / HostListingFormScreen).
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/theme/app_colors.dart';
+import '../../../../shared/widgets/app_image.dart';
+import '../../../../shared/widgets/app_semantic_icons.dart';
+import '../../domain/host_models.dart';
+import '../view_models/host_listing_form_view_model.dart';
+
+/// Máy trạng thái tải ảnh phòng nghỉ lên R2 và phân tích nhãn AI Vision trong biểu mẫu Chủ nhà.
+enum QueuedImageUploadStatus {
+  queued,
+  uploading,
+  success,
+  analyzing,
+  tagged,
+  analysisFailed,
+  failed;
+
+  String get labelVi {
+    switch (this) {
+      case QueuedImageUploadStatus.queued:
+        return 'Chờ tải lên';
+      case QueuedImageUploadStatus.uploading:
+        return 'Đang tải ảnh lên R2...';
+      case QueuedImageUploadStatus.success:
+        return 'Đã tải ảnh lên';
+      case QueuedImageUploadStatus.analyzing:
+        return 'Đang phân tích ảnh bằng AI...';
+      case QueuedImageUploadStatus.tagged:
+        return 'Đã gắn tag AI';
+      case QueuedImageUploadStatus.analysisFailed:
+        return 'Phân tích lỗi, thử lại';
+      case QueuedImageUploadStatus.failed:
+        return 'Tải ảnh thất bại';
+    }
+  }
+}
+
+/// Mô hình trạng thái từng tệp ảnh trong hàng đợi tải lên kèm tiến độ, khóa R2 và ID bản ghi trên máy chủ.
+class QueuedListingImage {
+  final String id;
+  final HostPickedFile file;
+  final QueuedImageUploadStatus status;
+  final double progress;
+  final String? error;
+  final String? uploadedPublicUrl;
+  final String? uploadedKey;
+  final int? savedImageId;
+
+  const QueuedListingImage({
+    required this.id,
+    required this.file,
+    this.status = QueuedImageUploadStatus.queued,
+    this.progress = 0,
+    this.error,
+    this.uploadedPublicUrl,
+    this.uploadedKey,
+    this.savedImageId,
+  });
+
+  QueuedListingImage copyWith({
+    QueuedImageUploadStatus? status,
+    double? progress,
+    String? error,
+    bool clearError = false,
+    String? uploadedPublicUrl,
+    String? uploadedKey,
+    int? savedImageId,
+  }) {
+    return QueuedListingImage(
+      id: id,
+      file: file,
+      status: status ?? this.status,
+      progress: progress ?? this.progress,
+      error: clearError ? null : (error ?? this.error),
+      uploadedPublicUrl: uploadedPublicUrl ?? this.uploadedPublicUrl,
+      uploadedKey: uploadedKey ?? this.uploadedKey,
+      savedImageId: savedImageId ?? this.savedImageId,
+    );
+  }
+}
+
+/// Màn hình tạo mới và chỉnh sửa tin đăng chỗ nghỉ đa bước dành cho Chủ nhà.
+///
+/// Giải thuật điều phối lưu nháp, tải ảnh presigned R2 và kiểm định tọa độ/giá:
+/// - Kiểm tra đầy đủ thông số sức chứa, phòng ngủ, giá ngày thường/cuối tuần, phụ thu khách vượt chuẩn và tọa độ bản đồ TP. Vũng Tàu trước khi gửi duyệt.
+/// - Quản lý hàng đợi tải ảnh song song có kiểm soát tiến độ (`QueuedListingImage`), tự động gắn nhãn AI Vision và cho phép sắp xếp lại ảnh đại diện.
+class HostListingFormScreen extends ConsumerStatefulWidget {
+  final String? listingId;
+  final VoidCallback? onSaved;
+  final VoidCallback? onCancel;
+  final bool embedded;
+  final bool? stepMode;
+
+  const HostListingFormScreen({
+    super.key,
+    this.listingId,
+    this.onSaved,
+    this.onCancel,
+    this.embedded = false,
+    this.stepMode,
+  });
+
+  @override
+  ConsumerState<HostListingFormScreen> createState() =>
+      _HostListingFormScreenState();
+}
+
+class _HostListingFormScreenState extends ConsumerState<HostListingFormScreen> {
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _latController = TextEditingController(
+    text: kDefaultVungTauLat.toStringAsFixed(6),
+  );
+  final _lngController = TextEditingController(
+    text: kDefaultVungTauLng.toStringAsFixed(6),
+  );
+  final _maxGuestsController = TextEditingController(text: '4');
+  final _bedroomsController = TextEditingController(text: '2');
+  final _bedsController = TextEditingController(text: '2');
+  final _bathroomsController = TextEditingController(text: '2');
+  final _basePriceController = TextEditingController(text: '1500000');
+  final _weekendPriceController = TextEditingController(text: '1500000');
+  final _cleaningFeeController = TextEditingController(text: '0');
+  final _surchargeController = TextEditingController(text: '0');
+  final _minNightsController = TextEditingController(text: '1');
+  final _maxNightsController = TextEditingController();
+  final _quietHoursController = TextEditingController(text: '22:00 - 06:00');
+
+  // Step-by-step Wizard State
+  int _currentStep = 0;
+  final bool _useStepMode = true;
+  bool get _effectiveStepMode =>
+      widget.stepMode ?? (widget.embedded ? _useStepMode : false);
+
+  final List<({String title, String subtitle, IconData icon})> _steps = const [
+    (
+      title: 'Cơ bản',
+      subtitle: 'Loại hình & tên chỗ nghỉ',
+      icon: AppSemanticIcons.home
+    ),
+    (title: 'Vị trí', subtitle: 'Địa chỉ & bản đồ', icon: LucideIcons.mapPin),
+    (
+      title: 'Giá & Phòng',
+      subtitle: 'Sức chứa & giá lưu trú',
+      icon: LucideIcons.badgePercent
+    ),
+    (
+      title: 'Nội quy',
+      subtitle: 'Giờ giấc & quy định',
+      icon: LucideIcons.clipboardList
+    ),
+    (
+      title: 'Tiện nghi',
+      subtitle: 'Dịch vụ & tiện ích',
+      icon: LucideIcons.sparkles
+    ),
+    (
+      title: 'Hình ảnh',
+      subtitle: 'Thư viện ảnh & AI tag',
+      icon: LucideIcons.image
+    ),
+    (
+      title: 'Xem lại',
+      subtitle: 'Kiểm tra & xác nhận',
+      icon: LucideIcons.checkCheck
+    ),
+  ];
+
+  HostPropertyType _propertyType = HostPropertyType.villa;
+  HostRoomType _roomType = HostRoomType.entirePlace;
+  HostCancellationPolicy _cancellationPolicy = HostCancellationPolicy.flexible;
+  HostListingStatus _initialCreateStatus = HostListingStatus.draft;
+
+  String _selectedWard = kVungTauWards.first.name;
+  String _checkInFrom = '14:00';
+  String _checkOutBefore = '12:00';
+  bool _instantBookEnabled = false;
+  bool _weekendPriceManuallyChanged = false;
+
+  // House rules
+  bool _smokingAllowed = false;
+  bool _petsAllowed = false;
+  bool _partyAllowed = false;
+
+  // Amenities
+  List<Map<String, dynamic>> _availableAmenities = [];
+  final Set<int> _selectedAmenityIds = {};
+
+  // Existing & Queued Images + AI Vision Taxonomy
+  String? _activeListingId;
+  List<ExistingListingImage> _existingImages = [];
+  List<QueuedListingImage> _queuedImages = [];
+  List<ImageTagTaxonomy> _tagTaxonomies = kDefaultImageTagTaxonomies;
+  final Set<int> _analyzingImageIds = {};
+  final Set<int> _savingTagImageIds = {};
+  bool _analyzingAllAi = false;
+
+  bool _loadingInitial = false;
+  bool _saving = false;
+  String? _errorMessage;
+  String? _successMessage;
+  String? _uploadStatusMessage;
+  String? _aiStatusMessage;
+
+  bool get _isEditMode =>
+      _activeListingId != null && _activeListingId!.trim().isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    _activeListingId = widget.listingId;
+    final firstWard = kVungTauWards.first;
+    _latController.text = firstWard.latitude.toStringAsFixed(6);
+    _lngController.text = firstWard.longitude.toStringAsFixed(6);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeData();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant HostListingFormScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.listingId != widget.listingId) {
+      _activeListingId = widget.listingId;
+      _initializeData();
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _addressController.dispose();
+    _latController.dispose();
+    _lngController.dispose();
+    _maxGuestsController.dispose();
+    _bedroomsController.dispose();
+    _bedsController.dispose();
+    _bathroomsController.dispose();
+    _basePriceController.dispose();
+    _weekendPriceController.dispose();
+    _cleaningFeeController.dispose();
+    _surchargeController.dispose();
+    _minNightsController.dispose();
+    _maxNightsController.dispose();
+    _quietHoursController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initializeData() async {
+    setState(() {
+      _loadingInitial = true;
+      _errorMessage = null;
+    });
+
+    final repo = ref.read(hostListingFormViewModelProvider);
+
+    try {
+      final amenitiesFuture = repo.getPublicAmenities().catchError(
+            (_) => <Map<String, dynamic>>[],
+          );
+
+      if (_isEditMode) {
+        final detailFuture = repo.getHostListingById(_activeListingId!);
+        final analysisFuture =
+            repo.getListingImagesAnalysis(_activeListingId!).catchError(
+                  (_) => (
+                    images: <ExistingListingImage>[],
+                    tagTaxonomies: kDefaultImageTagTaxonomies,
+                    summary: const <String, dynamic>{},
+                  ),
+                );
+
+        final results = await Future.wait<dynamic>([
+          amenitiesFuture,
+          detailFuture,
+          analysisFuture,
+        ]);
+
+        if (!mounted) return;
+
+        final amenities = results[0] as List<Map<String, dynamic>>;
+        final detail = results[1] as Map<String, dynamic>;
+        final analysis = results[2] as ({
+          List<ExistingListingImage> images,
+          List<ImageTagTaxonomy> tagTaxonomies,
+          Map<String, dynamic> summary,
+        });
+
+        _availableAmenities = amenities;
+        _populateFromListingDetail(detail, analysis);
+      } else {
+        final amenities = await amenitiesFuture;
+        if (!mounted) return;
+        _availableAmenities = amenities;
+      }
+
+      setState(() => _loadingInitial = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingInitial = false;
+        _errorMessage = repo.extractErrorMessage(
+          e,
+          'Không thể tải dữ liệu chỗ nghỉ.',
+        );
+      });
+    }
+  }
+
+  void _populateFromListingDetail(
+    Map<String, dynamic> detail,
+    ({
+      List<ExistingListingImage> images,
+      List<ImageTagTaxonomy> tagTaxonomies,
+      Map<String, dynamic> summary,
+    }) analysis,
+  ) {
+    _titleController.text = (detail['title'] ?? '').toString();
+    _descriptionController.text = (detail['description'] ?? '').toString();
+    _addressController.text = (detail['addressLine'] ?? '').toString();
+
+    final ward = (detail['ward'] ?? '').toString().trim();
+    if (ward.isNotEmpty) {
+      _selectedWard = ward;
+    }
+
+    final lat = detail['latitude'] is num
+        ? (detail['latitude'] as num).toDouble()
+        : double.tryParse('${detail['latitude'] ?? ''}');
+    final lng = detail['longitude'] is num
+        ? (detail['longitude'] as num).toDouble()
+        : double.tryParse('${detail['longitude'] ?? ''}');
+    if (lat != null) _latController.text = lat.toStringAsFixed(6);
+    if (lng != null) _lngController.text = lng.toStringAsFixed(6);
+
+    _propertyType = HostPropertyType.fromApi(detail['propertyType']);
+    _roomType = HostRoomType.fromApi(detail['roomType']);
+    _cancellationPolicy =
+        HostCancellationPolicy.fromApi(detail['cancellationPolicy']);
+    // CONFLICT-RESOLVED: Đọc đồng bộ cả status và internalStatus == 'rejected' khi mở form chỉnh sửa chỗ nghỉ.
+    _initialCreateStatus = HostListingStatus.fromListingMap(detail);
+
+    _maxGuestsController.text = '${detail['maxGuests'] ?? 4}';
+    _bedroomsController.text = '${detail['bedrooms'] ?? 2}';
+    _bedsController.text = '${detail['beds'] ?? 2}';
+    _bathroomsController.text = '${detail['bathrooms'] ?? 1}';
+
+    final basePrice = detail['basePrice'] ?? detail['pricePerNight'] ?? 0;
+    final weekendPrice = detail['weekendPrice'] ?? basePrice;
+    _basePriceController.text = _formatNumericInput(basePrice);
+    _weekendPriceController.text = _formatNumericInput(weekendPrice);
+    _weekendPriceManuallyChanged =
+        _weekendPriceController.text != _basePriceController.text;
+
+    _cleaningFeeController.text =
+        _formatNumericInput(detail['cleaningFee'] ?? 0);
+    _surchargeController.text =
+        _formatNumericInput(detail['surchargeAmount'] ?? 0);
+    _minNightsController.text = '${detail['minNights'] ?? 1}';
+    _maxNightsController.text =
+        detail['maxNights'] != null ? '${detail['maxNights']}' : '';
+
+    final checkIn = (detail['checkInFrom'] ?? '14:00').toString();
+    if (kHalfHourTimeOptions.contains(checkIn)) {
+      _checkInFrom = checkIn;
+    }
+    final checkOut = (detail['checkOutBefore'] ?? '12:00').toString();
+    if (kHalfHourTimeOptions.contains(checkOut)) {
+      _checkOutBefore = checkOut;
+    }
+
+    _instantBookEnabled =
+        detail['instantBookEnabled'] == true || detail['instantBook'] == true;
+
+    // House rules
+    final rules = detail['rules'] is Map<Object?, Object?>
+        ? Map<String, dynamic>.from(detail['rules'] as Map<Object?, Object?>)
+        : detail;
+    _smokingAllowed = rules['smokingAllowed'] == true;
+    _petsAllowed = rules['petsAllowed'] == true;
+    _partyAllowed = rules['partyAllowed'] == true;
+    if (rules['quietHours'] != null) {
+      _quietHoursController.text = rules['quietHours'].toString();
+    }
+
+    // Amenities
+    _selectedAmenityIds.clear();
+    final rawAmenities = detail['amenities'] ?? detail['amenityIds'];
+    if (rawAmenities is List) {
+      for (final item in rawAmenities) {
+        if (item is num) {
+          _selectedAmenityIds.add(item.toInt());
+        } else if (item is Map<Object?, Object?>) {
+          final id = item['amenityId'] ?? item['id'];
+          final parsed = id is num ? id.toInt() : int.tryParse('${id ?? ''}');
+          if (parsed != null && parsed > 0) _selectedAmenityIds.add(parsed);
+        } else {
+          final parsed = int.tryParse('$item');
+          if (parsed != null && parsed > 0) _selectedAmenityIds.add(parsed);
+        }
+      }
+    }
+
+    // Taxonomies & Images
+    _tagTaxonomies = analysis.tagTaxonomies.isNotEmpty
+        ? analysis.tagTaxonomies
+        : kDefaultImageTagTaxonomies;
+
+    if (analysis.images.isNotEmpty) {
+      _existingImages = analysis.images;
+    } else if (detail['images'] is List) {
+      _existingImages = (detail['images'] as List)
+          .whereType<Map<Object?, Object?>>()
+          .map(
+            (e) => ExistingListingImage.fromJson(
+              Map<String, dynamic>.from(e),
+              taxonomies: _tagTaxonomies,
+            ),
+          )
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    }
+  }
+
+  String _formatNumericInput(dynamic raw) {
+    if (raw == null) return '0';
+    if (raw is int) return '$raw';
+    if (raw is double) {
+      return raw == raw.roundToDouble() ? '${raw.toInt()}' : '$raw';
+    }
+    final parsed = double.tryParse('$raw');
+    if (parsed == null) return '0';
+    return parsed == parsed.roundToDouble() ? '${parsed.toInt()}' : '$parsed';
+  }
+
+  void _handleWardChanged(String? wardName) {
+    if (wardName == null || wardName.isEmpty) return;
+    setState(() {
+      _selectedWard = wardName;
+      final ward = kVungTauWards.cast<VungTauWard?>().firstWhere(
+            (w) => w?.name == wardName,
+            orElse: () => null,
+          );
+      if (ward != null) {
+        _latController.text = ward.latitude.toStringAsFixed(6);
+        _lngController.text = ward.longitude.toStringAsFixed(6);
+      }
+    });
+  }
+
+  void _handleBasePriceChanged(String value) {
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits != value) {
+      _basePriceController.value = TextEditingValue(
+        text: digits,
+        selection: TextSelection.collapsed(offset: digits.length),
+      );
+    }
+    if (!_weekendPriceManuallyChanged) {
+      _weekendPriceController.text = digits;
+    }
+  }
+
+  void _handleWeekendPriceChanged(String value) {
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits != value) {
+      _weekendPriceController.value = TextEditingValue(
+        text: digits,
+        selection: TextSelection.collapsed(offset: digits.length),
+      );
+    }
+    _weekendPriceManuallyChanged = digits.isNotEmpty;
+  }
+
+  // ===========================================================================
+  // R2 Image Picking, Queuing, Retry & Existing Image Management
+  // ===========================================================================
+
+  Future<void> _pickImagesFromDevice() async {
+    setState(() {
+      _errorMessage = null;
+      _successMessage = null;
+    });
+
+    final totalCount = _existingImages.length + _queuedImages.length;
+    final remainingSlots = kMaxListingImagesCount - totalCount;
+    if (remainingSlots <= 0) {
+      setState(() {
+        _errorMessage =
+            'Mỗi chỗ nghỉ chỉ được tối đa $kMaxListingImagesCount ảnh.';
+      });
+      return;
+    }
+
+    try {
+      final files =
+          await ref.read(hostListingFormViewModelProvider).pickListingImages(
+                context: context,
+                maxImages: remainingSlots,
+              );
+      if (files.isEmpty || !mounted) return;
+
+      for (final file in files) {
+        final err = validateListingImagePickedFile(file);
+        if (err != null) {
+          setState(() => _errorMessage = err);
+          return;
+        }
+      }
+
+      final nowMs = DateTime.now().microsecondsSinceEpoch;
+      final additions = <QueuedListingImage>[];
+      for (var i = 0; i < files.length; i++) {
+        additions.add(
+          QueuedListingImage(
+            id: 'queued_${nowMs}_$i',
+            file: files[i],
+          ),
+        );
+      }
+
+      setState(() {
+        _queuedImages = [..._queuedImages, ...additions];
+      });
+    } catch (e) {
+      if (!mounted) return;
+      final repo = ref.read(hostListingFormViewModelProvider);
+      setState(() {
+        _errorMessage = repo.extractErrorMessage(
+          e,
+          'Không thể chọn ảnh từ thiết bị.',
+        );
+      });
+    }
+  }
+
+  void _removeQueuedImage(String id) {
+    setState(() {
+      _queuedImages = _queuedImages.where((item) => item.id != id).toList();
+    });
+  }
+
+  void _clearAllQueuedImages() {
+    setState(() {
+      _queuedImages = [];
+    });
+  }
+
+  void _moveQueuedImage(int index, int delta) {
+    final targetIndex = index + delta;
+    if (targetIndex < 0 || targetIndex >= _queuedImages.length) return;
+    setState(() {
+      final list = List<QueuedListingImage>.from(_queuedImages);
+      final moved = list.removeAt(index);
+      list.insert(targetIndex, moved);
+      _queuedImages = list;
+    });
+  }
+
+  void _updateQueuedImage(
+    String id,
+    QueuedListingImage Function(QueuedListingImage current) updater,
+  ) {
+    setState(() {
+      _queuedImages = _queuedImages
+          .map((item) => item.id == id ? updater(item) : item)
+          .toList();
+    });
+  }
+
+  void _mergeExistingImage(ExistingListingImage updated) {
+    setState(() {
+      final exists =
+          _existingImages.any((img) => img.imageId == updated.imageId);
+      if (!exists) {
+        _existingImages = [..._existingImages, updated]
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      } else {
+        _existingImages = _existingImages
+            .map(
+              (img) => img.imageId == updated.imageId
+                  ? updated.copyWith(isCover: updated.isCover || img.isCover)
+                  : img,
+            )
+            .toList();
+      }
+    });
+  }
+
+  Future<
+      ({
+        int successCount,
+        List<String> failures,
+        List<String> analysisFailures
+      })> _uploadQueuedImagesForListing(
+    String listingId,
+    List<QueuedListingImage> imagesToProcess,
+  ) async {
+    final repo = ref.read(hostListingFormViewModelProvider);
+    final failures = <String>[];
+    final analysisFailures = <String>[];
+    int successCount = 0;
+
+    final initialExistingCount = _existingImages.length;
+    var nextSortOrder = _existingImages.isEmpty
+        ? 0
+        : (_existingImages
+                .map((e) => e.sortOrder)
+                .reduce((a, b) => a > b ? a : b) +
+            1);
+    if (nextSortOrder < _existingImages.length) {
+      nextSortOrder = _existingImages.length;
+    }
+
+    for (var i = 0; i < imagesToProcess.length; i++) {
+      final item = imagesToProcess[i];
+      if (!mounted) break;
+
+      setState(() {
+        _uploadStatusMessage =
+            'Đang tải ảnh ${i + 1}/${imagesToProcess.length} (${item.file.name})...';
+      });
+      _updateQueuedImage(
+        item.id,
+        (cur) => cur.copyWith(
+          status: QueuedImageUploadStatus.uploading,
+          progress: 0,
+          clearError: true,
+        ),
+      );
+
+      try {
+        String publicUrl;
+        String? objectKey;
+        if (item.uploadedPublicUrl != null &&
+            item.uploadedPublicUrl!.trim().isNotEmpty) {
+          publicUrl = item.uploadedPublicUrl!.trim();
+          objectKey = item.uploadedKey;
+        } else {
+          final uploaded = await repo.uploadFileToR2(
+            item.file,
+            folder: 'listings',
+            listingId: listingId,
+            onSendProgress: (sent, total) {
+              if (!mounted || total <= 0) return;
+              _updateQueuedImage(
+                item.id,
+                (cur) => cur.copyWith(progress: (sent / total).clamp(0.0, 1.0)),
+              );
+            },
+          );
+          publicUrl = uploaded.publicUrl;
+          objectKey = uploaded.key;
+          _updateQueuedImage(
+            item.id,
+            (cur) => cur.copyWith(
+              uploadedPublicUrl: publicUrl,
+              uploadedKey: objectKey,
+            ),
+          );
+        }
+
+        final assignedSortOrder = nextSortOrder++;
+        final savedImages = await repo.addListingImages(
+          listingId,
+          [
+            {
+              'url': publicUrl,
+              'key': objectKey,
+              'originalFilename': item.file.name,
+              'displayTitle': null,
+              'altText': _titleController.text.trim().isNotEmpty
+                  ? _titleController.text.trim()
+                  : 'Ảnh chỗ nghỉ',
+              'caption': null,
+              'isCover': initialExistingCount == 0 && successCount == 0,
+              'sortOrder': assignedSortOrder,
+            },
+          ],
+          taxonomies: _tagTaxonomies,
+        );
+
+        successCount += 1;
+        final createdImage = savedImages.isNotEmpty ? savedImages.first : null;
+        if (createdImage != null) {
+          _mergeExistingImage(createdImage);
+        }
+
+        _updateQueuedImage(
+          item.id,
+          (cur) => cur.copyWith(
+            status: QueuedImageUploadStatus.success,
+            progress: 1.0,
+            uploadedPublicUrl: publicUrl,
+            uploadedKey: objectKey,
+            savedImageId: createdImage?.imageId,
+          ),
+        );
+
+        if (createdImage != null && createdImage.imageId > 0) {
+          setState(() {
+            _uploadStatusMessage =
+                'Đang phân tích ảnh bằng AI ${i + 1}/${imagesToProcess.length}...';
+          });
+          _updateQueuedImage(
+            item.id,
+            (cur) => cur.copyWith(status: QueuedImageUploadStatus.analyzing),
+          );
+
+          try {
+            final analyzed = await repo.analyzeSingleListingImage(
+              listingId,
+              createdImage.imageId,
+              taxonomies: _tagTaxonomies,
+            );
+            _mergeExistingImage(analyzed);
+            if (analyzed.aiAnalysisStatus == 'analyzed') {
+              _updateQueuedImage(
+                item.id,
+                (cur) => cur.copyWith(status: QueuedImageUploadStatus.tagged),
+              );
+            } else {
+              final msg =
+                  analyzed.aiErrorMessage ?? 'Phân tích AI chưa hoàn tất.';
+              analysisFailures.add('${item.file.name}: $msg');
+              _updateQueuedImage(
+                item.id,
+                (cur) => cur.copyWith(
+                  status: QueuedImageUploadStatus.analysisFailed,
+                  error: msg,
+                ),
+              );
+            }
+          } catch (aiErr) {
+            final msg = repo.extractErrorMessage(
+              aiErr,
+              'Phân tích lỗi, thử lại.',
+            );
+            analysisFailures.add('${item.file.name}: $msg');
+            _mergeExistingImage(
+              createdImage.copyWith(
+                aiAnalysisStatus: 'failed',
+                aiErrorMessage: msg,
+              ),
+            );
+            _updateQueuedImage(
+              item.id,
+              (cur) => cur.copyWith(
+                status: QueuedImageUploadStatus.analysisFailed,
+                error: msg,
+              ),
+            );
+          }
+        }
+      } catch (uploadErr) {
+        final msg = repo.extractErrorMessage(
+          uploadErr,
+          'Upload ảnh thất bại.',
+        );
+        failures.add('${item.file.name}: $msg');
+        _updateQueuedImage(
+          item.id,
+          (cur) => cur.copyWith(
+            status: QueuedImageUploadStatus.failed,
+            error: msg,
+          ),
+        );
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _uploadStatusMessage = analysisFailures.isNotEmpty
+            ? 'Một số ảnh phân tích AI chưa thành công, bạn có thể thử lại hoặc gắn nhãn thủ công.'
+            : (successCount > 0 ? 'Đã tải lên và gắn nhãn ảnh.' : null);
+      });
+    }
+
+    return (
+      successCount: successCount,
+      failures: failures,
+      analysisFailures: analysisFailures,
+    );
+  }
+
+  Future<void> _retryFailedQueuedImage(QueuedListingImage item) async {
+    if (!_isEditMode) {
+      setState(() {
+        _errorMessage = 'Vui lòng nhấn Lưu chỗ nghỉ để tải ảnh lên.';
+      });
+      return;
+    }
+    await _uploadQueuedImagesForListing(_activeListingId!, [item]);
+  }
+
+  Future<void> _handleSetCoverImage(int imageId) async {
+    if (!_isEditMode) return;
+    final repo = ref.read(hostListingFormViewModelProvider);
+    setState(() {
+      _errorMessage = null;
+      _successMessage = null;
+    });
+
+    try {
+      await repo.setListingCoverImage(_activeListingId!, imageId);
+      if (!mounted) return;
+      setState(() {
+        _existingImages = _existingImages
+            .map((img) => img.copyWith(isCover: img.imageId == imageId))
+            .toList();
+        _successMessage = 'Đã cập nhật ảnh bìa.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = repo.extractErrorMessage(
+          e,
+          'Không thể cập nhật ảnh bìa.',
+        );
+      });
+    }
+  }
+
+  Future<void> _handleDeleteExistingImage(ExistingListingImage image) async {
+    if (!_isEditMode) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        title: const Text('Xóa ảnh chỗ nghỉ'),
+        content: const Text('Bạn có chắc chắn muốn xóa ảnh này khỏi chỗ nghỉ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFBE123C),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Xóa ảnh'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final repo = ref.read(hostListingFormViewModelProvider);
+    setState(() {
+      _errorMessage = null;
+      _successMessage = null;
+    });
+
+    try {
+      await repo.deleteHostImage(image.imageId);
+      if (!mounted) return;
+      setState(() {
+        _existingImages = _existingImages
+            .where((img) => img.imageId != image.imageId)
+            .toList();
+        _successMessage = 'Đã xóa ảnh.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = repo.extractErrorMessage(e, 'Không thể xóa ảnh.');
+      });
+    }
+  }
+
+  Future<void> _moveExistingImage(int index, int delta) async {
+    final targetIndex = index + delta;
+    if (targetIndex < 0 || targetIndex >= _existingImages.length) return;
+    final list = List<ExistingListingImage>.from(_existingImages);
+    final moved = list.removeAt(index);
+    list.insert(targetIndex, moved);
+    setState(() {
+      _existingImages = [
+        for (var i = 0; i < list.length; i++) list[i].copyWith(sortOrder: i),
+      ];
+    });
+    if (targetIndex == 0 &&
+        _isEditMode &&
+        !moved.isCover &&
+        moved.imageId > 0) {
+      await _handleSetCoverImage(moved.imageId);
+    }
+  }
+
+  Future<void> _handleAnalyzeSingleImage(int imageId) async {
+    if (!_isEditMode) return;
+    final repo = ref.read(hostListingFormViewModelProvider);
+    setState(() {
+      _analyzingImageIds.add(imageId);
+      _aiStatusMessage = 'Đang phân tích ảnh bằng AI...';
+      _errorMessage = null;
+    });
+
+    try {
+      final result = await repo.analyzeSingleListingImage(
+        _activeListingId!,
+        imageId,
+        taxonomies: _tagTaxonomies,
+      );
+      if (!mounted) return;
+      _mergeExistingImage(result);
+      setState(() {
+        _aiStatusMessage = result.aiAnalysisStatus == 'analyzed'
+            ? 'Đã gắn tag AI cho ảnh.'
+            : 'Phân tích AI chưa hoàn tất. Bạn có thể chọn tag thủ công bên dưới.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      final msg = repo.extractErrorMessage(
+        e,
+        'Không thể phân tích ảnh bằng AI.',
+      );
+      setState(() {
+        _existingImages = _existingImages
+            .map(
+              (img) => img.imageId == imageId
+                  ? img.copyWith(
+                      aiAnalysisStatus: 'failed',
+                      aiErrorMessage: msg,
+                    )
+                  : img,
+            )
+            .toList();
+        _aiStatusMessage =
+            'Phân tích AI tạm thời gián đoạn ($msg). Bạn vẫn có thể gắn tag thủ công và lưu chỗ nghỉ.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _analyzingImageIds.remove(imageId);
+        });
+      }
+    }
+  }
+
+  Future<void> _handleAnalyzeAllImagesWithAi() async {
+    if (!_isEditMode) {
+      setState(() {
+        _aiStatusMessage =
+            'Bạn cần lưu chỗ nghỉ trước khi phân tích ảnh bằng AI.';
+      });
+      return;
+    }
+    if (_existingImages.isEmpty) {
+      setState(() {
+        _aiStatusMessage = 'Chỗ nghỉ này chưa có ảnh đã lưu để phân tích.';
+      });
+      return;
+    }
+
+    final repo = ref.read(hostListingFormViewModelProvider);
+    setState(() {
+      _analyzingAllAi = true;
+      _aiStatusMessage = 'Đang phân tích toàn bộ ảnh bằng AI...';
+      _errorMessage = null;
+    });
+
+    try {
+      final result = await repo.analyzeAllListingImages(
+        _activeListingId!,
+        force: true,
+        taxonomies: _tagTaxonomies,
+      );
+      final refreshed = await repo.getListingImagesAnalysis(_activeListingId!);
+      if (!mounted) return;
+      setState(() {
+        _tagTaxonomies = refreshed.tagTaxonomies;
+        if (refreshed.images.isNotEmpty) {
+          _existingImages = refreshed.images;
+        }
+        _aiStatusMessage =
+            'Đã phân tích ${result.analyzedCount} ảnh${result.failedCount > 0 ? ', ${result.failedCount} ảnh lỗi (có thể gắn tag thủ công)' : ''}.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      final msg = repo.extractErrorMessage(
+        e,
+        'Không thể phân tích ảnh bằng AI.',
+      );
+      setState(() {
+        _aiStatusMessage =
+            'Phân tích AI tạm thời gián đoạn ($msg). Bạn vẫn có thể gắn tag thủ công từ 22 nhãn có sẵn.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _analyzingAllAi = false);
+      }
+    }
+  }
+
+  Future<void> _handleUpdateImageTags(
+    ExistingListingImage image,
+    List<String> nextTagCodes,
+  ) async {
+    final repo = ref.read(hostListingFormViewModelProvider);
+    setState(() {
+      _savingTagImageIds.add(image.imageId);
+      _errorMessage = null;
+    });
+
+    try {
+      final updated = await repo.updateListingImageTags(
+        image.imageId,
+        nextTagCodes,
+        taxonomies: _tagTaxonomies,
+      );
+      if (!mounted) return;
+      _mergeExistingImage(updated);
+      setState(() {
+        _successMessage = 'Đã cập nhật nhãn ảnh.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = repo.extractErrorMessage(
+          e,
+          'Không thể cập nhật nhãn ảnh.',
+        );
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingTagImageIds.remove(image.imageId);
+        });
+      }
+    }
+  }
+
+  // ===========================================================================
+  // Form Validation & Submit (Create / Update + Amenities + Rules + R2 Upload)
+  // ===========================================================================
+
+  HostListingUpsertDto? _buildValidatedDto(
+      {HostListingStatus? overrideStatus}) {
+    final lat = double.tryParse(_latController.text.trim());
+    final lng = double.tryParse(_lngController.text.trim());
+    if (lat == null || lng == null) {
+      setState(
+          () => _errorMessage = 'Vui lòng nhập tọa độ vĩ độ/kinh độ hợp lệ.');
+      return null;
+    }
+
+    final maxGuests = int.tryParse(_maxGuestsController.text.trim());
+    final bedrooms = int.tryParse(_bedroomsController.text.trim());
+    final beds = int.tryParse(_bedsController.text.trim());
+    final bathrooms = double.tryParse(_bathroomsController.text.trim());
+    final basePrice = double.tryParse(_basePriceController.text.trim());
+    final weekendText = _weekendPriceController.text.trim();
+    final weekendPrice =
+        weekendText.isEmpty ? basePrice : double.tryParse(weekendText);
+    final cleaningFee =
+        double.tryParse(_cleaningFeeController.text.trim()) ?? 0;
+    final surchargeAmount =
+        double.tryParse(_surchargeController.text.trim()) ?? 0;
+    final minNights = int.tryParse(_minNightsController.text.trim());
+    final maxNightsText = _maxNightsController.text.trim();
+    final maxNights =
+        maxNightsText.isEmpty ? null : int.tryParse(maxNightsText);
+
+    if (maxGuests == null ||
+        bedrooms == null ||
+        beds == null ||
+        bathrooms == null ||
+        basePrice == null ||
+        weekendPrice == null ||
+        minNights == null) {
+      setState(() {
+        _errorMessage =
+            'Vui lòng kiểm tra lại các trường số (Sức chứa, Phòng, Giá, Số đêm).';
+      });
+      return null;
+    }
+
+    final dto = HostListingUpsertDto(
+      title: _titleController.text,
+      description: _descriptionController.text,
+      addressLine: _addressController.text,
+      ward: _selectedWard,
+      district: kVungTauCity,
+      city: kVungTauCity,
+      country: 'VN',
+      latitude: lat,
+      longitude: lng,
+      propertyType: _propertyType,
+      roomType: _roomType,
+      maxGuests: maxGuests,
+      bedrooms: bedrooms,
+      beds: beds,
+      bathrooms: bathrooms,
+      basePrice: basePrice,
+      weekendPrice: weekendPrice,
+      cleaningFee: cleaningFee,
+      surchargeAmount: surchargeAmount,
+      currency: 'VND',
+      minNights: minNights,
+      maxNights: maxNights,
+      checkInFrom: _checkInFrom,
+      checkOutBefore: _checkOutBefore,
+      cancellationPolicy: _cancellationPolicy,
+      instantBookEnabled: _instantBookEnabled,
+      amenityIds: _selectedAmenityIds.toList(),
+      status: overrideStatus ?? _initialCreateStatus,
+    );
+
+    final validationError = dto.validate(isCreate: !_isEditMode);
+    if (validationError != null) {
+      setState(() => _errorMessage = validationError);
+      return null;
+    }
+
+    return dto;
+  }
+
+  Future<void> _submitForm({HostListingStatus? targetStatus}) async {
+    if (_saving) return;
+    setState(() {
+      _errorMessage = null;
+      _successMessage = null;
+      _uploadStatusMessage = null;
+    });
+
+    final currentRole = ref.read(hostListingFormUserRoleProvider);
+    if (!isApprovedHostRole(currentRole)) {
+      setState(() {
+        _errorMessage =
+            'Tài khoản chưa được cấp quyền Chủ nhà (Host) để tạo hoặc cập nhật chỗ nghỉ (403).';
+      });
+      return;
+    }
+
+    final dto = _buildValidatedDto(overrideStatus: targetStatus);
+    if (dto == null) return;
+
+    setState(() => _saving = true);
+    final repo = ref.read(hostListingFormViewModelProvider);
+
+    final pendingUploads = _queuedImages
+        .where(
+          (item) =>
+              item.status != QueuedImageUploadStatus.success &&
+              item.status != QueuedImageUploadStatus.tagged &&
+              item.status != QueuedImageUploadStatus.analysisFailed,
+        )
+        .toList();
+
+    final wasAlreadyEditMode = _isEditMode;
+
+    try {
+      String listingId;
+      if (wasAlreadyEditMode) {
+        listingId = _activeListingId!;
+        await repo.updateHostListing(
+          listingId,
+          dto.toUpdateJson(
+            includeStatus: targetStatus != null,
+            nextStatus: targetStatus,
+          ),
+          userRole: currentRole,
+        );
+        if (targetStatus != null) {
+          _initialCreateStatus = targetStatus;
+        }
+      } else {
+        final created = await repo.createHostListing(
+          dto.toCreateJson(),
+          userRole: currentRole,
+        );
+        listingId =
+            (created['listingId'] ?? created['id'] ?? '').toString().trim();
+        if (listingId.isEmpty) {
+          throw Exception('Máy chủ không trả về mã chỗ nghỉ sau khi tạo.');
+        }
+        _activeListingId = listingId;
+      }
+
+      // Sync amenities (`PUT /api/host/listings/:id/amenities`) - NEVER swallow errors!
+      if (_selectedAmenityIds.isNotEmpty || wasAlreadyEditMode) {
+        try {
+          await repo.updateListingAmenities(
+            listingId,
+            _selectedAmenityIds.toList(),
+          );
+        } catch (amenityErr) {
+          final msg = repo.extractErrorMessage(
+            amenityErr,
+            'Cập nhật tiện nghi thất bại.',
+          );
+          throw StateError(
+            'Đã lưu thông tin cơ bản (#$listingId) nhưng cập nhật tiện nghi thất bại: $msg',
+          );
+        }
+      }
+
+      // Sync rules (`PATCH /api/host/listings/:id/rules`) - NEVER swallow errors!
+      try {
+        await repo.updateListingRules(listingId, {
+          'checkInFrom': _checkInFrom,
+          'checkOutBefore': _checkOutBefore,
+          'smokingAllowed': _smokingAllowed,
+          'petsAllowed': _petsAllowed,
+          'partyAllowed': _partyAllowed,
+          'quietHours': _quietHoursController.text.trim(),
+        });
+      } catch (rulesErr) {
+        final msg = repo.extractErrorMessage(
+          rulesErr,
+          'Cập nhật nội quy thất bại.',
+        );
+        throw StateError(
+          'Đã lưu thông tin cơ bản (#$listingId) nhưng cập nhật nội quy thất bại: $msg',
+        );
+      }
+
+      // Upload queued images to R2 & run AI analysis
+      final uploadResult = pendingUploads.isNotEmpty
+          ? await _uploadQueuedImagesForListing(listingId, pendingUploads)
+          : (
+              successCount: 0,
+              failures: <String>[],
+              analysisFailures: <String>[],
+            );
+
+      if (!mounted) return;
+
+      if (uploadResult.failures.isNotEmpty) {
+        setState(() {
+          _saving = false;
+          _errorMessage =
+              'Đã lưu thông tin chỗ nghỉ nhưng một số ảnh tải lên R2 thất bại: ${uploadResult.failures.join("; ")}';
+        });
+        return;
+      }
+
+      // Remove completed queued images
+      setState(() {
+        _queuedImages = [];
+        _saving = false;
+        _successMessage = uploadResult.analysisFailures.isNotEmpty
+            ? 'Đã lưu chỗ nghỉ. Một số ảnh phân tích AI lỗi: ${uploadResult.analysisFailures.join("; ")}'
+            : (wasAlreadyEditMode
+                ? 'Đã cập nhật chỗ nghỉ thành công.'
+                : 'Đã tạo chỗ nghỉ thành công.');
+      });
+
+      widget.onSaved?.call();
+
+      if (mounted) {
+        _showSuccessDialog(
+          title: _titleController.text.trim().isNotEmpty
+              ? _titleController.text.trim()
+              : 'Chỗ nghỉ The Palm Villa',
+          listingId: listingId,
+          isEditMode: wasAlreadyEditMode,
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _errorMessage = repo.extractErrorMessage(
+          e,
+          'Không thể lưu chỗ nghỉ.',
+        );
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentRole = ref.watch(hostListingFormUserRoleProvider);
+    if (!isApprovedHostRole(currentRole)) {
+      final unauthorizedView = Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Container(
+              key: const Key('listing_form_unauthorized_guard'),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceBase,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    LucideIcons.shieldAlert,
+                    size: 36,
+                    color: AppColors.iconStrong,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Yêu cầu quyền Chủ nhà (Host)',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textStrong,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tài khoản hiện tại (${currentRole ?? 'guest'}) chưa được phê duyệt làm Chủ nhà nên không thể đăng hoặc sửa chỗ nghỉ.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(180, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    onPressed: () => context.go('/tro-thanh-host/trang-thai'),
+                    child: const Text('Kiểm tra hồ sơ Host'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      if (widget.embedded) return unauthorizedView;
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(child: unauthorizedView),
+      );
+    }
+
+    final content = _loadingInitial
+        ? const Center(
+            child: Padding(
+              padding: EdgeInsets.all(48),
+              child: CircularProgressIndicator(color: AppColors.iconStrong),
+            ),
+          )
+        : SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 960),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildHeader(context),
+                    if (_errorMessage != null) ...[
+                      const SizedBox(height: 16),
+                      _buildStatusBanner(
+                        key: const Key('listing_form_error_banner'),
+                        text: _errorMessage!,
+                        bg: AppColors.errorSoft,
+                        border: AppColors.border,
+                        fg: AppColors.error,
+                        icon: AppSemanticIcons.errorAlert,
+                      ),
+                    ],
+                    if (_successMessage != null) ...[
+                      const SizedBox(height: 16),
+                      _buildStatusBanner(
+                        key: const Key('listing_form_success_banner'),
+                        text: _successMessage!,
+                        bg: AppColors.successSoft,
+                        border: AppColors.border,
+                        fg: AppColors.success,
+                        icon: LucideIcons.circleCheck,
+                      ),
+                    ],
+                    if (_uploadStatusMessage != null) ...[
+                      const SizedBox(height: 12),
+                      _buildStatusBanner(
+                        text: _uploadStatusMessage!,
+                        bg: AppColors.surfaceBase,
+                        border: AppColors.border,
+                        fg: AppColors.textStrong,
+                        icon: LucideIcons.cloudUpload,
+                      ),
+                    ],
+                    if (_aiStatusMessage != null) ...[
+                      const SizedBox(height: 12),
+                      _buildStatusBanner(
+                        key: const Key('listing_form_ai_banner'),
+                        text: _aiStatusMessage!,
+                        bg: AppColors.surfaceBase,
+                        border: AppColors.border,
+                        fg: AppColors.textStrong,
+                        icon: LucideIcons.scanSearch,
+                      ),
+                    ],
+                    if (_effectiveStepMode) ...[
+                      _buildStepperBar(),
+                      _buildStepContent(),
+                      _buildStepFooterActions(),
+                    ] else ...[
+                      _buildHostCoPilotCard(),
+                      const Divider(height: 32, color: AppColors.border),
+                      _buildBasicInfoCard(),
+                      const Divider(height: 32, color: AppColors.border),
+                      _buildLocationCard(),
+                      const Divider(height: 32, color: AppColors.border),
+                      _buildCapacityAndPricingCard(),
+                      const Divider(height: 32, color: AppColors.border),
+                      _buildPoliciesAndRulesCard(),
+                      const Divider(height: 32, color: AppColors.border),
+                      _buildAmenitiesCard(),
+                      const Divider(height: 32, color: AppColors.border),
+                      _buildImagesAndAiCard(),
+                      const SizedBox(height: 24),
+                      _buildFooterActions(),
+                      const SizedBox(height: 32),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+
+    if (widget.embedded) {
+      return content;
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.surfaceBase,
+        elevation: 0,
+        leading: IconButton(
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          icon: const Icon(LucideIcons.arrowLeft, color: AppColors.textPrimary),
+          onPressed: () {
+            if (widget.onCancel != null) {
+              widget.onCancel!();
+            } else if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/host');
+            }
+          },
+          tooltip: 'Quay lại',
+        ),
+        title: Text(
+          _isEditMode ? 'Sửa chỗ nghỉ' : 'Thêm chỗ nghỉ mới',
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+      body: SafeArea(child: content),
+    );
+  }
+
+  Widget _buildDropdownField<T>({
+    Key? dropdownKey,
+    required String label,
+    required T? value,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?>? onChanged,
+    String? hint,
+  }) {
+    return InputDecorator(
+      decoration: _fieldDecoration(label, hint: hint),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          key: dropdownKey,
+          isExpanded: true,
+          isDense: true,
+          value: value,
+          hint: hint != null
+              ? Text(
+                  hint,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                )
+              : null,
+          items: items,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Text(
+            _isEditMode
+                ? 'Sửa chỗ nghỉ #$_activeListingId'
+                : 'Thêm chỗ nghỉ mới',
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+        TextButton.icon(
+          key: const Key('listing_header_back_btn'),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.textPrimary,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          ),
+          onPressed: () {
+            if (_effectiveStepMode && _currentStep > 0) {
+              _goToPrevStep();
+            } else if (widget.onCancel != null) {
+              widget.onCancel!();
+            } else if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/host');
+            }
+          },
+          icon: const Icon(
+            LucideIcons.arrowLeft,
+            size: 16,
+            color: AppColors.iconStrong,
+          ),
+          label: const Text(
+            'Quay lại',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  int _calculateCompletionScore() {
+    int score = 0;
+    if (_titleController.text.trim().isNotEmpty) score += 15;
+    if (_descriptionController.text.trim().length >= 20) score += 15;
+    if (_addressController.text.trim().isNotEmpty) score += 15;
+    final price = int.tryParse(
+            _basePriceController.text.replaceAll(RegExp(r'[^0-9]'), '')) ??
+        0;
+    if (price > 0) score += 15;
+    final totalPhotos = _existingImages.length + _queuedImages.length;
+    if (totalPhotos >= 5) {
+      score += 20;
+    } else if (totalPhotos >= 1) {
+      score += 10;
+    }
+    if (_selectedAmenityIds.length >= 3) score += 10;
+    if (_instantBookEnabled || _quietHoursController.text.isNotEmpty) {
+      score += 10;
+    }
+    return score.clamp(0, 100);
+  }
+
+  Widget _buildHostCoPilotCard() {
+    final score = _calculateCompletionScore();
+    return Container(
+      margin: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Độ hoàn thiện',
+                  style:
+                      TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceElevated,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '$score%',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textStrong,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: score / 100.0,
+              minHeight: 5,
+              backgroundColor: AppColors.borderSoft,
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                AppColors.textStrong,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVungTauTitleSuggestions() {
+    final suggestions = [
+      'View Biển',
+      'Hồ Bơi Riêng',
+      'Gần Bãi Sau',
+      'Hoàng Hôn Bãi Dâu',
+      'Sân Vườn BBQ',
+      'Seaview Luxury',
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: suggestions.map((tag) {
+            return ActionChip(
+              backgroundColor: AppColors.surfaceBase,
+              shape: const StadiumBorder(),
+              side: BorderSide.none,
+              label: Text(
+                tag,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              onPressed: () {
+                final clean = tag.trim();
+                final current = _titleController.text.trim();
+                if (!current.contains(clean)) {
+                  setState(() {
+                    if (current.isEmpty) {
+                      _titleController.text = clean;
+                    } else {
+                      _titleController.text = '$current - $clean';
+                    }
+                  });
+                }
+              },
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBasicInfoCard() {
+    return _SectionCard(
+      title: 'Thông tin cơ bản',
+      icon: AppSemanticIcons.home,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 540;
+            final propDropdown = _buildDropdownField<HostPropertyType>(
+              dropdownKey: const Key('listing_property_type_dropdown'),
+              label: 'Loại chỗ nghỉ *',
+              value: _propertyType,
+              items: HostPropertyType.values
+                  .map(
+                    (e) => DropdownMenuItem<HostPropertyType>(
+                      value: e,
+                      child: Text(e.labelVi, overflow: TextOverflow.ellipsis),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _propertyType = v);
+              },
+            );
+            final roomDropdown = _buildDropdownField<HostRoomType>(
+              dropdownKey: const Key('listing_room_type_dropdown'),
+              label: 'Loại phòng *',
+              value: _roomType,
+              items: HostRoomType.values
+                  .map(
+                    (e) => DropdownMenuItem<HostRoomType>(
+                      value: e,
+                      child: Text(e.labelVi, overflow: TextOverflow.ellipsis),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _roomType = v);
+              },
+            );
+            if (isWide) {
+              return Row(
+                children: [
+                  Expanded(child: propDropdown),
+                  const SizedBox(width: 14),
+                  Expanded(child: roomDropdown),
+                ],
+              );
+            }
+            return Column(
+              children: [
+                propDropdown,
+                const SizedBox(height: 14),
+                roomDropdown,
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          key: const Key('listing_title_input'),
+          controller: _titleController,
+          decoration: _fieldDecoration(
+            'Tên chỗ nghỉ *',
+            hint: 'Ví dụ: Villa Bãi Sau có hồ bơi',
+          ),
+        ),
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: const Text('Gợi ý tên', style: TextStyle(fontSize: 13)),
+          children: [_buildVungTauTitleSuggestions()],
+        ),
+        const SizedBox(height: 14),
+        TextFormField(
+          key: const Key('listing_description_input'),
+          controller: _descriptionController,
+          maxLines: 4,
+          decoration: _fieldDecoration(
+            'Mô tả *',
+            hint: 'Không gian, vị trí và điểm nổi bật',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLocationCard() {
+    final wardNames = kVungTauWards.map((w) => w.name).toList();
+    if (_selectedWard.isNotEmpty && !wardNames.contains(_selectedWard)) {
+      wardNames.insert(0, _selectedWard);
+    }
+
+    final topVungTauWards = [
+      'Phường Thắng Tam (Bãi Sau)',
+      'Phường 1 (Bãi Trước)',
+      'Phường 2 (Bãi Dứa - Bãi Dâu)',
+      'Phường 8',
+    ];
+
+    return _SectionCard(
+      title: 'Vị trí',
+      icon: LucideIcons.mapPin,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Gợi ý khu vực trọng điểm Vũng Tàu:',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: topVungTauWards.map((w) {
+                final match = kVungTauWards.firstWhere(
+                  (element) => w.startsWith(element.name),
+                  orElse: () => kVungTauWards.first,
+                );
+                final isSelected = _selectedWard == match.name;
+                return ChoiceChip(
+                  showCheckmark: false,
+                  backgroundColor: AppColors.surfaceBase,
+                  selectedColor: AppColors.primary,
+                  side: BorderSide.none,
+                  shape: const StadiumBorder(),
+                  label: Text(
+                    w,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color:
+                          isSelected ? Colors.white : AppColors.textSecondary,
+                    ),
+                  ),
+                  selected: isSelected,
+                  onSelected: (_) => _handleWardChanged(match.name),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        TextFormField(
+          key: const Key('listing_address_input'),
+          controller: _addressController,
+          decoration: _fieldDecoration(
+            'Địa chỉ cụ thể (Số nhà, tên đường) *',
+            hint: 'Ví dụ: 164B Phan Chu Trinh, Phường 2, Vũng Tàu',
+          ),
+        ),
+        const SizedBox(height: 14),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 540;
+            final wardField = _buildDropdownField<String>(
+              dropdownKey: const Key('listing_ward_dropdown'),
+              label: 'Phường / Xã *',
+              value: _selectedWard,
+              items: wardNames
+                  .map(
+                    (name) => DropdownMenuItem<String>(
+                      value: name,
+                      child: Text(name, overflow: TextOverflow.ellipsis),
+                    ),
+                  )
+                  .toList(),
+              onChanged: _handleWardChanged,
+            );
+            final cityField = TextFormField(
+              initialValue: '$kVungTauCity (Quốc gia: VN • Tiền tệ: VND)',
+              readOnly: true,
+              decoration: _fieldDecoration('Thành phố / Quốc gia / Tiền tệ'),
+            );
+            if (isWide) {
+              return Row(
+                children: [
+                  Expanded(child: wardField),
+                  const SizedBox(width: 14),
+                  Expanded(child: cityField),
+                ],
+              );
+            }
+            return Column(
+              children: [
+                wardField,
+                const SizedBox(height: 14),
+                cityField,
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 14),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 540;
+            final latField = TextFormField(
+              key: const Key('listing_lat_input'),
+              controller: _latController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: _fieldDecoration('Vĩ độ (Latitude: 10.30 – 10.48) *'),
+            );
+            final lngField = TextFormField(
+              key: const Key('listing_lng_input'),
+              controller: _lngController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration:
+                  _fieldDecoration('Kinh độ (Longitude: 106.98 – 107.20) *'),
+            );
+            if (isWide) {
+              return Row(
+                children: [
+                  Expanded(child: latField),
+                  const SizedBox(width: 14),
+                  Expanded(child: lngField),
+                ],
+              );
+            }
+            return Column(
+              children: [
+                latField,
+                const SizedBox(height: 14),
+                lngField,
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAirbnbCounterRow({
+    required String label,
+    required String subtitle,
+    required IconData icon,
+    required TextEditingController controller,
+    required Key textKey,
+    required int min,
+    required int max,
+  }) {
+    final currentVal = int.tryParse(controller.text.trim()) ?? min;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: AppColors.iconStrong),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            padding: EdgeInsets.zero,
+            tooltip: 'Giảm $label',
+            icon: const Icon(LucideIcons.minus, size: 18),
+            color: currentVal > min
+                ? AppColors.iconStrong
+                : AppColors.textDisabled,
+            onPressed: currentVal > min
+                ? () {
+                    final next = currentVal - 1;
+                    setState(() {
+                      controller.text = '$next';
+                    });
+                  }
+                : null,
+          ),
+          SizedBox(
+            width: 40,
+            child: TextFormField(
+              key: textKey,
+              controller: controller,
+              textAlign: TextAlign.center,
+              textAlignVertical: TextAlignVertical.center,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+              decoration: const InputDecoration(
+                isDense: true,
+                filled: false,
+                contentPadding: EdgeInsets.symmetric(vertical: 4),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+              ),
+            ),
+          ),
+          IconButton(
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            padding: EdgeInsets.zero,
+            tooltip: 'Tăng $label',
+            icon: const Icon(LucideIcons.plus, size: 18),
+            color: currentVal < max
+                ? AppColors.iconStrong
+                : AppColors.textDisabled,
+            onPressed: currentVal < max
+                ? () {
+                    final next = currentVal + 1;
+                    setState(() {
+                      controller.text = '$next';
+                    });
+                  }
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCapacityAndPricingCard() {
+    return _SectionCard(
+      title: 'Sức chứa & Giá',
+      icon: LucideIcons.users,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 640;
+            final guestStepper = _buildAirbnbCounterRow(
+              label: 'Khách tối đa',
+              subtitle: 'Sức chứa lớn nhất',
+              icon: LucideIcons.users,
+              controller: _maxGuestsController,
+              textKey: const Key('listing_max_guests_input'),
+              min: 1,
+              max: 50,
+            );
+            final bedroomStepper = _buildAirbnbCounterRow(
+              label: 'Phòng ngủ',
+              subtitle: 'Không gian riêng tư',
+              icon: LucideIcons.bedDouble,
+              controller: _bedroomsController,
+              textKey: const Key('listing_bedrooms_input'),
+              min: 0,
+              max: 20,
+            );
+            final bedStepper = _buildAirbnbCounterRow(
+              label: 'Số giường',
+              subtitle: 'Giường đôi/đơn',
+              icon: LucideIcons.bed,
+              controller: _bedsController,
+              textKey: const Key('listing_beds_input'),
+              min: 1,
+              max: 30,
+            );
+            final bathStepper = _buildAirbnbCounterRow(
+              label: 'Phòng tắm (WC)',
+              subtitle: 'Số phòng vệ sinh',
+              icon: LucideIcons.bath,
+              controller: _bathroomsController,
+              textKey: const Key('listing_bathrooms_input'),
+              min: 1,
+              max: 20,
+            );
+
+            if (isWide) {
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: guestStepper),
+                      const SizedBox(width: 12),
+                      Expanded(child: bedroomStepper),
+                    ],
+                  ),
+                  const Divider(height: 1, color: AppColors.border),
+                  Row(
+                    children: [
+                      Expanded(child: bedStepper),
+                      const SizedBox(width: 12),
+                      Expanded(child: bathStepper),
+                    ],
+                  ),
+                ],
+              );
+            }
+            return Column(
+              children: [
+                guestStepper,
+                const Divider(height: 1, color: AppColors.border),
+                bedroomStepper,
+                const Divider(height: 1, color: AppColors.border),
+                bedStepper,
+                const Divider(height: 1, color: AppColors.border),
+                bathStepper,
+              ],
+            );
+          },
+        ),
+        const Divider(height: 28, color: AppColors.border),
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceElevated,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(
+                    LucideIcons.coins,
+                    size: 18,
+                    color: AppColors.iconStrong,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Gợi ý giá cuối tuần',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  ActionChip(
+                    backgroundColor: AppColors.surfaceBase,
+                    shape: const StadiumBorder(),
+                    side: BorderSide.none,
+                    label: const Text(
+                      '+20% Thứ 6 & Thứ 7',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    onPressed: () {
+                      final base = int.tryParse(_basePriceController.text
+                              .replaceAll(RegExp(r'[^0-9]'), '')) ??
+                          0;
+                      if (base > 0) {
+                        final weekend = (base * 1.2).round();
+                        setState(() {
+                          _weekendPriceController.text = '$weekend';
+                          _handleWeekendPriceChanged('$weekend');
+                        });
+                      }
+                    },
+                  ),
+                  ActionChip(
+                    backgroundColor: AppColors.surfaceBase,
+                    shape: const StadiumBorder(),
+                    side: BorderSide.none,
+                    label: const Text(
+                      '+30% Mùa cao điểm',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    onPressed: () {
+                      final base = int.tryParse(_basePriceController.text
+                              .replaceAll(RegExp(r'[^0-9]'), '')) ??
+                          0;
+                      if (base > 0) {
+                        final weekend = (base * 1.3).round();
+                        setState(() {
+                          _weekendPriceController.text = '$weekend';
+                          _handleWeekendPriceChanged('$weekend');
+                        });
+                      }
+                    },
+                  ),
+                  ActionChip(
+                    backgroundColor: AppColors.surfaceBase,
+                    shape: const StadiumBorder(),
+                    side: BorderSide.none,
+                    label: const Text(
+                      'Bằng giá ngày thường',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    onPressed: () {
+                      final base = _basePriceController.text.trim();
+                      setState(() {
+                        _weekendPriceController.text = base;
+                        _handleWeekendPriceChanged(base);
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 640;
+            final fields = [
+              TextFormField(
+                key: const Key('listing_base_price_input'),
+                controller: _basePriceController,
+                keyboardType: TextInputType.number,
+                onChanged: _handleBasePriceChanged,
+                decoration: _fieldDecoration('Giá ngày thường / đêm (VND) *'),
+              ),
+              TextFormField(
+                key: const Key('listing_weekend_price_input'),
+                controller: _weekendPriceController,
+                keyboardType: TextInputType.number,
+                onChanged: _handleWeekendPriceChanged,
+                decoration: _fieldDecoration('Giá cuối tuần (VND) *'),
+              ),
+              TextFormField(
+                key: const Key('listing_cleaning_fee_input'),
+                controller: _cleaningFeeController,
+                keyboardType: TextInputType.number,
+                decoration: _fieldDecoration('Phí dọn dẹp (VND)'),
+              ),
+              TextFormField(
+                key: const Key('listing_surcharge_input'),
+                controller: _surchargeController,
+                keyboardType: TextInputType.number,
+                decoration: _fieldDecoration('Phụ thu thêm khách (VND)'),
+              ),
+            ];
+            if (isWide) {
+              return Row(
+                children: [
+                  for (var i = 0; i < fields.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 12),
+                    Expanded(child: fields[i]),
+                  ],
+                ],
+              );
+            }
+            return Column(
+              children: [
+                for (var i = 0; i < fields.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 12),
+                  fields[i],
+                ],
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPoliciesAndRulesCard() {
+    return _SectionCard(
+      title: 'Nội quy & Chính sách',
+      icon: LucideIcons.shieldCheck,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 640;
+            final fields = [
+              TextFormField(
+                key: const Key('listing_min_nights_input'),
+                controller: _minNightsController,
+                keyboardType: TextInputType.number,
+                decoration: _fieldDecoration('Số đêm tối thiểu *'),
+              ),
+              TextFormField(
+                key: const Key('listing_max_nights_input'),
+                controller: _maxNightsController,
+                keyboardType: TextInputType.number,
+                decoration: _fieldDecoration('Số đêm tối đa'),
+              ),
+              _buildDropdownField<String>(
+                dropdownKey: const Key('listing_checkin_dropdown'),
+                label: 'Nhận phòng từ *',
+                value: _checkInFrom,
+                items: kHalfHourTimeOptions
+                    .map(
+                      (t) => DropdownMenuItem<String>(value: t, child: Text(t)),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => _checkInFrom = v);
+                },
+              ),
+              _buildDropdownField<String>(
+                dropdownKey: const Key('listing_checkout_dropdown'),
+                label: 'Trả phòng trước *',
+                value: _checkOutBefore,
+                items: kHalfHourTimeOptions
+                    .map(
+                      (t) => DropdownMenuItem<String>(value: t, child: Text(t)),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => _checkOutBefore = v);
+                },
+              ),
+            ];
+            if (isWide) {
+              return Row(
+                children: [
+                  for (var i = 0; i < fields.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 12),
+                    Expanded(child: fields[i]),
+                  ],
+                ],
+              );
+            }
+            return Column(
+              children: [
+                for (var i = 0; i < fields.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 12),
+                  fields[i],
+                ],
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 14),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 540;
+            final cancelField = _buildDropdownField<HostCancellationPolicy>(
+              dropdownKey: const Key('listing_cancellation_dropdown'),
+              label: 'Chính sách hủy phòng *',
+              value: _cancellationPolicy,
+              items: HostCancellationPolicy.values
+                  .map(
+                    (e) => DropdownMenuItem<HostCancellationPolicy>(
+                      value: e,
+                      child: Text(e.labelVi, overflow: TextOverflow.ellipsis),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _cancellationPolicy = v);
+              },
+            );
+            final statusField = !_isEditMode
+                ? _buildDropdownField<HostListingStatus>(
+                    dropdownKey: const Key('listing_status_dropdown'),
+                    label: 'Trạng thái khi lưu *',
+                    value: _initialCreateStatus ==
+                            HostListingStatus.pendingApproval
+                        ? HostListingStatus.pendingApproval
+                        : HostListingStatus.draft,
+                    items: const [
+                      DropdownMenuItem<HostListingStatus>(
+                        value: HostListingStatus.draft,
+                        child: Text('Lưu nháp (draft)'),
+                      ),
+                      DropdownMenuItem<HostListingStatus>(
+                        value: HostListingStatus.pendingApproval,
+                        child: Text('Gửi admin duyệt (pending_approval)'),
+                      ),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) setState(() => _initialCreateStatus = v);
+                    },
+                  )
+                : TextFormField(
+                    controller: _quietHoursController,
+                    decoration: _fieldDecoration('Khung giờ yên lặng'),
+                  );
+
+            if (isWide) {
+              return Row(
+                children: [
+                  Expanded(child: cancelField),
+                  const SizedBox(width: 14),
+                  Expanded(child: statusField),
+                ],
+              );
+            }
+            return Column(
+              children: [
+                cancelField,
+                const SizedBox(height: 14),
+                statusField,
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: _instantBookEnabled
+                ? AppColors.surfaceElevated
+                : AppColors.surfaceBase,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                LucideIcons.zap,
+                size: 20,
+                color: AppColors.iconStrong,
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Đặt phòng nhanh (Instant Book)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      'Khách được xác nhận tức thì mà không cần chủ nhà duyệt thủ công.',
+                      style: TextStyle(
+                          fontSize: 11, color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              Checkbox(
+                key: const Key('listing_instant_book_checkbox'),
+                value: _instantBookEnabled,
+                activeColor: AppColors.textStrong,
+                onChanged: (v) =>
+                    setState(() => _instantBookEnabled = v == true),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'Nội quy cơ bản:',
+          style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          children: [
+            FilterChip(
+              showCheckmark: false,
+              backgroundColor: AppColors.surfaceBase,
+              selectedColor: AppColors.primary,
+              side: BorderSide.none,
+              avatar: Icon(
+                LucideIcons.cigarette,
+                size: 15,
+                color: _smokingAllowed ? Colors.white : AppColors.iconMuted,
+              ),
+              shape: const StadiumBorder(),
+              label: Text(
+                'Cho phép hút thuốc',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight:
+                      _smokingAllowed ? FontWeight.w600 : FontWeight.w500,
+                  color:
+                      _smokingAllowed ? Colors.white : AppColors.textSecondary,
+                ),
+              ),
+              selected: _smokingAllowed,
+              onSelected: (v) => setState(() => _smokingAllowed = v),
+            ),
+            FilterChip(
+              showCheckmark: false,
+              backgroundColor: AppColors.surfaceBase,
+              selectedColor: AppColors.primary,
+              side: BorderSide.none,
+              avatar: Icon(
+                LucideIcons.pawPrint,
+                size: 15,
+                color: _petsAllowed ? Colors.white : AppColors.iconMuted,
+              ),
+              shape: const StadiumBorder(),
+              label: Text(
+                'Cho phép thú cưng',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: _petsAllowed ? FontWeight.w600 : FontWeight.w500,
+                  color: _petsAllowed ? Colors.white : AppColors.textSecondary,
+                ),
+              ),
+              selected: _petsAllowed,
+              onSelected: (v) => setState(() => _petsAllowed = v),
+            ),
+            FilterChip(
+              showCheckmark: false,
+              backgroundColor: AppColors.surfaceBase,
+              selectedColor: AppColors.primary,
+              side: BorderSide.none,
+              avatar: Icon(
+                LucideIcons.partyPopper,
+                size: 15,
+                color: _partyAllowed ? Colors.white : AppColors.iconMuted,
+              ),
+              shape: const StadiumBorder(),
+              label: Text(
+                'Cho phép tổ chức tiệc / BBQ',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: _partyAllowed ? FontWeight.w600 : FontWeight.w500,
+                  color: _partyAllowed ? Colors.white : AppColors.textSecondary,
+                ),
+              ),
+              selected: _partyAllowed,
+              onSelected: (v) => setState(() => _partyAllowed = v),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAmenitiesCard() {
+    return _SectionCard(
+      title: 'Tiện nghi',
+      icon: LucideIcons.wifi,
+      children: [
+        if (_availableAmenities.isEmpty)
+          const Text(
+            'Danh sách tiện nghi sẽ được đồng bộ từ máy chủ khi trực tuyến.',
+            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _availableAmenities.map((amenity) {
+              final rawId = amenity['amenityId'] ?? amenity['id'];
+              final id = rawId is num
+                  ? rawId.toInt()
+                  : (int.tryParse('${rawId ?? ''}') ?? 0);
+              final name =
+                  (amenity['name'] ?? amenity['label'] ?? 'Tiện nghi #$id')
+                      .toString();
+              final selected = _selectedAmenityIds.contains(id);
+              final icon = AppSemanticIcons.resolveAmenityIcon(name);
+
+              return FilterChip(
+                key: Key('listing_amenity_chip_$id'),
+                showCheckmark: false,
+                backgroundColor: AppColors.surfaceBase,
+                selectedColor: AppColors.primary,
+                side: BorderSide.none,
+                avatar: Icon(
+                  icon,
+                  size: 15,
+                  color: selected ? Colors.white : AppColors.iconMuted,
+                ),
+                shape: const StadiumBorder(),
+                label: Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    color: selected ? Colors.white : AppColors.textSecondary,
+                  ),
+                ),
+                selected: selected,
+                onSelected: (val) {
+                  setState(() {
+                    if (val) {
+                      _selectedAmenityIds.add(id);
+                    } else {
+                      _selectedAmenityIds.remove(id);
+                    }
+                  });
+                },
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildImagesAndAiCard() {
+    return _SectionCard(
+      title: 'Ảnh chỗ nghỉ',
+      icon: LucideIcons.camera,
+      children: [
+        InkWell(
+          key: const Key('listing_pick_images_btn'),
+          borderRadius: BorderRadius.circular(24),
+          onTap: _saving ? null : _pickImagesFromDevice,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 120),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: AppColors.border,
+                width: 1.2,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  LucideIcons.camera,
+                  size: 28,
+                  color: AppColors.iconStrong,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Chọn ảnh thật từ thiết bị của bạn',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Hỗ trợ JPG, PNG, WebP hoặc GIF. Tối đa 30 ảnh, mỗi ảnh 5MB.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.textStrong,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(LucideIcons.imagePlus,
+                          size: 14, color: Colors.white),
+                      SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'Tải ảnh lên ngay',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_existingImages.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              Text(
+                'ẢNH ĐÃ LƯU (${_existingImages.length})',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondary,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              if (_isEditMode)
+                OutlinedButton.icon(
+                  key: const Key('listing_analyze_all_ai_btn'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(180, 48),
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  onPressed:
+                      _analyzingAllAi ? null : _handleAnalyzeAllImagesWithAi,
+                  icon: const Icon(
+                    LucideIcons.scanSearch,
+                    size: 16,
+                    color: AppColors.iconStrong,
+                  ),
+                  label: Text(
+                    _analyzingAllAi
+                        ? 'Đang phân tích ảnh...'
+                        : 'Phân tích ảnh bằng AI',
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final crossCount = constraints.maxWidth >= 760
+                  ? 3
+                  : (constraints.maxWidth >= 480 ? 2 : 1);
+              const spacing = 12.0;
+              final itemWidth =
+                  (constraints.maxWidth - (spacing * (crossCount - 1))) /
+                      crossCount;
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  for (var idx = 0; idx < _existingImages.length; idx++)
+                    SizedBox(
+                      width: itemWidth,
+                      child: _buildExistingImageCard(_existingImages[idx], idx),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+        if (_queuedImages.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              Text(
+                'ẢNH MỚI CHỜ UPLOAD (${_queuedImages.length})',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondary,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(140, 48),
+                  foregroundColor: AppColors.textPrimary,
+                ),
+                onPressed: _saving ? null : _clearAllQueuedImages,
+                icon: const Icon(
+                  LucideIcons.trash2,
+                  size: 16,
+                  color: AppColors.iconStrong,
+                ),
+                label: const Text('Xóa toàn bộ ảnh mới đã chọn'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final crossCount = constraints.maxWidth >= 760
+                  ? 3
+                  : (constraints.maxWidth >= 480 ? 2 : 1);
+              const spacing = 12.0;
+              final itemWidth =
+                  (constraints.maxWidth - (spacing * (crossCount - 1))) /
+                      crossCount;
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  for (var idx = 0; idx < _queuedImages.length; idx++)
+                    SizedBox(
+                      width: itemWidth,
+                      child: _buildQueuedImageCard(_queuedImages[idx], idx),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildExistingImageCard(ExistingListingImage image, int index) {
+    final isAnalyzing = _analyzingImageIds.contains(image.imageId);
+    final isSavingTags = _savingTagImageIds.contains(image.imageId);
+    final currentTagCodes = image.tags.map((t) => t.tag).toSet();
+    final availableTaxonomies =
+        _tagTaxonomies.where((t) => !currentTagCodes.contains(t.code)).toList();
+
+    String statusLabel = 'Chưa phân tích';
+    Color statusColor = AppColors.textSecondary;
+    if (isAnalyzing || image.aiAnalysisStatus == 'analyzing') {
+      statusLabel = 'Đang phân tích ảnh bằng AI...';
+      statusColor = AppColors.textStrong;
+    } else if (image.aiAnalysisStatus == 'failed' ||
+        image.aiAnalysisStatus == 'analysis_failed') {
+      statusLabel = 'Phân tích lỗi, thử lại';
+      statusColor = const Color(0xFFBE123C);
+    } else if (image.tags.isNotEmpty || image.aiAnalysisStatus == 'analyzed') {
+      statusLabel = 'Đã gắn tag (${image.tags.length})';
+      statusColor = const Color(0xFF047857);
+    }
+
+    return Container(
+      key: Key('existing_image_card_${image.imageId}'),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: image.isCover ? AppColors.primary : AppColors.border,
+          width: image.isCover ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(23)),
+            child: AppImage(
+              imageUrl: image.url,
+              height: 140,
+              fit: BoxFit.cover,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        image.displayTitle?.isNotEmpty == true
+                            ? image.displayTitle!
+                            : 'Ảnh chỗ nghỉ ${index + 1}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (image.isCover)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandSoft,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Ảnh bìa',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  statusLabel,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor,
+                  ),
+                ),
+                if (image.roomType != null &&
+                    image.roomType!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Không gian: ${image.roomType}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+                if (image.aiConfidence != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Độ tin cậy AI: ${(image.aiConfidence! <= 1 ? image.aiConfidence! * 100 : image.aiConfidence!).toStringAsFixed(0)}%',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+                if (image.aiWarnings.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Cảnh báo: ${image.aiWarnings.join(", ")}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFFB45309),
+                    ),
+                  ),
+                ],
+                if (image.tags.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: image.tags.map((tag) {
+                      return InputChip(
+                        key: Key('image_${image.imageId}_tag_${tag.tag}'),
+                        shape: const StadiumBorder(),
+                        label: Text(
+                          tag.labelVi,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        onDeleted: isSavingTags
+                            ? null
+                            : () {
+                                final next = image.tags
+                                    .map((t) => t.tag)
+                                    .where((code) => code != tag.tag)
+                                    .toList();
+                                _handleUpdateImageTags(image, next);
+                              },
+                      );
+                    }).toList(),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                InputDecorator(
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      key: Key('image_${image.imageId}_add_tag_dropdown'),
+                      isExpanded: true,
+                      isDense: true,
+                      value: null,
+                      hint: Text(
+                        'Thêm tag thiếu (${availableTaxonomies.length})',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      items: availableTaxonomies
+                          .map(
+                            (tax) => DropdownMenuItem<String>(
+                              value: tax.code,
+                              child: Text(
+                                tax.labelVi,
+                                style: const TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: isSavingTags || availableTaxonomies.isEmpty
+                          ? null
+                          : (code) {
+                              if (code == null || code.isEmpty) return;
+                              final next = [
+                                ...image.tags.map((t) => t.tag),
+                                code,
+                              ];
+                              _handleUpdateImageTags(image, next);
+                            },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    TextButton(
+                      key: Key('image_${image.imageId}_analyze_btn'),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(72, 48),
+                      ),
+                      onPressed: isAnalyzing
+                          ? null
+                          : () => _handleAnalyzeSingleImage(image.imageId),
+                      child: Text(
+                        statusLabel.contains('lỗi')
+                            ? 'Thử lại'
+                            : 'Phân tích AI',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    if (!image.isCover)
+                      TextButton(
+                        key: Key('image_${image.imageId}_cover_btn'),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(72, 48),
+                        ),
+                        onPressed: () => _handleSetCoverImage(image.imageId),
+                        child: const Text(
+                          'Đặt bìa',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    if (index > 0)
+                      IconButton(
+                        key: Key('image_${image.imageId}_move_left_btn'),
+                        constraints:
+                            const BoxConstraints(minWidth: 48, minHeight: 48),
+                        tooltip: 'Chuyển lên trước',
+                        onPressed: () => _moveExistingImage(index, -1),
+                        icon: const Icon(
+                          LucideIcons.arrowLeft,
+                          size: 16,
+                          color: AppColors.iconStrong,
+                        ),
+                      ),
+                    if (index < _existingImages.length - 1)
+                      IconButton(
+                        key: Key('image_${image.imageId}_move_right_btn'),
+                        constraints:
+                            const BoxConstraints(minWidth: 48, minHeight: 48),
+                        tooltip: 'Chuyển ra sau',
+                        onPressed: () => _moveExistingImage(index, 1),
+                        icon: const Icon(
+                          LucideIcons.arrowRight,
+                          size: 16,
+                          color: AppColors.iconStrong,
+                        ),
+                      ),
+                    TextButton(
+                      key: Key('image_${image.imageId}_delete_btn'),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(64, 48),
+                        foregroundColor: const Color(0xFFBE123C),
+                      ),
+                      onPressed: () => _handleDeleteExistingImage(image),
+                      child: const Text(
+                        'Xóa',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQueuedImageCard(QueuedListingImage item, int index) {
+    final isFutureCover = _existingImages.isEmpty && index == 0;
+    return Container(
+      key: Key('queued_image_card_${item.id}'),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isFutureCover ? AppColors.primary : AppColors.border,
+          width: isFutureCover ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(23)),
+            child: Image.memory(
+              item.file.bytes,
+              height: 130,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                height: 130,
+                color: AppColors.surfaceMuted,
+                alignment: Alignment.center,
+                child: const Icon(
+                  LucideIcons.image,
+                  color: AppColors.iconMuted,
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${item.file.name} (${item.file.formattedSize})',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isFutureCover)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandSoft,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Ảnh bìa',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  item.status.labelVi,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: item.status == QueuedImageUploadStatus.failed ||
+                            item.status ==
+                                QueuedImageUploadStatus.analysisFailed
+                        ? const Color(0xFFBE123C)
+                        : AppColors.primary,
+                  ),
+                ),
+                if (item.status == QueuedImageUploadStatus.uploading) ...[
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(value: item.progress, minHeight: 4),
+                ],
+                if (item.error != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    item.error!,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFFBE123C),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    if (item.status == QueuedImageUploadStatus.failed &&
+                        _isEditMode)
+                      TextButton(
+                        key: Key('queued_image_retry_${item.id}'),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(72, 48),
+                        ),
+                        onPressed: () => _retryFailedQueuedImage(item),
+                        child: const Text('Thử lại'),
+                      ),
+                    if (index > 0)
+                      IconButton(
+                        key: Key('queued_image_move_left_${item.id}'),
+                        constraints:
+                            const BoxConstraints(minWidth: 48, minHeight: 48),
+                        tooltip: 'Chuyển lên trước',
+                        onPressed: () => _moveQueuedImage(index, -1),
+                        icon: const Icon(
+                          LucideIcons.arrowLeft,
+                          size: 16,
+                          color: AppColors.iconStrong,
+                        ),
+                      ),
+                    if (index < _queuedImages.length - 1)
+                      IconButton(
+                        key: Key('queued_image_move_right_${item.id}'),
+                        constraints:
+                            const BoxConstraints(minWidth: 48, minHeight: 48),
+                        tooltip: 'Chuyển ra sau',
+                        onPressed: () => _moveQueuedImage(index, 1),
+                        icon: const Icon(
+                          LucideIcons.arrowRight,
+                          size: 16,
+                          color: AppColors.iconStrong,
+                        ),
+                      ),
+                    if (item.status != QueuedImageUploadStatus.uploading &&
+                        item.status != QueuedImageUploadStatus.analyzing)
+                      TextButton(
+                        key: Key('queued_image_remove_${item.id}'),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(64, 48),
+                          foregroundColor: const Color(0xFFBE123C),
+                        ),
+                        onPressed: () => _removeQueuedImage(item.id),
+                        child: const Text('Xóa'),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatVnd(dynamic amount) {
+    final val = double.tryParse('$amount') ?? 0;
+    if (val <= 0) return '0 ₫';
+    final intVal = val.round();
+    final parts = intVal.toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (Match m) => '${m[1]}.',
+        );
+    return '$parts ₫';
+  }
+
+  bool _validateCurrentStep() {
+    setState(() => _errorMessage = null);
+    if (_currentStep == 0) {
+      if (_titleController.text.trim().isEmpty) {
+        setState(() =>
+            _errorMessage = 'Vui lòng nhập tên chỗ nghỉ trước khi tiếp tục.');
+        return false;
+      }
+      if (_descriptionController.text.trim().isEmpty) {
+        setState(() =>
+            _errorMessage = 'Vui lòng nhập mô tả chỗ nghỉ trước khi tiếp tục.');
+        return false;
+      }
+    } else if (_currentStep == 1) {
+      if (_addressController.text.trim().isEmpty) {
+        setState(() =>
+            _errorMessage = 'Vui lòng nhập địa chỉ cụ thể trước khi tiếp tục.');
+        return false;
+      }
+    } else if (_currentStep == 2) {
+      final price = int.tryParse(
+            _basePriceController.text.replaceAll(RegExp(r'[^0-9]'), ''),
+          ) ??
+          0;
+      if (price <= 0) {
+        setState(
+            () => _errorMessage = 'Vui lòng nhập giá cơ bản mỗi đêm hợp lệ.');
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _goToNextStep() {
+    if (!_validateCurrentStep()) return;
+    if (_currentStep < _steps.length - 1) {
+      setState(() {
+        _currentStep++;
+        _errorMessage = null;
+      });
+    }
+  }
+
+  void _goToPrevStep() {
+    if (_currentStep > 0) {
+      setState(() {
+        _currentStep--;
+        _errorMessage = null;
+      });
+    } else {
+      widget.onCancel?.call();
+    }
+  }
+
+  void _resetFormForNewListing() {
+    setState(() {
+      _activeListingId = null;
+      _currentStep = 0;
+      _titleController.clear();
+      _descriptionController.clear();
+      _addressController.clear();
+      _latController.text = kDefaultVungTauLat.toStringAsFixed(6);
+      _lngController.text = kDefaultVungTauLng.toStringAsFixed(6);
+      _maxGuestsController.text = '4';
+      _bedroomsController.text = '2';
+      _bedsController.text = '2';
+      _bathroomsController.text = '2';
+      _basePriceController.text = '1500000';
+      _weekendPriceController.text = '1500000';
+      _cleaningFeeController.text = '0';
+      _surchargeController.text = '0';
+      _minNightsController.text = '1';
+      _maxNightsController.clear();
+      _quietHoursController.text = '22:00 - 06:00';
+      _propertyType = HostPropertyType.villa;
+      _roomType = HostRoomType.entirePlace;
+      _cancellationPolicy = HostCancellationPolicy.flexible;
+      _selectedWard = kVungTauWards.first.name;
+      _checkInFrom = '14:00';
+      _checkOutBefore = '12:00';
+      _instantBookEnabled = false;
+      _weekendPriceManuallyChanged = false;
+      _smokingAllowed = false;
+      _petsAllowed = false;
+      _partyAllowed = false;
+      _selectedAmenityIds.clear();
+      _existingImages = [];
+      _queuedImages = [];
+      _errorMessage = null;
+      _successMessage = null;
+      _uploadStatusMessage = null;
+      _aiStatusMessage = null;
+    });
+  }
+
+  void _showSuccessDialog({
+    required String title,
+    required String listingId,
+    required bool isEditMode,
+  }) {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFECFDF5),
+                border: Border.all(color: const Color(0xFFA7F3D0), width: 2),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x1A10B981),
+                    blurRadius: 18,
+                    spreadRadius: 4,
+                  ),
+                ],
+              ),
+              child: const Center(
+                child: Icon(
+                  LucideIcons.circleCheck,
+                  color: Color(0xFF059669),
+                  size: 40,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              isEditMode ? 'Cập nhật thành công!' : 'Thêm chỗ nghỉ thành công!',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              isEditMode
+                  ? 'Chỗ nghỉ #$listingId đã được cập nhật thông tin thành công lên hệ thống The Palm Villa.'
+                  : 'Chỗ nghỉ #$listingId đã được lưu thành công và sẵn sàng đón khách trên hệ thống The Palm Villa!',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: () {
+                Navigator.of(dialogCtx).pop();
+                widget.onCancel?.call();
+              },
+              icon: const Icon(LucideIcons.building2, size: 18),
+              label: const Text(
+                'Quản lý danh sách chỗ nghỉ',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+            ),
+            if (!isEditMode) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  minimumSize: const Size(double.infinity, 46),
+                  side: const BorderSide(color: AppColors.border),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.of(dialogCtx).pop();
+                  _resetFormForNewListing();
+                },
+                icon: const Icon(LucideIcons.plus, size: 18),
+                label: const Text(
+                  'Thêm tiếp chỗ nghỉ khác',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepperBar() {
+    final score = _calculateCompletionScore();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Độ hoàn thiện',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            Text(
+              '$score%',
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: (score / 100.0).clamp(0.05, 1.0),
+            minHeight: 4,
+            backgroundColor: const Color(0xFFF1F5F9),
+            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1E293B)),
+          ),
+        ),
+        const SizedBox(height: 18),
+        const Divider(height: 1, thickness: 1, color: AppColors.border),
+        const SizedBox(height: 14),
+      ],
+    );
+  }
+
+  Widget _buildStepContent() {
+    switch (_currentStep) {
+      case 0:
+        return _buildBasicInfoCard();
+      case 1:
+        return _buildLocationCard();
+      case 2:
+        return _buildCapacityAndPricingCard();
+      case 3:
+        return _buildPoliciesAndRulesCard();
+      case 4:
+        return _buildAmenitiesCard();
+      case 5:
+        return _buildImagesAndAiCard();
+      case 6:
+        return _buildReviewAndConfirmCard();
+      default:
+        return _buildBasicInfoCard();
+    }
+  }
+
+  Widget _buildPlaceholderCover() {
+    return Container(
+      height: 180,
+      width: double.infinity,
+      color: const Color(0xFFF1F5F9),
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(LucideIcons.image, size: 36, color: Color(0xFF94A3B8)),
+            SizedBox(height: 6),
+            Text(
+              'Chưa có ảnh bìa',
+              style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReviewMiniStat({
+    required IconData icon,
+    required String label,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 16, color: AppColors.primary),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReviewAndConfirmCard() {
+    final basePrice = int.tryParse(
+          _basePriceController.text.replaceAll(RegExp(r'[^0-9]'), ''),
+        ) ??
+        0;
+    final weekendPrice = int.tryParse(
+          _weekendPriceController.text.replaceAll(RegExp(r'[^0-9]'), ''),
+        ) ??
+        basePrice;
+    final cleaningFee = int.tryParse(
+          _cleaningFeeController.text.replaceAll(RegExp(r'[^0-9]'), ''),
+        ) ??
+        0;
+
+    String? coverUrl;
+    if (_existingImages.isNotEmpty) {
+      final cover = _existingImages.firstWhere(
+        (img) => img.isCover,
+        orElse: () => _existingImages.first,
+      );
+      coverUrl = cover.url;
+    }
+    final totalImages = _existingImages.length + _queuedImages.length;
+
+    final selectedAmenitiesList = _availableAmenities
+        .where((a) => _selectedAmenityIds.contains(a['amenityId']))
+        .map((a) => a['name']?.toString() ?? '')
+        .where((n) => n.isNotEmpty)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1F2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Center(
+                child: Icon(
+                  LucideIcons.checkCheck,
+                  size: 20,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Kiểm tra & Xác nhận thông tin',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    'Xem lại toàn bộ chi tiết chỗ nghỉ trước khi lưu lên hệ thống.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // 1. Khối Tổng quan & Hình ảnh
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceBase,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Stack(
+                  children: [
+                    if (coverUrl != null && coverUrl.isNotEmpty)
+                      Image.network(
+                        coverUrl,
+                        height: 180,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _buildPlaceholderCover(),
+                      )
+                    else
+                      _buildPlaceholderCover(),
+                    Positioned(
+                      bottom: 10,
+                      right: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.images,
+                                size: 13, color: Colors.white),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$totalImages ảnh',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${_propertyType.labelVi} • ${_roomType.labelVi}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _titleController.text.trim().isNotEmpty
+                              ? _titleController.text.trim()
+                              : 'Chưa đặt tên chỗ nghỉ',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(LucideIcons.mapPin,
+                                size: 13, color: AppColors.textSecondary),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                '${_addressController.text.trim().isNotEmpty ? _addressController.text.trim() : 'Chưa nhập địa chỉ'}, $_selectedWard, Vũng Tàu',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                    onPressed: () => setState(() => _currentStep = 0),
+                    icon: const Icon(LucideIcons.pencil, size: 13),
+                    label: const Text('Sửa', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // 2. Khối Sức chứa & Giá lưu trú
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceBase,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Sức chứa & Giá phòng',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                    onPressed: () => setState(() => _currentStep = 2),
+                    icon: const Icon(LucideIcons.pencil, size: 13),
+                    label: const Text('Sửa', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _buildReviewMiniStat(
+                    icon: LucideIcons.users,
+                    label: '${_maxGuestsController.text} Khách',
+                  ),
+                  const SizedBox(width: 8),
+                  _buildReviewMiniStat(
+                    icon: LucideIcons.bedDouble,
+                    label: '${_bedroomsController.text} PN',
+                  ),
+                  const SizedBox(width: 8),
+                  _buildReviewMiniStat(
+                    icon: LucideIcons.bed,
+                    label: '${_bedsController.text} Giường',
+                  ),
+                  const SizedBox(width: 8),
+                  _buildReviewMiniStat(
+                    icon: LucideIcons.bath,
+                    label: '${_bathroomsController.text} PT',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Divider(height: 1, color: AppColors.border),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Giá ngày thường',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_formatVnd(basePrice)} / đêm',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Giá cuối tuần (T7, CN)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_formatVnd(weekendPrice)} / đêm',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFBE123C),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (cleaningFee > 0) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Phí dọn dẹp: ${_formatVnd(cleaningFee)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // 3. Khối Tiện nghi nổi bật
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceBase,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Tiện nghi (${selectedAmenitiesList.length})',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                    onPressed: () => setState(() => _currentStep = 4),
+                    icon: const Icon(LucideIcons.pencil, size: 13),
+                    label: const Text('Sửa', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (selectedAmenitiesList.isEmpty)
+                const Text(
+                  'Chưa chọn tiện nghi bổ sung nào.',
+                  style:
+                      TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                )
+              else
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: selectedAmenitiesList.take(8).map((name) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            LucideIcons.check,
+                            size: 11,
+                            color: Color(0xFF10B981),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // 4. Khối Quy tắc & Chính sách
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceBase,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Quy tắc & Giờ giấc',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                    onPressed: () => setState(() => _currentStep = 3),
+                    icon: const Icon(LucideIcons.pencil, size: 13),
+                    label: const Text('Sửa', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '• Nhận phòng từ $_checkInFrom  |  Trả phòng trước $_checkOutBefore',
+                style:
+                    const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '• Hút thuốc: ${_smokingAllowed ? 'Cho phép' : 'Không'}  |  Thú cưng: ${_petsAllowed ? 'Cho phép' : 'Không'}  |  Tiệc tùng: ${_partyAllowed ? 'Cho phép' : 'Không'}',
+                style:
+                    const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '• Chính sách hủy: ${_cancellationPolicy.labelVi}',
+                style:
+                    const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF1F2),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFFECDD3)),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.shieldCheck, size: 18, color: AppColors.primary),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Bằng việc nhấn "Lưu chỗ nghỉ", bạn xác nhận toàn bộ thông tin là chính xác và sẵn sàng tiếp đón khách lưu trú.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFFBE123C),
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepFooterActions() {
+    final isLastStep = _currentStep == _steps.length - 1;
+
+    return Padding(
+      padding: EdgeInsets.only(top: 20, bottom: widget.embedded ? 40 : 28),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 50),
+                backgroundColor: AppColors.surfaceBase,
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.border),
+                shape: const StadiumBorder(),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+              onPressed: _saving ? null : _goToPrevStep,
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    LucideIcons.arrowLeft,
+                    size: 16,
+                    color: AppColors.iconStrong,
+                  ),
+                  SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'Quay lại',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: isLastStep
+                ? ElevatedButton.icon(
+                    key: const Key('listing_save_btn'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 50),
+                      elevation: 0,
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                    ),
+                    onPressed: _saving ? null : () => _submitForm(),
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(
+                            LucideIcons.check,
+                            size: 17,
+                            color: Colors.white,
+                          ),
+                    label: Text(
+                      _saving
+                          ? 'Đang lưu...'
+                          : (_isEditMode ? 'Cập nhật ngay' : 'Lưu chỗ nghỉ'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  )
+                : ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 50),
+                      elevation: 0,
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                    ),
+                    onPressed: _goToNextStep,
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Tiếp tục',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Icon(
+                          LucideIcons.arrowRight,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooterActions() {
+    // Giải thuật hiển thị nút "Lưu & Gửi duyệt" theo trạng thái hiện tại của chỗ nghỉ:
+    // CONFLICT-RESOLVED: Chỉ hiển thị cho draft, pending_approval hoặc rejected; ẩn với published/hidden để tránh lỗi chuyển trạng thái 422.
+    final canSubmitForApproval = _isEditMode &&
+        (_initialCreateStatus == HostListingStatus.draft ||
+            _initialCreateStatus == HostListingStatus.pendingApproval ||
+            _initialCreateStatus == HostListingStatus.rejected);
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        if (canSubmitForApproval)
+          OutlinedButton.icon(
+            key: const Key('listing_submit_approval_btn'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(160, 48),
+              foregroundColor: AppColors.textPrimary,
+              side: const BorderSide(color: AppColors.border),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            onPressed: _saving
+                ? null
+                : () => _submitForm(
+                      targetStatus: HostListingStatus.pendingApproval,
+                    ),
+            icon: const Icon(
+              LucideIcons.send,
+              size: 16,
+              color: AppColors.iconStrong,
+            ),
+            label: const Text('Lưu & Gửi duyệt'),
+          ),
+        ElevatedButton.icon(
+          key: const Key('listing_save_btn'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(180, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          onPressed: _saving ? null : () => _submitForm(),
+          icon: _saving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(LucideIcons.save, size: 18, color: Colors.white),
+          label: Text(
+            _saving
+                ? 'Đang lưu...'
+                : (_isEditMode ? 'Cập nhật chỗ nghỉ' : 'Lưu chỗ nghỉ'),
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    );
+  }
+
+  InputDecoration _fieldDecoration(String label, {String? hint}) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      filled: true,
+      fillColor: AppColors.surfaceBase,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: const UnderlineInputBorder(
+        borderSide: BorderSide(color: AppColors.border),
+      ),
+      enabledBorder: const UnderlineInputBorder(
+        borderSide: BorderSide(color: AppColors.border),
+      ),
+      focusedBorder: const UnderlineInputBorder(
+        borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+      ),
+    );
+  }
+
+  Widget _buildStatusBanner({
+    Key? key,
+    required String text,
+    required Color bg,
+    required Color border,
+    required Color fg,
+    required IconData icon,
+  }) {
+    return Container(
+      key: key,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: AppColors.iconStrong),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: fg,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  final String title;
+  final IconData? icon;
+  final List<Widget> children;
+
+  const _SectionCard({
+    required this.title,
+    this.icon,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surfaceBase,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: AppColors.borderSoft),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (icon != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(icon, size: 22, color: AppColors.iconStrong),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+}

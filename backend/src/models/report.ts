@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu báo cáo vi phạm hoặc sự cố từ người dùng đối với chỗ nghỉ, đánh giá hoặc tài khoản khác.
+ */
 import {
     CreationOptional,
     DataTypes,

@@ -1,3 +1,7 @@
+/// Tập hợp hằng số cấu hình toàn cục về định danh thương hiệu, thời gian chờ mạng, khóa lưu trữ và quy chuẩn bố cục.
+///
+/// Đồng bộ các ngưỡng nghiệp vụ cốt lõi như múi giờ `Asia/Ho_Chi_Minh`, chiều cao tối đa vùng cuộn bảng giá theo đêm
+/// (`220.0` trên điện thoại, `248.0` trên máy tính bảng) và diện tích vùng chạm trợ năng tối thiểu (`48.0` dp).
 abstract final class AppConstants {
   static const appName = 'The Palm Villa';
   static const appTagline = 'Biệt thự nghỉ dưỡng Vũng Tàu';

@@ -1,3 +1,8 @@
+/**
+ * Lược đồ kiểm chứng dữ liệu đầu vào bằng Zod cho phân hệ xác thực (`auth`):
+ * - Ràng buộc chặt định dạng định danh (email/số điện thoại/username), độ mạnh mật khẩu, mã OTP 6 chữ số, ngày sinh hợp lệ và tham số Google ID Token / Refresh Token.
+ */
+
 import { z } from "zod";
 
 import {
@@ -63,6 +68,9 @@ const dobSchema = z.preprocess(
         .optional(),
 );
 
+/**
+ * Schema kiểm chứng chuỗi định danh đăng nhập hợp lệ (email, số điện thoại Việt Nam hoặc username).
+ */
 export const identifierSchema = z
     .string()
     .trim()
@@ -77,6 +85,9 @@ export const identifierSchema = z
         );
     }, "identifier must be a valid email, username, or phone number");
 
+/**
+ * Schema kiểm chứng dữ liệu đăng ký tài khoản mới (email, mật khẩu đủ độ mạnh, họ tên, số điện thoại, ngày sinh).
+ */
 export const registerBodySchema = z.object({
     email: z.string().trim().email("email is invalid").max(255, "email must be at most 255 characters").transform((value) => value.toLowerCase()),
     password: passwordSchema,
@@ -87,6 +98,9 @@ export const registerBodySchema = z.object({
     dob: dobSchema,
 });
 
+/**
+ * Schema kiểm chứng dữ liệu yêu cầu đăng nhập gồm định danh và mật khẩu.
+ */
 export const loginBodySchema = z.object({
     identifier: identifierSchema,
     password: z
@@ -96,36 +110,60 @@ export const loginBodySchema = z.object({
         .max(128, "Mật khẩu tối đa 128 ký tự"),
 });
 
+/**
+ * Schema kiểm chứng dữ liệu yêu cầu khôi phục mật khẩu theo định danh tài khoản.
+ */
 export const forgotPasswordBodySchema = z.object({
     identifier: identifierSchema,
 });
 
+/**
+ * Schema dùng chung cho các yêu cầu chỉ nhận trường định danh `identifier`.
+ */
 export const identifierBodySchema = forgotPasswordBodySchema;
 
+/**
+ * Schema kiểm chứng yêu cầu gửi mã OTP gồm định danh nhận mã và mục đích sử dụng (`purpose`).
+ */
 export const sendOtpBodySchema = z.object({
     identifier: identifierSchema,
     purpose: z.enum(["sign_up", "forgot_password", "verify_email", "verify_phone"]).default("sign_up"),
 });
 
+/**
+ * Schema kiểm chứng yêu cầu đặt lại mật khẩu gồm định danh, mã OTP 6 chữ số và mật khẩu mới.
+ */
 export const resetPasswordBodySchema = z.object({
     identifier: identifierSchema,
     otp: z.string().trim().regex(/^\d{6}$/, "otp must be a 6 digit code"),
     newPassword: passwordSchema,
 });
 
+/**
+ * Schema kiểm chứng yêu cầu xác minh số điện thoại bằng mã OTP.
+ */
 export const verifyPhoneBodySchema = z.object({
     identifier: identifierSchema,
     otp: z.string().trim().regex(/^\d{6}$/, "otp must be a 6 digit code"),
 });
+/**
+ * Schema kiểm chứng yêu cầu xác minh địa chỉ email bằng mã OTP.
+ */
 export const verifyEmailBodySchema = z.object({
     identifier: identifierSchema,
     otp: z.string().trim().regex(/^\d{6}$/, "otp must be a 6 digit code"),
 });
 
+/**
+ * Schema kiểm chứng yêu cầu đăng nhập OAuth bằng chuỗi `idToken` do Google cấp.
+ */
 export const googleLoginBodySchema = z.object({
     idToken: z.string().trim().min(1, "idToken is required"),
 });
 
+/**
+ * Schema kiểm chứng dữ liệu làm mới phiên đăng nhập với trường `refreshToken` tùy chọn (khi không truyền qua cookie).
+ */
 export const refreshTokenBodySchema = z
     .object({
         refreshToken: z.string().trim().min(1, "refreshToken is required").optional(),

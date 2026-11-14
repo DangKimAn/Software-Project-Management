@@ -56,11 +56,11 @@
 
 ### Tóm tắt (Tiếng Việt)
 
-**The Palm Villa** (tên định danh kỹ thuật trong giai đoạn khởi tạo: *Minh Thanh Villa*) là nền tảng thương mại điện tử chuyên biệt cho phân khúc cho thuê biệt thự nghỉ dưỡng nguyên căn (*whole-villa vacation rentals*) tại TP. Vũng Tàu, được xây dựng và vận hành theo chuẩn mực của học phần **Quản lý Dự án Phần mềm**. Dự án giải quyết đồng thời bốn bài toán kỹ thuật cốt lõi trong hệ thống OTA hiện đại: (1) kiểm soát tương tranh chống đặt trùng phòng (*double-booking*) bằng cơ chế khóa ngày mức giao dịch ACID (`booking_date_locks`) kết hợp tiến trình tự động thu hồi giữ chỗ quá hạn 15 phút; (2) tách biệt rạch ròi giữa vòng đời lưu trú 11 trạng thái (**Booking Finite State Machine**) với 3 luồng đối soát tài chính độc lập (Thanh toán, Hoàn tiền, Giải ngân Maker–Checker); (3) khám phá đa tiêu chí theo phân vùng địa lý – bán kính bản đồ kết hợp thị giác máy tính (**OpenAI `gpt-4.1-mini`**) phục vụ phân loại nhãn ảnh biệt thự và bóc tách định danh CCCD (KYC); và (4) đồng bộ lịch trống hai chiều tự động với **Google Sheets** phục vụ mô hình vận hành đại lý của Chủ nhà (*Host Agency Mode*). Toàn bộ kho mã nguồn được tổ chức theo mô hình Monorepo gồm ứng dụng đa nền tảng **Flutter** (15 phân hệ chức năng, 145 tệp mã nguồn Dart, hỗ trợ Android, iOS, Web và 3 ngôn ngữ `vi`/`en`/`ko`) và máy chủ **Node.js + Express 5 + TypeScript** (25 phân hệ nghiệp vụ, 52 định nghĩa mô hình dữ liệu, 22 kịch bản di trú SQL), được bảo vệ bởi quy trình kiểm duyệt chất lượng tự động **GitHub Actions CI/CD**.
+**The Palm Villa** (tên định danh kỹ thuật trong giai đoạn khởi tạo: *Minh Thanh Villa*) là nền tảng thương mại điện tử chuyên biệt cho phân khúc cho thuê biệt thự nghỉ dưỡng nguyên căn (*whole-villa vacation rentals*) tại TP. Vũng Tàu, được xây dựng và vận hành theo chuẩn mực của học phần **Quản lý Dự án Phần mềm**. Dự án giải quyết đồng thời bốn bài toán kỹ thuật cốt lõi trong hệ thống OTA hiện đại: (1) kiểm soát tương tranh chống đặt trùng phòng (*double-booking*) bằng cơ chế khóa ngày mức giao dịch ACID (`booking_date_locks`) kết hợp tiến trình tự động thu hồi giữ chỗ quá hạn 15 phút; (2) tách biệt rạch ròi giữa vòng đời lưu trú 11 trạng thái (**Booking Finite State Machine**) với 3 luồng đối soát tài chính độc lập (Thanh toán, Hoàn tiền, Giải ngân Maker–Checker); (3) khám phá đa tiêu chí theo phân vùng địa lý – bán kính bản đồ kết hợp thị giác máy tính (**OpenAI `gpt-4.1-mini`**) phục vụ phân loại nhãn ảnh biệt thự và bóc tách định danh CCCD (KYC); và (4) đồng bộ lịch trống hai chiều tự động với **Google Sheets** phục vụ mô hình vận hành đại lý của Chủ nhà (*Host Agency Mode*). Toàn bộ kho mã nguồn được tổ chức theo mô hình Monorepo gồm ứng dụng đa nền tảng **Flutter** (14 phân hệ chức năng, 182 tệp mã nguồn Dart, hỗ trợ Android, iOS, Web và 3 ngôn ngữ `vi`/`en`/`ko`) và máy chủ **Node.js + Express 5 + TypeScript** (21 phân hệ nghiệp vụ, 52 định nghĩa mô hình dữ liệu, 22 kịch bản di trú SQL), được bảo vệ bởi quy trình kiểm duyệt chất lượng tự động **GitHub Actions CI/CD**.
 
 ### Abstract (English)
 
-**The Palm Villa** (initially codenamed *Minh Thanh Villa*) is an end-to-end vacation villa booking and property management platform engineered under rigorous **Software Project Management** methodologies. Designed for whole-villa rentals in Vung Tau City, Vietnam, the system addresses four critical distributed-application challenges: (1) deterministic concurrency control against double-booking via transactional date-range locking (`booking_date_locks`) paired with an automated 15-minute payment-hold expiration worker; (2) strict architectural decoupling between an 11-state **Booking Finite State Machine (FSM)** and three orthogonal financial settlement tracks (*Payment*, *Refund*, and *Maker–Checker Host Payouts*); (3) multi-criteria geospatial & availability discovery paired with **AI Computer Vision** (**OpenAI `gpt-4.1-mini`**) for automated listing media tagging and Host KYC identity verification; and (4) bidirectional **Google Sheets synchronization** tailored for real-world host agency workflows. Structured as a full-stack monorepo, the codebase integrates a **Flutter** cross-platform client (15 feature modules, 145 Dart files across Android, iOS, and Web with `vi`/`en`/`ko` localization) and a **Node.js + Express 5 + TypeScript** backend (25 domain modules, 52 Sequelize models, and 22 SQL migrations), governed by multi-stage **GitHub Actions CI/CD** pipelines and automated security/static-analysis quality gates.
+**The Palm Villa** (initially codenamed *Minh Thanh Villa*) is an end-to-end vacation villa booking and property management platform engineered under rigorous **Software Project Management** methodologies. Designed for whole-villa rentals in Vung Tau City, Vietnam, the system addresses four critical distributed-application challenges: (1) deterministic concurrency control against double-booking via transactional date-range locking (`booking_date_locks`) paired with an automated 15-minute payment-hold expiration worker; (2) strict architectural decoupling between an 11-state **Booking Finite State Machine (FSM)** and three orthogonal financial settlement tracks (*Payment*, *Refund*, and *Maker–Checker Host Payouts*); (3) multi-criteria geospatial & availability discovery paired with **AI Computer Vision** (**OpenAI `gpt-4.1-mini`**) for automated listing media tagging and Host KYC identity verification; and (4) bidirectional **Google Sheets synchronization** tailored for real-world host agency workflows. Structured as a full-stack monorepo, the codebase integrates a **Flutter** cross-platform client (14 feature modules, 182 Dart files across Android, iOS, and Web with `vi`/`en`/`ko` localization) and a **Node.js + Express 5 + TypeScript** backend (21 domain modules, 52 Sequelize models, and 22 SQL migrations), governed by multi-stage **GitHub Actions CI/CD** pipelines and automated security/static-analysis quality gates.
 
 ---
 
@@ -72,11 +72,11 @@ Hệ thống **The Palm Villa** được thiết kế để giải quyết các 
 
 | Mã | Bài toán thực tiễn (Domain Problem) | Giải pháp kiến trúc & Thuật toán (Engineering Solution) | Phân hệ đối chứng trong mã nguồn |
 | :--: | :--- | :--- | :--- |
-| **P1** | **Xung đột đặt trùng lịch (*Double-Booking Race Condition*)** khi nhiều khách cùng thanh toán một căn biệt thự trong cùng khoảng ngày `[checkIn, checkOut)`. | Giao dịch ACID kết hợp bảng khóa ngày duy nhất `booking_date_locks` và tiến trình nền `startPaymentExpirationSweep` tự động giải phóng khóa sau 15 phút nếu chưa thanh toán. | `backend/src/modules/bookings/`<br>`backend/src/services/booking-expiration.service.ts` |
+| **P1** | **Xung đột đặt trùng lịch (*Double-Booking Race Condition*)** khi nhiều khách cùng thanh toán một căn biệt thự trong cùng khoảng ngày `[checkIn, checkOut)`. | Giao dịch ACID kết hợp bảng khóa ngày duy nhất `booking_date_locks` và tiến trình nền `startPaymentExpirationSweep` tự động giải phóng khóa sau 15 phút nếu chưa thanh toán. | `backend/src/modules/bookings/`<br>`backend/src/modules/bookings/booking-expiration.service.ts` |
 | **P2** | **Nhập nhằng giữa trạng thái lưu trú và trạng thái dòng tiền** gây sai lệch kế toán khi hủy phòng, hoàn tiền hoặc giải ngân cho Host. | Thiết kế **Booking FSM 11 trạng thái** tách rời hoàn toàn khỏi `payments.status`, `refunds.status` và quy trình phê duyệt 2 cấp (*Maker–Checker*) trên `host_payout_batch`. | `backend/src/modules/bookings/booking-state-machine.ts`<br>`backend/src/modules/payouts/` |
 | **P3** | **Chuẩn hóa dữ liệu tìm kiếm theo khu vực và kiểm duyệt chất lượng hình ảnh/hồ sơ Host thủ công tốn thời gian.** | Bộ lọc đa tiêu chí kết hợp gom nhóm địa danh Vũng Tàu, bán kính tọa độ bản đồ, kiểm tra lịch trống thực tế và thị giác máy tính **`gpt-4.1-mini`** tự động gắn nhãn ảnh biệt thự & trích xuất CCCD. | `backend/src/modules/listings/`<br>`backend/src/modules/ai/` |
 | **P4** | **Đứt gãy dữ liệu lịch trống** giữa sàn đặt phòng trực tuyến và bảng tính quản lý nội bộ của Chủ nhà / Đại lý. | Cơ chế **Host Agency Mode**: mỗi Host được cấp phát và đồng bộ hai chiều định kỳ với Google Sheets thông qua Service Account & hàng đợi công việc bất đồng bộ. | `backend/src/modules/host-sheet-sync/`<br>`hotel-booking-flutter/lib/features/host/` |
-| **P5** | **Rủi ro lộ lọt tài liệu định danh KYC (CCCD)** và token xác thực của người dùng. | Tách biệt Bucket công khai và Bucket riêng tư trên **Cloudflare R2** (chỉ cấp phát Presigned URL hiệu lực 300 giây cho Admin duyệt KYC); xoay vòng Refresh Token HttpOnly + `FlutterSecureStorage`. | `backend/src/modules/verifications/`<br>`backend/src/modules/uploads/`<br>`tools/quality/secret_and_rule_audit.dart` |
+| **P5** | **Rủi ro lộ lọt tài liệu định danh KYC (CCCD)** và token xác thực của người dùng. | Tách biệt Bucket công khai và Bucket riêng tư trên **Cloudflare R2** (chỉ cấp phát Presigned URL hiệu lực 300 giây cho Admin duyệt KYC); xoay vòng Refresh Token HttpOnly + `FlutterSecureStorage`. | `backend/src/modules/host-kyc/`<br>`backend/src/modules/uploads/`<br>`tools/quality/secret_and_rule_audit.dart` |
 
 ---
 
@@ -98,7 +98,7 @@ flowchart TB
 
     subgraph ServerLayer["Tầng Ứng dụng & Nghiệp vụ (Node.js + Express 5 + TypeScript)"]
         SecMW["Lớp Bảo mật & Kiểm soát (Helmet, CORS, Rate Limit, Sanitize, RBAC)"]
-        REST["25 Phân hệ Nghiệp vụ RESTful API (/api/*)"]
+        REST["21 Phân hệ Nghiệp vụ RESTful API (/api/*)"]
         SocketHub["Socket.IO Real-Time Hub (Chat, Presence, In-App Notifications)"]
         Workers["Background Workers (15m Payment Hold Sweep & Bidirectional Sheet Sync)"]
         SecMW --> REST
@@ -131,7 +131,7 @@ flowchart TB
 ### Nguyên lý kiến trúc cốt lõi
 
 - **Frontend (`hotel-booking-flutter/`):** Tổ chức theo mô hình **Feature-first + MVVM + Repository Pattern**. Dữ liệu mạng từ `Dio` được ánh xạ qua lớp DTO/Model bất biến (`freezed`, `json_serializable`), cung cấp lên tầng giao diện thông qua hệ thống Dependency Injection của `flutter_riverpod`. Thiết kế giao diện tuân thủ ngôn ngữ **Airbnb Luxury × Apple Studio Minimalist** sử dụng bộ phông chữ `SF Pro Display` / `SF Pro Text` / `SF Pro Rounded`, hỗ trợ đa tiền tệ (VND, USD, KRW...) và 3 ngôn ngữ (`vi`, `en`, `ko`).
-- **Backend (`backend/`):** Kiến trúc **Modular Monolith** chia tách độc lập thành 25 mô-đun miền nghiệp vụ (`Controller` → `Service` → `Repository/Model`), chuẩn hóa toàn bộ phản hồi HTTP theo cấu trúc đồng nhất `{ success, message, data | errors }` kèm định danh truy vết `requestId` trên từng yêu cầu.
+- **Backend (`backend/`):** Kiến trúc **Modular Monolith** chia tách độc lập thành 21 mô-đun miền nghiệp vụ (`Controller` → `Service` → `Repository/Model`), chuẩn hóa toàn bộ phản hồi HTTP theo cấu trúc đồng nhất `{ success, message, data | errors }` kèm định danh truy vết `requestId` trên từng yêu cầu.
 
 ---
 
@@ -178,13 +178,13 @@ stateDiagram-v2
 
 ### 4.2. Phân quyền RBAC và Ma trận phân hệ chức năng
 
-Hệ thống áp dụng kiểm soát truy cập dựa trên vai trò (**RBAC**: `guest`, `host`, `moderator`, `admin`) xuyên suốt từ Route Guard của `GoRouter` trên Frontend xuống Middleware xác thực trên Backend:
+Hệ thống áp dụng kiểm soát truy cập dựa trên vai trò (**RBAC**: `guest`, `host`, `admin`) xuyên suốt từ Route Guard của `GoRouter` trên Frontend xuống Middleware xác thực trên Backend:
 
 | Tác nhân | Năng lực nghiệp vụ cốt lõi | Phân hệ Frontend (`lib/features/`) | Phân hệ Backend (`src/modules/`) |
 | :--- | :--- | :--- | :--- |
-| **Khách du lịch (`guest`)** | Khám phá biệt thự theo khu vực & bản đồ bán kính, lọc đa tiêu chí, xem lịch trống & quy đổi tỷ giá, đặt phòng & thanh toán (VNPay/MoMo/VietQR), quản lý chuyến đi, yêu thích, nhắn tin trực tiếp với Host, đánh giá sau lưu trú, đọc cẩm nang du lịch. | `home`, `villas`, `villa_detail`, `search`, `booking_inquiry`, `trips`, `favorites`, `messages`, `reviews`, `blog`, `contact`, `settings`, `auth` | `listings`, `ai`, `bookings`, `payments`, `coupons`, `wishlist`, `conversations`, `reviews`, `blogs`, `exchange-rates`, `notifications` |
-| **Chủ nhà (`host`)** | Đăng ký trở thành Host & xác thực CCCD bằng AI Vision (KYC), quản lý danh mục biệt thự & ảnh, quản lý lịch trống 30 ngày, đồng bộ hai chiều Google Sheets, duyệt/check-in/check-out đơn đặt, phản hồi đánh giá, quản lý tài khoản ngân hàng & theo dõi đối soát doanh thu. | `host` (Overview Studio, Properties, Calendar, Bookings, Payouts, Sheet Sync, Onboarding), `messages`, `reviews` | `host-onboarding`, `host-applications`, `verifications`, `host-listings`, `host-sheet-sync`, `host-bank-account`, `payouts`, `banks`, `reports`, `uploads` |
-| **Quản trị viên (`admin`)** | Thống kê toàn sàn thời gian thực, duyệt/từ chối hồ sơ KYC qua R2 Signed URL, kiểm duyệt tin đăng biệt thự, quản lý người dùng & phân quyền, cấu hình phí sàn (*Platform Fee*) & mã giảm giá, xử lý báo cáo vi phạm (*Trust & Safety*), phê duyệt lệnh chi trả (*Maker–Checker Payouts*). | `admin` (Dashboard, Users & RBAC, Listings Moderation, KYC Verification, Payouts, Coupons, Amenities, Reports) | `admin`, `users`, `amenities`, `verifications`, `payouts`, `coupons`, `reports` |
+| **Khách du lịch (`guest`)** | Khám phá biệt thự theo khu vực & bản đồ bán kính, lọc đa tiêu chí, xem lịch trống & quy đổi tỷ giá, đặt phòng & thanh toán (VNPay/MoMo/VietQR), quản lý chuyến đi, yêu thích, nhắn tin trực tiếp với Host, đánh giá sau lưu trú, đọc cẩm nang du lịch & tra cứu hướng dẫn/chính sách hoàn hủy. | `home`, `villas`, `villa_detail`, `search`, `trips`, `favorites`, `messages`, `reviews`, `blog`, `support`, `settings`, `auth` | `listings`, `ai`, `bookings`, `payments`, `coupons`, `wishlist`, `conversations`, `reviews`, `blogs`, `exchange-rates`, `notifications` |
+| **Chủ nhà (`host`)** | Đăng ký trở thành Host & xác thực CCCD bằng AI Vision (KYC), quản lý danh mục biệt thự & ảnh, quản lý lịch trống 30 ngày, đồng bộ hai chiều Google Sheets, duyệt/check-in/check-out đơn đặt, phản hồi đánh giá, quản lý tài khoản ngân hàng & theo dõi đối soát doanh thu. | `host` (Overview Studio, Properties, Calendar, Bookings, Payouts, Sheet Sync, Onboarding), `messages`, `reviews` | `host-kyc`, `host-listings`, `host-sheet-sync`, `payouts`, `reports`, `uploads` |
+| **Quản trị viên (`admin`)** | Thống kê toàn sàn thời gian thực, duyệt/từ chối hồ sơ KYC qua R2 Signed URL, kiểm duyệt tin đăng biệt thự, quản lý người dùng & phân quyền, cấu hình phí sàn (*Platform Fee*) & mã giảm giá, xử lý báo cáo vi phạm (*Trust & Safety*), phê duyệt lệnh chi trả (*Maker–Checker Payouts*). | `admin` (Dashboard, Users & RBAC, Listings Moderation, KYC Verification, Payouts, Coupons, Amenities, Reports) | `admin`, `users`, `amenities`, `host-kyc`, `payouts`, `coupons`, `reports` |
 
 ---
 
@@ -232,11 +232,11 @@ Software-Project-Management/
 │   │   ├── common/ & middlewares/     # Chuẩn hóa HTTP Response, Error Handler, Rate Limit, RBAC, Sanitize
 │   │   ├── config/                    # Cấu hình MySQL/TiDB SSL, CORS, Logger, Biến môi trường
 │   │   ├── models/                    # 52 tệp định nghĩa thực thể và quan hệ Sequelize
-│   │   ├── modules/                   # 25 phân hệ nghiệp vụ độc lập (auth, listings, bookings, payouts, ai...)
-│   │   ├── services/ & socket/        # Worker quét hết hạn giữ chỗ 15 phút & Socket.IO Gateway
+│   │   ├── modules/                   # 21 phân hệ nghiệp vụ độc lập (auth, listings, bookings, host-kyc, payouts, ai...)
+│   │   ├── services/ & socket/        # Adapter hạ tầng ngoài (R2, Mail, FCM, Audit) & Socket.IO Gateway
 │   │   ├── app.ts & server.ts         # Khởi tạo ứng dụng Express 5 & cơ chế Graceful Shutdown
 │   │   └── index.ts                   # Điểm vào (Entrypoint) của tiến trình máy chủ
-│   ├── tests/                         # 25 bộ kiểm thử tích hợp bảo mật, tương tranh & hợp đồng API
+│   ├── tests/                         # 30 bộ kiểm thử tích hợp bảo mật, tương tranh & hợp đồng API
 │   ├── Dockerfile                     # Đóng gói container máy chủ sản xuất
 │   └── package.json                   # Quản lý phụ thuộc và các kịch bản vận hành Backend
 ├── hotel-booking-flutter/             # Phân hệ Ứng dụng Đa nền tảng Flutter (Android, iOS, Web)
@@ -244,11 +244,11 @@ Software-Project-Management/
 │   ├── lib/
 │   │   ├── app/                       # GoRouter, Riverpod DI Providers & Hệ thống Design Tokens
 │   │   ├── core/                      # Dio Client, Secure Storage, BookingDate [checkIn, checkOut), Sealed Errors
-│   │   ├── features/                  # 15 phân hệ giao diện theo kiến trúc Feature-first MVVM
+│   │   ├── features/                  # 14 phân hệ giao diện theo kiến trúc Feature-first MVVM
 │   │   ├── l10n/                      # Tài nguyên đa ngôn ngữ ARB (Tiếng Việt, Tiếng Anh, Tiếng Hàn)
 │   │   ├── shared/                    # Thư viện thành phần giao diện dùng chung (Design System Widgets)
 │   │   └── main*.dart                 # Các điểm khởi chạy theo từng Flavor (dev, staging, prod)
-│   ├── test/ & integration_test/      # 52 bộ Unit, Widget, Visual Multi-Viewport & Golden Tests + E2E
+│   ├── test/ & integration_test/      # 61 tệp kiểm thử Unit, Widget, Visual Multi-Viewport, Golden & E2E
 │   └── pubspec.yaml                   # Khai báo phụ thuộc và cấu hình phông chữ SF Pro
 ├── tools/
 │   └── quality/                       # Công cụ kiểm toán mã nguồn độc lập (secret_and_rule_audit, quality_gate)
@@ -269,7 +269,7 @@ Software-Project-Management/
 
 ### 7.2. Triển khai nhanh bằng Docker Compose
 
-Phương thức này tự động khởi tạo đồng bộ **MySQL 8.0** (cổng `3306`) và **Backend API Container** (cổng `5000`) kèm cơ chế kiểm tra sức khỏe (`healthcheck`):
+Phương thức này tự động khởi tạo đồng bộ **MySQL 8.0** (cổng `3306`) và **Backend API Container** (cổng `7000`, đồng bộ với `config/dev.json` của Flutter) kèm cơ chế kiểm tra sức khỏe (`healthcheck`):
 
 ```bash
 # 1. Sao chép kho lưu trữ mã nguồn
@@ -280,7 +280,7 @@ cd Software-Project-Management
 docker compose up -d --build
 
 # 3. Xác minh trạng thái sức khỏe của hệ thống và kết nối MySQL
-curl http://localhost:5000/api/health
+curl http://localhost:7000/api/health
 ```
 
 ### 7.3. Khởi chạy thủ công phục vụ phát triển (Local Development)
@@ -338,6 +338,7 @@ Bảng tóm tắt các nhóm tham số cấu hình trong `backend/.env` (tham ch
 | **AI Thị giác máy tính (OpenAI Vision)** | `OPENAI_API_KEY`, `OPENAI_VISION_MODEL` | Kết nối mô hình `gpt-4.1-mini` phục vụ phân tích nhãn ảnh biệt thự và bóc tách thông tin CCCD (KYC). |
 | **Lưu trữ Đám mây (R2)** | `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `R2_PRIVATE_BUCKET`, `R2_PRIVATE_SIGNED_URL_EXPIRES_SECONDS` | Phân tách kho lưu trữ ảnh công khai và kho hồ sơ CCCD riêng tư (mặc định hết hạn URL sau `300s`). |
 | **Cổng Thanh toán & Giữ chỗ** | `PAYMENT_HOLD_MINUTES`, `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`, `MOMO_PARTNER_CODE`, `MOMO_SECRET_KEY` | Thời gian khóa phòng chờ thanh toán (`15` phút) và khóa tích hợp cổng thanh toán VNPay / MoMo. |
+| **Tỷ giá Đa tiền tệ (Exchange Rates)** | `EXCHANGE_RATE_ENABLED`, `EXCHANGE_RATE_PROVIDER`, `EXCHANGE_RATE_CACHE_TTL_MS`, `EXCHANGE_RATE_SNAPSHOT_PATH` | Cấu hình nguồn tỷ giá ngoại tệ trực tiếp (`frankfurter`), bộ nhớ đệm TTL (`3h`) và tệp dự phòng ngoại tuyến. |
 | **Thông báo & Đồng bộ Host** | `FIREBASE_SERVICE_ACCOUNT_PATH`, `GOOGLE_SHEETS_SYNC_ENABLED`, `GOOGLE_SHEETS_SYNC_INTERVAL_SECONDS` | Cấu hình đẩy thông báo FCM di động và chu kỳ đồng bộ lịch Google Sheets hai chiều (`120s`). |
 
 ---
@@ -367,14 +368,14 @@ Nhà nghiên cứu hoặc giảng viên đánh giá có thể thực thi trực 
 pwsh ./tools/quality/quality_gate.ps1
 # hoặc: bash ./tools/quality/quality_gate.sh
 
-# 2. Kiểm thử toàn diện Phân hệ Frontend Flutter (52 tệp kiểm thử)
+# 2. Kiểm thử toàn diện Phân hệ Frontend Flutter (61 tệp kiểm thử)
 cd hotel-booking-flutter
-dart run tools/quality/secret_and_rule_audit.dart
+dart run ../tools/quality/secret_and_rule_audit.dart
 flutter analyze --no-fatal-infos
 flutter test --exclude-tags=golden
 flutter test test/integration/e2e_all_flows_test.dart test/integration/visual_ui_checklist_test.dart
 
-# 3. Kiểm thử toàn diện Phân hệ Backend Node.js (25 bộ kiểm thử tích hợp)
+# 3. Kiểm thử toàn diện Phân hệ Backend Node.js (30 bộ kiểm thử tích hợp)
 cd ../backend
 npm run typecheck
 npm test
@@ -384,10 +385,10 @@ npm test
 
 | Hạng mục đo lường thực chứng | Quy mô / Cấu hình | Công cụ xác minh tự động |
 | :--- | :--- | :--- |
-| **Mã nguồn Ứng dụng Đa nền tảng (`hotel-booking-flutter/lib`)** | **145 tệp Dart** / **15 phân hệ chức năng** | `flutter analyze` & `secret_and_rule_audit.dart` |
-| **Bộ kiểm thử Tự động Frontend (`hotel-booking-flutter/test`)** | **52 tệp kiểm thử** (Unit, Widget, Multi-Viewport `320–430dp`, Text Scale `1.0–1.6x`, Golden & E2E) | `flutter test` & `flutter_ci.yml` |
-| **Mã nguồn Máy chủ & CSDL (`backend/src` & `migrations`)** | **25 phân hệ nghiệp vụ** / **52 tệp Model** / **22 tệp Migration** (49+ bảng quan hệ) | `tsc --noEmit` & `backend-ci.yml` |
-| **Bộ kiểm thử Tích hợp Backend (`backend/tests`)** | **25 bộ kiểm thử** (Auth/RBAC, Tương tranh khóa ngày, Idempotency thanh toán, AI Vision, Sheet Sync...) | `node --test` trên MySQL 8.0 ảo (`ci-test.yml`) |
+| **Mã nguồn Ứng dụng Đa nền tảng (`hotel-booking-flutter/lib`)** | **182 tệp Dart** / **14 phân hệ chức năng** | `flutter analyze` & `secret_and_rule_audit.dart` |
+| **Bộ kiểm thử Tự động Frontend (`hotel-booking-flutter/test` & `integration_test`)** | **61 tệp kiểm thử** (Unit, Widget, Multi-Viewport `320–430dp`, Text Scale `1.0–1.6x`, Golden & E2E) | `flutter test` & `flutter_ci.yml` |
+| **Mã nguồn Máy chủ & CSDL (`backend/src` & `migrations`)** | **21 phân hệ nghiệp vụ** / **52 tệp Model** / **22 tệp Migration** (49+ bảng quan hệ) | `tsc --noEmit` & `backend-ci.yml` |
+| **Bộ kiểm thử Tích hợp Backend (`backend/tests`)** | **30 bộ kiểm thử** (Auth/RBAC, Tương tranh khóa ngày, Idempotency thanh toán, AI Vision, Sheet Sync...) | `node --test` trên MySQL 8.0 ảo (`ci-test.yml`) |
 | **Kiểm toán Bảo mật Mã nguồn (Zero-Secret & Zero-Mock Policy)** | Quét rò rỉ khóa bí mật, cấm tắt kiểm tra chứng chỉ TLS (`badCertificateCallback`) và cấm dữ liệu giả lập trong `lib/` | `tools/quality/secret_and_rule_audit.dart` |
 
 ---
@@ -404,7 +405,7 @@ Dự án được tổ chức theo mô hình **Lean Agile / Iterative Developmen
 | :--: | :--- | :---: | :--- |
 | 1 | **Đặng Kim An** | `N23DCCN001` | Quản trị kho lưu trữ & cấu hình Git, phát triển Backend API, thiết kế & vận hành CSDL MySQL/TiDB SSL, triển khai hạ tầng đám mây. |
 | 2 | **Ngô Minh Phát** | `N23DCCN044` | Phát triển và tối ưu hóa phân hệ Lịch Chủ nhà 30 ngày (*AbortController*), gia cố bảo mật luồng xác thực chống dò quét tài khoản, kiểm thử nghiệp vụ. |
-| 3 | **Đặng Minh Thành** | `N23DCCN056` | Thiết kế kiến trúc Flutter đa nền tảng (15 phân hệ), tích hợp đồng bộ Full-stack FE–BE, Booking FSM, AI Vision KYC & Image Tagging, Host Sheet Sync & hệ thống CI/CD. |
+| 3 | **Đặng Minh Thành** | `N23DCCN056` | Thiết kế kiến trúc Flutter đa nền tảng (14 phân hệ), tích hợp đồng bộ Full-stack FE–BE, Booking FSM, AI Vision KYC & Image Tagging, Host Sheet Sync & hệ thống CI/CD. |
 
 ### Trích dẫn học thuật (BibTeX Citation)
 

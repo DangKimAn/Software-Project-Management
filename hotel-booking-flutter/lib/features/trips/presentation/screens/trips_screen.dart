@@ -7,20 +7,23 @@ import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/formatters/currency_formatter.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_loading.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
-import '../../../reviews/presentation/widgets/review_list_widget.dart';
 import '../../domain/entities/booking.dart';
 import '../view_models/trips_view_model.dart';
 
-/// Complete port of `Source goc/frontend/src/views/pages/Trips/index.tsx` (`TripHistoryList`, `TripHistoryCard`, `ReviewModal`).
+/// Màn hình quản lý danh sách chuyến đi cá nhân của khách hàng (`/account/trips`).
+///
+/// Phân tách lịch sử đặt phòng thành 3 phân nhóm (`Sắp tới`, `Hoàn tất`, `Đã hủy`), tự động làm mới nền
+/// mỗi 60 giây, hiển thị đếm ngược giữ chỗ cho đơn chờ thanh toán, cho phép xem chi tiết bóc tách chi phí,
+/// hủy đặt phòng hợp lệ kèm lý do và gửi đánh giá sao sau khi hoàn thành kỳ nghỉ.
 class TripsScreen extends ConsumerStatefulWidget {
+  /// Khởi tạo `TripsScreen`.
   const TripsScreen({super.key});
 
   @override
@@ -58,6 +61,8 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
     return '$mins:$secs';
   }
 
+  // Giải thuật xác nhận và thực thi hủy đặt phòng từ phía khách hàng (`_handleCancelBooking`):
+  // Kiểm tra điều kiện `booking.canCancel`, mở hộp thoại bắt buộc nhập lý do hủy và ủy quyền qua `TripsActionsViewModel.cancelBooking`.
   Future<void> _handleCancelBooking(Booking booking) async {
     if (!booking.canCancel) return;
 
@@ -110,13 +115,10 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
 
     if (shouldCancel == true && mounted) {
       try {
-        final repo = ref.read(bookingRepositoryProvider);
-        await repo.cancelBooking(
-          bookingId: booking.id,
-          reason: reasonController.text.trim(),
-        );
-        ref.invalidate(myBookingsProvider);
-        ref.invalidate(bookingDetailProvider(booking.id));
+        await ref.read(tripsActionsViewModelProvider).cancelBooking(
+              bookingId: booking.id,
+              reason: reasonController.text.trim(),
+            );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Đã hủy đặt phòng thành công.')),
@@ -136,6 +138,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
     }
   }
 
+  // Giải thuật thu thập số sao (`1..5`) và nhận xét thực tế (tối thiểu 5 ký tự) cho chuyến đi đã hoàn tất (`_openReviewModal`).
   Future<void> _openReviewModal(Booking booking) async {
     int selectedRating = 5;
     final commentCtrl = TextEditingController();
@@ -190,7 +193,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '$starVal★',
+                                    '$starVal',
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: isSelected
@@ -239,15 +242,12 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
 
     if (submitted == true && mounted) {
       try {
-        await ref.read(reviewRepositoryProvider).createReview(
+        await ref.read(tripsActionsViewModelProvider).submitStayReview(
               bookingId: booking.id,
+              listingId: booking.listingId,
               rating: selectedRating,
               comment: commentCtrl.text.trim(),
             );
-        ref.invalidate(myBookingsProvider);
-        if (booking.listingId.isNotEmpty) {
-          ref.invalidate(listingReviewsProvider(booking.listingId));
-        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -465,16 +465,32 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
       context: MoneyDisplayContext.checkoutReference,
       includeApproximatePrefix: false,
     );
-    final isRefundStatus = booking.effectiveStatus == 'refund_pending' ||
-        booking.effectiveStatus == 'refunded';
+    // Giải thuật phân loại màu sắc & biểu tượng huy hiệu trạng thái trên thẻ chuyến đi:
+    // Suy xuất trực tiếp từ `booking.effectiveStatus` thay vì `booking.status` thô
+    // để `completed`/`checked_out` mang sắc xanh thành công, còn `refunded`/`refund_pending`
+    // mang sắc trung tính/hổ phách thông tin thay vì đỏ báo lỗi.
+    // CONFLICT-RESOLVED: Tránh hiển thị nhầm huy hiệu đỏ lỗi cho đơn hoàn tiền hoặc hổ phách cho đơn đã trả phòng.
+    final effStatus = booking.effectiveStatus;
+    final isRefundStatus =
+        effStatus == 'refund_pending' || effStatus == 'refunded';
     Color badgeText = const Color(0xFFB45309);
-    if (booking.status == 'paid' ||
-        booking.status == 'confirmed' ||
-        booking.status == 'checked_in' ||
-        booking.status == 'completed') {
+    IconData badgeIcon = LucideIcons.clock;
+    if (effStatus == 'paid' ||
+        effStatus == 'confirmed' ||
+        effStatus == 'checked_in' ||
+        effStatus == 'checked_out' ||
+        effStatus == 'completed') {
       badgeText = const Color(0xFF047857);
+      badgeIcon = LucideIcons.circleCheck;
+    } else if (effStatus == 'refunded') {
+      badgeText = AppColors.textSecondary;
+      badgeIcon = LucideIcons.rotateCcw;
+    } else if (effStatus == 'refund_pending') {
+      badgeText = const Color(0xFFB45309);
+      badgeIcon = LucideIcons.refreshCw;
     } else if (booking.isCancelled) {
       badgeText = AppColors.errorRed;
+      badgeIcon = LucideIcons.circleX;
     }
 
     final isExpanded = _expandedBookingIds.contains(booking.id);
@@ -510,8 +526,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
                       child: Text(
@@ -523,13 +538,23 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                     ),
                     const SizedBox(width: 8),
                     Flexible(
-                      child: Text(
-                        booking.statusDisplay,
-                        textAlign: TextAlign.right,
-                        style: AppTypography.caption.copyWith(
-                          color: badgeText,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Icon(badgeIcon, size: 13, color: badgeText),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              booking.statusDisplay,
+                              textAlign: TextAlign.right,
+                              style: AppTypography.caption.copyWith(
+                                color: badgeText,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -585,7 +610,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                   ],
                 ),
 
-                if (booking.status == 'pending_payment') ...[
+                if (effStatus == 'pending_payment') ...[
                   const SizedBox(height: 6),
                   Row(
                     children: [
@@ -632,36 +657,34 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                         const SizedBox(height: 6),
                         _DetailItemRow(
                           label: 'Tiền phòng (${booking.nights} đêm)',
-                          value:
-                              CurrencyFormatter.formatVnd(pb.baseNightsAmount),
+                          value: MoneyFormatter.formatVnd(pb.baseNightsAmount),
                         ),
                         if (pb.weekendSurchargeAmount > 0)
                           _DetailItemRow(
                             label: 'Phụ thu cuối tuần',
-                            value: CurrencyFormatter.formatVnd(
+                            value: MoneyFormatter.formatVnd(
                                 pb.weekendSurchargeAmount),
                           ),
                         if (pb.extraGuestFeeAmount > 0)
                           _DetailItemRow(
                             label: 'Phụ thu khách thêm',
-                            value: CurrencyFormatter.formatVnd(
+                            value: MoneyFormatter.formatVnd(
                                 pb.extraGuestFeeAmount),
                           ),
                         if (pb.surchargeAmount > 0)
                           _DetailItemRow(
                             label: 'Phụ thu cố định',
-                            value:
-                                CurrencyFormatter.formatVnd(pb.surchargeAmount),
+                            value: MoneyFormatter.formatVnd(pb.surchargeAmount),
                           ),
                         if (pb.cleaningFee > 0)
                           _DetailItemRow(
                             label: 'Phí vệ sinh',
-                            value: CurrencyFormatter.formatVnd(pb.cleaningFee),
+                            value: MoneyFormatter.formatVnd(pb.cleaningFee),
                           ),
                         if (pb.serviceFee > 0)
                           _DetailItemRow(
                             label: 'Phí dịch vụ',
-                            value: CurrencyFormatter.formatVnd(pb.serviceFee),
+                            value: MoneyFormatter.formatVnd(pb.serviceFee),
                           ),
                         if (pb.discountAmount > 0)
                           _DetailItemRow(
@@ -670,7 +693,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                                 ? 'Giảm giá (${booking.couponCode})'
                                 : 'Giảm giá',
                             value:
-                                '-${CurrencyFormatter.formatVnd(pb.discountAmount)}',
+                                '-${MoneyFormatter.formatVnd(pb.discountAmount)}',
                           ),
                         if (booking.specialRequests != null &&
                             booking.specialRequests!.isNotEmpty)
@@ -711,7 +734,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                             color: AppColors.textMuted,
                             fontWeight: FontWeight.w400)),
                     const SizedBox(height: 4),
-                    Text(CurrencyFormatter.formatVnd(booking.totalAmount),
+                    Text(MoneyFormatter.formatVnd(booking.totalAmount),
                         style: AppTypography.cardTitle
                             .copyWith(color: AppColors.primary)),
                     if (refResult.isForeignDisplayed) ...[

@@ -1,5 +1,8 @@
 import { AuthenticatedUser } from "../modules/auth/auth.service";
 
+/**
+ * Mở rộng giao diện Express.Request với thông tin người dùng xác thực, requestId, cookie và dữ liệu đã kiểm chứng.
+ */
 declare global {
     namespace Express {
         interface Request {

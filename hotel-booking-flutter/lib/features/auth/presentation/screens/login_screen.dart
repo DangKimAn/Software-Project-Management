@@ -9,14 +9,18 @@ import '../../../../core/errors/app_failure.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/app_text_field.dart';
-import '../../data/services/google_auth_service.dart';
+
 import '../../domain/entities/user.dart';
 import '../view_models/auth_notifier.dart';
 import '../validation/auth_validation.dart';
 
+/// Màn hình đăng nhập người dùng (`/dang-nhap`), hỗ trợ xác thực bằng Email/Số điện thoại kèm mật khẩu
+/// hoặc đăng nhập một chạm qua Google OAuth, đồng thời điều hướng an toàn theo tham số `redirectTo`.
 class LoginScreen extends ConsumerStatefulWidget {
+  /// Đường dẫn nội bộ cần chuyển hướng tới sau khi đăng nhập thành công (nếu vượt qua kiểm tra an toàn).
   final String? redirectTo;
 
+  /// Khởi tạo `LoginScreen`.
   const LoginScreen({super.key, this.redirectTo});
 
   @override
@@ -65,6 +69,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     context.go(target);
   }
 
+  // Giải thuật xử lý đăng nhập bằng mật khẩu (`_handleLogin`):
+  // Kiểm tra biểu mẫu cục bộ qua `AuthValidation`, gửi yêu cầu đăng nhập tới `AuthNotifier`,
+  // điều hướng theo quyền nếu thành công hoặc ánh xạ lỗi từng trường dữ liệu trả về từ máy chủ.
   Future<void> _handleLogin() async {
     if (_isLoading) return;
     setState(() {

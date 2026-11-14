@@ -7,6 +7,9 @@ import { sendError } from "../common/http";
 
 const isProduction = () => process.env.NODE_ENV === "production";
 
+/**
+ * Giải thuật trích xuất mã trạng thái HTTP hợp lệ (`400..599`) từ đối tượng lỗi phát sinh bởi middleware parser/router.
+ */
 const getHttpErrorStatus = (error: unknown) => {
     if (!error || typeof error !== "object") {
         return undefined;
@@ -22,6 +25,9 @@ const getHttpErrorStatus = (error: unknown) => {
     return statusCode >= 400 && statusCode < 600 ? statusCode : undefined;
 };
 
+/**
+ * Giải thuật ánh xạ thông điệp lỗi HTTP chuẩn hóa, tránh lộ chi tiết parser nội bộ ra phía client.
+ */
 const getHttpErrorMessage = (error: unknown, statusCode: number) => {
     const type = error && typeof error === "object" ? (error as { type?: unknown }).type : undefined;
 
@@ -40,6 +46,11 @@ const getHttpErrorMessage = (error: unknown, statusCode: number) => {
     return statusCode < 500 ? "Bad request" : "Internal server error";
 };
 
+/**
+ * Giải thuật xử lý lỗi tập trung toàn cục (Centralized Error Boundary):
+ * - Phân loại tuần tự: `AppError` nghiệp vụ -> `UniqueConstraintError` (409) -> `ValidationError` (422) -> `DatabaseError` (500) -> lỗi HTTP parser -> lỗi chưa xác định (500).
+ * - Che giấu chi tiết stack/SQL nhạy cảm khi chạy ở môi trường `production` nhưng ghi nhận đầy đủ ngữ cảnh `requestId` vào nhật ký hệ thống.
+ */
 export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
     if (error instanceof AppError) {
         if (error.statusCode >= 500) {

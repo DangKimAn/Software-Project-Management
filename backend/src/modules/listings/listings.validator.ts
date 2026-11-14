@@ -1,11 +1,21 @@
 import { z } from "zod";
 
-import { isValidLocationGroup } from "../../common/vung-tau-location-groups";
+import { isValidLocationGroup } from "./vung-tau-location-groups";
 
+/**
+ * Giải thuật xác thực tham số đường dẫn `listingId`:
+ * Ép kiểu sang số (`z.coerce.number()`) và ràng buộc số nguyên dương chặt (`> 0`) nhằm chặn sớm ID âm, số thập phân hoặc chuỗi không hợp lệ tại tầng biên HTTP.
+ */
 export const listingIdParamSchema = z.object({
     listingId: z.coerce.number().int().positive(),
 });
 
+/**
+ * Giải thuật xác thực và chuẩn hóa lược đồ tham số truy vấn tìm kiếm chỗ nghỉ công khai bằng Zod:
+ * - Cắt khoảng trắng thừa và giới hạn chiều dài từ khóa tìm kiếm (`1..255` ký tự).
+ * - Ràng buộc miền giá trị tập đóng cho loại hình bất động sản, loại phòng, tiêu chí sắp xếp và kiểm tra phân khu Vũng Tàu qua `isValidLocationGroup`.
+ * - Kẹp biên tọa độ địa lý WGS84 (`lat` thuộc [-90, 90], `lng` thuộc [-180, 180]), bán kính tìm kiếm bản đồ [1, 10000]m, mức giá không âm và giới hạn phân trang.
+ */
 export const publicListingsQuerySchema = z.object({
     q: z.string().trim().min(1).max(255).optional(),
     city: z.string().trim().min(1).optional(),

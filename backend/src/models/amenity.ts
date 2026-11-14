@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý danh mục tiện ích chỗ nghỉ (hồ bơi, BBQ, wifi, bãi đỗ xe...) và trạng thái xóa mềm.
+ */
 import {
     CreationOptional,
     DataTypes,

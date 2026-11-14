@@ -7,7 +7,7 @@ import Booking from "../../models/booking";
 import { getNextSequence } from "../../models/counter";
 import Listing from "../../models/listing";
 import Review, { ReviewDocument } from "../../models/review";
-import { sanitizeAndModerateText, sanitizeUserText } from "../../services/trust-safety-service";
+import { sanitizeAndModerateText, sanitizeUserText } from "../../common/text-moderation";
 import { notifyReviewCreated } from "../notifications/notification.service";
 
 export type CreateReviewInput = {
@@ -25,35 +25,61 @@ export type CreateReviewReplyInput = {
     reply: string;
 };
 
+/**
+ * Giải thuật kiểm tra an toàn thuộc tính sở hữu trực tiếp trên đối tượng để phân biệt trường không gửi (`undefined`) với trường xóa trắng (`null`).
+ */
 const hasOwn = <T extends object>(value: T, key: keyof T) =>
     Object.prototype.hasOwnProperty.call(value, key);
 
+/**
+ * Giải thuật làm sạch chống XSS và kiểm duyệt nội dung bình luận đánh giá qua bộ lọc an toàn tín nhiệm (`sanitizeAndModerateText`),
+ * cho phép chuỗi rỗng khi khách chỉ chấm điểm sao mà không viết nhận xét.
+ */
 const normalizeComment = (value?: string | null) =>
     sanitizeAndModerateText(value ?? "", {
         field: "comment",
         allowEmpty: true,
     });
 
+/**
+ * Giải thuật làm sạch và kiểm duyệt nội dung phản hồi của Chủ nhà, bắt buộc khác rỗng và tuân thủ chính sách nội dung an toàn.
+ */
 const normalizeReply = (value: string) =>
     sanitizeAndModerateText(value, {
         field: "reply",
     });
 
+/**
+ * Giải thuật trích xuất và làm sạch tên hiển thị công khai trên một dòng của người đánh giá, mặc định `"Guest"` nếu thiếu định danh.
+ */
 const getPublicReviewerName = (user: AuthenticatedUser) =>
     sanitizeUserText(user.name || user.username || "Guest", "singleLine") || "Guest";
 
+/**
+ * Giải thuật kiểm tra quyền sở hữu đánh giá: chỉ cho phép chính tác giả đánh giá (`reviewerUserId === user.id`) sửa hoặc xóa bản ghi (ném lỗi 403 nếu vi phạm).
+ */
 const assertReviewOwner = (review: ReviewDocument, user: AuthenticatedUser) => {
     if (String(review.reviewerUserId) !== user.id) {
         throw new ApiError(403, "Forbidden");
     }
 };
 
+/**
+ * Giải thuật kiểm tra bất biến khả biến của đánh giá: chặn cập nhật/xóa lại với lỗi xung đột 409 nếu đánh giá đã bị xóa mềm (`deletedAt`) hoặc đã bị ẩn (`!isVisible`).
+ */
 const assertReviewEditable = (review: ReviewDocument) => {
     if (review.deletedAt || !review.isVisible) {
         throw new ApiError(409, "Review has been deleted");
     }
 };
 
+/**
+ * Giải thuật khởi tạo đánh giá sau lưu trú trong giao dịch CSDL:
+ * - Xác thực chính chủ khách đặt phòng (`booking.guestUserId === user.id`) và kiểm tra điều kiện tiên quyết đã hoàn tất lưu trú:
+ *   trạng thái đơn bắt buộc là `"completed"`, `"checked_out"` hoặc đã ghi nhận mốc trả phòng thực tế `checkedOutAt` (ném lỗi 409 nếu chưa hoàn tất).
+ * - Đảm bảo bất biến tối đa 1 đánh giá / 1 đơn đặt phòng bằng cả truy vấn kiểm tra trước lẫn bắt ngoại lệ `UniqueConstraintError` chống race condition.
+ * - Lưu bản ghi ở trạng thái hiển thị (`isVisible = true`, `deletedAt = null`) làm dữ liệu nguồn để tính lại điểm trung bình cộng `ratingAvg` và tổng số lượt đánh giá `reviewCount`, đồng thời gửi thông báo cho Chủ nhà.
+ */
 export const createReview = async (user: AuthenticatedUser, input: CreateReviewInput) =>
     sequelize.transaction(async (transaction) => {
         const booking = await Booking.findOne({
@@ -128,6 +154,10 @@ export const createReview = async (user: AuthenticatedUser, input: CreateReviewI
         };
     });
 
+/**
+ * Giải thuật cập nhật điểm số (`rating`) hoặc nhận xét (`comment`) của đánh giá:
+ * Yêu cầu tối thiểu một trường thay đổi, xác thực quyền sở hữu và trạng thái chưa xóa mềm, kiểm duyệt lại văn bản nhận xét và lưu cập nhật để làm mới `ratingAvg` của chỗ nghỉ.
+ */
 export const updateReview = async (
     user: AuthenticatedUser,
     reviewId: number,
@@ -166,6 +196,10 @@ export const updateReview = async (
     };
 };
 
+/**
+ * Giải thuật xóa mềm đánh giá của khách hàng:
+ * Xác thực quyền sở hữu, hạ cờ `isVisible = false` và đánh dấu `deletedAt` để loại trừ tức thời bản ghi khỏi phép tính trung bình cộng `ratingAvg` và bộ đếm `reviewCount`.
+ */
 export const deleteReview = async (user: AuthenticatedUser, reviewId: number) => {
     const review = await Review.findOne({ reviewId });
 
@@ -181,6 +215,10 @@ export const deleteReview = async (user: AuthenticatedUser, reviewId: number) =>
     await review.save();
 };
 
+/**
+ * Giải thuật ghi nhận phản hồi một lần của Chủ nhà (hoặc Admin) trên đánh giá của khách:
+ * Đảm bảo đánh giá đang hiển thị, chưa có phản hồi trước đó (lỗi 409 nếu phản hồi lặp), xác thực quyền sở hữu chỗ nghỉ (`listing.hostId === user.id` hoặc `admin`) và kiểm duyệt văn bản phản hồi.
+ */
 export const createReviewReply = async (
     user: AuthenticatedUser,
     reviewId: number,

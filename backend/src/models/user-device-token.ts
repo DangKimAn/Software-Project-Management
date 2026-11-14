@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý mã thông báo thiết bị (FCM token) phục vụ gửi thông báo đẩy đa nền tảng Android, iOS và Web.
+ */
 import {
     CreationOptional,
     DataTypes,

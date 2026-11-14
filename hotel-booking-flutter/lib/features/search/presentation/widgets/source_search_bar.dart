@@ -9,14 +9,30 @@ import '../../../../core/date/booking_date.dart';
 import '../../../../shared/animations/source_animations.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/vung_tau_map_picker.dart';
-import '../../../villas/data/repositories/villa_repository_impl.dart';
+import '../../../villas/domain/entities/villa.dart';
 
+/// Thanh tìm kiếm trung tâm đa chế độ thích ứng bố cục di động, thanh điều hướng ghim và màn hình rộng.
+///
+/// Giải thuật thích ứng khung tìm kiếm và hộp thoại ngăn kéo (`Responsive Search Bar & Modal Sheet`):
+/// - Trên màn hình rộng (`>= 768px`, khi không bật `isCompact` hoặc `isInHeader`), hiển thị thanh viên thuốc
+///   4 phân đoạn (`Địa điểm`, `Nhận phòng`, `Trả phòng`, `Khách`) mở trực tiếp đúng thẻ tương ứng.
+/// - Trên điện thoại hoặc khi ghim trong `AppTopHeader`, thu gọn thành viên thuốc đơn hiển thị tóm tắt địa điểm,
+///   thời gian và số khách.
+/// - Bấm vào bất kỳ phân đoạn nào sẽ mở `DraggableScrollableSheet` bù khoảng đệm bàn phím `viewInsets.bottom`,
+///   tự động thu gọn thanh chuyển thẻ khi bề rộng hẹp hoặc cỡ chữ `TextScaler` lớn.
+///
 /// Complete port of `SearchBar.tsx`, `BookingWidget.tsx`, `DatePickerPanel.tsx`, `Guest.tsx`, and `StayFilterModal`.
 class SourceSearchBar extends ConsumerStatefulWidget {
+  /// Cho biết thanh tìm kiếm luôn hiển thị ở chế độ viên thuốc thu gọn hay không.
   final bool isCompact;
+
+  /// Cho biết thanh tìm kiếm đang được nhúng bên trong thanh điều hướng đỉnh `AppTopHeader`.
   final bool isInHeader;
+
+  /// Hàm gọi lại sau khi người dùng xác nhận tìm kiếm (mặc định điều hướng tới `/tim-kiem` nếu để `null`).
   final VoidCallback? onSearchSubmitted;
 
+  /// Khởi tạo thanh tìm kiếm `SourceSearchBar`.
   const SourceSearchBar({
     super.key,
     this.isCompact = false,
@@ -468,6 +484,8 @@ class _SegmentTrigger extends StatelessWidget {
   }
 }
 
+/// Ngăn kéo tương tác 3 bước (`Địa điểm`, `Thời gian`, `Khách`) tích hợp bản đồ Vũng Tàu, lịch tháng và bộ đếm khách.
+///
 /// Interactive Search Popover Sheet (`SearchPopover.tsx` + `DatePickerPanel.tsx` + `Guest.tsx` + `LocationMapPicker.tsx`).
 class _SearchPopoverSheet extends ConsumerStatefulWidget {
   final int initialTab; // 0 = Địa điểm, 1 = Thời gian, 2 = Khách
@@ -483,7 +501,16 @@ class _SearchPopoverSheet extends ConsumerStatefulWidget {
       _SearchPopoverSheetState();
 }
 
+/// Chuẩn hóa chuỗi tiếng Việt `input` về chữ thường không dấu để đối sánh tìm kiếm không phân biệt dấu.
+///
+/// Giải thuật khử dấu tiếng Việt (Vietnamese Diacritic Folding):
+/// 1. Hạ toàn bộ ký tự về chữ thường (`toLowerCase()`) và cắt khoảng trắng hai đầu (`trim()`).
+/// 2. Duyệt bảng ánh xạ nguyên âm mang dấu thanh / dấu mũ (`à..ẵ`, `è..ễ`, `ì..ĩ`, `ò..ỡ`, `ù..ữ`, `ỳ..ỹ`)
+///    và phụ âm `đ`, thay thế từng mã điểm Unicode dựng sẵn về ký tự ASCII cơ sở (`a`, `e`, `i`, `o`, `u`, `y`, `d`).
+/// 3. Nhờ đó người dùng gõ `'bai sau'`, `'tran phu'` hay `'chi linh'` đều khớp chính xác với `'Bãi Sau'`,
+///    `'Trần Phú'` và `'Chí Linh'` trong danh mục khu vực Vũng Tàu.
 String _normalizeViSearch(String input) {
+  // Giải thuật khử dấu tiếng Việt theo bảng mã điểm nguyên âm và phụ âm đ:
   var s = input.toLowerCase().trim();
   const diacritics = <String, String>{
     'a': 'àáạảãâầấậẩẫăằắặẳẵ',
@@ -517,7 +544,8 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     final filter = ref.read(villaFilterProvider);
     _queryCtrl = TextEditingController(text: filter.searchQuery);
     _showMapPicker = filter.lat != null && filter.lng != null;
-    final now = DateTime.now();
+    // Giải thuật đồng bộ tháng/năm mở đầu bộ chọn lịch theo múi giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7):
+    final now = BookingDate.todayVn();
     _calendarMonth = filter.checkIn?.month ?? now.month;
     _calendarYear = filter.checkIn?.year ?? now.year;
   }
@@ -1122,9 +1150,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     final trimmedQuery = _queryCtrl.text.trim();
     final filteredGroups = trimmedQuery.isEmpty
         ? allGroups
-        : allGroups
-            .where((g) => _groupMatchesQuery(g, trimmedQuery))
-            .toList();
+        : allGroups.where((g) => _groupMatchesQuery(g, trimmedQuery)).toList();
     final textScale = MediaQuery.textScalerOf(context).scale(1);
 
     return Column(
@@ -1541,8 +1567,9 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
               for (var i = 0; i < filteredGroups.length; i += 2) {
                 if (i > 0) rows.add(const SizedBox(height: spacing));
                 final leftGroup = filteredGroups[i];
-                final rightGroup =
-                    i + 1 < filteredGroups.length ? filteredGroups[i + 1] : null;
+                final rightGroup = i + 1 < filteredGroups.length
+                    ? filteredGroups[i + 1]
+                    : null;
                 rows.add(
                   IntrinsicHeight(
                     child: Row(
@@ -1707,6 +1734,14 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     });
   }
 
+  /// Chuyển đổi giữa các chế độ chọn thời gian (`dates`, `months`, `flexible`) và đồng bộ khoảng `[checkIn, checkOut)`.
+  ///
+  /// Giải thuật đồng bộ chế độ thời gian qua `SearchDateModeHelper`:
+  /// - Chế độ `'months'`: Gọi `SearchDateModeHelper.computeForMonths` để quy đổi tập tháng đã chọn thành
+  ///   cặp ngày đầu tháng - đầu tháng kế tiếp hợp lệ cho truy vấn backend.
+  /// - Chế độ `'flexible'`: Gọi `SearchDateModeHelper.computeForFlexible` để sinh khoảng ngày đại diện cho
+  ///   kỳ nghỉ cuối tuần, 1 tuần hoặc 1 tháng.
+  /// - Chế độ `'dates'`: Khôi phục cặp ngày cụ thể hoặc lùi về mặc định nhận phòng ngày mai (`today + 1`), lưu trú `2` đêm.
   void _switchDateMode(String nextMode, VillaFilterState current) {
     setState(() => _selectingCheckOut = false);
     if (nextMode == 'months') {
@@ -1756,7 +1791,8 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
 
   Widget _buildDateTab(VillaFilterState filter) {
     final mode = filter.dateMode == 'months' ? 'months' : 'dates';
-    final currentMonth = DateTime.now().month;
+    // Giải thuật xác định danh sách tháng khả dụng theo múi giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7):
+    final currentMonth = BookingDate.todayVn().month;
     final availableMonths = [
       for (int m = currentMonth; m <= 12; m++) m,
     ];
@@ -2136,9 +2172,8 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: selected
-                        ? AppColors.brandSoft
-                        : AppColors.surfaceBase,
+                    color:
+                        selected ? AppColors.brandSoft : AppColors.surfaceBase,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color:
@@ -2208,6 +2243,12 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     );
   }
 
+  /// Dựng giao diện thẻ chọn số lượng khách phân nhóm (`Người lớn`, `Trẻ em`, `Em bé`, `Thú cưng`).
+  ///
+  /// Giải thuật ràng buộc bộ đếm khách lưu trú:
+  /// - Tự động nâng `adults = 1` nếu người dùng tăng `children`, `infants` hoặc `pets` lớn hơn `0` khi `adults == 0`
+  ///   (đảm bảo không có đoàn khách nào chỉ gồm trẻ nhỏ hoặc thú cưng đi một mình).
+  /// - Giới hạn mỗi nhóm đếm trong đoạn `[0, 40]` và không cộng `infants` (dưới 2 tuổi) vào `effectiveGuests`.
   Widget _buildGuestTab(VillaFilterState filter) {
     void updateGuestCounts({
       int? adults,
@@ -2517,9 +2558,8 @@ class _GuestCounterRow extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15.5,
                     fontWeight: FontWeight.w700,
-                    color: value > 0
-                        ? AppColors.textPrimary
-                        : AppColors.textMuted,
+                    color:
+                        value > 0 ? AppColors.textPrimary : AppColors.textMuted,
                   ),
                 ),
               ),
@@ -2567,6 +2607,14 @@ class _GuestCounterRow extends StatelessWidget {
   }
 }
 
+/// Lưới lịch tháng rút gọn dùng trong ngăn kéo tìm kiếm chung (không khóa theo từng căn biệt thự riêng lẻ).
+///
+/// Giải thuật dựng lưới lịch tháng và dải băng chọn ngày (`_SimpleMonthGrid`):
+/// 1. Tính tổng số ngày của tháng qua `DateTime(year, month + 1, 0).day` và độ lệch đầu tuần chuẩn Thứ Hai
+///    `startOffset = (firstDay.weekday - 1) % 7` để chèn đúng số ô đệm trống trước ngày mùng 1.
+/// 2. Khóa toàn bộ các ngày quá khứ đứng trước `BookingDate.todayVn()` (theo múi giờ Việt Nam `UTC+7`).
+/// 3. Vẽ lớp nền dải băng ngang màu `AppColors.rangeBackground` bên dưới các ngày nằm trong `[checkIn, checkOut]`
+///    (bo tròn nửa trái tại `isStart`, bo tròn nửa phải tại `isEnd`) và tô tròn màu Coral `AppColors.primary` ở hai đầu mút.
 class _SimpleMonthGrid extends StatelessWidget {
   final int year;
   final int month;
@@ -2584,10 +2632,11 @@ class _SimpleMonthGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Giải thuật tính biên độ tháng dương lịch và độ lệch cột Thứ Hai đầu tuần:
     final firstDay = DateTime(year, month, 1);
     final daysInMonth = DateTime(year, month + 1, 0).day;
     final startOffset = (firstDay.weekday - 1) % 7;
-    final today = BookingDate.today();
+    final today = BookingDate.todayVn();
     final hasRange =
         checkIn != null && checkOut != null && checkOut!.isAfter(checkIn!);
 
@@ -2631,9 +2680,8 @@ class _SimpleMonthGrid extends StatelessWidget {
             final isToday = date == today;
             final isStart = checkIn == date;
             final isEnd = checkOut == date;
-            final isInRange = hasRange &&
-                date.isAfter(checkIn!) &&
-                date.isBefore(checkOut!);
+            final isInRange =
+                hasRange && date.isAfter(checkIn!) && date.isBefore(checkOut!);
 
             return InkWell(
               onTap: isPast ? null : () => onDayTapped(date),
@@ -2685,12 +2733,10 @@ class _SimpleMonthGrid extends StatelessWidget {
                           '$day',
                           style: TextStyle(
                             fontSize: 13,
-                            fontWeight: (isStart ||
-                                    isEnd ||
-                                    isInRange ||
-                                    isToday)
-                                ? FontWeight.w700
-                                : FontWeight.w500,
+                            fontWeight:
+                                (isStart || isEnd || isInRange || isToday)
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
                             color: isPast
                                 ? AppColors.textTertiary
                                 : (isStart || isEnd)
@@ -2711,6 +2757,8 @@ class _SimpleMonthGrid extends StatelessWidget {
   }
 }
 
+/// Mở ngăn kéo bộ lọc tìm kiếm nâng cao cho phép lọc theo thứ tự sắp xếp, loại hình, khoảng giá, số phòng và 12 tiện nghi chuẩn.
+///
 /// Opens the StayFilterModal (`stays/filter/StayFilterModal.tsx`) for advanced filtering.
 Future<void> showStayFilterModal(BuildContext context, WidgetRef ref) async {
   await showModalBottomSheet<void>(
@@ -2787,7 +2835,7 @@ class _StayFilterModalSheetState extends ConsumerState<_StayFilterModalSheet> {
     _beds = f.beds ?? 0;
     _bathrooms = f.bathrooms ?? 0;
     _amenities =
-        f.amenities.map(VillaRepositoryImpl.normalizeAmenityCode).toSet();
+        VillaSearchQueryNormalizer.normalizeAmenities(f.amenities).toSet();
     _sort = f.sort;
   }
 
@@ -3072,10 +3120,9 @@ class _StayFilterModalSheetState extends ConsumerState<_StayFilterModalSheet> {
                                     priceMax: maxP < 20000000 ? maxP : null,
                                     clearPrice:
                                         minP <= 500000 && maxP >= 20000000,
-                                    bedrooms: _bedrooms > 0 ? _bedrooms : null,
-                                    beds: _beds > 0 ? _beds : null,
-                                    bathrooms:
-                                        _bathrooms > 0 ? _bathrooms : null,
+                                    bedrooms: _bedrooms,
+                                    beds: _beds,
+                                    bathrooms: _bathrooms,
                                     amenities: _amenities.toList(),
                                     sort: _sort,
                                     page: 1,

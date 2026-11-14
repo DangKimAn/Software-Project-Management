@@ -3,9 +3,17 @@ import type { CorsOptions } from "cors";
 import { ApiError } from "../common/api-error";
 import { getEnv } from "./env";
 
+/**
+ * Giải thuật nhận diện nguồn gốc (Origin) localhost phục vụ môi trường phát triển nội bộ.
+ */
 const isLocalDevOrigin = (origin: string) =>
     /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
 
+/**
+ * Giải thuật cấu hình chính sách CORS chặt chẽ khi bật `credentials: true`:
+ * - Cấm tuyệt đối cấu hình đại diện `*` và bắt buộc khai báo danh sách allowlist tường minh trên môi trường `production`.
+ * - Từ chối các origin ngoài danh sách cho phép bằng lỗi `ApiError(403)`.
+ */
 export const getCorsOptions = (): CorsOptions => {
     const env = getEnv();
     const allowedOrigins = env.corsOrigins;

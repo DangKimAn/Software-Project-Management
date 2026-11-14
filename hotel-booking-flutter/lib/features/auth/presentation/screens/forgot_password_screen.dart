@@ -10,12 +10,18 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
-import '../view_models/auth_notifier.dart';
+import '../view_models/forgot_password_view_model.dart';
 import '../validation/auth_validation.dart';
 
+/// Các bước tuần tự trong luồng khôi phục mật khẩu: nhập định danh (`request`), xác thực OTP (`otp`) và hoàn tất (`success`).
 enum _ForgotStep { request, otp, success }
 
+/// Màn hình khôi phục mật khẩu qua mã xác thực OTP 6 chữ số (`/quen-mat-khau`).
+///
+/// Quản lý máy trạng thái 3 bước kèm đồng hồ đếm ngược chống gửi lại OTP liên tục (`_otpResendSeconds`),
+/// kiểm tra độ mạnh mật khẩu mới và xác nhận khớp mật khẩu nhập lại trước khi cập nhật lên máy chủ.
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
+  /// Khởi tạo `ForgotPasswordScreen`.
   const ForgotPasswordScreen({super.key});
 
   @override
@@ -79,6 +85,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   String get _currentOtp => _otpController.text.trim();
   bool get _isOtpComplete => RegExp(r'^\d{6}$').hasMatch(_currentOtp);
 
+  // Giải thuật yêu cầu gửi mã OTP và kích hoạt đồng hồ đếm ngược chờ gửi lại (`_handleSendOtp`).
   Future<void> _handleSendOtp() async {
     if (_isLoading) return;
     _fieldErrors = {};
@@ -97,8 +104,9 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     });
 
     try {
-      final repo = ref.read(authRepositoryProvider);
-      await repo.forgotPassword(identifier: identifier);
+      await ref
+          .read(forgotPasswordViewModelProvider)
+          .requestPasswordResetOtp(identifier: identifier);
       if (mounted) {
         setState(() {
           _step = _ForgotStep.otp;
@@ -123,6 +131,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     await _handleSendOtp();
   }
 
+  // Giải thuật thẩm định mã OTP 6 chữ số cùng mật khẩu mới và gửi xác nhận đặt lại mật khẩu (`_handleResetPassword`).
   Future<void> _handleResetPassword() async {
     if (_isLoading) return;
     _fieldErrors = {};
@@ -150,12 +159,11 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     });
 
     try {
-      final repo = ref.read(authRepositoryProvider);
-      await repo.resetPassword(
-        identifier: _identifierController.text.trim(),
-        otp: otp,
-        newPassword: newPassword,
-      );
+      await ref.read(forgotPasswordViewModelProvider).confirmPasswordReset(
+            identifier: _identifierController.text.trim(),
+            otp: otp,
+            newPassword: newPassword,
+          );
       if (mounted) {
         setState(() {
           _isLoading = false;

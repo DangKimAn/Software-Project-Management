@@ -20,8 +20,8 @@ const adminService = require("../dist/modules/admin/admin.service");
 const usersService = require("../dist/modules/users/users.service");
 const usersRepository = require("../dist/modules/users/users.repository");
 const reportsService = require("../dist/modules/reports/reports.service");
-const auditLogService = require("../dist/services/audit-log-service");
-const hostVerificationStatusService = require("../dist/services/host-verification-status-service");
+const auditLogService = require("../dist/services/audit-log.service");
+const hostVerificationStatusService = require("../dist/modules/host-kyc/host-status-sync.service");
 const notificationService = require("../dist/modules/notifications/notification.service");
 
 const originals: PatchEntry[] = [];

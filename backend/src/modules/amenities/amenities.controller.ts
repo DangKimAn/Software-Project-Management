@@ -1,3 +1,8 @@
+/**
+ * Bộ điều phối HTTP cho danh mục tiện ích chỗ ở (`amenities`):
+ * - Cung cấp handler tra cứu danh sách tiện ích công khai cho khách/chủ nhà và các handler CRUD danh mục tiện ích dành cho quản trị viên.
+ */
+
 import type { RequestHandler } from "express";
 
 import { asyncHandler } from "../../common/async-handler";
@@ -16,6 +21,9 @@ import {
     updateAmenity,
 } from "./amenities.service";
 
+/**
+ * Trả về danh sách tiện ích đang kích hoạt hiển thị công khai cho người dùng.
+ */
 export const getPublicAmenities: RequestHandler = asyncHandler(async (_req, res) => {
     const result = await listPublicAmenities();
 
@@ -24,6 +32,9 @@ export const getPublicAmenities: RequestHandler = asyncHandler(async (_req, res)
     });
 });
 
+/**
+ * Liệt kê toàn bộ danh mục tiện ích phục vụ trang quản trị.
+ */
 export const getAdminAmenities: RequestHandler = asyncHandler(async (_req, res) => {
     const result = await listAdminAmenities();
 
@@ -32,6 +43,9 @@ export const getAdminAmenities: RequestHandler = asyncHandler(async (_req, res) 
     });
 });
 
+/**
+ * Tạo mới một mục tiện ích chỗ ở trong danh mục hệ thống.
+ */
 export const createAdminAmenity: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -45,6 +59,9 @@ export const createAdminAmenity: RequestHandler = asyncHandler(async (req, res) 
     });
 });
 
+/**
+ * Cập nhật thông tin hoặc trạng thái của một tiện ích theo `amenityId`.
+ */
 export const updateAdminAmenity: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -58,6 +75,9 @@ export const updateAdminAmenity: RequestHandler = asyncHandler(async (req, res) 
     });
 });
 
+/**
+ * Xóa một tiện ích khỏi danh mục quản trị theo `amenityId`.
+ */
 export const deleteAdminAmenity: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 

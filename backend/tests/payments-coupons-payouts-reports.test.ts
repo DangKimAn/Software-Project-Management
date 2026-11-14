@@ -23,11 +23,11 @@ const Payment = require("../dist/models/payment").default;
 const PaymentTransaction = require("../dist/models/payment-transaction").default;
 const PayoutAccount = require("../dist/models/payout-account").default;
 const Refund = require("../dist/models/refund").default;
-const userAccessService = require("../dist/services/user-access-service");
+const userAccessService = require("../dist/modules/users/user-access.service");
 const paymentsService = require("../dist/modules/payments/payments.service");
 const vnpayService = require("../dist/modules/payments/vnpay.service");
 const couponsService = require("../dist/modules/coupons/coupons.service");
-const hostBankAccountService = require("../dist/modules/host-bank-account/host-bank-account.service");
+const hostBankAccountService = require("../dist/modules/payouts/payout-accounts.service");
 const payoutsService = require("../dist/modules/payouts/payouts.service");
 const reportsService = require("../dist/modules/reports/reports.service");
 const notificationService = require("../dist/modules/notifications/notification.service");
@@ -482,7 +482,8 @@ describe("Payments, coupons, payouts, and revenue reports", () => {
         assert.equal(createdPayload?.accountName, "NGUYEN VAN A");
         assert.equal(createdPayload?.branchName, "Chi nhánh Vũng Tàu");
         assert.equal(createdPayload?.isDefault, true);
-        assert.equal(result.accountNumber, "123456789");
+        assert.equal(typeof createdPayload?.accountNumberEncrypted, "string");
+        assert.equal(result.accountNumber, "*****6789");
         assert.equal(result.accountHolderName, "NGUYEN VAN A");
     });
 

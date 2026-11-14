@@ -1,9 +1,22 @@
+import '../../../../core/date/booking_date.dart';
+
+export 'payment_status_resolver.dart';
+
+/// Đơn giá chi tiết của một đêm lưu trú cụ thể trong bảng bóc tách chi phí đặt phòng.
 class BookingNightlyPriceItem {
+  /// Ngày lưu trú theo định dạng `YYYY-MM-DD`.
   final String date;
+
+  /// Đơn giá áp dụng cho đêm lưu trú (VND).
   final int amount;
+
+  /// Nguồn cấu hình giá (ví dụ `'base'`, `'weekend'`, hoặc giá tùy chỉnh theo lịch).
   final String source;
+
+  /// Cho biết đêm lưu trú này có rơi vào cuối tuần hay không.
   final bool isWeekend;
 
+  /// Khởi tạo `BookingNightlyPriceItem`.
   const BookingNightlyPriceItem({
     required this.date,
     required this.amount,
@@ -11,6 +24,7 @@ class BookingNightlyPriceItem {
     this.isWeekend = false,
   });
 
+  /// Giải mã đối tượng JSON từng đêm lưu trú thành `BookingNightlyPriceItem`.
   factory BookingNightlyPriceItem.fromJson(Map<String, dynamic> json) {
     return BookingNightlyPriceItem(
       date: (json['date'] ?? '').toString(),
@@ -21,25 +35,61 @@ class BookingNightlyPriceItem {
   }
 }
 
+/// Bảng bóc tách toàn diện chi phí đặt phòng (tiền đêm cơ bản, phụ thu cuối tuần, phụ phí khách thêm,
+/// phí dọn dẹp, phí dịch vụ và chiết khấu mã giảm giá).
 class BookingPriceBreakdown {
+  /// Tổng số đêm lưu trú của kỳ nghỉ.
   final int totalNights;
+
+  /// Số đêm ngày thường trong kỳ nghỉ.
   final int weekdayNights;
+
+  /// Số đêm cuối tuần trong kỳ nghỉ.
   final int weekendNights;
+
+  /// Đơn giá tiêu chuẩn mỗi đêm ngày thường (VND).
   final int nightlyPrice;
+
+  /// Đơn giá áp dụng cho đêm cuối tuần (VND).
   final int weekendPrice;
+
+  /// Danh sách chi tiết đơn giá của từng đêm trong khoảng lưu trú.
   final List<BookingNightlyPriceItem> nightlyPrices;
+
+  /// Tổng tiền phòng tạm tính (đã bao gồm phụ thu cuối tuần).
   final int subtotalAmount;
+
+  /// Tiền phòng cơ bản chưa tách riêng hoặc trước cộng phụ thu cuối tuần.
   final int baseNightsAmount;
+
+  /// Khoản chênh lệch phụ thu cuối tuần (VND).
   final int weekendSurchargeAmount;
+
+  /// Các khoản phụ phí ngày lễ hoặc sự kiện đặc biệt khác (VND).
   final int surchargeAmount;
+
+  /// Phụ phí vượt số lượng khách tiêu chuẩn (VND).
   final int extraGuestFeeAmount;
+
+  /// Phí dọn dẹp vệ sinh một lần cho kỳ lưu trú (VND).
   final int cleaningFee;
+
+  /// Phí dịch vụ vận hành nền tảng (VND).
   final int serviceFee;
+
+  /// Số tiền được giảm nhờ áp dụng mã khuyến mãi (VND).
   final int discountAmount;
+
+  /// Tổng số tiền thanh toán cuối cùng sau khi cộng phí và trừ chiết khấu (VND).
   final int totalAmount;
+
+  /// Mã định danh số nguyên của mã giảm giá đã áp dụng (nếu có).
   final int? couponId;
+
+  /// Chuỗi mã giảm giá đã áp dụng trên đơn đặt phòng (nếu có).
   final String? couponCode;
 
+  /// Khởi tạo `BookingPriceBreakdown`, tự động suy ra `subtotalAmount` nếu không truyền tường minh.
   const BookingPriceBreakdown({
     this.totalNights = 1,
     this.weekdayNights = 1,
@@ -61,9 +111,13 @@ class BookingPriceBreakdown {
   }) : subtotalAmount =
             subtotalAmount ?? (baseNightsAmount + weekendSurchargeAmount);
 
+  /// Giá trị phí dọn dẹp đồng bộ tên trường với lược đồ API.
   int get cleaningFeeAmount => cleaningFee;
+
+  /// Giá trị phí dịch vụ đồng bộ tên trường với lược đồ API.
   int get serviceFeeAmount => serviceFee;
 
+  /// Giải mã bảng bóc tách giá từ JSON và chống cộng trùng phụ thu cuối tuần vào `subtotalAmount`.
   factory BookingPriceBreakdown.fromJson(Map<String, dynamic> json) {
     final rawSubtotal =
         ((json['subtotalAmount'] ?? json['subtotal']) as num?)?.round();
@@ -172,26 +226,63 @@ class BookingPriceBreakdown {
   }
 }
 
+/// Kết quả thẩm định tính hợp lệ và mức chiết khấu của mã giảm giá từ máy chủ.
 class CouponValidationResult {
+  /// Cho biết mã giảm giá có đủ điều kiện áp dụng cho đơn đặt phòng hiện tại hay không.
   final bool valid;
+
+  /// Chuỗi mã giảm giá đã chuẩn hóa.
   final String code;
+
+  /// Tiêu đề chương trình khuyến mãi.
   final String? title;
+
+  /// Mô tả chi tiết điều kiện ưu đãi.
   final String? description;
+
+  /// Loại chiết khấu (`'percent'` theo phần trăm hoặc `'fixed_amount'` số tiền cố định).
   final String? discountType; // 'percent' | 'fixed_amount'
+
+  /// Giá trị chiết khấu gốc (phần trăm hoặc số tiền VND).
   final double? discountValue;
+
+  /// Mức giảm tối đa cho phép đối với mã giảm theo phần trăm (VND).
   final int? maxDiscountAmount;
+
+  /// Giá trị đơn hàng tối thiểu để kích hoạt mã giảm giá (VND).
   final int? minOrderValue;
+
+  /// Tổng số lượt sử dụng tối đa của toàn chiến dịch.
   final int? totalLimit;
+
+  /// Số lượt mã đã được sử dụng.
   final int? usedCount;
+
+  /// Giới hạn số lượt sử dụng trên mỗi tài khoản khách hàng.
   final int? limitPerUser;
+
+  /// Thời điểm bắt đầu hiệu lực của mã giảm giá.
   final DateTime? startDate;
+
+  /// Thời điểm kết thúc hiệu lực của mã giảm giá.
   final DateTime? endDate;
+
+  /// Cho biết mã giảm giá có đang ở trạng thái kích hoạt trên hệ thống hay không.
   final bool? isActive;
+
+  /// Số tiền được giảm thực tế trên đơn hàng (luôn bằng `0` nếu `valid` là `false`).
   final int discountAmount;
+
+  /// Tổng tiền đơn hàng dự kiến sau khi trừ chiết khấu.
   final int? finalAmount;
+
+  /// Mã nguyên nhân từ chối thô trả về từ máy chủ khi không hợp lệ.
   final String? reason;
+
+  /// Thông điệp phản hồi hiển thị trực tiếp cho người dùng.
   final String? message;
 
+  /// Khởi tạo `CouponValidationResult`.
   const CouponValidationResult({
     required this.valid,
     required this.code,
@@ -213,16 +304,21 @@ class CouponValidationResult {
     this.message,
   });
 
+  /// Cho biết mã giảm giá bị từ chối do đã quá hạn sử dụng hay không.
   bool get isExpired => reason?.toLowerCase().contains('expired') == true;
 
+  /// Cho biết mã giảm giá không áp dụng cho chỗ nghỉ đang chọn hay không.
   bool get isListingNotApplicable =>
       reason?.toLowerCase().contains('listing') == true;
 
+  /// Cho biết đơn đặt phòng chưa đạt giá trị tối thiểu của mã giảm giá hay không.
   bool get isMinOrderNotMet =>
       reason?.toLowerCase().contains('minordervalue') == true;
 
+  /// Thông điệp giải thích tiếng Việt ưu tiên hiển thị trên giao diện.
   String? get displayMessage => message ?? localizeRejectionReason(reason);
 
+  /// Chuyển đổi mã nguyên nhân từ chối tiếng Anh/hệ thống `rawReason` sang câu thông báo tiếng Việt dễ hiểu.
   static String? localizeRejectionReason(String? rawReason) {
     if (rawReason == null || rawReason.trim().isEmpty) return null;
     final trimmed = rawReason.trim();
@@ -257,6 +353,7 @@ class CouponValidationResult {
     return trimmed;
   }
 
+  /// Giải mã phản hồi thẩm định mã giảm giá từ JSON, đảm bảo `discountAmount` bằng `0` khi `valid` là `false`.
   factory CouponValidationResult.fromJson(
     Map<String, dynamic> json, {
     String fallbackCode = '',
@@ -319,13 +416,24 @@ class CouponValidationResult {
   }
 }
 
+/// Thông tin trạng thái cấu hình và khả năng sẵn sàng phục vụ của một phương thức thanh toán trực tuyến.
 class PaymentMethodAvailability {
+  /// Mã định danh phương thức thanh toán (`'vnpay'` hoặc `'momo'`).
   final String method; // 'vnpay' | 'momo'
+
+  /// Nhãn hiển thị tên cổng thanh toán trên giao diện.
   final String label;
+
+  /// Cho biết cổng thanh toán đã được cấu hình đầy đủ khóa bí mật và sẵn sàng giao dịch hay chưa.
   final bool available;
+
+  /// Danh sách các biến môi trường còn thiếu trên máy chủ (nếu cổng chưa sẵn sàng).
   final List<String> missingConfigKeys;
+
+  /// Lý do giải thích vì sao phương thức thanh toán hiện không khả dụng.
   final String? unavailableReason;
 
+  /// Khởi tạo `PaymentMethodAvailability`.
   const PaymentMethodAvailability({
     required this.method,
     required this.label,
@@ -334,8 +442,10 @@ class PaymentMethodAvailability {
     this.unavailableReason,
   });
 
+  /// Bí danh truy cập nhanh lý do không khả dụng `unavailableReason`.
   String? get reason => unavailableReason;
 
+  /// Giải mã đối tượng JSON từ `/api/payments/methods` thành `PaymentMethodAvailability`.
   factory PaymentMethodAvailability.fromJson(Map<String, dynamic> json) {
     final method = (json['method'] ?? 'vnpay').toString().trim().toLowerCase();
     final label =
@@ -361,26 +471,64 @@ class PaymentMethodAvailability {
   }
 }
 
+/// Thực thể đại diện cho một phiên giao dịch thanh toán gắn với đơn đặt phòng,
+/// bao gồm URL chuyển hướng cổng thanh toán, trạng thái đối soát và cờ hoàn tiền khi thanh toán muộn.
 class PaymentSessionResult {
+  /// Mã định danh phiên thanh toán trên hệ thống.
   final String paymentId;
+
+  /// Mã đơn đặt phòng liên kết với giao dịch này.
   final String bookingId;
+
+  /// Phương thức thanh toán sử dụng (`'vnpay'`, `'momo'`, ...).
   final String method;
+
+  /// Trạng thái bản ghi thanh toán gốc (`'pending'`, `'paid'`, `'failed'`, `'refunded'`, ...).
   final String paymentStatus;
+
+  /// Trạng thái kết quả tổng hợp trả về từ dịch vụ đối soát thanh toán.
   final String paymentResultStatus;
+
+  /// Số tiền giao dịch (VND).
   final int amount;
+
+  /// Đơn vị tiền tệ giao dịch (mặc định `'VND'`).
   final String currency;
+
+  /// Đường dẫn URL chuyển hướng sang cổng thanh toán đối tác (VNPay / MoMo).
   final String? paymentUrl;
+
+  /// Tên nhà cung cấp cổng thanh toán.
   final String? provider;
+
+  /// Mã tham chiếu giao dịch (`TxnRef`) gửi sang cổng thanh toán.
   final String? providerTxnRef;
+
+  /// Mã giao dịch thực tế phát sinh bên phía ngân hàng/ví điện tử đối tác.
   final String? providerTransactionNo;
+
+  /// Mã phản hồi gốc từ cổng thanh toán (ví dụ `'00'` của VNPay).
   final String? providerResponseCode;
+
+  /// Thời điểm cổng thanh toán xác nhận thu tiền thành công.
   final DateTime? paidAt;
+
+  /// Cho biết giao dịch thu tiền thành công sau khi đơn đã hết hạn giữ chỗ và bắt buộc phải hoàn tiền.
   final bool requiresRefund;
+
+  /// Trạng thái tiến trình hoàn tiền (`'pending'`, `'processing'`, `'succeeded'`, `'refunded'`).
   final String? refundStatus;
+
+  /// Nguyên nhân phát sinh giao dịch thanh toán muộn sau khi hết hạn giữ chỗ.
   final String? latePaymentReason;
+
+  /// Thời điểm khởi tạo phiên thanh toán.
   final DateTime? createdAt;
+
+  /// Thời điểm cập nhật bản ghi thanh toán gần nhất.
   final DateTime? updatedAt;
 
+  /// Khởi tạo `PaymentSessionResult`.
   const PaymentSessionResult({
     required this.paymentId,
     required this.bookingId,
@@ -407,30 +555,52 @@ class PaymentSessionResult {
             paymentResultStatus ?? paymentStatus ?? status ?? 'pending',
         providerTxnRef = providerTxnRef ?? transactionRef;
 
+  /// Bí danh trạng thái thanh toán `paymentStatus`.
   String get status => paymentStatus;
+
+  /// Bí danh mã tham chiếu giao dịch `providerTxnRef`.
   String? get transactionRef => providerTxnRef;
 
-  bool get isRefundPending =>
-      paymentResultStatus == 'refund_pending' ||
-      requiresRefund ||
-      refundStatus == 'pending' ||
-      refundStatus == 'processing';
-
+  /// Cho biết giao dịch đã được hoàn tiền thành công về phương thức ban đầu hay chưa.
+  // Giải thuật phân loại trạng thái hoàn tiền của phiên thanh toán:
+  // Kiểm tra trạng thái đã hoàn tiền thành công (`isRefunded`) trước khi xét `isRefundPending`
+  // để khi `requiresRefund == true` nhưng `refundStatus == 'succeeded'` thì không bị kẹt ở `refund_pending`.
+  // CONFLICT-RESOLVED: Đồng bộ với `payments.service.ts` trả về `paymentResultStatus: "refunded"` khi `refundStatus === "succeeded"`.
   bool get isRefunded =>
+      paymentResultStatus == 'refunded' ||
       paymentStatus == 'refunded' ||
       refundStatus == 'succeeded' ||
       refundStatus == 'refunded';
 
+  /// Cho biết giao dịch có đang trong quá trình chờ xử lý hoàn tiền hay không.
+  bool get isRefundPending =>
+      !isRefunded &&
+      (paymentResultStatus == 'refund_pending' ||
+          paymentStatus == 'refund_pending' ||
+          requiresRefund ||
+          refundStatus == 'pending' ||
+          refundStatus == 'processing');
+
+  /// Cho biết giao dịch đã thanh toán hợp lệ và không thuộc diện chờ/đã hoàn tiền.
   bool get isPaid => paymentStatus == 'paid' && !isRefundPending && !isRefunded;
 
+  /// Cho biết phiên thanh toán có đang chờ người dùng hoàn tất trên cổng hay không.
   bool get isPending => paymentStatus == 'pending';
+
+  /// Cho biết giao dịch có bị từ chối hoặc thất bại hay không.
   bool get isFailed => paymentStatus == 'failed';
+
+  /// Cho biết người dùng đã hủy giao dịch trên cổng thanh toán hay chưa.
   bool get isCancelled => paymentStatus == 'cancelled';
+
+  /// Cho biết phiên thanh toán đã hết thời hạn giao dịch hay chưa.
   bool get isExpired => paymentStatus == 'expired';
 
+  /// Thông báo tiếng Việt giải thích nguyên nhân thanh toán muộn sau khi hết hạn giữ chỗ.
   String? get latePaymentReasonDisplay =>
       localizeLatePaymentReason(latePaymentReason);
 
+  /// Chuẩn hóa mã lý do thanh toán muộn `rawReason` sang câu giải thích tiếng Việt cho khách hàng.
   static String? localizeLatePaymentReason(String? rawReason) {
     if (rawReason == null || rawReason.trim().isEmpty) return null;
     final trimmed = rawReason.trim();
@@ -444,6 +614,7 @@ class PaymentSessionResult {
     return trimmed;
   }
 
+  /// Giải mã đối tượng JSON từ API thanh toán thành `PaymentSessionResult`.
   factory PaymentSessionResult.fromJson(Map<String, dynamic> json) {
     final rawStatus = (json['paymentStatus'] ?? json['status'] ?? 'pending')
         .toString()
@@ -490,11 +661,18 @@ class PaymentSessionResult {
   }
 }
 
+/// Chi tiết lỗi xác thực gắn với một dòng mục cụ thể `index` trong yêu cầu đặt nhiều phòng cùng lúc.
 class BulkBookingItemError {
+  /// Vị trí chỉ mục (bắt đầu từ `0`) của mục đặt phòng gặp lỗi trong danh sách gửi lên.
   final int index;
+
+  /// Tên trường dữ liệu bị lỗi (ví dụ `'checkInDate'`, `'guestCount'`, `'couponCode'`).
   final String? field;
+
+  /// Thông báo lỗi chi tiết cho dòng đặt phòng này.
   final String message;
 
+  /// Khởi tạo `BulkBookingItemError`.
   const BulkBookingItemError({
     required this.index,
     this.field,
@@ -502,10 +680,15 @@ class BulkBookingItemError {
   });
 }
 
+/// Ngoại lệ chuyên biệt ném ra khi giao dịch đặt nhiều phòng cùng lúc thất bại ở một hoặc nhiều dòng mục.
 class BulkBookingException implements Exception {
+  /// Thông báo lỗi tổng quát của yêu cầu đặt phòng hàng loạt.
   final String message;
+
+  /// Danh sách lỗi chi tiết gắn theo từng chỉ mục dòng để hiển thị trực tiếp trên từng thẻ cấu hình.
   final List<BulkBookingItemError> itemErrors;
 
+  /// Khởi tạo `BulkBookingException`.
   const BulkBookingException({
     required this.message,
     this.itemErrors = const [],
@@ -515,47 +698,127 @@ class BulkBookingException implements Exception {
   String toString() => message;
 }
 
+/// Thực thể trung tâm biểu diễn một đơn đặt phòng của khách hàng, bao gồm thông tin chỗ nghỉ,
+/// lịch nhận/trả phòng, chi phí chi tiết, thời hạn giữ chỗ thanh toán và máy trạng thái vòng đời đơn.
 class Booking {
+  /// Mã định danh duy nhất của đơn đặt phòng.
   final String id;
+
+  /// Mã định danh chỗ nghỉ/biệt thự được đặt.
   final String listingId;
+
+  /// Tên hiển thị của biệt thự hoặc chỗ nghỉ.
   final String propertyName;
+
+  /// Đường dẫn ảnh bìa đại diện của chỗ nghỉ.
   final String? coverImageUrl;
+
+  /// Ngày nhận phòng theo định dạng `YYYY-MM-DD`.
   final String checkInDate;
+
+  /// Ngày trả phòng theo định dạng `YYYY-MM-DD`.
   final String checkOutDate;
+
+  /// Tổng số đêm lưu trú.
   final int nights;
+
+  /// Tổng số tiền thanh toán cuối cùng của đơn đặt phòng (VND).
   final int totalAmount;
+
+  /// Tiền phòng tạm tính trước phí dọn dẹp, phí dịch vụ và giảm giá (VND).
   final int subtotalAmount;
+
+  /// Phí dọn dẹp vệ sinh (VND).
   final int cleaningFeeAmount;
+
+  /// Phí dịch vụ nền tảng (VND).
   final int serviceFeeAmount;
+
+  /// Số tiền giảm giá từ mã ưu đãi (VND).
   final int discountAmount;
+
+  /// Đơn vị tiền tệ (mặc định `'VND'`).
   final String currency;
+
+  /// Số lượng khách lưu trú đăng ký trong đơn.
   final int guestCount;
+
+  /// Trạng thái đơn đặt phòng trả về từ API.
   final String status;
+
+  /// Trạng thái nội bộ chi tiết của máy trạng thái đặt phòng trên máy chủ (nếu có).
   final String? internalStatus;
+
+  /// Trạng thái thanh toán của đơn (`'unpaid'`, `'paid'`, `'refund_pending'`, `'refunded'`, ...).
   final String paymentStatus;
+
+  /// Trạng thái xử lý hoàn tiền của đơn đặt phòng (nếu phát sinh hoàn tiền).
   final String? refundStatus;
+
+  /// Trạng thái giải ngân doanh thu cho Chủ nhà.
   final String? payoutStatus;
+
+  /// Địa chỉ hiển thị của chỗ nghỉ.
   final String? address;
+
+  /// Mã hoặc nội dung lý do hủy đơn đặt phòng.
   final String? cancellationReason;
+
+  /// Mã định danh người dùng đã thực hiện thao tác hủy đơn.
   final String? cancelledByUserId;
+
+  /// Mã định danh Chủ nhà sở hữu chỗ nghỉ.
   final String? hostUserId;
+
+  /// Mã định danh Khách hàng đặt phòng.
   final String? guestUserId;
+
+  /// Yêu cầu đặc biệt hoặc ghi chú của khách gửi Chủ nhà.
   final String? specialRequests;
+
+  /// Mã giảm giá đã áp dụng cho đơn đặt phòng.
   final String? couponCode;
+
+  /// Thời điểm hết hạn khóa lịch phòng tạm thời (`lockedUntil`).
   final DateTime? lockedUntil;
+
+  /// Thời điểm hết hạn giữ chỗ chờ thanh toán (`paymentExpiresAt`).
   final DateTime? paymentExpiresAt;
+
+  /// Thời điểm bắt đầu mở phiên thanh toán.
   final DateTime? paymentStartedAt;
+
+  /// Thời điểm hoàn tất thanh toán.
   final DateTime? paidAt;
+
+  /// Thời điểm khách thực tế nhận phòng.
   final DateTime? checkedInAt;
+
+  /// Thời điểm khách thực tế trả phòng.
   final DateTime? checkedOutAt;
+
+  /// Thời điểm đơn đặt phòng bị hủy.
   final DateTime? cancelledAt;
+
+  /// Số giây giữ chỗ còn lại do máy chủ tính sẵn tại thời điểm phản hồi (nếu có).
   final int? remainingPaymentSeconds;
+
+  /// Cho biết khách hàng đã gửi đánh giá cho kỳ lưu trú này hay chưa.
   final bool hasReview;
+
+  /// Họ tên hiển thị của Chủ nhà.
   final String? hostName;
+
+  /// Số điện thoại liên hệ của Chủ nhà.
   final String? hostPhone;
+
+  /// Đối tượng bóc tách chi tiết cấu thành giá của đơn đặt phòng.
   final BookingPriceBreakdown? priceBreakdown;
+
+  /// Thời điểm tạo đơn đặt phòng.
   final DateTime? createdAt;
 
+  /// Khởi tạo thực thể `Booking`.
   const Booking({
     required this.id,
     required this.listingId,
@@ -598,8 +861,10 @@ class Booking {
     this.createdAt,
   });
 
+  /// Mốc thời hạn cuối cùng phải hoàn tất thanh toán giữ chỗ (`paymentExpiresAt` ưu tiên hơn `lockedUntil`).
   DateTime? get paymentDeadline => paymentExpiresAt ?? lockedUntil;
 
+  /// Cho biết đơn đặt phòng đã được thanh toán thành công dựa trên `paymentStatus`, `paidAt` hoặc trạng thái vòng đời sau thanh toán.
   bool get isPaid {
     final pStatus = paymentStatus.trim().toLowerCase();
     final rawStatus = (internalStatus ?? status).trim().toLowerCase();
@@ -619,8 +884,12 @@ class Booking {
         }.contains(rawStatus);
   }
 
-  /// Calculates remaining hold seconds without EVER resetting 0 or expired deadlines to 900.
+  /// Tính số giây giữ chỗ thanh toán còn lại tính từ thời điểm `now` (mặc định là thời gian thực hiện tại),
+  /// đảm bảo trả về `0` khi đơn đã thanh toán hoặc đã quá hạn, tuyệt đối không tự đặt lại về `900` giây.
   int computeRemainingPaymentSeconds({DateTime? now}) {
+    // Giải thuật tính đếm ngược thời gian giữ chỗ chờ thanh toán:
+    // So sánh `paymentDeadline.toUtc()` với mốc `now.toUtc()` theo mili-giây và làm tròn lên (`ceil`) theo giây;
+    // nếu không có mốc tuyệt đối mới dùng `remainingPaymentSeconds` dương từ máy chủ.
     if (isPaid) return 0;
 
     final rawStatus = (internalStatus ?? status).trim().toLowerCase();
@@ -646,6 +915,7 @@ class Booking {
     return 0;
   }
 
+  /// Kiểm tra xem đơn giữ chỗ chờ thanh toán đã vượt quá thời hạn tại thời điểm `now` hay chưa.
   bool isPaymentExpiredAt([DateTime? now]) {
     final raw = status.trim().toLowerCase();
     final internal = internalStatus?.trim().toLowerCase();
@@ -681,10 +951,19 @@ class Booking {
     return false;
   }
 
+  /// Cho biết đơn đặt phòng hiện đã quá thời hạn giữ chỗ thanh toán hay chưa.
   bool get isExpired => isPaymentExpiredAt();
 
-  /// Resolves the canonical booking status code matching `bookingStatus.ts` & `booking-state-machine.ts`.
+  /// Phân giải mã trạng thái chuẩn hóa có hiệu lực của đơn đặt phòng tại mốc thời gian `now`,
+  /// đồng bộ hoàn toàn với máy trạng thái Backend (`bookingStatus.ts` & `booking-state-machine.ts`).
   String effectiveStatusAt([DateTime? now]) {
+    // Giải thuật chuẩn hóa trạng thái hiệu lực của đặt phòng (Effective Booking Status):
+    // 1. Ưu tiên ánh xạ trạng thái hoàn tiền (`refundStatus == 'succeeded'` -> `'refunded'`;
+    //    `pending`/`processing` trên đơn hủy/từ chối/hết hạn -> `'refund_pending'`).
+    // 2. Đối với đơn ở trạng thái `'paid'` có ngày hiện tại theo múi giờ Việt Nam (`UTC+7`)
+    //    `today >= checkOutDate` (và không bị hủy/hoàn tiền), tự động chuyển sang `'completed'`
+    //    để lịch sử lưu trú đã qua không bị kẹt ở nhóm "Sắp tới".
+    // CONFLICT-RESOLVED: Đồng bộ logic auto-advance `paid -> completed` khi qua `checkOutDate` với `bookings.service.ts` và chuẩn hóa `refundStatus`.
     final refStatus = refundStatus?.trim().toLowerCase();
     final payStatus = paymentStatus.trim().toLowerCase();
     final raw = status.trim().toLowerCase();
@@ -697,7 +976,7 @@ class Booking {
       return 'refunded';
     }
 
-    if (raw == 'refund_pending') {
+    if (raw == 'refund_pending' || payStatus == 'refund_pending') {
       return 'refund_pending';
     }
 
@@ -744,16 +1023,45 @@ class Booking {
       'payment_expired',
     }.contains(resolved);
 
-    if (isTerminalOrExpired &&
+    final isRawCancelledOrExpired = const {
+      'cancelled',
+      'cancelled_by_guest',
+      'cancelled_by_host',
+      'cancelled_by_admin',
+      'host_cancelled',
+      'rejected',
+      'expired',
+      'payment_expired',
+    }.contains(raw);
+
+    if ((isTerminalOrExpired || isRawCancelledOrExpired) &&
         (refStatus == 'pending' || refStatus == 'processing')) {
       return 'refund_pending';
+    }
+
+    if (resolved == 'paid') {
+      final parsedCheckOut = BookingDate.tryParse(checkOutDate.trim());
+      if (parsedCheckOut != null) {
+        final vnNow =
+            (now ?? DateTime.now()).toUtc().add(const Duration(hours: 7));
+        final todayVn = BookingDate(
+          year: vnNow.year,
+          month: vnNow.month,
+          day: vnNow.day,
+        );
+        if (!todayVn.isBefore(parsedCheckOut)) {
+          return 'completed';
+        }
+      }
     }
 
     return resolved;
   }
 
+  /// Mã trạng thái hiệu lực hiện tại của đơn đặt phòng tại thời điểm hệ thống.
   String get effectiveStatus => effectiveStatusAt();
 
+  /// Cho biết đơn đặt phòng thuộc nhóm đã hủy, bị từ chối, quá hạn thanh toán hoặc đang/đã hoàn tiền.
   bool get isCancelled {
     final eff = effectiveStatus;
     return const {
@@ -770,6 +1078,7 @@ class Booking {
     }.contains(eff);
   }
 
+  /// Cho biết kỳ lưu trú đã hoàn tất hoặc khách đã trả phòng.
   bool get isCompleted {
     if (isCancelled) return false;
     final eff = effectiveStatus;
@@ -779,10 +1088,11 @@ class Booking {
         eff == 'payout_paid';
   }
 
+  /// Cho biết đơn đặt phòng đang hoạt động (sắp tới hoặc đang lưu trú, chưa hủy và chưa hoàn tất).
   bool get isActive => !isCancelled && !isCompleted;
 
-  /// Guest can pay now ONLY when status is `pending_payment`, not already paid,
-  /// not expired, and payment is not currently processing.
+  /// Cho biết khách hàng có thể thực hiện thanh toán ngay cho đơn này hay không
+  /// (chỉ cho phép khi `effectiveStatus` là `'pending_payment'`, chưa quá hạn và không đang xử lý giao dịch).
   bool get canPayNow {
     if (isPaid || isExpired || isCancelled || isCompleted) {
       return false;
@@ -794,7 +1104,8 @@ class Booking {
     return effectiveStatus == 'pending_payment';
   }
 
-  /// Guest can cancel ONLY in `pending_payment`, `paid`, or `confirmed` states (`booking-state-machine.ts`).
+  /// Cho biết khách hàng có quyền chủ động hủy đơn đặt phòng ở trạng thái hiện tại hay không
+  /// (chỉ hợp lệ khi đơn đang ở `'pending_payment'`, `'paid'` hoặc `'confirmed'`).
   bool get canCancel {
     if (isCancelled || isCompleted || isExpired) {
       return false;
@@ -806,10 +1117,13 @@ class Booking {
     }.contains(effectiveStatus);
   }
 
+  /// Cho biết khách hàng đủ điều kiện viết đánh giá cho chuyến đi đã hoàn thành này hay chưa.
   bool get canReview => isCompleted && !hasReview;
 
+  /// Cho biết đơn đặt phòng đã kết thúc vòng đời (hoàn thành hoặc đã hủy) để hiển thị nút đặt lại hay chưa.
   bool get canRebook => isCompleted || isCancelled;
 
+  /// Trả về nhãn trạng thái tiếng Việt thân thiện ứng với thời điểm `now`.
   String statusDisplayAt([DateTime? now]) {
     final raw = status.trim().toLowerCase();
     final eff = effectiveStatusAt(now);
@@ -844,11 +1158,14 @@ class Booking {
     }
   }
 
+  /// Nhãn trạng thái tiếng Việt tại thời điểm hiện tại.
   String get statusDisplay => statusDisplayAt();
 
+  /// Nội dung lý do hủy đơn đã được bản địa hóa sang tiếng Việt.
   String? get cancellationReasonDisplay =>
       localizeCancellationReason(cancellationReason);
 
+  /// Chuyển đổi mã lý do hủy đơn hệ thống `rawReason` sang thông điệp tiếng Việt rõ nghĩa.
   static String? localizeCancellationReason(String? rawReason) {
     if (rawReason == null || rawReason.trim().isEmpty) return null;
     final trimmed = rawReason.trim();
@@ -886,6 +1203,7 @@ class Booking {
     return trimmed;
   }
 
+  /// Phân loại sắc thái màu hiển thị huy hiệu trạng thái (`'warning'`, `'success'`, `'info'`, `'muted'`, `'danger'`).
   String get statusTone {
     final eff = effectiveStatus;
     switch (eff) {
@@ -911,6 +1229,8 @@ class Booking {
     }
   }
 
+  /// Giải mã đối tượng JSON từ API thành thực thể `Booking`, tự động nội suy số đêm, địa chỉ,
+  /// ảnh bìa chỗ nghỉ và hợp nhất bảng bóc tách giá `BookingPriceBreakdown`.
   factory Booking.fromJson(Map<String, dynamic> json) {
     final listing = json['listing'] is Map<String, dynamic>
         ? json['listing'] as Map<String, dynamic>

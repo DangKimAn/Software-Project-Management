@@ -157,8 +157,12 @@ const VILLA_GALLERIES: Record<
     ],
 };
 
+/**
+ * Nạp dữ liệu mẫu chuẩn hóa (tiện ích, tài khoản phân quyền, biệt thự, lịch trống, đánh giá, mã giảm giá, bài viết)
+ * theo cơ chế lũy đẳng `findOrCreate`, có khóa chặn thực thi trái phép trên môi trường production.
+ */
 const seed = async () => {
-    console.info("🌱 Bắt đầu nạp dữ liệu mẫu (Seeding Database)...");
+    console.info("Bắt đầu nạp dữ liệu mẫu (Seeding Database)...");
     await sequelize.authenticate();
 
     // 1. Seed Amenities
@@ -699,7 +703,7 @@ const seed = async () => {
         await blog2.update({ coverImage: "assets/images/19tranphu.jpg" });
     }
 
-    console.info("🎉 Seeding Database hoàn tất thành công 100%!");
+    console.info("Seeding Database hoàn tất thành công 100%!");
 };
 
 if (process.env.NODE_ENV === "production" && process.env.ALLOW_PRODUCTION_SEED !== "true") {
@@ -713,7 +717,7 @@ seed()
         process.exit(0);
     })
     .catch(async (error) => {
-        console.error("❌ Seeding thất bại:", error);
+        console.error("Seeding thất bại:", error);
         await sequelize.close();
         process.exit(1);
     });

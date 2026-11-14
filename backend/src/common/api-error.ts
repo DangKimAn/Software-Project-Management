@@ -5,6 +5,9 @@ export type AppErrorDetail = {
 
 export type ApiErrorDetail = AppErrorDetail;
 
+/**
+ * Lớp ngoại lệ chuẩn tầng ứng dụng kèm mã HTTP và cờ `expose` kiểm soát việc hiển thị thông điệp lỗi ra client.
+ */
 export class AppError extends Error {
     statusCode: number;
     errors?: AppErrorDetail[];
@@ -19,6 +22,9 @@ export class AppError extends Error {
     }
 }
 
+/**
+ * Lớp ngoại lệ hợp đồng HTTP API dùng thống nhất trên các controller và service nghiệp vụ.
+ */
 export class ApiError extends AppError {
     constructor(statusCode: number, message: string, errors?: ApiErrorDetail[]) {
         super(statusCode, message, errors);

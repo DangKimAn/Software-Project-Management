@@ -5,11 +5,15 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../core/logging/app_logger.dart';
 
-/// Exception thrown when the user explicitly cancels the Google Sign-In picker.
+/// Ngoại lệ ném ra khi người dùng chủ động đóng hộp thoại chọn tài khoản Google mà không đăng nhập.
 class GoogleSignInCancelledException implements Exception {
+  /// Thông báo mô tả thao tác hủy đăng nhập Google.
   final String message;
+
+  /// Mã định danh lỗi nội bộ (`'GOOGLE_SIGN_IN_CANCELLED'`).
   final String code;
 
+  /// Khởi tạo `GoogleSignInCancelledException`.
   const GoogleSignInCancelledException([
     this.message = 'Đã hủy đăng nhập Google.',
   ]) : code = 'GOOGLE_SIGN_IN_CANCELLED';
@@ -18,22 +22,27 @@ class GoogleSignInCancelledException implements Exception {
   String toString() => message;
 }
 
-/// Official Google Sign-In SDK wrapper for Android, iOS, and Flutter Web.
+/// Dịch vụ tích hợp Google Sign-In SDK chính thức trên Android, iOS và Flutter Web.
 ///
-/// Obtains a verified Google OpenID Connect `idToken` from the native/web
-/// Google Identity SDK to be exchanged with the Express backend at
-/// `POST /api/auth/google`.
+/// Thu thập chuỗi định danh OpenID Connect `idToken` đã ký số từ Google Identity SDK
+/// để trao đổi lấy phiên xác thực hệ thống tại điểm cuối `POST /api/auth/google`.
 class GoogleAuthService {
   final GoogleSignIn? _customGoogleSignIn;
   final bool _enforceConfigGuard;
   GoogleSignIn? _lazyGoogleSignIn;
 
+  /// Khởi tạo `GoogleAuthService`, cho phép truyền đối tượng `googleSignIn` giả lập khi kiểm thử.
   GoogleAuthService({
     GoogleSignIn? googleSignIn,
     bool? enforceConfigGuard,
   })  : _customGoogleSignIn = googleSignIn,
         _enforceConfigGuard = enforceConfigGuard ?? (googleSignIn == null);
 
+  // Giải thuật khởi tạo lười (`lazy`) đối tượng `GoogleSignIn` phù hợp từng nền tảng:
+  // - Trên Web: truyền `clientId` của ứng dụng Web OAuth.
+  // - Trên iOS/macOS: kết hợp `iosClientId` và `serverClientId`.
+  // - Trên Android: truyền `serverClientId` (Web OAuth 2.0 Client ID) để Google Play Services phát hành `idToken`
+  //   khớp trường `audience` khi máy chủ Backend xác thực chữ ký.
   GoogleSignIn _resolveClient() {
     if (_customGoogleSignIn != null) {
       return _customGoogleSignIn;
@@ -77,8 +86,10 @@ class GoogleAuthService {
     return _lazyGoogleSignIn!;
   }
 
-  /// Launches the interactive Google Sign-In flow and returns a non-empty
-  /// Google `idToken` ready for `POST /api/auth/google`.
+  /// Mở luồng đăng nhập Google tương tác và trả về chuỗi `idToken` khác rỗng sẵn sàng gửi tới `POST /api/auth/google`.
+  ///
+  /// Ném `ValidationFailure` nếu thiếu biến môi trường cấu hình OAuth, `GoogleSignInCancelledException`
+  /// nếu người dùng tự đóng hộp thoại, hoặc `AuthFailure` / `NetworkFailure` tương ứng với mã lỗi nền tảng (như lỗi SHA-1 mã `10`).
   Future<String> obtainIdToken() async {
     if (_enforceConfigGuard) {
       if (kIsWeb && !AppConfig.isGoogleOAuthConfigured) {
@@ -183,7 +194,7 @@ class GoogleAuthService {
     }
   }
 
-  /// Signs out from the local Google SDK session without throwing if not signed in.
+  /// Đăng xuất khỏi phiên đệm cục bộ của Google SDK một cách an toàn mà không ném ngoại lệ nếu chưa đăng nhập.
   Future<void> signOut() async {
     final client = _customGoogleSignIn ?? _lazyGoogleSignIn;
     if (client == null) return;

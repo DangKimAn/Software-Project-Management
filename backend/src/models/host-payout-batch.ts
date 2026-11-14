@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý lô quyết toán và chi trả doanh thu cho chủ nhà theo quy trình đối soát Maker-Checker.
+ */
 import {
     CreationOptional,
     DataTypes,

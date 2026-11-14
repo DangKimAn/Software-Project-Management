@@ -77,6 +77,9 @@ const debugSocket = (...args: unknown[]) => {
     }
 };
 
+/**
+ * Giải thuật xác định danh sách Origin hợp lệ cho kết nối thời gian thực Socket.IO.
+ */
 const getSocketCorsOrigin = () => {
     const env = getEnv();
 
@@ -93,6 +96,9 @@ const getSocketCorsOrigin = () => {
     return env.corsOrigins;
 };
 
+/**
+ * Giải thuật trích xuất JWT Access Token trong bắt tay kết nối Socket.IO (`handshake.auth.token` hoặc `Authorization` header).
+ */
 const extractSocketToken = (socket: Socket) => {
     const authToken = socket.handshake.auth?.token;
 
@@ -121,6 +127,10 @@ const extractRawConversationId = (payload: unknown): unknown => {
     return undefined;
 };
 
+/**
+ * Giải thuật xác thực bắt tay kết nối WebSocket/Socket.IO:
+ * - Xác minh chữ ký JWT, đối chiếu trạng thái người dùng trên CSDL và lưu mốc hết hạn `tokenExp` vào `socket.data` để tái kiểm tra khi tham gia phòng.
+ */
 const authenticateSocket = async (socket: AuthenticatedSocket, next: (error?: Error) => void) => {
     try {
         const token = extractSocketToken(socket);
@@ -150,6 +160,9 @@ const authenticateSocket = async (socket: AuthenticatedSocket, next: (error?: Er
     }
 };
 
+/**
+ * Giải thuật tái xác thực phiên Socket đang mở nhằm chặn kết nối có token đã hết hạn hoặc tài khoản vừa bị khóa sau thời điểm bắt tay.
+ */
 const assertSocketSessionStillActive = async (socket: AuthenticatedSocket, userId: number) => {
     const tokenExp = socket.data.tokenExp;
     if (typeof tokenExp === "number" && tokenExp * 1000 <= Date.now()) {
@@ -171,6 +184,9 @@ const assertSocketSessionStillActive = async (socket: AuthenticatedSocket, userI
     return true;
 };
 
+/**
+ * Giải thuật kiểm tra quyền thành viên phòng hội thoại trên kênh Socket (chống nghe lén hội thoại IDOR).
+ */
 const assertSocketConversationParticipant = async (
     socket: AuthenticatedSocket,
     conversationId: number,
@@ -210,6 +226,9 @@ const assertSocketConversationParticipant = async (
     return Boolean(participant);
 };
 
+/**
+ * Giải thuật khởi tạo máy chủ Socket.IO thời gian thực kèm hạn mức bộ đệm gói tin (64KB) và bộ đếm hạn ngạch sự kiện mỗi cửa sổ 10 giây.
+ */
 export const initializeSocket = (server: HttpServer) => {
     io = new SocketIOServer(server, {
         maxHttpBufferSize: SOCKET_MAX_HTTP_BUFFER_SIZE,
@@ -322,8 +341,12 @@ export const initializeSocket = (server: HttpServer) => {
     return io;
 };
 
+/** Trả về thể hiện máy chủ Socket.IO hiện hành (nếu đã khởi tạo). */
 export const getSocketServer = () => io;
 
+/**
+ * Giải thuật ngắt cưỡng bức toàn bộ kết nối Socket đang mở của một người dùng khi tài khoản bị thu hồi quyền hoặc khóa khẩn cấp.
+ */
 export const disconnectUserSockets = (userId: string | number) => {
     if (!io) {
         return;
@@ -332,6 +355,9 @@ export const disconnectUserSockets = (userId: string | number) => {
     io.in(userRoom(userId)).disconnectSockets(true);
 };
 
+/**
+ * Giải thuật phát sóng tin nhắn mới (`message:new`) tới phòng hội thoại và phòng cá nhân của người nhận nhưng loại trừ người gửi để tránh nhân đôi bản ghi phía client.
+ */
 export const emitMessageNew = (payload: MessageNewPayload) => {
     if (!io) {
         return;
@@ -353,6 +379,9 @@ export const emitMessageNew = (payload: MessageNewPayload) => {
         });
 };
 
+/**
+ * Giải thuật đẩy thông báo thời gian thực (`notification:new`) tới phòng cá nhân của người nhận.
+ */
 export const emitNotificationNew = (userId: string | number, payload: NotificationNewPayload) => {
     if (!io) {
         return;

@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu bài viết cẩm nang du lịch, nội dung xuất bản và định danh đường dẫn tĩnh (slug).
+ */
 import {
     CreationOptional,
     DataTypes,

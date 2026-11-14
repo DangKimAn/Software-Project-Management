@@ -7,12 +7,18 @@ const sensitiveValuePatterns: Array<[RegExp, string]> = [
     [/\b(vnp_SecureHash|vnp_SecureHashType)=([^&\s]+)/gi, "$1=[REDACTED]"],
 ];
 
+/**
+ * Giải thuật che giấu chuỗi bí mật (Bearer token, mật khẩu, mã OTP, chữ ký cổng thanh toán) xuất hiện trực tiếp trong thông điệp văn bản.
+ */
 const maskString = (value: string) =>
     sensitiveValuePatterns.reduce(
         (maskedValue, [pattern, replacement]) => maskedValue.replace(pattern, replacement),
         value,
     );
 
+/**
+ * Giải thuật đệ quy duyệt cây đối tượng siêu dữ liệu nhật ký để biên tập (`[REDACTED]`) mọi khóa và giá trị nhạy cảm trước khi xuất JSON.
+ */
 const maskValue = (value: unknown): unknown => {
     if (typeof value === "string") {
         return maskString(value);
@@ -34,6 +40,9 @@ const maskValue = (value: unknown): unknown => {
     return value;
 };
 
+/**
+ * Giải thuật tuần tự hóa đối tượng `Error` sang cấu trúc JSON an toàn đã lọc thông tin nhạy cảm trên `message` và `stack`.
+ */
 const serializeError = (error: unknown) => {
     if (error instanceof Error) {
         return {
@@ -46,6 +55,9 @@ const serializeError = (error: unknown) => {
     return error;
 };
 
+/**
+ * Giải thuật ghi dòng nhật ký có cấu trúc JSON (Structured JSON Logging) ra luồng chuẩn tương ứng mức độ nghiêm trọng.
+ */
 const write = (level: "info" | "warn" | "error", message: string, meta?: LogMeta) => {
     const payload = {
         level,
@@ -69,6 +81,7 @@ const write = (level: "info" | "warn" | "error", message: string, meta?: LogMeta
     process.stdout.write(`${line}\n`);
 };
 
+/** Bộ ghi nhật ký tập trung tự động biên tập thông tin xác thực và PII nhạy cảm. */
 export const logger = {
     info: (message: string, meta?: LogMeta) => write("info", message, meta),
     warn: (message: string, meta?: LogMeta) => write("warn", message, meta),

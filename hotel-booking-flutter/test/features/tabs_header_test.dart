@@ -10,7 +10,7 @@ import 'package:hotel_booking_flutter/features/settings/presentation/screens/set
 import 'package:hotel_booking_flutter/features/trips/domain/entities/booking.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/screens/trips_screen.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/view_models/trips_view_model.dart';
-import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_header.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -44,12 +44,14 @@ void main() {
   );
 
   group('Top Header with Search Bar across Bottom Navigation Tabs', () {
-    testWidgets('1. MessagesScreen (Tin nhắn) renders top search header and bell',
+    testWidgets(
+        '1. MessagesScreen (Tin nhắn) renders top search header and bell',
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
             conversationsListProvider
                 .overrideWith((ref) => Future.value(<ConversationItem>[])),
           ],
@@ -80,7 +82,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
             myBookingsProvider.overrideWith((ref) => Future.value(<Booking>[])),
             activePendingBookingProvider.overrideWithValue(null),
           ],
@@ -106,12 +109,14 @@ void main() {
       expect(find.byType(AppSearchHeader), findsOneWidget);
     });
 
-    testWidgets('3. SettingsScreen (Tài khoản) renders top search header and bell',
+    testWidgets(
+        '3. SettingsScreen (Tài khoản) renders top search header and bell',
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
           ],
           child: MaterialApp(
             theme: AppTheme.lightTheme,
