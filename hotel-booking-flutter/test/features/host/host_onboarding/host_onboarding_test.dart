@@ -38,7 +38,9 @@ class _FakeHostFilePickerService implements HostFilePickerService {
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = 'Chọn tài liệu xác minh',
+    // CONFLICT-RESOLVED: Đáp ứng chữ ký `pickKycDocument` hợp nhất gồm cả `imageOnly` và `source`.
     bool imageOnly = false,
+    HostKycFileSource source = HostKycFileSource.deviceFile,
   }) async {
     requestedTitles.add(title);
     requestedImageOnlyFlags.add(imageOnly);
@@ -79,8 +81,9 @@ class _FakePermissionService implements HostOnboardingPermissionService {
 
   @override
   Future<HostKycPermissionResult> requestPermission(
-    HostKycFileSource source,
-  ) async {
+    HostKycFileSource source, {
+    BuildContext? context,
+  }) async {
     requestedSources.add(source);
     return result;
   }
@@ -483,6 +486,12 @@ Future<void> _tapPickButton(WidgetTester tester, String slotKey) async {
   await tester.ensureVisible(btn);
   await tester.tap(btn);
   await tester.pumpAndSettle();
+
+  final fileOption = find.byKey(Key('kyc_source_file_$slotKey'));
+  if (fileOption.evaluate().isNotEmpty) {
+    await tester.tap(fileOption);
+    await tester.pumpAndSettle();
+  }
 }
 
 void main() {
@@ -1081,6 +1090,13 @@ void main() {
         await tester.ensureVisible(reselectBtn);
         await tester.tap(reselectBtn);
         await tester.pumpAndSettle();
+        final reselectFileOption = find.byKey(
+          const Key('kyc_source_file_identitySingle'),
+        );
+        if (reselectFileOption.evaluate().isNotEmpty) {
+          await tester.tap(reselectFileOption);
+          await tester.pumpAndSettle();
+        }
 
         expect(find.textContaining('passport_reselected.png'), findsWidgets);
 

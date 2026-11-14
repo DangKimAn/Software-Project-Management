@@ -7,10 +7,14 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../core/logging/app_logger.dart';
 import '../../../core/security/url_security_validator.dart';
 import '../domain/host_models.dart';
+// CONFLICT-RESOLVED: Giữ đồng thời export `HostPickedFile` từ nhánh refactor và `HostKycFileSource` từ `origin/develop`.
+import '../onboarding/host_onboarding_services.dart';
 
 export '../domain/host_models.dart' show HostPickedFile;
+export '../onboarding/host_onboarding_services.dart' show HostKycFileSource;
 import 'host_file_picker_web_stub.dart'
     if (dart.library.js_interop) 'host_file_picker_web.dart';
 
@@ -80,7 +84,9 @@ abstract class HostFilePickerService {
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = 'Chọn tài liệu xác minh',
+    // CONFLICT-RESOLVED: Kết hợp cờ giới hạn ảnh định danh `imageOnly` với nguồn chọn tệp `source` (camera, thư viện ảnh, tệp thiết bị).
     bool imageOnly = false,
+    HostKycFileSource source = HostKycFileSource.deviceFile,
   });
 
   /// Chọn một hoặc nhiều ảnh chỗ nghỉ (`JPG`, `PNG`, `WebP`, `GIF`, tối đa `maxImages` ảnh, mỗi ảnh tối đa 5MB).
@@ -437,10 +443,66 @@ if (\$dlg.ShowDialog(\$topForm) -eq [System.Windows.Forms.DialogResult]::OK) {
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = 'Chọn tài liệu xác minh',
+    // CONFLICT-RESOLVED: Hợp nhất nhánh chụp ảnh trực tiếp (`cameraScan`) và chọn thư viện ảnh (`photoLibrary`) từ `origin/develop` với lọc định dạng `imageOnly` của nhánh refactor.
     bool imageOnly = false,
+    HostKycFileSource source = HostKycFileSource.deviceFile,
   }) async {
+    if (source == HostKycFileSource.cameraScan) {
+      try {
+        final imagePicker = ImagePicker();
+        final xf = await imagePicker.pickImage(
+          source: ImageSource.camera,
+          imageQuality: 95,
+        );
+        if (xf == null) return null;
+        final bytes = await xf.readAsBytes();
+        if (bytes.isEmpty) return null;
+        final name = xf.name.trim().isNotEmpty
+            ? xf.name.trim()
+            : 'kyc_camera_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        return HostPickedFile(
+          name: name,
+          mimeType: resolveHostFileMimeType(name, headerBytes: bytes),
+          sizeBytes: bytes.length,
+          bytes: bytes,
+          path: kIsWeb ? null : xf.path,
+        );
+      } catch (e) {
+        AppLogger.e('Failed to capture photo from camera',
+            tag: 'HostFilePicker', error: e);
+        rethrow;
+      }
+    }
+
+    if (source == HostKycFileSource.photoLibrary) {
+      try {
+        final imagePicker = ImagePicker();
+        final xf = await imagePicker.pickImage(
+          source: ImageSource.gallery,
+          imageQuality: 95,
+        );
+        if (xf == null) return null;
+        final bytes = await xf.readAsBytes();
+        if (bytes.isEmpty) return null;
+        final name = xf.name.trim().isNotEmpty
+            ? xf.name.trim()
+            : 'kyc_gallery_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        return HostPickedFile(
+          name: name,
+          mimeType: resolveHostFileMimeType(name, headerBytes: bytes),
+          sizeBytes: bytes.length,
+          bytes: bytes,
+          path: kIsWeb ? null : xf.path,
+        );
+      } catch (e) {
+        AppLogger.e('Failed to pick photo from gallery',
+            tag: 'HostFilePicker', error: e);
+        rethrow;
+      }
+    }
+
     // Giải thuật giới hạn định dạng chọn tệp KYC theo loại chứng từ:
-    // CONFLICT-RESOLVED: Giấy tờ định danh (imageOnly = true) chỉ cho phép ảnh JPG, PNG, WebP khớp image/* của Backend.
+    // Giấy tờ định danh (imageOnly = true) chỉ cho phép ảnh JPG, PNG, WebP khớp image/* của Backend.
     final extensions = imageOnly
         ? const ['jpg', 'jpeg', 'png', 'webp']
         : const ['jpg', 'jpeg', 'png', 'webp', 'pdf'];

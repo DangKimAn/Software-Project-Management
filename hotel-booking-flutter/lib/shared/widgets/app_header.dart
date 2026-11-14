@@ -5,7 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../app/theme/app_colors.dart';
 import '../../features/auth/presentation/view_models/auth_notifier.dart';
 import '../../features/search/presentation/widgets/source_search_bar.dart';
+import '../../features/trips/presentation/view_models/trips_view_model.dart';
 import '../../features/trips/presentation/widgets/global_pending_booking_banner.dart';
+// CONFLICT-RESOLVED: Tích hợp đa ngôn ngữ động (`context.l10n`) từ `origin/develop` (`cbb008a`) vào thanh điều hướng đầu trang `app_header.dart`.
+import '../../l10n/l10n.dart';
 import 'app_header_menu.dart';
 import 'app_notification_bell.dart';
 import 'app_semantic_icons.dart';
@@ -15,9 +18,9 @@ export 'app_notification_bell.dart';
 /// Biến thể thanh đầu trang tích hợp sẵn thanh tìm kiếm dạng viên thuốc ("Bạn muốn đi đâu?"),
 /// nút chuông thông báo và trình đơn tài khoản dùng chung cho các phân hệ chính.
 ///
-/// Top header variant equipped with the pill search bar ("Bạn muốn đi đâu?"),
-/// notification bell, and popup menu across main tabs (Tin nhắn, Chuyến đi, Tài khoản).
-class AppSearchHeader extends StatelessWidget {
+/// Tự động chuyển đổi ưu tiên hiển thị biểu ngữ giữ chỗ chờ thanh toán (`GlobalPendingBookingBanner`)
+/// thay cho thanh tìm kiếm và chuông thông báo khi người dùng đang có đơn giữ chỗ còn hiệu lực.
+class AppSearchHeader extends ConsumerWidget {
   /// Đường dẫn định tuyến hiện tại dùng để đánh dấu mục điều hướng đang hoạt động.
   final String currentPath;
 
@@ -31,12 +34,27 @@ class AppSearchHeader extends StatelessWidget {
     this.hidePendingBanner = false,
   });
 
-  /// Dựng `AppTopHeader` với `SourceSearchBar` ở chế độ thu gọn nằm giữa thanh đầu trang.
+  /// Dựng `GlobalPendingBookingBanner` khi có đơn giữ chỗ hoặc `AppTopHeader` với `SourceSearchBar` thu gọn.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // CONFLICT-RESOLVED: Giữ cơ chế ưu tiên hiển thị biểu ngữ giữ chỗ `GlobalPendingBookingBanner` thay cho thanh tìm kiếm trên các tab chính từ develop.
+    final activeBooking = ref.watch(activePendingBookingProvider);
+    final isExcludedPath =
+        currentPath.contains('/thanh-toan') || currentPath.contains('/pay');
+
+    if (activeBooking != null && !hidePendingBanner && !isExcludedPath) {
+      return Container(
+        color: AppColors.surfaceBase,
+        child: SafeArea(
+          bottom: false,
+          child: GlobalPendingBookingBanner(booking: activeBooking),
+        ),
+      );
+    }
+
     return AppTopHeader(
       currentPath: currentPath,
-      hidePendingBanner: hidePendingBanner,
+      hidePendingBanner: true,
       centerSearchTrigger: SourceSearchBar(
         isCompact: true,
         isInHeader: true,
@@ -237,8 +255,8 @@ class AppTopHeader extends ConsumerWidget {
                                         children: [
                                           Text(
                                             authUser != null && authUser.isHost
-                                                ? 'Khu vực host'
-                                                : 'Trở thành host',
+                                                ? context.l10n.navHostPortal
+                                                : context.l10n.navBecomeHost,
                                             style: TextStyle(
                                               fontSize: 13,
                                               fontWeight: FontWeight.w600,
@@ -336,15 +354,16 @@ class AppTopHeader extends ConsumerWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // CONFLICT-RESOLVED: Sử dụng khóa l10n (`navDiscover`, `navStays`, `navBlog`, `navContact`) từ `origin/develop` để thanh Header Desktop tự động đổi ngôn ngữ VI/EN/KO theo thời gian thực.
                   _NavTextLink(
-                    label: 'Trang chủ',
+                    label: context.l10n.navDiscover,
                     isActive: currentPath == '/',
                     isOverlayTop: isOverlayTop,
                     onTap: () => context.go('/'),
                   ),
                   SizedBox(width: navSpacing),
                   _NavTextLink(
-                    label: 'Nơi lưu trú',
+                    label: context.l10n.navStays,
                     isActive: currentPath.startsWith('/search') ||
                         currentPath.startsWith('/tim-kiem') ||
                         currentPath.startsWith('/noi-luu-tru') ||
@@ -354,7 +373,7 @@ class AppTopHeader extends ConsumerWidget {
                   ),
                   SizedBox(width: navSpacing),
                   _NavTextLink(
-                    label: 'Blog',
+                    label: context.l10n.navBlog,
                     isActive: currentPath.startsWith('/blog') ||
                         currentPath.startsWith('/cam-nang'),
                     isOverlayTop: isOverlayTop,
@@ -362,7 +381,7 @@ class AppTopHeader extends ConsumerWidget {
                   ),
                   SizedBox(width: navSpacing),
                   _NavTextLink(
-                    label: 'Liên hệ',
+                    label: context.l10n.navContact,
                     isActive: currentPath.startsWith('/lien-he'),
                     isOverlayTop: isOverlayTop,
                     onTap: () => context.push('/lien-he'),

@@ -210,6 +210,60 @@ class AdminPortalViewModel {
     return _adminRepo.cancelScheduledPlatformFee();
   }
 
+  // CONFLICT-RESOLVED: Bổ sung các nghiệp vụ xét duyệt rút tiền Host (Payout) và hoàn tiền Khách (Refund) từ nhánh develop vào AdminPortalViewModel để tuân thủ kiến trúc MVVM nghiêm ngặt.
+  // Giải thuật truy vấn và điều phối phê duyệt / từ chối giải ngân rút tiền Chủ nhà & hoàn tiền Khách hàng qua Napas 24/7.
+  /// Truy vấn danh sách yêu cầu rút tiền của Chủ nhà theo trạng thái `status` và giới hạn bản ghi `limit`.
+  Future<List<Map<String, dynamic>>> getAdminHostPayouts({
+    String? status,
+    int page = 1,
+    int limit = 50,
+  }) {
+    return _adminRepo.getAdminHostPayouts(
+      status: status,
+      page: page,
+      limit: limit,
+    );
+  }
+
+  /// Phê duyệt và kích hoạt lệnh giải ngân cho đơn rút tiền `payoutId` của Chủ nhà.
+  Future<Map<String, dynamic>> disburseHostPayout(String payoutId) {
+    return _adminRepo.disburseHostPayout(payoutId);
+  }
+
+  /// Từ chối đơn rút tiền `payoutId` của Chủ nhà kèm lý do `reason`.
+  Future<Map<String, dynamic>> rejectHostPayout(
+    String payoutId,
+    String reason,
+  ) {
+    return _adminRepo.rejectHostPayout(payoutId, reason);
+  }
+
+  /// Truy vấn danh sách yêu cầu hoàn tiền của Khách hàng theo trạng thái `status` và giới hạn bản ghi `limit`.
+  Future<List<Map<String, dynamic>>> getAdminRefunds({
+    String? status,
+    int page = 1,
+    int limit = 50,
+  }) {
+    return _adminRepo.getAdminRefunds(
+      status: status,
+      page: page,
+      limit: limit,
+    );
+  }
+
+  /// Phê duyệt và thực thi chuyển khoản hoàn tiền cho yêu cầu `refundId` của Khách hàng.
+  Future<Map<String, dynamic>> approveRefund(String refundId) {
+    return _adminRepo.approveRefund(refundId);
+  }
+
+  /// Từ chối yêu cầu hoàn tiền `refundId` kèm lý do `reason`.
+  Future<Map<String, dynamic>> rejectRefund(
+    String refundId,
+    String reason,
+  ) {
+    return _adminRepo.rejectRefund(refundId, reason);
+  }
+
   // Giải thuật khởi tạo kênh trò chuyện hỗ trợ trực tiếp với người dùng và làm mới danh sách hội thoại.
   /// Mở hoặc tạo mới hội thoại hỗ trợ trực tiếp với người dùng `participantUserId`.
   Future<ConversationItem> openDirectSupportConversation(

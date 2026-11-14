@@ -9,7 +9,8 @@ import { getEnv } from "../../config/env";
 import { logger } from "../../config/logger";
 import Listing from "../../models/listing";
 
-export const allowedPublicUploadFolders = ["listings", "avatars", "misc"] as const;
+// CONFLICT-RESOLVED: Cho phép thư mục công khai `listings`, `avatars`, `misc`, `chat` (phục vụ tin nhắn thoại/ảnh R2 từ `origin/develop`) nhưng tiếp tục cấm tuyệt đối `verifications` trên bucket công khai.
+export const allowedPublicUploadFolders = ["listings", "avatars", "misc", "chat"] as const;
 export type UploadFolder = (typeof allowedPublicUploadFolders)[number];
 
 export type PresignUploadInput = {
@@ -27,16 +28,34 @@ export type UploadActor = {
 };
 
 const uploadUrlExpiresInSeconds = 300;
-const maxUploadSizeBytes = 10 * 1024 * 1024;
+const maxUploadSizeBytes = 25 * 1024 * 1024;
 
-const imageExtensionsByContentType: Record<string, string> = {
+const mediaExtensionsByContentType: Record<string, string> = {
     "image/jpeg": "jpg",
     "image/png": "png",
     "image/webp": "webp",
     "image/gif": "gif",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/m4a": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/mp4": "m4a",
+    "audio/aac": "aac",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/ogg": "ogg",
+    "audio/webm": "webm",
 };
 
-const allowedContentTypes = new Set(Object.keys(imageExtensionsByContentType));
+// CONFLICT-RESOLVED: Hợp nhất tập MIME ảnh/âm thanh từ `origin/develop` với tập thư mục công khai an toàn `allowedFoldersSet`.
+const imageContentTypes = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+]);
+
+const allowedContentTypes = new Set(Object.keys(mediaExtensionsByContentType));
 const allowedFoldersSet = new Set<string>(allowedPublicUploadFolders);
 
 /**
@@ -215,15 +234,30 @@ export const createPresignedUploadUrl = async (
     assertPublicUploadFolderAllowed(input.folder);
     assertFolderListingId(input);
 
-    if (!allowedContentTypes.has(input.contentType)) {
-        throw new ApiError(422, "Validation error", [
-            {
-                path: "contentType",
-                msg: "Only JPG, PNG, WebP, or GIF image files are allowed",
-            },
-        ]);
+    const isChatFolder = input.folder === "chat";
+    const isImage = imageContentTypes.has(input.contentType);
+
+    if (isChatFolder) {
+        if (!allowedContentTypes.has(input.contentType)) {
+            throw new ApiError(422, "Validation error", [
+                {
+                    path: "contentType",
+                    msg: "Unsupported media type. Allowed images: JPG, PNG, WebP, GIF. Allowed audio: MP3, M4A, AAC, WAV, OGG, WebM.",
+                },
+            ]);
+        }
+    } else {
+        if (!isImage) {
+            throw new ApiError(422, "Validation error", [
+                {
+                    path: "contentType",
+                    msg: "Unsupported media type. Only JPG, PNG, WebP, or GIF are allowed.",
+                },
+            ]);
+        }
     }
 
+    // CONFLICT-RESOLVED: Giữ kiểm tra phân quyền sở hữu listing (`assertListingUploadAccess`) kết hợp kiểm tra kích thước bắt buộc `assertMandatoryUploadSize` (1B..25MB).
     const listingAccess =
         input.folder === "listings"
             ? await assertListingUploadAccess(input.listingId, actor)
@@ -231,7 +265,7 @@ export const createPresignedUploadUrl = async (
 
     const enforcedSizeBytes = assertMandatoryUploadSize(input.size);
     const r2Config = assertRequiredR2Env();
-    const extension = imageExtensionsByContentType[input.contentType];
+    const extension = mediaExtensionsByContentType[input.contentType] ?? "bin";
     const uuid = crypto.randomUUID();
     const objectKey = listingAccess
         ? `listings/${listingAccess.userPathSegment}/${listingAccess.listingPathSegment}/${uuid}.${extension}`
@@ -252,5 +286,45 @@ export const createPresignedUploadUrl = async (
         publicUrl: `${r2Config.publicBaseUrl}/${objectKey}`,
         key: objectKey,
         expiresIn: uploadUrlExpiresInSeconds,
+    };
+};
+
+export const uploadBufferToR2 = async ({
+    userId,
+    buffer,
+    filename,
+    contentType,
+    folder = "chat",
+}: {
+    userId: string;
+    buffer: Buffer;
+    filename: string;
+    contentType: string;
+    folder?: UploadFolder;
+}) => {
+    validateFilename(filename);
+    assertPublicUploadFolderAllowed(folder);
+    if (!allowedContentTypes.has(contentType)) {
+        throw new ApiError(422, "Unsupported media type");
+    }
+    const r2Config = assertRequiredR2Env();
+    const extension = mediaExtensionsByContentType[contentType] ?? "bin";
+    const uuid = crypto.randomUUID();
+    const objectKey = `${folder}/${userId}/${uuid}.${extension}`;
+    const client = createR2Client(r2Config);
+    const command = new PutObjectCommand({
+        Bucket: r2Config.bucket,
+        Key: objectKey,
+        ContentType: contentType,
+        Body: buffer,
+    });
+    await client.send(command);
+
+    return {
+        publicUrl: `${r2Config.publicBaseUrl}/${objectKey}`,
+        key: objectKey,
+        filename,
+        contentType,
+        size: buffer.length,
     };
 };

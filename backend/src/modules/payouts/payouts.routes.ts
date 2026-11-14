@@ -16,6 +16,7 @@ import {
     createAdminHostPayout,
     createNewPayoutAccount,
     deleteExistingPayoutAccount,
+    disburseHostPayoutHandler,
     getMyHostBankAccount,
     listAdminHostPayouts,
     listHostPayouts,
@@ -23,6 +24,7 @@ import {
     listVietnamBanks,
     markHostPayoutPaidHandler,
     rejectHostPayoutHandler,
+    requestHostPayoutHandler,
     saveMyHostBankAccount,
     updateExistingPayoutAccount,
 } from "./payouts.controller";
@@ -114,11 +116,30 @@ hostPayoutsRouter.delete(
     deleteExistingPayoutAccount,
 );
 hostPayoutsRouter.get("/payouts", payoutListValidators, listHostPayouts);
+// CONFLICT-RESOLVED: Bổ sung định tuyến yêu cầu rút tiền Chủ nhà (`POST /payouts/request`) và giải ngân tự động Admin (`POST /:payoutId/disburse`) từ `origin/develop` vào bộ router hợp nhất.
+hostPayoutsRouter.post(
+    "/payouts/request",
+    [
+        body("amount")
+            .isFloat({ min: 200000 })
+            .withMessage("Số tiền rút tối thiểu là 200.000 VNĐ"),
+        body("payoutAccountId")
+            .optional({ nullable: true })
+            .isInt({ min: 1 })
+            .withMessage("payoutAccountId must be a positive integer"),
+        body("notes")
+            .optional({ nullable: true })
+            .isString()
+            .trim()
+            .isLength({ max: 500 }),
+    ],
+    requestHostPayoutHandler,
+);
 
 export const adminHostPayoutsRouter = express.Router();
 adminHostPayoutsRouter.use(authenticate, requireRole("admin"));
 adminHostPayoutsRouter.get(
-    "/",
+    ["/", "/payouts"],
     [
         query("status").optional().isIn(hostPayoutStatusValues).withMessage("status is invalid"),
         query("hostId").optional().isInt({ min: 1 }).withMessage("hostId must be a positive integer").toInt(),
@@ -127,7 +148,7 @@ adminHostPayoutsRouter.get(
     listAdminHostPayouts,
 );
 adminHostPayoutsRouter.post(
-    "/",
+    ["/", "/payouts"],
     [
         body("hostId").isInt({ min: 1 }).withMessage("hostId must be a positive integer").toInt(),
         body("bookingIds").isArray({ min: 1 }).withMessage("bookingIds must be a non-empty array"),
@@ -142,9 +163,18 @@ adminHostPayoutsRouter.post(
     ],
     createAdminHostPayout,
 );
-adminHostPayoutsRouter.patch("/:payoutId/approve", [payoutIdParamValidator], approveHostPayoutHandler);
+adminHostPayoutsRouter.patch(["/:payoutId/approve", "/payouts/:payoutId/approve"], [payoutIdParamValidator], approveHostPayoutHandler);
+adminHostPayoutsRouter.post(["/:payoutId/disburse", "/payouts/:payoutId/disburse"], [payoutIdParamValidator], disburseHostPayoutHandler);
 adminHostPayoutsRouter.patch(
-    "/:payoutId/reject",
+    ["/:payoutId/reject", "/payouts/:payoutId/reject"],
+    [
+        payoutIdParamValidator,
+        body("reason").isString().trim().notEmpty().withMessage("reason is required").isLength({ max: 2000 }),
+    ],
+    rejectHostPayoutHandler,
+);
+adminHostPayoutsRouter.post(
+    ["/:payoutId/reject", "/payouts/:payoutId/reject"],
     [
         payoutIdParamValidator,
         body("reason").isString().trim().notEmpty().withMessage("reason is required").isLength({ max: 2000 }),

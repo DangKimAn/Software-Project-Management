@@ -8,6 +8,8 @@ import '../../app/di/providers.dart';
 import '../../app/theme/app_colors.dart';
 import '../../features/auth/domain/entities/user.dart';
 import '../../features/auth/presentation/view_models/auth_notifier.dart';
+// CONFLICT-RESOLVED: Tích hợp đa ngôn ngữ động (`context.l10n`) từ `origin/develop` (`cbb008a`) vào menu tài khoản trên thanh đầu trang.
+import '../../l10n/l10n.dart';
 import 'app_notification_bell.dart';
 import 'app_semantic_icons.dart';
 import 'currency_language_selector.dart';
@@ -102,7 +104,7 @@ class AppHeaderMenuButton extends ConsumerWidget {
             break;
         }
       },
-      itemBuilder: (context) => _buildMenuItems(ref, user),
+      itemBuilder: (context) => _buildMenuItems(context, ref, user),
       child: Container(
         constraints: const BoxConstraints(
           minWidth: 40,
@@ -127,38 +129,44 @@ class AppHeaderMenuButton extends ConsumerWidget {
     );
   }
 
-  List<PopupMenuEntry<String>> _buildMenuItems(WidgetRef ref, User? user) {
+  // CONFLICT-RESOLVED: Chuyển toàn bộ nhãn mục chọn trong `AppHeaderMenuButton` sang `context.l10n` từ `origin/develop` để hỗ trợ chuyển đổi VI/EN/KO thời gian thực.
+  List<PopupMenuEntry<String>> _buildMenuItems(
+    BuildContext context,
+    WidgetRef ref,
+    User? user,
+  ) {
+    final l10n = context.l10n;
     final localeCurrencyLabel =
-        '${ref.read(moneyFormatterProvider).l10n.settingsLanguage} • ${ref.read(effectiveCurrencyProvider).code} (${ref.read(effectiveCurrencyProvider).symbol})';
+        '${l10n.settingsLanguage} • ${ref.read(effectiveCurrencyProvider).code} (${ref.read(effectiveCurrencyProvider).symbol})';
 
     final mobileNavItems = <PopupMenuEntry<String>>[
       if (!isDesktop) ...[
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'home',
           child: _MenuItemRow(
             icon: AppSemanticIcons.home,
-            label: 'Trang chủ',
+            label: l10n.navDiscover,
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'stays',
           child: _MenuItemRow(
             icon: LucideIcons.search,
-            label: 'Nơi lưu trú',
+            label: l10n.navStays,
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'blog',
           child: _MenuItemRow(
             icon: LucideIcons.bookOpen,
-            label: 'Blog',
+            label: l10n.navBlog,
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'contact',
           child: _MenuItemRow(
             icon: LucideIcons.phone,
-            label: 'Liên hệ',
+            label: l10n.navContact,
           ),
         ),
         const PopupMenuDivider(),
@@ -166,32 +174,32 @@ class AppHeaderMenuButton extends ConsumerWidget {
     ];
 
     final commonAccountItems = <PopupMenuEntry<String>>[
-      const PopupMenuItem(
+      PopupMenuItem(
         value: 'wishlist',
         child: _MenuItemRow(
           icon: LucideIcons.heart,
-          label: 'Danh sách yêu thích',
+          label: l10n.navFavorites,
         ),
       ),
-      const PopupMenuItem(
+      PopupMenuItem(
         value: 'trips',
         child: _MenuItemRow(
           icon: AppSemanticIcons.bookings,
-          label: 'Chuyến đi',
+          label: l10n.navTrips,
         ),
       ),
-      const PopupMenuItem(
+      PopupMenuItem(
         value: 'messages',
         child: _MenuItemRow(
           icon: AppSemanticIcons.messageHost,
-          label: 'Tin nhắn',
+          label: l10n.navMessages,
         ),
       ),
-      const PopupMenuItem(
+      PopupMenuItem(
         value: 'profile',
         child: _MenuItemRow(
           icon: AppSemanticIcons.userProfile,
-          label: 'Hồ sơ',
+          label: l10n.navAccount,
         ),
       ),
       PopupMenuItem(
@@ -208,27 +216,28 @@ class AppHeaderMenuButton extends ConsumerWidget {
         ...mobileNavItems,
         ...commonAccountItems,
         const PopupMenuDivider(),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'host',
           child: _MenuItemRow(
             icon: AppSemanticIcons.becomeHost,
-            label: 'Trở thành host',
+            label: l10n.navBecomeHost,
           ),
         ),
         const PopupMenuDivider(),
-        const PopupMenuItem(
+        // CONFLICT-RESOLVED: Dùng đúng khóa bản địa hóa `authLoginTitle` và `authRegisterTitle` từ `AppLocalizations` đã sinh tự động.
+        PopupMenuItem(
           value: 'login',
           child: _MenuItemRow(
             icon: LucideIcons.logIn,
-            label: 'Đăng nhập',
+            label: l10n.authLoginTitle,
             isBold: true,
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'register',
           child: _MenuItemRow(
             icon: LucideIcons.userPlus,
-            label: 'Đăng ký',
+            label: l10n.authRegisterTitle,
           ),
         ),
       ];
@@ -268,24 +277,24 @@ class AppHeaderMenuButton extends ConsumerWidget {
             icon: user.isHost
                 ? AppSemanticIcons.home
                 : AppSemanticIcons.becomeHost,
-            label: user.isHost ? 'Khu vực host' : 'Trở thành host',
+            label: user.isHost ? l10n.navHostPortal : l10n.navBecomeHost,
           ),
         ),
       if (user.isAdmin)
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'admin',
           child: _MenuItemRow(
             icon: AppSemanticIcons.adminPortal,
-            label: 'Khu vực admin',
+            label: l10n.navAdminPortal,
             isBold: true,
           ),
         ),
       const PopupMenuDivider(),
-      const PopupMenuItem(
+      PopupMenuItem(
         value: 'logout',
         child: _MenuItemRow(
           icon: AppSemanticIcons.logout,
-          label: 'Đăng xuất',
+          label: l10n.authLogout,
         ),
       ),
     ];

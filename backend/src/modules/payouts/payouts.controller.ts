@@ -14,6 +14,7 @@ import {
     getValidatedParams,
     getValidatedQuery,
 } from "../../common/validation";
+// CONFLICT-RESOLVED: Trỏ các hàm xử lý chi trả và rút tiền mới (`disburseHostPayout`, `requestHostPayout`) qua namespace `payoutsService` đồng nhất với `payoutAccountsService`.
 import * as payoutAccountsService from "./payout-accounts.service";
 import * as payoutsService from "./payouts.service";
 import { vietnamBanks } from "./vietnam-banks.data";
@@ -179,5 +180,34 @@ export const markHostPayoutPaidHandler: RequestHandler = asyncHandler(async (req
 
     return sendSuccess(res, {
         data: payout,
+    });
+});
+
+// CONFLICT-RESOLVED: Bổ sung endpoint giải ngân tự động Admin (`disburseHostPayoutHandler`) và yêu cầu rút tiền Chủ nhà (`requestHostPayoutHandler`) từ `origin/develop` qua namespace `payoutsService`.
+export const disburseHostPayoutHandler: RequestHandler = asyncHandler(async (req, res) => {
+    assertValidRequest(req);
+
+    const params = getValidatedParams<{ payoutId: number }>(req);
+    const result = await payoutsService.disburseHostPayout({
+        payoutId: params.payoutId,
+        actorUserId: Number(req.user!.id),
+    });
+
+    return sendSuccess(res, {
+        message: "Chi trả tiền cho Host thành công",
+        data: result,
+    });
+});
+
+export const requestHostPayoutHandler: RequestHandler = asyncHandler(async (req, res) => {
+    assertValidRequest(req);
+
+    const body = getValidatedBody<payoutsService.RequestHostPayoutInput>(req);
+    const result = await payoutsService.requestHostPayout(req.user!, body, auditContextFromRequest(req));
+
+    return sendSuccess(res, {
+        statusCode: 201,
+        message: "Yêu cầu rút tiền đã được gửi thành công, vui lòng chờ Admin kiểm duyệt",
+        data: result,
     });
 });

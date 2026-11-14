@@ -27,6 +27,8 @@ import {
     updateHostSheetSettings,
     UpdateHostSheetSettingsInput,
     verifyHostSpreadsheetPermissions,
+    previewSheetButtonChanges,
+    applySheetButtonSync,
 } from "./host-sheet-sync.service";
 
 /**
@@ -159,5 +161,22 @@ export const listHostSheetChangeLogsHandler: RequestHandler = asyncHandler(async
     }>(req);
     const data = await listHostSheetChangeLogs(Number(req.user!.id), query);
     return sendSuccess(res, { data });
+});
+
+export const sheetButtonPreviewHandler: RequestHandler = asyncHandler(async (req, res) => {
+    assertValidRequest(req);
+    const body = getValidatedBody<{ spreadsheetId: string }>(req);
+    const data = await previewSheetButtonChanges(body.spreadsheetId);
+    return sendSuccess(res, { data });
+});
+
+export const sheetButtonSyncHandler: RequestHandler = asyncHandler(async (req, res) => {
+    assertValidRequest(req);
+    const body = getValidatedBody<{ spreadsheetId: string }>(req);
+    const data = await applySheetButtonSync(body.spreadsheetId);
+    return sendSuccess(res, {
+        message: data.message,
+        data: data.data,
+    });
 });
 

@@ -34,6 +34,9 @@ abstract class BookingRepository {
   Future<void> cancelBooking({
     required String bookingId,
     required String reason,
+    String? bankName,
+    String? accountNumber,
+    String? accountName,
   });
 
   /// Kiểm tra tính hợp lệ và tính trước mức giảm giá của mã khuyến mãi `code` đối với giá trị đơn `bookingAmount`

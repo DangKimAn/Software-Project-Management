@@ -219,7 +219,7 @@ class PushNotificationService {
   Future<void> _initializeLocalNotifications() async {
     try {
       const androidSettings =
-          AndroidInitializationSettings('@mipmap/ic_launcher');
+          AndroidInitializationSettings('@drawable/ic_notification');
       const iosSettings = DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
@@ -430,6 +430,8 @@ class PushNotificationService {
         channelDescription: androidChannelDescription,
         importance: Importance.max,
         priority: Priority.high,
+        icon: '@drawable/ic_notification',
+        largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
         color: AppColors.primary,
         playSound: true,
         enableVibration: true,

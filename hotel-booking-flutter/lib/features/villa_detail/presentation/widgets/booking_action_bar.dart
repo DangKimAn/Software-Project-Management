@@ -96,7 +96,7 @@ class BookingActionBar extends StatelessWidget {
               AppIconButton(
                 icon: const Icon(AppSemanticIcons.messageHost, size: 18),
                 iconColor: AppColors.iconStrong,
-                tooltip: 'Nhắn tin cho Chủ nhà',
+                tooltip: context.l10n.villaDetailMessageHostTooltip,
                 onPressed: onMessageHost ??
                     onCallHotline ??
                     () => context.push('/villa/${villa.id}/nhan-tin-host'),
@@ -110,9 +110,9 @@ class BookingActionBar extends StatelessWidget {
                 child: AppButton(
                   text: onBookNow != null
                       ? (villa.instantBook
-                          ? 'Đặt phòng ngay'
-                          : 'Gửi yêu cầu đặt')
-                      : 'Tư vấn Zalo',
+                          ? context.l10n.ctaBookInstant
+                          : context.l10n.ctaRequestBooking)
+                      : context.l10n.ctaBookNow,
                   onPressed: onBookNow ??
                       onInquireZalo ??
                       () {
@@ -122,10 +122,9 @@ class BookingActionBar extends StatelessWidget {
                         );
                         ContactService.openZaloInquiry(messageText: msg);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content:
-                                Text('Đã sao chép nội dung tư vấn và mở Zalo'),
-                            duration: Duration(seconds: 2),
+                          SnackBar(
+                            content: Text(context.l10n.ctaZaloCopied),
+                            duration: const Duration(seconds: 2),
                           ),
                         );
                       },

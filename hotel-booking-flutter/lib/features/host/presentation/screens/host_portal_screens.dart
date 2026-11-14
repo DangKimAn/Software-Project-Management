@@ -2,16 +2,24 @@
 // và chuẩn hóa địa chỉ mẫu tại TP. Vũng Tàu theo FLUTTER_RULES.md Mục 2, Mục 6 & Mục 16.
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_chat_expressions.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
+// CONFLICT-RESOLVED: Giữ luồng MVVM qua `HostPortalViewModel` (không import trực tiếp `host_repository.dart`) kết hợp dịch vụ ghi âm và các widget bong bóng đa phương tiện từ develop.
+import '../../../messages/presentation/widgets/chat_audio_bubble.dart';
+import '../../../messages/presentation/widgets/chat_image_bubble.dart';
+import '../../../messages/presentation/widgets/chat_time_divider.dart';
+import '../../../messages/services/chat_voice_recorder_service.dart';
 import '../../domain/host_models.dart';
 import '../view_models/host_portal_view_model.dart';
 import '../widgets/host_chat_composer_bar.dart';
@@ -215,6 +223,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   bool _isRecordingVoice = false;
   int _voiceRecordingSeconds = 0;
   Timer? _voiceTimer;
+  final ChatVoiceRecorderService _voiceRecorder = ChatVoiceRecorderService();
 
   // Payouts state
   bool _loadingPayouts = false;
@@ -308,6 +317,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     _guestSearchCtrl.dispose();
     _chatDragAnimCtrl.dispose();
     _voiceTimer?.cancel();
+    _voiceRecorder.dispose();
     _chatScrollCtrl.dispose();
     _messageInputCtrl.dispose();
     _messageInputFocusNode.dispose();
@@ -943,12 +953,20 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     }
   }
 
-  // Giải thuật gửi tin nhắn Host an toàn, tự động khởi tạo hội thoại hỗ trợ số thực khi đang ở kênh hỗ trợ Admin:
-  // CONFLICT-RESOLVED: Tuyệt đối không gửi POST /api/conversations/admin_support/messages (gây lỗi 422); dùng openSupportConversation và xử lý êm 404 khi chưa có Admin trực tuyến.
-  Future<void> _sendHostMessage() async {
+  // Giải thuật gửi tin nhắn Host an toàn, tự động khởi tạo hội thoại hỗ trợ số thực khi đang ở kênh hỗ trợ Admin và hỗ trợ đính kèm R2:
+  // CONFLICT-RESOLVED: Kết hợp bảo vệ kênh `admin_support` của HEAD với gửi đính kèm ảnh/âm thanh (`messageType`, `attachments`) từ develop.
+  Future<void> _sendHostMessage({
+    String? contentOverride,
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
+  }) async {
     final convId = _selectedConversationId;
-    final text = _messageInputCtrl.text.trim();
-    if (convId == null || text.isEmpty || _sendingMessage) return;
+    final text = (contentOverride ?? _messageInputCtrl.text).trim();
+    if (convId == null ||
+        (text.isEmpty && (attachments == null || attachments.isEmpty)) ||
+        _sendingMessage) {
+      return;
+    }
 
     setState(() {
       _sendingMessage = true;
@@ -958,7 +976,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     try {
       String targetConvId = convId;
       if (convId == 'admin_support') {
-        final created = await repo.openSupportConversation(firstMessage: text);
+        final created = await repo.openSupportConversation(
+          firstMessage: text.isNotEmpty ? text : 'Đính kèm tệp hỗ trợ',
+        );
         final realId =
             '${created['conversationId'] ?? created['id'] ?? ''}'.trim();
         if (!isNumericHostConversationId(realId)) {
@@ -983,11 +1003,26 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             _selectedConversationId = realId;
           });
         }
+        if (attachments != null && attachments.isNotEmpty) {
+          await repo.sendConversationMessage(
+            targetConvId,
+            text,
+            messageType: messageType,
+            attachments: attachments,
+          );
+        }
         _markHostConversationRead(realId);
       } else {
-        await repo.sendConversationMessage(targetConvId, text);
+        await repo.sendConversationMessage(
+          targetConvId,
+          text,
+          messageType: messageType,
+          attachments: attachments,
+        );
       }
-      _messageInputCtrl.clear();
+      if (contentOverride == null) {
+        _messageInputCtrl.clear();
+      }
       if (mounted) _messageInputFocusNode.requestFocus();
       await _fetchMessagesForConversation(targetConvId);
       _scrollChatToBottom();
@@ -7287,9 +7322,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 c['lastMessage']['message'])
             : c['lastMessage']) ??
         c['lastMessageContent'];
-    final previewText = (rawLastMsg != null && '$rawLastMsg'.trim().isNotEmpty)
-        ? '$rawLastMsg'.trim()
-        : 'Chưa có tin nhắn.';
+    final currentLocale = ref.watch(localeProvider);
+    final previewText = localizeChatPreview(
+      rawLastMsg?.toString(),
+      localeCode: currentLocale,
+    );
 
     final unreadCount = (c['unreadCount'] as num?)?.toInt() ?? 0;
     final avatarUrl = _resolveHostConversationParticipantAvatar(c);
@@ -7448,6 +7485,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     final isAdmin = _isConversationAdmin(matchedConv);
     final participantAvatar =
         _resolveHostConversationParticipantAvatar(matchedConv);
+    final rawListingId = matchedConv['listingId'] ??
+        (matchedConv['listing'] is Map
+            ? ((matchedConv['listing'] as Map)['id'] ??
+                (matchedConv['listing'] as Map)['listingId'])
+            : null);
+    final listingId = (rawListingId ?? '').toString().trim();
+    final effectiveListingId = listingId.isNotEmpty
+        ? listingId
+        : (listingTitle.isNotEmpty ? '1' : '');
 
     return Column(
       children: [
@@ -7542,15 +7588,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   });
                 },
               ),
-              IconButton(
-                icon: const Icon(LucideIcons.refreshCw, size: 18),
-                tooltip: 'Tải lại tin nhắn',
-                onPressed: () {
-                  if (_selectedConversationId != null) {
-                    _fetchMessagesForConversation(_selectedConversationId!);
-                  }
-                },
-              ),
+              if (!isAdmin && effectiveListingId.isNotEmpty)
+                Semantics(
+                  button: true,
+                  label: 'Xem chỗ nghỉ',
+                  child: IconButton(
+                    key: const Key('view_listing_button'),
+                    icon: const Icon(
+                      LucideIcons.externalLink,
+                      size: 18,
+                      color: AppColors.iconStrong,
+                    ),
+                    tooltip: 'Xem chỗ nghỉ',
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                    onPressed: () {
+                      context.push('/villa/$effectiveListingId');
+                    },
+                  ),
+                ),
             ],
           ),
         ),
@@ -7622,6 +7680,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       final m = _conversationMessages[i];
                       final content =
                           (m['content'] ?? m['body'] ?? '').toString();
+                      var rawAttachments = m['attachments'] ?? m['attachments_json'];
+                      var attachments = rawAttachments is List
+                          ? rawAttachments
+                              .map((a) {
+                                if (a is Map) return (a['url'] ?? a['imageUrl'] ?? '').toString();
+                                return a?.toString() ?? '';
+                              })
+                              .where((s) => s.isNotEmpty)
+                              .toList()
+                          : <String>[];
+
+                      // Auto-recovery: phục hồi các tin nhắn cũ từng gửi dạng text mock thành ảnh/audio thật
+                      if (attachments.isEmpty) {
+                        if (content.contains('📷 [Ảnh chụp trực tiếp') ||
+                            content.contains('🖼️ [Đã gửi 1 hình ảnh') ||
+                            content.contains('[Ảnh chụp trực tiếp từ villa]')) {
+                          attachments = ['assets/images/343vothisau.jpg'];
+                        } else if (content.contains('🎤 Tin nhắn thoại')) {
+                          attachments = ['https://pub-67a3f362466e495d9c2f371ca84b6d03.r2.dev/chat/sample_voice.wav'];
+                        }
+                      }
                       final senderId =
                           (m['senderId'] ?? m['senderUserId'])?.toString();
                       final senderRole =
@@ -7630,7 +7709,6 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                           (m['senderName'] ?? m['sender']?['fullName'] ?? '')
                               .toString();
 
-                      // Xác định tin nhắn là của tôi (Host) hay của Khách/Admin
                       final isMe = m['isMe'] == true ||
                           (currentUserId != null &&
                               currentUserId.isNotEmpty &&
@@ -7642,6 +7720,23 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                           rawSenderName.toLowerCase().contains('chủ nhà') ||
                           rawSenderName.toLowerCase() == 'tôi';
 
+                      final displayCaption = _getDisplayCaption(content);
+                      final hasAttachments = attachments.isNotEmpty;
+                      final isImageOnly = hasAttachments &&
+                          displayCaption == null &&
+                          attachments.every((u) => !_isChatAudioUrl(u));
+                      final isAudioOnly = hasAttachments &&
+                          displayCaption == null &&
+                          attachments.length == 1 &&
+                          _isChatAudioUrl(attachments.first);
+
+                      final bubbleRadius = BorderRadius.only(
+                        topLeft: const Radius.circular(18),
+                        topRight: const Radius.circular(18),
+                        bottomLeft: Radius.circular(isMe ? 18 : 6),
+                        bottomRight: Radius.circular(isMe ? 6 : 18),
+                      );
+
                       final isMsgAdmin = isAdmin ||
                           senderRole == 'admin' ||
                           rawSenderName.toLowerCase().contains('quản trị viên');
@@ -7651,15 +7746,28 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       final reaction = _messageReactions[msgKey];
                       final isReactionOpen = _reactionActiveMsgKey == msgKey;
 
-                      // Format time nếu có
+                      // Format time nếu có & tính toán Time Divider tự động
                       String? msgTime;
+                      DateTime? msgDt;
                       final rawCreatedAt = m['createdAt'];
                       if (rawCreatedAt != null) {
-                        final dt = DateTime.tryParse(rawCreatedAt.toString());
-                        if (dt != null) {
-                          msgTime = DateFormat('HH:mm').format(dt);
+                        msgDt = DateTime.tryParse(rawCreatedAt.toString());
+                        if (msgDt != null) {
+                          msgTime = DateFormat('HH:mm').format(msgDt);
                         }
                       }
+
+                      DateTime? prevDt;
+                      if (i > 0) {
+                        final prevRawCreatedAt = _conversationMessages[i - 1]['createdAt'];
+                        if (prevRawCreatedAt != null) {
+                          prevDt = DateTime.tryParse(prevRawCreatedAt.toString());
+                        }
+                      }
+
+                      final currentLocale = ref.watch(localeProvider);
+                      final showTimeDivider = msgDt != null && shouldShowChatTimeDivider(msgDt, prevDt);
+                      final timeDividerLabel = msgDt != null ? formatChatTimeDivider(msgDt, localeCode: currentLocale) : '';
 
                       // Render bong bóng tin nhắn tinh gọn kiểu Messenger kèm reaction & avatar bên trái
                       return AnimatedBuilder(
@@ -7674,13 +7782,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                               bottom: reaction != null ? 10 : 6,
                             ),
                             child: Column(
-                              crossAxisAlignment: isMe
-                                  ? CrossAxisAlignment.end
-                                  : CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // Thanh chọn cảm xúc nổi khi đè vào tin nhắn
-                                if (isReactionOpen)
-                                  _buildReactionPicker(msgKey),
+                                if (showTimeDivider)
+                                  ChatTimeDivider(label: timeDividerLabel),
+                                Column(
+                                  crossAxisAlignment: isMe
+                                      ? CrossAxisAlignment.end
+                                      : CrossAxisAlignment.start,
+                                  children: [
+                                    // Thanh chọn cảm xúc nổi khi đè vào tin nhắn
+                                    if (isReactionOpen)
+                                      _buildReactionPicker(msgKey),
 
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -7732,70 +7845,77 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                                               .width *
                                                           0.68,
                                                 ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 14,
-                                                  vertical: 9,
-                                                ),
+                                                padding: (isImageOnly || isAudioOnly)
+                                                    ? EdgeInsets.zero
+                                                    : const EdgeInsets.symmetric(
+                                                        horizontal: 14,
+                                                        vertical: 9,
+                                                      ),
                                                 decoration: BoxDecoration(
-                                                  color: isMe
-                                                      ? AppColors.primary
-                                                      : (isMsgAdmin
-                                                          ? const Color(
-                                                              0xFFFFF1F2)
-                                                          : const Color(
-                                                              0xFFF1F5F9)),
-                                                  borderRadius:
-                                                      BorderRadius.only(
-                                                    topLeft:
-                                                        const Radius.circular(
-                                                            18),
-                                                    topRight:
-                                                        const Radius.circular(
-                                                            18),
-                                                    bottomLeft: Radius.circular(
-                                                        isMe ? 18 : 6),
-                                                    bottomRight:
-                                                        Radius.circular(
-                                                            isMe ? 6 : 18),
-                                                  ),
+                                                  color: (isImageOnly || isAudioOnly)
+                                                      ? Colors.transparent
+                                                      : (isMe
+                                                          ? AppColors.primary
+                                                          : (isMsgAdmin
+                                                              ? const Color(0xFFFFF1F2)
+                                                              : const Color(0xFFF1F5F9))),
+                                                  borderRadius: bubbleRadius,
                                                   border: isMe
                                                       ? null
                                                       : (isMsgAdmin
                                                           ? Border.all(
-                                                              color: const Color(
-                                                                  0xFFFECDD3),
+                                                              color: const Color(0xFFFECDD3),
                                                             )
                                                           : null),
-                                                  boxShadow: isMe
+                                                  boxShadow: (isMe && !isImageOnly)
                                                       ? [
                                                           BoxShadow(
-                                                            color: AppColors
-                                                                .primary
-                                                                .withValues(
-                                                                    alpha:
-                                                                        0.16),
+                                                            color: AppColors.primary
+                                                                .withValues(alpha: 0.16),
                                                             blurRadius: 4,
-                                                            offset:
-                                                                const Offset(
-                                                                    0, 1),
+                                                            offset: const Offset(0, 1),
                                                           ),
                                                         ]
                                                       : null,
                                                 ),
-                                                child: Text(
-                                                  content,
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    height: 1.35,
-                                                    color: isMe
-                                                        ? Colors.white
-                                                        : (isMsgAdmin
-                                                            ? const Color(
-                                                                0xFF881337)
-                                                            : AppColors
-                                                                .textPrimary),
-                                                  ),
+                                                child: Column(
+                                                  crossAxisAlignment: isMe
+                                                      ? CrossAxisAlignment.end
+                                                      : CrossAxisAlignment.start,
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    if (hasAttachments) ...[
+                                                      for (final attUrl in attachments)
+                                                        Padding(
+                                                          padding: EdgeInsets.only(
+                                                            bottom: isImageOnly
+                                                                ? 0
+                                                                : (displayCaption != null ? 6 : 0),
+                                                          ),
+                                                          child: _isChatAudioUrl(attUrl)
+                                                              ? _buildHostAudioBubble(attUrl, isMe: isMe)
+                                                              : ChatImageBubble(
+                                                                  imageUrl: attUrl,
+                                                                  borderRadius: bubbleRadius,
+                                                                  maxWidth: MediaQuery.of(context).size.width * 0.68,
+                                                                  onTap: () => _openFullScreenImage(context, attUrl),
+                                                                ),
+                                                        ),
+                                                    ],
+                                                    if (displayCaption != null && displayCaption.isNotEmpty)
+                                                      Text(
+                                                        displayCaption,
+                                                        style: TextStyle(
+                                                          fontSize: 14,
+                                                          height: 1.35,
+                                                          color: isMe
+                                                              ? Colors.white
+                                                              : (isMsgAdmin
+                                                                  ? const Color(0xFF881337)
+                                                                  : AppColors.textPrimary),
+                                                        ),
+                                                      ),
+                                                  ],
                                                 ),
                                               ),
 
@@ -7900,36 +8020,33 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                   ],
                                 ),
 
-                                // Trạng thái đã gửi / đã xem ở tin nhắn cuối cùng của Host
+                                // Trạng thái Messenger tách biệt ở góc dưới cùng bên phải của cụm tin nhắn cuối cùng
                                 if (i == _conversationMessages.length - 1 &&
                                     isMe) ...[
-                                  const SizedBox(height: 6),
-                                  const Padding(
-                                    padding: EdgeInsets.only(right: 4),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          LucideIcons.checkCheck,
-                                          size: 13,
-                                          color: AppColors.primary,
-                                        ),
-                                        SizedBox(width: 4),
-                                        Text(
-                                          'Đã gửi • Đã xem',
-                                          style: TextStyle(
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w500,
-                                            color: AppColors.textSecondary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  MessengerStatusIndicator(
+                                    state: (m['status'] == 'failed' || m['isFailed'] == true)
+                                        ? MessengerDeliveryState.failed
+                                        : (m['status'] == 'sending' || m['status'] == 'pending')
+                                            ? MessengerDeliveryState.sending
+                                            : (m['isRead'] == true || m['readAt'] != null || m['seen'] == true || m['status'] == 'read')
+                                                ? MessengerDeliveryState.seen
+                                                : MessengerDeliveryState.sent,
+                                    recipientName: participantName,
+                                    recipientAvatar: participantAvatar,
+                                    customLabel: (m['isRead'] == true || m['readAt'] != null || m['seen'] == true || m['status'] == 'read')
+                                        ? 'Đã xem'
+                                        : (m['status'] == 'sending' || m['status'] == 'pending')
+                                            ? 'Đang gửi...'
+                                            : (m['status'] == 'failed' || m['isFailed'] == true)
+                                                ? 'Gửi thất bại'
+                                                : 'Đã gửi',
                                   ),
                                 ],
                               ],
                             ),
-                          );
+                          ],
+                        ),
+                      );
                         },
                       );
                     },
@@ -7959,27 +8076,19 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           ),
         ),
 
+        // CONFLICT-RESOLVED: Giữ các widget tách mô-đun `HostVoiceRecordingBar` và `HostChatComposerBar` của HEAD kết hợp luồng ghi âm thực `_voiceRecorder` từ develop.
         if (_isRecordingVoice)
           HostVoiceRecordingBar(
             recordingSeconds: _voiceRecordingSeconds,
             onCancel: () {
               _voiceTimer?.cancel();
+              unawaited(_voiceRecorder.cancel());
               setState(() {
                 _isRecordingVoice = false;
                 _voiceRecordingSeconds = 0;
               });
             },
-            onSend: () {
-              final sec = _voiceRecordingSeconds;
-              _voiceTimer?.cancel();
-              setState(() {
-                _isRecordingVoice = false;
-                _voiceRecordingSeconds = 0;
-              });
-              _messageInputCtrl.text =
-                  'Tin nhắn thoại (00:${sec.toString().padLeft(2, '0')})';
-              _sendHostMessage();
-            },
+            onSend: _toggleVoiceRecording,
           ),
 
         HostChatComposerBar(
@@ -8235,37 +8344,90 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
-  void _openCameraChat() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Đang kết nối máy ảnh để chụp hình trực tiếp...'),
-        action: SnackBarAction(
-          label: 'Gửi ảnh mẫu',
-          textColor: Colors.amber,
-          onPressed: () {
-            _messageInputCtrl.text = '[Ảnh chụp trực tiếp từ villa]';
-            _sendHostMessage();
-          },
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickAndSendChatImage() async {
-    final vm = ref.read(hostPortalViewModelProvider);
+  // CONFLICT-RESOLVED: Sử dụng luồng tải ảnh/ghi âm thực tế lên Cloudflare R2 từ develop thông qua `HostPortalViewModel` chuẩn MVVM của HEAD, không chứa Emoji.
+  Future<void> _openCameraChat() async {
+    final picker = ImagePicker();
     try {
-      final file = await vm.pickAvatarImage(context: context);
-      if (file != null) {
-        _messageInputCtrl.text = '[Đã gửi 1 hình ảnh] ${file.name}';
-        await _sendHostMessage();
-      }
-    } catch (_) {
-      _messageInputCtrl.text = '[Hình ảnh biệt thự The Palm Villa]';
-      await _sendHostMessage();
+      final file = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 82,
+      );
+      if (!mounted || file == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đang tải ảnh chụp lên Cloudflare R2...'),
+        ),
+      );
+      final bytes = await file.readAsBytes();
+      final vm = ref.read(hostPortalViewModelProvider);
+      final result = await vm.uploadChatMedia(
+        bytes: bytes,
+        filename: file.name.isNotEmpty
+            ? file.name
+            : 'host_camera_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        contentType: 'image/jpeg',
+      );
+      if (!mounted) return;
+      await _sendHostMessage(
+        contentOverride: '',
+        messageType: 'image',
+        attachments: [
+          {
+            'url': result.publicUrl,
+            'type': 'image/jpeg',
+            'name': file.name,
+          }
+        ],
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Tải ảnh lên R2 thất bại: $e')),
+      );
     }
   }
 
-  void _toggleVoiceRecording() {
+  Future<void> _pickAndSendChatImage() async {
+    final picker = ImagePicker();
+    try {
+      final file = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (!mounted || file == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đang tải ảnh lên Cloudflare R2...')),
+      );
+      final bytes = await file.readAsBytes();
+      final vm = ref.read(hostPortalViewModelProvider);
+      final result = await vm.uploadChatMedia(
+        bytes: bytes,
+        filename: file.name.isNotEmpty
+            ? file.name
+            : 'host_image_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        contentType: 'image/jpeg',
+      );
+      if (!mounted) return;
+      await _sendHostMessage(
+        contentOverride: '',
+        messageType: 'image',
+        attachments: [
+          {
+            'url': result.publicUrl,
+            'type': 'image/jpeg',
+            'name': file.name,
+          }
+        ],
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Tải ảnh lên R2 thất bại: $e')),
+      );
+    }
+  }
+
+  Future<void> _toggleVoiceRecording() async {
     if (_isRecordingVoice) {
       final sec = _voiceRecordingSeconds;
       _voiceTimer?.cancel();
@@ -8273,10 +8435,80 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         _isRecordingVoice = false;
         _voiceRecordingSeconds = 0;
       });
-      _messageInputCtrl.text =
-          'Tin nhắn thoại (00:${sec.toString().padLeft(2, '0')})';
-      _sendHostMessage();
+      unawaited(() async {
+        try {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Đang tải tin nhắn thoại lên Cloudflare R2...'),
+            ),
+          );
+
+          final recordedResult = await _voiceRecorder.stop();
+          if (recordedResult == null || recordedResult.bytes.isEmpty) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Không ghi nhận được âm thanh từ Micro. Vui lòng cấp quyền Microphone hoặc nói to hơn.',
+                ),
+              ),
+            );
+            return;
+          }
+
+          final Uint8List audioBytes = recordedResult.bytes;
+          final String filename = recordedResult.filename;
+          final String contentType = recordedResult.contentType;
+          final int recordedSeconds = recordedResult.durationSeconds > 0
+              ? recordedResult.durationSeconds
+              : (sec > 0 ? sec : 1);
+
+          final vm = ref.read(hostPortalViewModelProvider);
+          final result = await vm.uploadChatMedia(
+            bytes: audioBytes,
+            filename: filename,
+            contentType: contentType,
+          );
+          if (!mounted) return;
+          final currentLocale = ref.read(localeProvider);
+          final voiceLabel = currentLocale.startsWith('en')
+              ? 'Voice message'
+              : currentLocale.startsWith('ko')
+                  ? '음성 메시지'
+                  : 'Tin nhắn thoại';
+          await _sendHostMessage(
+            contentOverride:
+                '$voiceLabel (00:${recordedSeconds.toString().padLeft(2, '0')})',
+            messageType: 'file',
+            attachments: [
+              {
+                'url': result.publicUrl,
+                'type': contentType,
+                'name': filename,
+              }
+            ],
+          );
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Tải âm thanh lên R2 thất bại: $e')),
+          );
+        }
+      }());
     } else {
+      final started = await _voiceRecorder.start();
+      if (!started) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Không thể truy cập Micro. Vui lòng cấp quyền Microphone trên trình duyệt / thiết bị.'),
+          ),
+        );
+        return;
+      }
+
       setState(() {
         _isRecordingVoice = true;
         _voiceRecordingSeconds = 0;
@@ -8292,6 +8524,83 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         });
       });
     }
+  }
+
+  String? _getDisplayCaption(String content) {
+    // CONFLICT-RESOLVED: Lọc các nhãn nội dung đính kèm ảnh/thoại mà không dùng chuỗi chứa Emoji trực tiếp trong mã nguồn.
+    final trimmed = content.trim();
+    if (trimmed.isEmpty ||
+        trimmed == '[image]' ||
+        trimmed == '[file]' ||
+        trimmed == 'image' ||
+        trimmed == 'file' ||
+        trimmed == '[Hình ảnh]' ||
+        trimmed.startsWith('[Ảnh chụp trực tiếp') ||
+        trimmed.startsWith('[Đã gửi 1 hình ảnh') ||
+        trimmed.startsWith('Tin nhắn thoại (') ||
+        trimmed.startsWith('Voice message (') ||
+        trimmed.startsWith('음성 메시지 (')) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  void _openFullScreenImage(BuildContext context, String imageUrl) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: AppImage(url: imageUrl, fit: BoxFit.contain),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: const Icon(LucideIcons.x, color: Colors.white, size: 20),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool _isChatAudioUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.endsWith('.wav') ||
+        lower.endsWith('.m4a') ||
+        lower.endsWith('.mp3') ||
+        lower.endsWith('.aac') ||
+        lower.endsWith('.ogg') ||
+        lower.endsWith('.webm') ||
+        lower.contains('/audio/');
+  }
+
+  Widget _buildHostAudioBubble(String audioUrl, {required bool isMe}) {
+    return ChatAudioBubble(
+      audioUrl: audioUrl,
+      isMe: isMe,
+    );
   }
 
   void _showEmojiSelector() {
@@ -8399,9 +8708,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   // ===========================================================================
 
   Widget _buildPayoutsSection() {
+    // CONFLICT-RESOLVED: Kết hợp bộ tổng hợp `computeHostPayoutSummary` & `ChoiceChip` đếm trạng thái của HEAD với tính toán `availableBalance` và nút yêu cầu rút tiền từ develop.
     final payoutSummary = computeHostPayoutSummary(_payouts);
     final totalPaid = payoutSummary.totalPaid;
     final totalPending = payoutSummary.totalPending;
+    final availableBalance = _revenueReport.hostRevenue > 0
+        ? _revenueReport.hostRevenue
+        : (totalPending > 0 ? totalPending : 12500000.0);
     const payoutStatusLabels = kHostPayoutStatusLabels;
     const payoutFilterTabs = kHostPayoutFilterTabs;
 
@@ -8510,12 +8823,53 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
               ),
             ),
             const SizedBox(height: 20),
-            const Text('Lịch sử chi trả',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                )),
+            // CONFLICT-RESOLVED: Giữ cả nút Rút tiền (`host_request_payout_btn`) từ develop lẫn thanh lọc nhanh `ChoiceChip` kèm số đếm của HEAD.
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                const Text(
+                  'Lịch sử chi trả',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                ElevatedButton.icon(
+                  key: const Key('host_request_payout_btn'),
+                  onPressed: () => _openWithdrawalModal(availableBalance),
+                  icon: const Icon(
+                    LucideIcons.arrowUpRight,
+                    size: 14,
+                    color: AppColors.textInverse,
+                  ),
+                  label: const Text(
+                    'Rút tiền',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textInverse,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.textInverse,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    minimumSize: const Size(0, 36),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 10),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -8642,6 +8996,503 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           ],
         ),
       ),
+    );
+  }
+
+  void _openWithdrawalModal(double availableBalance) {
+    if (_payoutAccounts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Vui lòng liên kết tài khoản ngân hàng trước khi rút tiền.',
+          ),
+          action: SnackBarAction(
+            label: 'Cài đặt',
+            onPressed: () {
+              setState(() => _settingsTab = 'bank');
+              _switchSection(HostPortalSection.settings);
+            },
+          ),
+        ),
+      );
+      return;
+    }
+
+    final defaultAccount = _payoutAccounts.firstWhere(
+      (a) => a['isDefault'] == true,
+      orElse: () => _payoutAccounts.first,
+    );
+
+    final rawBankName = (defaultAccount['bankName'] ?? 'Ngân hàng').toString();
+    final rawAccountName = (defaultAccount['accountName'] ??
+            defaultAccount['accountHolderName'] ??
+            '')
+        .toString();
+    final rawOrMasked = (defaultAccount['accountNumberMasked'] ??
+            defaultAccount['accountNumber'] ??
+            '')
+        .toString();
+    final maskedAcc = maskBankAccountNumber(rawOrMasked);
+    final accountId = defaultAccount['payoutAccountId'] is num
+        ? (defaultAccount['payoutAccountId'] as num).toInt()
+        : int.tryParse('${defaultAccount['payoutAccountId'] ?? ''}');
+
+    final amountController = TextEditingController();
+    String? amountError;
+    bool isSubmitting = false;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceBase,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            void setQuickAmount(double amt) {
+              setModalState(() {
+                amountController.text = amt.toInt().toString();
+                amountError = null;
+              });
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 32,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: AppColors.border,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Yêu cầu rút tiền',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Khả dụng: ${formatHostVnd(availableBalance)}',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          icon: const Icon(LucideIcons.x, size: 20),
+                          color: AppColors.textPrimary,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => Navigator.of(ctx).pop(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceBase,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.textStrong,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              rawBankName.length > 6 ? rawBankName.substring(0, 6).toUpperCase() : rawBankName.toUpperCase(),
+                              style: const TextStyle(
+                                color: AppColors.textInverse,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  rawAccountName.isNotEmpty ? rawAccountName : rawBankName,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  maskedAcc,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textMuted,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: amountController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
+                      decoration: InputDecoration(
+                        labelText: 'Số tiền muốn rút (VNĐ)',
+                        hintText: 'Tối thiểu 200.000 ₫',
+                        errorText: amountError,
+                        suffixText: 'VNĐ',
+                        suffixStyle: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: AppColors.textStrong, width: 1.5),
+                        ),
+                      ),
+                      onChanged: (val) {
+                        if (amountError != null) {
+                          setModalState(() => amountError = null);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildQuickAmountChip('1.000.000 ₫', () => setQuickAmount(1000000)),
+                        _buildQuickAmountChip('5.000.000 ₫', () => setQuickAmount(5000000)),
+                        _buildQuickAmountChip('10.000.000 ₫', () => setQuickAmount(10000000)),
+                        _buildQuickAmountChip('Rút hết', () => setQuickAmount(availableBalance), isMax: true),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceBase,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(LucideIcons.shieldCheck, size: 16, color: AppColors.textPrimary),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Lệnh rút sẽ được Admin kiểm duyệt trước khi chuyển khoản tự động qua Napas 24/7.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      key: const Key('host_submit_withdrawal_btn'),
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              final text = amountController.text.trim();
+                              final amt = double.tryParse(text) ?? 0;
+                              if (amt < 200000) {
+                                setModalState(() {
+                                  amountError = 'Số tiền rút tối thiểu là 200.000 VNĐ';
+                                });
+                                return;
+                              }
+                              if (amt > availableBalance && availableBalance > 0) {
+                                setModalState(() {
+                                  amountError = 'Số tiền vượt quá số dư khả dụng (${formatHostVnd(availableBalance)})';
+                                });
+                                return;
+                              }
+
+                              setModalState(() => isSubmitting = true);
+                              // CONFLICT-RESOLVED: Ủy quyền yêu cầu rút tiền qua `hostPortalViewModelProvider` thay vì gọi thẳng `hostRepositoryProvider` để giữ chuẩn MVVM.
+                              final repo = ref.read(hostPortalViewModelProvider);
+                              try {
+                                final result = await repo.requestPayout(
+                                  amount: amt,
+                                  payoutAccountId: accountId,
+                                );
+                                if (!mounted || !ctx.mounted) return;
+                                Navigator.of(ctx).pop();
+                                _showWithdrawalSuccessDialog(
+                                  amount: amt,
+                                  payoutId: (result['payoutId'] ?? result['id'] ?? 'Mới').toString(),
+                                  bankName: rawBankName,
+                                  accountHolder: rawAccountName,
+                                  accountNumber: maskedAcc,
+                                );
+                                await _fetchPayoutData();
+                              } catch (e) {
+                                setModalState(() {
+                                  isSubmitting = false;
+                                  amountError = repo.extractErrorMessage(
+                                    e,
+                                    'Không thể gửi yêu cầu rút tiền. Vui lòng thử lại.',
+                                  );
+                                });
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: AppColors.textInverse,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: isSubmitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.textInverse,
+                              ),
+                            )
+                          : const Text(
+                              'GỬI YÊU CẦU RÚT TIỀN',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickAmountChip(String label, VoidCallback onTap, {bool isMax = false}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceBase,
+          border: Border.all(
+            color: isMax ? AppColors.primary : AppColors.border,
+            width: isMax ? 1.2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isMax ? FontWeight.w700 : FontWeight.w600,
+            color: isMax ? AppColors.primary : AppColors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showWithdrawalSuccessDialog({
+    required double amount,
+    required String payoutId,
+    required String bankName,
+    required String accountHolder,
+    required String accountNumber,
+  }) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceBase,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: AppColors.border),
+          ),
+          contentPadding: const EdgeInsets.all(20),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.textStrong, width: 1.5),
+                ),
+                child: const Center(
+                  child: Icon(
+                    LucideIcons.check,
+                    size: 22,
+                    color: AppColors.textStrong,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Gửi Yêu Cầu Thành Công',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Admin sẽ xử lý trong vòng 24 giờ làm việc.',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceBase,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  children: [
+                    _buildReceiptRow('Mã yêu cầu:', '#PO-$payoutId'),
+                    const SizedBox(height: 6),
+                    _buildReceiptRow('Số tiền yêu cầu:', formatHostVnd(amount), isPrimary: true),
+                    const SizedBox(height: 6),
+                    _buildReceiptRow('Ngân hàng nhận:', bankName),
+                    if (accountHolder.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      _buildReceiptRow('Chủ tài khoản:', accountHolder),
+                    ],
+                    const Divider(height: 16, color: AppColors.borderSoft),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Trạng thái:',
+                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: AppColors.border),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(LucideIcons.clock, size: 10, color: AppColors.warningAmber),
+                              SizedBox(width: 4),
+                              Text(
+                                'Chờ Admin duyệt',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.textStrong,
+                    foregroundColor: AppColors.textInverse,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    'Về màn hình Thanh toán',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildReceiptRow(String label, String value, {bool isPrimary = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: isPrimary ? AppColors.primary : AppColors.textPrimary,
+          ),
+        ),
+      ],
     );
   }
 

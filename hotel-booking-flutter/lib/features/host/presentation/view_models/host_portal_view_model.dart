@@ -1,9 +1,11 @@
 // CONFLICT-RESOLVED: Bổ sung `HostPortalViewModel` cho cổng quản lý Chủ nhà (`host_portal_screens.dart`)
 // theo chuẩn MVVM (FLUTTER_RULES.md Mục 2), loại bỏ việc Screen gọi trực tiếp `hostRepositoryProvider`,
 // `hostFilePickerProvider`, `hostCurrentUserRoleProvider` và `package:dio/dio.dart`.
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../messages/services/chat_media_upload_service.dart';
 import '../../data/host_repository.dart';
 import '../../domain/host_models.dart';
 import '../../services/host_file_picker_service.dart';
@@ -215,15 +217,47 @@ class HostPortalViewModel {
     );
   }
 
+  // CONFLICT-RESOLVED: Bổ sung `messageType`, `attachments`, `uploadChatMedia` và `requestPayout` từ develop vào `HostPortalViewModel` để tuân thủ MVVM.
   Future<Map<String, dynamic>> sendConversationMessage(
     String conversationId,
-    String content,
-  ) {
-    return _repo.sendConversationMessage(conversationId, content);
+    String content, {
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
+  }) {
+    return _repo.sendConversationMessage(
+      conversationId,
+      content,
+      messageType: messageType,
+      attachments: attachments,
+    );
+  }
+
+  Future<ChatUploadResult> uploadChatMedia({
+    required Uint8List bytes,
+    required String filename,
+    required String contentType,
+  }) {
+    return _ref.read(chatMediaUploadServiceProvider).uploadMediaBytesToR2(
+          bytes: bytes,
+          filename: filename,
+          contentType: contentType,
+        );
   }
 
   Future<List<Map<String, dynamic>>> getPayoutAccounts() {
     return _repo.getPayoutAccounts();
+  }
+
+  Future<Map<String, dynamic>> requestPayout({
+    required double amount,
+    int? payoutAccountId,
+    String? notes,
+  }) {
+    return _repo.requestPayout(
+      amount: amount,
+      payoutAccountId: payoutAccountId,
+      notes: notes,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getMyPayouts({

@@ -1343,8 +1343,12 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
     // 1. Check appropriate device/camera/media permission
     try {
+      // CONFLICT-RESOLVED: Gọi qua `hostOnboardingViewModelProvider` đúng chuẩn MVVM đồng thời chuyển tiếp `context` cho hộp thoại xin quyền từ `origin/develop`.
       final permissionService = ref.read(hostOnboardingViewModelProvider);
-      final permResult = await permissionService.requestPermission(source);
+      final permResult = await permissionService.requestPermission(
+        source,
+        context: context,
+      );
       if (!mounted) return;
       if (!permResult.isGranted) {
         final msg = permResult.messageVi ??
@@ -1374,7 +1378,9 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
       final file = await picker.pickKycDocument(
         context: context,
         title: slotLabel,
+        // CONFLICT-RESOLVED: Truyền đồng thời `imageOnly: isIdentitySlot` và `source: source` để vừa hỗ trợ chụp camera/thư viện vừa chặn PDF cho giấy tờ tùy thân.
         imageOnly: isIdentitySlot,
+        source: source,
       );
       if (file == null || !mounted) return;
 
@@ -2814,7 +2820,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
         borderRadius: BorderRadius.circular(16),
         onTap: (_submitting || isLocked || pickedFile != null)
             ? null
-            : () => _pickFileForSlot(
+            : () => _openFileSourceBottomSheet(
                   slotKey: slotKey,
                   slotLabel: title,
                 ),
@@ -3004,7 +3010,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                           label: 'Chọn lại',
                           onPressed: _submitting
                               ? null
-                              : () => _pickFileForSlot(
+                              : () => _openFileSourceBottomSheet(
                                     slotKey: slotKey,
                                     slotLabel: title,
                                   ),

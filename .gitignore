@@ -42,8 +42,11 @@ docs/ai-fix/
 **/*.md
 *.txt
 **/*.txt
-*.pdf 
+# CONFLICT-RESOLVED: Gộp quy tắc bỏ qua cả tệp .pdf và .docx trên toàn bộ cây thư mục từ hai nhánh.
+*.pdf
+**/*.pdf
 *.docx
+**/*.docx
 
 # Node.js (Source goc/backend, Source goc/frontend)
 **/node_modules/

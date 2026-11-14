@@ -64,15 +64,23 @@ class TripsActionsViewModel {
     return _bookingRepository.createBulkBookings(items: items);
   }
 
-  /// Hủy đơn đặt phòng `bookingId` kèm lý do `reason` và làm mới tức thì danh sách chuyến đi cũng như chi tiết đơn.
-  // Giải thuật hủy đơn đặt phòng kèm lý do và làm mới ngay danh sách chuyến đi cá nhân.
+  /// Hủy đơn đặt phòng `bookingId` kèm lý do `reason` (và thông tin ngân hàng nhận hoàn tiền nếu đơn đã thanh toán),
+  /// đồng thời làm mới tức thì danh sách chuyến đi cũng như chi tiết đơn.
+  // Giải thuật hủy đơn đặt phòng kèm lý do/tài khoản hoàn tiền và làm mới ngay danh sách chuyến đi cá nhân.
+  // CONFLICT-RESOLVED: Bổ sung tham số ngân hàng hoàn tiền (`bankName`, `accountNumber`, `accountName`) từ develop vào ViewModel để giữ kiến trúc MVVM.
   Future<void> cancelBooking({
     required String bookingId,
     required String reason,
+    String? bankName,
+    String? accountNumber,
+    String? accountName,
   }) async {
     await _bookingRepository.cancelBooking(
       bookingId: bookingId,
       reason: reason,
+      bankName: bankName,
+      accountNumber: accountNumber,
+      accountName: accountName,
     );
     _ref.invalidate(myBookingsProvider);
     _ref.invalidate(bookingDetailProvider(bookingId));

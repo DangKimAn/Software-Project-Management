@@ -1213,9 +1213,136 @@ export const notifyRefundCreated = async (refundId: number, transaction?: Transa
                 userId,
                 title: "Có refund mới cần xử lý",
                 body,
-                actionUrl: "/admin",
-                payload,
+                actionUrl: "/admin/chi-tra",
+                payload: {
+                    ...payload,
+                    forAdmin: true,
+                    targetRole: "admin",
+                },
             })),
+        ],
+    });
+};
+
+// CONFLICT-RESOLVED: Giữ trọn bộ hàm thông báo hoàn tiền (`notifyRefundSucceeded`, `notifyRefundRejected`) từ `origin/develop` và JSDoc giải thuật thông báo chi trả của nhánh refactor.
+/**
+ * Giải thuật thông báo hoàn tiền thành công (`REFUND_CREATED`) tới Khách đặt phòng qua In-App, Push và Email.
+ */
+export const notifyRefundSucceeded = async (refundId: number, transaction?: Transaction) => {
+    const refund = await safeNotificationLookup("refund", { refundId }, () =>
+        Refund.findByPk(refundId, {
+            transaction,
+        }),
+    );
+
+    if (!refund) {
+        return;
+    }
+
+    const context = await getBookingContext(refund.bookingId, transaction);
+
+    if (!context) {
+        return;
+    }
+
+    const title = "Hoàn tiền thành công";
+    const body = `Số tiền ${formatMoney(refund.amount, refund.currency)} đã được hoàn về tài khoản ngân hàng của bạn. Mã GD: ${refund.providerRef ?? ""}`;
+    const payload = {
+        refundId: refund.refundId,
+        paymentId: refund.paymentId,
+        bookingId: refund.bookingId,
+        status: refund.status,
+        amount: toNumber(refund.amount),
+        currency: refund.currency,
+        providerRef: refund.providerRef,
+    };
+    const lines = [
+        `Xin chào ${context.guest?.fullName ?? ""},`,
+        body,
+        `Mã giao dịch ngân hàng: ${refund.providerRef ?? "N/A"}`,
+        `Cảm ơn bạn đã đồng hành cùng The Palm Villa.`,
+    ];
+
+    await notify({
+        eventType: "REFUND_CREATED",
+        targetType: "refund",
+        targetId: refund.refundId,
+        transaction,
+        recipients: [
+            {
+                userId: Number(context.booking.guestUserId),
+                title,
+                body,
+                actionUrl: "/account/trips",
+                payload,
+                email: context.guest?.email
+                    ? {
+                          to: context.guest.email,
+                          subject: "Hoàn tiền thành công - The Palm Villa",
+                          text: lines.filter(Boolean).join("\n"),
+                          html: buildEmailHtml(title, lines),
+                      }
+                    : null,
+            },
+        ],
+    });
+};
+
+/**
+ * Giải thuật thông báo từ chối yêu cầu hoàn tiền tới Khách đặt phòng kèm lý do từ chối chi tiết.
+ */
+export const notifyRefundRejected = async (refundId: number, rejectionReason: string, transaction?: Transaction) => {
+    const refund = await safeNotificationLookup("refund", { refundId }, () =>
+        Refund.findByPk(refundId, {
+            transaction,
+        }),
+    );
+
+    if (!refund) {
+        return;
+    }
+
+    const context = await getBookingContext(refund.bookingId, transaction);
+
+    if (!context) {
+        return;
+    }
+
+    const title = "Yêu cầu hoàn tiền bị từ chối";
+    const body = `Yêu cầu hoàn tiền cho booking #${refund.bookingId} đã bị từ chối. Lý do: ${rejectionReason}`;
+    const lines = [
+        `Xin chào ${context.guest?.fullName ?? ""},`,
+        body,
+        `Nếu bạn có bất kỳ thắc mắc nào, vui lòng liên hệ bộ phận hỗ trợ The Palm Villa.`,
+    ];
+
+    await notify({
+        eventType: "REFUND_CREATED",
+        targetType: "refund",
+        targetId: refund.refundId,
+        transaction,
+        recipients: [
+            {
+                userId: Number(context.booking.guestUserId),
+                title,
+                body,
+                actionUrl: "/account/trips",
+                payload: {
+                    refundId: refund.refundId,
+                    bookingId: refund.bookingId,
+                    status: refund.status,
+                    amount: toNumber(refund.amount),
+                    rejectionReason,
+                },
+                email: context.guest?.email
+                    ? {
+                          to: context.guest.email,
+                          subject: "Thông báo từ chối hoàn tiền - The Palm Villa",
+                          text: lines.filter(Boolean).join("\n"),
+                          html: buildEmailHtml(title, lines),
+                      }
+                    : null,
+            },
         ],
     });
 };
@@ -1233,6 +1360,7 @@ export const notifyPayoutCreated = async (payoutId: number, transaction?: Transa
     }
 
     const host = await getActiveUser(Number(payout.hostId), transaction);
+    const adminIds = await getAdminRecipientIds(transaction);
     const title = "Payout đã được tạo";
     const body = `Payout #${payout.payoutId} trị giá ${formatMoney(payout.amount, payout.currency)} đang chờ xử lý.`;
     const lines = [
@@ -1262,6 +1390,119 @@ export const notifyPayoutCreated = async (payoutId: number, transaction?: Transa
                     ? {
                           to: host.email,
                           subject: "Cập nhật payout - The Palm Villa",
+                          text: lines.filter(Boolean).join("\n"),
+                          html: buildEmailHtml(title, lines),
+                      }
+                    : null,
+            },
+            ...adminIds.map((userId) => ({
+                userId,
+                title: "Có yêu cầu rút tiền Host cần duyệt",
+                body: `Host ${host?.fullName ?? ""} yêu cầu rút ${formatMoney(payout.amount, payout.currency)}.`,
+                actionUrl: "/admin/chi-tra",
+                payload: {
+                    payoutId: payout.payoutId,
+                    amount: toNumber(payout.amount),
+                    currency: payout.currency,
+                    status: payout.status,
+                    forAdmin: true,
+                    targetRole: "admin",
+                },
+            })),
+        ],
+    });
+};
+
+export const notifyPayoutPaid = async (payoutId: number, transaction?: Transaction) => {
+    const payout = await HostPayoutBatch.findByPk(payoutId, {
+        transaction,
+    });
+
+    if (!payout) {
+        return;
+    }
+
+    const host = await getActiveUser(Number(payout.hostId), transaction);
+    const title = "Chi trả doanh thu thành công";
+    const body = `Số tiền ${formatMoney(payout.amount, payout.currency)} đã được chuyển vào tài khoản ngân hàng của bạn. Mã GD: ${payout.transferReference ?? ""}`;
+    const lines = [
+        `Xin chào ${host?.fullName ?? ""},`,
+        body,
+        `Mã tham chiếu ngân hàng: ${payout.transferReference ?? "N/A"}`,
+        `Thời gian chi trả: ${payout.paidAt ? new Date(payout.paidAt).toLocaleString("vi-VN") : "Hôm nay"}`,
+    ];
+
+    await notify({
+        eventType: "PAYOUT_CREATED",
+        targetType: "payout",
+        targetId: payout.payoutId,
+        transaction,
+        recipients: [
+            {
+                userId: Number(payout.hostId),
+                title,
+                body,
+                actionUrl: "/chu-nha/thanh-toan",
+                payload: {
+                    payoutId: payout.payoutId,
+                    amount: toNumber(payout.amount),
+                    currency: payout.currency,
+                    status: payout.status,
+                    transferReference: payout.transferReference,
+                },
+                email: host?.email
+                    ? {
+                          to: host.email,
+                          subject: "Chi trả doanh thu thành công - The Palm Villa",
+                          text: lines.filter(Boolean).join("\n"),
+                          html: buildEmailHtml(title, lines),
+                      }
+                    : null,
+            },
+        ],
+    });
+};
+
+export const notifyPayoutRejected = async (payoutId: number, rejectionReason: string, transaction?: Transaction) => {
+    const payout = await HostPayoutBatch.findByPk(payoutId, {
+        transaction,
+    });
+
+    if (!payout) {
+        return;
+    }
+
+    const host = await getActiveUser(Number(payout.hostId), transaction);
+    const title = "Đợt chi trả Payout bị từ chối";
+    const body = `Đợt chi trả #${payout.payoutId} trị giá ${formatMoney(payout.amount, payout.currency)} đã bị từ chối. Lý do: ${rejectionReason}`;
+    const lines = [
+        `Xin chào ${host?.fullName ?? ""},`,
+        body,
+        `Vui lòng kiểm tra lại thông tin tài khoản ngân hàng hoặc liên hệ bộ phận hỗ trợ.`,
+    ];
+
+    await notify({
+        eventType: "PAYOUT_CREATED",
+        targetType: "payout",
+        targetId: payout.payoutId,
+        transaction,
+        recipients: [
+            {
+                userId: Number(payout.hostId),
+                title,
+                body,
+                actionUrl: "/chu-nha/thanh-toan",
+                payload: {
+                    payoutId: payout.payoutId,
+                    amount: toNumber(payout.amount),
+                    currency: payout.currency,
+                    status: payout.status,
+                    rejectionReason,
+                },
+                email: host?.email
+                    ? {
+                          to: host.email,
+                          subject: "Thông báo từ chối chi trả - The Palm Villa",
                           text: lines.filter(Boolean).join("\n"),
                           html: buildEmailHtml(title, lines),
                       }

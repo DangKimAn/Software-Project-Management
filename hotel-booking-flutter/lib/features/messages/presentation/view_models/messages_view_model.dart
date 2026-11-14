@@ -1,11 +1,13 @@
 // CONFLICT-RESOLVED: Bổ sung `MessagesViewModel` cho phân hệ Tin nhắn (`messages_screen.dart`) theo chuẩn MVVM
 // (FLUTTER_RULES.md Mục 2), loại bỏ việc Screen gọi trực tiếp `conversationsRepositoryProvider` và `socketServiceProvider`.
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/socket_service.dart';
 import '../../data/conversations_repository.dart';
+import '../../services/chat_media_upload_service.dart';
 
 export '../../../../app/di/providers.dart' show villaDetailProvider;
 export '../../data/conversations_repository.dart'
@@ -89,16 +91,35 @@ class MessagesViewModel {
     return _repository.markConversationRead(conversationId);
   }
 
-  /// Gửi tin nhắn văn bản `content` lên máy chủ cho cuộc hội thoại `conversationId`.
-  // Giải thuật gửi tin nhắn văn bản tới cuộc hội thoại đang mở.
+  /// Gửi tin nhắn văn bản hoặc đính kèm đa phương tiện tới cuộc hội thoại `conversationId`.
+  // Giải thuật gửi tin nhắn văn bản/hình ảnh/ghi âm tới cuộc hội thoại đang mở.
+  // CONFLICT-RESOLVED: Bổ sung `messageType`, `attachments` và hàm `uploadChatMedia` từ develop vào ViewModel để tuân thủ chuẩn MVVM.
   Future<ChatMessageItem> sendMessage({
     required String conversationId,
     required String content,
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
   }) {
     return _repository.sendMessage(
       conversationId: conversationId,
       content: content,
+      messageType: messageType,
+      attachments: attachments,
     );
+  }
+
+  /// Tải tệp ảnh hoặc ghi âm lên Cloudflare R2 thông qua `ChatMediaUploadService`.
+  // Giải thuật tải byte đa phương tiện lên kho R2 phục vụ gửi ảnh/ghi âm trong hội thoại.
+  Future<ChatUploadResult> uploadChatMedia({
+    required Uint8List bytes,
+    required String filename,
+    required String contentType,
+  }) {
+    return _ref.read(chatMediaUploadServiceProvider).uploadMediaBytesToR2(
+          bytes: bytes,
+          filename: filename,
+          contentType: contentType,
+        );
   }
 
   /// Chuẩn hóa mọi ngoại lệ tầng mạng hoặc API thành `AppFailure` thống nhất cho tầng giao diện.

@@ -418,6 +418,28 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
                         }
                     }
                 }
+            } else if (req.repeatCell) {
+                const rc = req.repeatCell as any;
+                const sheetId = rc.range?.sheetId;
+                const tab = doc.tabs.find((t) => t.sheetId === sheetId);
+                if (tab && rc.cell?.userEnteredFormat?.textFormat?.fontFamily) {
+                    (tab as any).defaultFontFamily = rc.cell.userEnteredFormat.textFormat.fontFamily;
+                }
+            } else if (req.unmergeCells) {
+                const uc = req.unmergeCells as any;
+                const sheetId = uc.range?.sheetId;
+                const tab = doc.tabs.find((t) => t.sheetId === sheetId);
+                if (tab) {
+                    (tab as any).merges = [];
+                }
+            } else if (req.mergeCells) {
+                const mc = req.mergeCells as any;
+                const sheetId = mc.range?.sheetId;
+                const tab = doc.tabs.find((t) => t.sheetId === sheetId);
+                if (tab) {
+                    (tab as any).merges = (tab as any).merges ?? [];
+                    (tab as any).merges.push(mc.range);
+                }
             } else if (req.addProtectedRange) {
                 const pr = (req.addProtectedRange as any).protectedRange;
                 const sheetId = pr?.range?.sheetId;
@@ -428,6 +450,14 @@ class FakeGoogleSheetsTransport implements GoogleSheetsTransport {
                         description: pr.description,
                         warningOnly: pr.warningOnly,
                     });
+                }
+            } else if (req.setDataValidation) {
+                const sdv = (req.setDataValidation as any);
+                const sheetId = sdv.range?.sheetId;
+                const tab = doc.tabs.find((t) => t.sheetId === sheetId);
+                if (tab) {
+                    (tab as any).dataValidations = (tab as any).dataValidations ?? [];
+                    (tab as any).dataValidations.push(sdv);
                 }
             } else if (req.updateCells) {
                 const uc = req.updateCells as any;
@@ -1423,29 +1453,44 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         const col801 = fakeSheets.findListingColIndex(tab, 801);
         const rDay5 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 4;
 
-        // Verify (a): Day 5 restored to Orange G #9201; Day 9 remains Admin-locked Red
-        assert.equal(tab.rows.get(rDay5)![col801]?.userEnteredValue?.stringValue, "G #9201");
+        // Verify (a): Day 5 restored to Orange while retaining price; Day 9 remains Admin-locked Red
+        assert.ok(
+            tab.rows.get(rDay5)![col801]?.userEnteredValue?.numberValue === 4500000 ||
+            tab.rows.get(rDay5)![col801]?.userEnteredValue?.stringValue === "4500000",
+        );
+        assert.deepEqual(
+            tab.rows.get(rDay5)![col801]?.userEnteredFormat?.backgroundColorStyle?.rgbColor,
+            SHEET_COLORS.PENDING_HOLD_ORANGE,
+        );
         const adminCal = calendarStore.find((c) => Number(c.listingId) === 801 && c.date === dAdmin);
         assert.equal(adminCal.isBlockedByAdmin, true);
         assert.equal(adminCal.isAvailable, false);
 
-        // Verify (b): Day 7 restored to Green Đ #9202 & booking_vs_sheet_edit conflict logged
+        // Verify (b): Day 7 restored to Green (pure color, no text) & booking_vs_sheet_edit conflict logged
         const rDay7 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 6;
-        assert.equal(tab.rows.get(rDay7)![col801]?.userEnteredValue?.stringValue, "Đ #9202");
+        assert.equal(tab.rows.get(rDay7)![col801]?.userEnteredValue?.stringValue ?? "", "");
+        assert.deepEqual(
+            tab.rows.get(rDay7)![col801]?.userEnteredFormat?.backgroundColorStyle?.rgbColor,
+            SHEET_COLORS.BOOKED_GREEN,
+        );
         assert.ok(
             conflictsStore.some(
                 (c) => c.conflictType === "booking_vs_sheet_edit" && c.conflictDate === dPaid,
             ),
         );
 
-        // Verify (c): Fresh App lock on Day 10 NOT overwritten by stale White Sheet cell; exported Red "K" to Sheet!
+        // Verify (c): Fresh App lock on Day 10 NOT overwritten by stale White Sheet cell; exported Red with price to Sheet (retains price, no "K")!
         const freshAppCal = calendarStore.find(
             (c) => Number(c.listingId) === 801 && c.date === dFreshApp,
         );
         assert.equal(freshAppCal.isBlockedByHost, true);
         assert.equal(freshAppCal.isAvailable, false);
         const rDay10 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 9;
-        assert.equal(tab.rows.get(rDay10)![col801]?.userEnteredValue?.stringValue, "K");
+        assert.equal(tab.rows.get(rDay10)![col801]?.userEnteredValue?.numberValue, 4500000);
+        assert.deepEqual(
+            tab.rows.get(rDay10)![col801]?.userEnteredFormat?.backgroundColorStyle?.rgbColor,
+            SHEET_COLORS.HOST_BLOCKED_RED,
+        );
 
         // Verify (d): Concurrent edit on Day 11 fails safe to BLOCKED + logs app_vs_sheet_concurrent
         const concCal = calendarStore.find(
@@ -1584,7 +1629,8 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         const tab = fakeSheets.findMonthTab(sheetIdA, nextMonth.tabKey)!;
         const col801 = fakeSheets.findListingColIndex(tab, 801);
         const rDay26 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 25;
-        assert.equal(tab.rows.get(rDay26)![col801]?.userEnteredValue?.stringValue ?? "", "");
+        const rDay26Val = tab.rows.get(rDay26)![col801]?.userEnteredValue;
+        assert.ok(rDay26Val?.numberValue === 4500000 || rDay26Val?.stringValue === "4500000");
         assert.equal(
             calendarStore.find((c) => Number(c.listingId) === 801 && c.date === expDate),
             undefined,
@@ -1911,5 +1957,320 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
             "K",
             "Archived listing #801 historical blocked cell on Day 16 must remain intact",
         );
+    });
+
+    it("SS-17: Displays price on available days, pure color for hold & booked without text, and Times New Roman font", async () => {
+        const connectRes = await request(app)
+            .post("/api/host/sheet-sync/connect")
+            .set(hostAAuth)
+            .send({ spreadsheetUrlOrId: sheetUrlA });
+        assert.equal(connectRes.status, 200);
+
+        const rolling = hostSheetLayout.buildRollingMonthSpecs(
+            getTodayInVietnamDateString(),
+            6,
+        );
+        const tab = fakeSheets.findMonthTab(sheetIdA, rolling[0].tabKey)!;
+        assert.ok(tab);
+
+        // Check font on tab
+        assert.equal((tab as any).defaultFontFamily, "Times New Roman");
+
+        const col801 = fakeSheets.findListingColIndex(tab, 801);
+        assert.ok(col801 >= 1);
+
+        // Available day (Day 2): must display price (4,500,000 for listing #801) with Times New Roman font
+        const rDay2 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 1;
+        const cellDay2 = tab.rows.get(rDay2)![col801]!;
+        assert.ok(cellDay2.userEnteredValue?.numberValue === 4500000 || cellDay2.userEnteredValue?.stringValue === "4500000");
+        assert.equal(cellDay2.userEnteredFormat?.textFormat?.fontFamily, "Times New Roman");
+        assert.equal(cellDay2.userEnteredFormat?.numberFormat?.type, "NUMBER");
+
+        // Booked day: must have Green color and retain price
+        const dBooked = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-18`;
+        const dBookedOut = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-19`;
+        makeRecord(bookingsStore, "bookingId", {
+            bookingId: 9888,
+            listingId: 801,
+            guestUserId: 201,
+            hostUserId: 101,
+            checkInDate: dBooked,
+            checkOutDate: dBookedOut,
+            status: "confirmed",
+        });
+
+        // Held day: must have Orange color and retain price
+        const dHeld = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-20`;
+        const dHeldOut = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-21`;
+        makeRecord(bookingsStore, "bookingId", {
+            bookingId: 9889,
+            listingId: 801,
+            guestUserId: 201,
+            hostUserId: 101,
+            checkInDate: dHeld,
+            checkOutDate: dHeldOut,
+            status: "pending_payment",
+            lockedUntil: new Date(Date.now() + 10 * 60_000),
+        });
+
+        await request(app).post("/api/host/sheet-sync/sync-now").set(hostAAuth);
+
+        const rBooked = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 17;
+        const bookedCell = tab.rows.get(rBooked)![col801]!;
+        assert.ok(bookedCell.userEnteredValue?.numberValue === 4500000 || bookedCell.userEnteredValue?.stringValue === "4500000");
+        assert.deepEqual(bookedCell.userEnteredFormat?.backgroundColorStyle?.rgbColor, SHEET_COLORS.BOOKED_GREEN);
+        assert.equal(bookedCell.userEnteredFormat?.textFormat?.fontFamily, "Times New Roman");
+
+        const rHeld = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 19;
+        const heldCell = tab.rows.get(rHeld)![col801]!;
+        assert.ok(heldCell.userEnteredValue?.numberValue === 4500000 || heldCell.userEnteredValue?.stringValue === "4500000");
+        assert.deepEqual(heldCell.userEnteredFormat?.backgroundColorStyle?.rgbColor, SHEET_COLORS.PENDING_HOLD_ORANGE);
+        assert.equal(heldCell.userEnteredFormat?.textFormat?.fontFamily, "Times New Roman");
+    });
+
+    it("SS-18: Two-way price synchronization & Apps Script button endpoints (preview & sync)", async () => {
+        const connectRes = await request(app)
+            .post("/api/host/sheet-sync/connect")
+            .set(hostAAuth)
+            .send({ spreadsheetUrlOrId: sheetUrlA });
+        assert.equal(connectRes.status, 200);
+
+        const rolling = hostSheetLayout.buildRollingMonthSpecs(
+            getTodayInVietnamDateString(),
+            6,
+        );
+        const tab = fakeSheets.findMonthTab(sheetIdA, rolling[0].tabKey)!;
+        assert.ok(tab);
+
+        // Host edits Day 15 on listing 801: sets custom price 5,200,000 via "5200k"
+        fakeSheets.paintHostDay(sheetIdA, rolling[0].tabKey, 801, 15, {
+            text: "5200k",
+            bgColor: SHEET_COLORS.WHITE,
+        });
+
+        // 1. Test preview endpoint
+        const previewRes = await request(app)
+            .post("/api/host/sheet-sync/sheet-button-preview")
+            .send({ spreadsheetId: sheetIdA });
+        assert.equal(previewRes.status, 200);
+        assert.ok(previewRes.body.data.changesCount >= 1);
+        assert.ok(
+            previewRes.body.data.changes.some((c: string) =>
+                c.includes("5.200.000") && c.includes("ĐỔI GIÁ"),
+            ),
+        );
+
+        // 2. Test button sync endpoint
+        const syncRes = await request(app)
+            .post("/api/host/sheet-sync/sheet-button-sync")
+            .send({ spreadsheetId: sheetIdA });
+        assert.equal(syncRes.status, 200);
+
+        const dDay15 = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-15`;
+        const calDay15 = calendarStore.find(
+            (c) => Number(c.listingId) === 801 && c.date === dDay15,
+        );
+        assert.ok(calDay15);
+        assert.equal(calDay15.priceOverride, 5200000);
+
+        // 3. Host clears Day 15 back to default price
+        fakeSheets.paintHostDay(sheetIdA, rolling[0].tabKey, 801, 15, {
+            text: "",
+            bgColor: SHEET_COLORS.WHITE,
+        });
+        const syncResetRes = await request(app)
+            .post("/api/host/sheet-sync/sheet-button-sync")
+            .send({ spreadsheetId: sheetIdA });
+        assert.equal(syncResetRes.status, 200);
+
+        const calDay15After = calendarStore.find(
+            (c) => Number(c.listingId) === 801 && c.date === dDay15,
+        );
+        assert.ok(!calDay15After || calDay15After.priceOverride === null);
+    });
+
+    it("SS-19: Native Confirmation Checkbox on Sheet Header (Option A) — Draft edits ignored when unchecked, applied and auto-unchecked when checked", async () => {
+        const connectRes = await request(app)
+            .post("/api/host/sheet-sync/connect")
+            .set(hostAAuth)
+            .send({ spreadsheetUrlOrId: sheetUrlA });
+        assert.equal(connectRes.status, 200);
+
+        const rolling = hostSheetLayout.buildRollingMonthSpecs(
+            getTodayInVietnamDateString(),
+            6,
+        );
+        const tab = fakeSheets.findMonthTab(sheetIdA, rolling[0].tabKey)!;
+        assert.ok(tab);
+
+        // 1. Checkbox header structure verification
+        const cellA1 = tab.rows.get(0)?.[0];
+        assert.ok(cellA1);
+        assert.equal(cellA1?.userEnteredValue?.boolValue, false);
+
+        const bannerCell = tab.rows.get(0)?.[1];
+        assert.ok(bannerCell);
+        assert.ok(
+            (bannerCell?.userEnteredValue?.stringValue ?? "").includes("TÍCH VÀO Ô BÊN TRÁI ĐỂ XÁC NHẬN"),
+        );
+
+        const hasCheckboxValidation = (tab as any).dataValidations?.some(
+            (v: any) =>
+                v.range?.startRowIndex === 0 &&
+                v.range?.startColumnIndex === 0 &&
+                v.rule?.condition?.type === "BOOLEAN",
+        );
+        assert.ok(hasCheckboxValidation);
+
+        // 2. Host edits Day 20 on listing 801 to 6,000,000, but DOES NOT check the checkbox (A1 is false)
+        const dDay20 = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-20`;
+        fakeSheets.paintHostDay(sheetIdA, rolling[0].tabKey, 801, 20, {
+            text: "6000000",
+            bgColor: SHEET_COLORS.WHITE,
+        });
+
+        // Run background periodic poll job
+        const job = makeRecord(jobsStore, "jobId", {
+            jobId: 9919,
+            hostUserId: 101,
+            jobType: "periodic_poll",
+            priority: 80,
+            status: "pending",
+            attempts: 0,
+            maxAttempts: 3,
+            availableAt: new Date(),
+        });
+        const claimed = await hostSheetSyncWorker.claimNextPendingSheetSyncJob("worker-1");
+        assert.equal(claimed.jobId, job.jobId);
+        const outcome = await hostSheetSyncWorker.processClaimedSheetSyncJob(claimed);
+        assert.equal(outcome.status, "succeeded");
+
+        // DB was NOT modified because checkbox was unchecked
+        const calDay20Draft = calendarStore.find(
+            (c) => Number(c.listingId) === 801 && c.date === dDay20,
+        );
+        assert.ok(!calDay20Draft || calDay20Draft.priceOverride !== 6000000);
+
+        // Sheet cell was NOT wiped out by Phase B
+        const col801 = fakeSheets.findListingColIndex(tab, 801);
+        const rDay20 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 19;
+        const cellDay20OnSheet = tab.rows.get(rDay20)?.[col801];
+        assert.equal(cellDay20OnSheet?.userEnteredValue?.stringValue, "6000000");
+
+        // 3. Host now checks the box in A1 on Google Sheets!
+        tab.rows.get(0)![0] = {
+            userEnteredValue: { boolValue: true },
+        };
+
+        // Run background periodic poll job again
+        const job2 = makeRecord(jobsStore, "jobId", {
+            jobId: 9920,
+            hostUserId: 101,
+            jobType: "periodic_poll",
+            priority: 80,
+            status: "pending",
+            attempts: 0,
+            maxAttempts: 3,
+            availableAt: new Date(),
+        });
+        const claimed2 = await hostSheetSyncWorker.claimNextPendingSheetSyncJob("worker-1");
+        assert.equal(claimed2.jobId, job2.jobId);
+        const outcome2 = await hostSheetSyncWorker.processClaimedSheetSyncJob(claimed2);
+        assert.equal(outcome2.status, "succeeded");
+
+        // DB IS now updated with the confirmed price!
+        const calDay20Confirmed = calendarStore.find(
+            (c) => Number(c.listingId) === 801 && c.date === dDay20,
+        );
+        assert.ok(calDay20Confirmed);
+        assert.equal(calDay20Confirmed.priceOverride, 6000000);
+
+        // Checkbox A1 was AUTOMATICALLY RESET back to false!
+        const cellA1AfterSync = tab.rows.get(0)?.[0];
+        assert.equal(cellA1AfterSync?.userEnteredValue?.boolValue, false);
+    });
+
+    it("SS-20: Host changes cell from White to Red while retaining room price — locks day without replacing price with letter K", async () => {
+        const connectRes = await request(app)
+            .post("/api/host/sheet-sync/connect")
+            .set(hostAAuth)
+            .send({ spreadsheetUrlOrId: sheetUrlA });
+        assert.equal(connectRes.status, 200);
+
+        const rolling = hostSheetLayout.buildRollingMonthSpecs(
+            getTodayInVietnamDateString(),
+            6,
+        );
+        const tab = fakeSheets.findMonthTab(sheetIdA, rolling[0].tabKey)!;
+        assert.ok(tab);
+        const col801 = fakeSheets.findListingColIndex(tab, 801);
+        assert.ok(col801 >= 1);
+
+        const rDay22 = hostSheetLayout.SHEET_CALENDAR_START_ROW_INDEX + 21;
+        const dDay22 = `${rolling[0].tabKey.slice(3, 7)}-${rolling[0].tabKey.slice(0, 2)}-22`;
+
+        // Initially Day 22 is White with price 4,500,000
+        const initialCell = tab.rows.get(rDay22)?.[col801];
+        assert.ok(initialCell?.userEnteredValue?.numberValue === 4500000 || initialCell?.userEnteredValue?.stringValue === "4500000");
+
+        // 1. Host paints cell RED, retaining the price 4,500,000 (does not type "K")
+        fakeSheets.paintHostDay(sheetIdA, rolling[0].tabKey, 801, 22, {
+            text: "4500000",
+            bgColor: SHEET_COLORS.HOST_BLOCKED_RED,
+        });
+
+        // 2. Check preview button
+        const previewRes = await request(app)
+            .post("/api/host/sheet-sync/sheet-button-preview")
+            .send({ spreadsheetId: sheetIdA });
+        assert.equal(previewRes.status, 200);
+        assert.ok(previewRes.body.data.changes.some((c: string) => c.includes("[KHÓA LỊCH]") && c.includes("22/")));
+
+        // 3. Confirm sync
+        const syncRes = await request(app)
+            .post("/api/host/sheet-sync/sheet-button-sync")
+            .send({ spreadsheetId: sheetIdA });
+        assert.equal(syncRes.status, 200);
+
+        // Verify DB was locked
+        const calDay22 = calendarStore.find(
+            (c) => Number(c.listingId) === 801 && c.date === dDay22,
+        );
+        assert.ok(calDay22);
+        assert.equal(calDay22.isBlockedByHost, true);
+        assert.equal(calDay22.isAvailable, false);
+
+        // Verify Sheet cell is RED and STILL HAS THE PRICE, NOT letter "K"!
+        const cellDay22AfterLock = tab.rows.get(rDay22)?.[col801];
+        assert.deepEqual(
+            cellDay22AfterLock?.userEnteredFormat?.backgroundColorStyle?.rgbColor,
+            SHEET_COLORS.HOST_BLOCKED_RED,
+        );
+        assert.ok(
+            cellDay22AfterLock?.userEnteredValue?.numberValue === 4500000 ||
+            cellDay22AfterLock?.userEnteredValue?.stringValue === "4500000",
+            "Cell must retain its price and not be overwritten by letter K",
+        );
+        assert.notEqual(cellDay22AfterLock?.userEnteredValue?.stringValue, "K");
+
+        // 4. Host turns cell back to WHITE (re-opening the day, keeping the price)
+        fakeSheets.paintHostDay(sheetIdA, rolling[0].tabKey, 801, 22, {
+            text: "4500000",
+            bgColor: SHEET_COLORS.WHITE,
+        });
+
+        const syncUnlockRes = await request(app)
+            .post("/api/host/sheet-sync/sheet-button-sync")
+            .set(hostAAuth)
+            .send({ spreadsheetId: sheetIdA });
+        assert.equal(syncUnlockRes.status, 200);
+
+        // Verify DB was unlocked
+        const calDay22Unlocked = calendarStore.find(
+            (c) => Number(c.listingId) === 801 && c.date === dDay22,
+        );
+        assert.ok(calDay22Unlocked);
+        assert.equal(calDay22Unlocked.isBlockedByHost, false);
+        assert.equal(calDay22Unlocked.isAvailable, true);
     });
 });

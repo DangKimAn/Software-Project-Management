@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../villas/domain/entities/villa_specs.dart';
 
 /// Khối tóm tắt thông số kỹ thuật hai tầng thu gọn / mở rộng dành cho trang Chi tiết biệt thự.
@@ -27,30 +28,32 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
   @override
   Widget build(BuildContext context) {
     final specs = widget.specs;
+    // CONFLICT-RESOLVED: Kết hợp dữ liệu đa ngôn ngữ `context.l10n` từ `origin/develop` với cấu trúc `coreEntries` hỗ trợ lưới 2 cột co giãn chống tràn chữ của nhánh refactor.
+    final l10n = context.l10n;
     final coreEntries = <({IconData icon, String value, String label})>[
       if (specs.maxGuests > 0)
         (
           icon: LucideIcons.users,
-          value: '${specs.maxGuests} khách',
-          label: 'Sức chứa',
+          value: l10n.specGuestsCount(specs.maxGuests),
+          label: l10n.specCapacityLabel,
         ),
       if (specs.bedrooms > 0)
         (
           icon: LucideIcons.bed,
-          value: '${specs.bedrooms} phòng',
-          label: 'Phòng ngủ',
+          value: l10n.specBedroomsCount(specs.bedrooms),
+          label: l10n.specBedroomsLabel,
         ),
       if (specs.beds > 0)
         (
           icon: LucideIcons.bedDouble,
-          value: '${specs.beds} giường',
-          label: 'Giường',
+          value: l10n.specBedsCount(specs.beds),
+          label: l10n.specBedsLabel,
         ),
       if (specs.bathrooms > 0)
         (
           icon: LucideIcons.bath,
-          value: '${specs.bathrooms} WC',
-          label: 'Phòng tắm',
+          value: l10n.specBathsCount(specs.bathrooms),
+          label: l10n.specBathroomsLabel,
         ),
     ];
 
@@ -124,7 +127,7 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                         child: Divider(color: AppColors.borderSoft),
                       ),
                       Text(
-                        'Tiện ích nổi bật & Vị trí',
+                        l10n.specHighlightsTitle,
                         style: AppTypography.cardTitle.copyWith(fontSize: 14),
                       ),
                       const SizedBox(height: 10),
@@ -135,18 +138,18 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                             child: _buildSupportingItem(
                               LucideIcons.waves,
                               specs.hasSaltwaterPool
-                                  ? 'Hồ bơi nước mặn'
+                                  ? l10n.specSaltwaterPool
                                   : (specs.hasPrivatePool
-                                      ? 'Hồ bơi riêng'
-                                      : 'Không có hồ bơi'),
+                                      ? l10n.specPrivatePool
+                                      : l10n.specNoPool),
                             ),
                           ),
                           Expanded(
                             child: _buildSupportingItem(
                               LucideIcons.utensils,
                               specs.hasBbqKitchen
-                                  ? 'Bếp & Lò BBQ đầy đủ'
-                                  : 'Bếp cơ bản',
+                                  ? l10n.specBbqKitchen
+                                  : l10n.specBasicKitchen,
                             ),
                           ),
                         ],
@@ -158,8 +161,8 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                             child: _buildSupportingItem(
                               LucideIcons.car,
                               specs.hasParking
-                                  ? 'Chỗ đậu xe ô tô'
-                                  : 'Đậu xe tự túc',
+                                  ? l10n.specParking
+                                  : l10n.specSelfParking,
                             ),
                           ),
                           Expanded(
@@ -167,8 +170,9 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                               LucideIcons.mapPin,
                               specs.beachDistanceMeters != null &&
                                       specs.beachDistanceMeters! > 0
-                                  ? '${specs.beachDistanceMeters}m ra bãi tắm'
-                                  : 'Gần trung tâm',
+                                  ? l10n.specBeachDistance(
+                                      specs.beachDistanceMeters!)
+                                  : l10n.specNearCenter,
                             ),
                           ),
                         ],
@@ -195,11 +199,12 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // CONFLICT-RESOLVED: Bọc nhãn đa ngôn ngữ `l10n.specCollapseAction` / `l10n.specExpandAction` trong `Flexible` để không tràn dòng khi phóng chữ lớn.
                       Flexible(
                         child: Text(
                           _isExpanded
-                              ? 'Thu gọn thông số'
-                              : 'Xem thêm thông số chi tiết',
+                              ? l10n.specCollapseAction
+                              : l10n.specExpandAction,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,

@@ -128,10 +128,12 @@ class FakeCalendarAdapter implements HttpClientAdapter {
 
 class FakeFilePickerService implements HostFilePickerService {
   @override
+  // CONFLICT-RESOLVED: Đáp ứng chữ ký `pickKycDocument` hợp nhất gồm cả `imageOnly` và `source`.
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = '',
     bool imageOnly = false,
+    HostKycFileSource source = HostKycFileSource.deviceFile,
   }) async =>
       null;
   @override

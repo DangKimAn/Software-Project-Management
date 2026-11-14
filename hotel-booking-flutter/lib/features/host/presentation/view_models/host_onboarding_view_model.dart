@@ -84,8 +84,11 @@ class HostOnboardingViewModel {
 
   // Giải thuật xin quyền thiết bị, chọn tài liệu xác minh và bóc tách thông tin CCCD qua AI Vision có giới hạn thời gian.
   /// Yêu cầu cấp quyền truy cập máy ảnh hoặc thư viện tệp theo nguồn `source`.
-  Future<HostKycPermissionResult> requestPermission(HostKycFileSource source) {
-    return _permissionService.requestPermission(source);
+  Future<HostKycPermissionResult> requestPermission(
+    HostKycFileSource source, {
+    BuildContext? context,
+  }) {
+    return _permissionService.requestPermission(source, context: context);
   }
 
   /// Mở trình chọn chứng từ xác minh KYC từ thiết bị.
@@ -93,11 +96,13 @@ class HostOnboardingViewModel {
     BuildContext? context,
     String title = 'Chọn tài liệu xác minh',
     bool imageOnly = false,
+    HostKycFileSource source = HostKycFileSource.deviceFile,
   }) {
     return _picker.pickKycDocument(
       context: context,
       title: title,
       imageOnly: imageOnly,
+      source: source,
     );
   }
 

@@ -92,7 +92,9 @@ class FakeTestFilePickerService implements HostFilePickerService {
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = '',
+    // CONFLICT-RESOLVED: Đáp ứng chữ ký `pickKycDocument` hợp nhất gồm cả `imageOnly` và `source`.
     bool imageOnly = false,
+    HostKycFileSource source = HostKycFileSource.deviceFile,
   }) async {
     lastImageOnlyFlag = imageOnly;
     return nextKycFile;

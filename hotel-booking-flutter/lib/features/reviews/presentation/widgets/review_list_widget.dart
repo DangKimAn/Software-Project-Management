@@ -5,9 +5,12 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
+import '../../domain/entities/review_item.dart';
 import '../view_models/review_view_model.dart';
 
+// CONFLICT-RESOLVED: Giữ các provider đánh giá và `ReviewTranslationService` ở tầng `review_view_model.dart` (tránh gọi `Dio` trực tiếp trong Widget theo FLUTTER_RULES §2) và tái xuất cho các bên sử dụng.
 export '../view_models/review_view_model.dart';
 
 /// Danh sách hiển thị điểm trung bình, bộ lọc theo hạng sao (`1..5`) và các nhận xét của khách lưu trú.
@@ -37,10 +40,71 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
   int? _selectedRating;
   int _visibleLimit = _pageSize;
 
+  final Set<String> _translatedReviewIds = <String>{};
+  final Map<String, String> _translatedComments = <String, String>{};
+  final Map<String, String> _translatedHostReplies = <String, String>{};
+  final Set<String> _translatingReviewIds = <String>{};
+
+  Future<void> _toggleTranslation(ReviewItem review, String targetLanguage) async {
+    final reviewId = review.id;
+    if (_translatedReviewIds.contains(reviewId)) {
+      setState(() {
+        _translatedReviewIds.remove(reviewId);
+      });
+      return;
+    }
+
+    if (_translatedComments.containsKey(reviewId)) {
+      setState(() {
+        _translatedReviewIds.add(reviewId);
+      });
+      return;
+    }
+
+    setState(() {
+      _translatingReviewIds.add(reviewId);
+    });
+
+    try {
+      final translatedComment = await ReviewTranslationService.translateText(
+        review.comment,
+        targetLanguage: targetLanguage,
+      );
+      String? translatedReply;
+      if (review.hostReply != null && review.hostReply!.isNotEmpty) {
+        translatedReply = await ReviewTranslationService.translateText(
+          review.hostReply!,
+          targetLanguage: targetLanguage,
+        );
+      }
+
+      if (mounted) {
+        setState(() {
+          _translatedComments[reviewId] = translatedComment;
+          if (translatedReply != null) {
+            _translatedHostReplies[reviewId] = translatedReply;
+          }
+          _translatedReviewIds.add(reviewId);
+          _translatingReviewIds.remove(reviewId);
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _translatingReviewIds.remove(reviewId);
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // CONFLICT-RESOLVED: Hợp nhất phân trang an toàn `requiredPages` của nhánh refactor với ngữ cảnh đa ngôn ngữ `l10n` / `targetLang` từ `origin/develop`.
     final requiredPages =
         ((_visibleLimit + _apiPageLimit - 1) ~/ _apiPageLimit).clamp(1, 50);
+    final l10n = context.l10n;
+    final activeLang = context.activeLanguageCode;
+    final targetLang = activeLang == 'vi' ? 'en' : activeLang;
     final query = (
       listingId: widget.listingId,
       rating: _selectedRating,
@@ -75,7 +139,7 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
               ],
             ),
             Text(
-              '· ${widget.totalReviews} đánh giá',
+              '· ${l10n.reviewsCount(widget.totalReviews)}',
               style: AppTypography.bodyLarge.copyWith(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
@@ -90,11 +154,11 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              _buildRatingFilterChip(label: 'Tất cả', ratingValue: null),
+              _buildRatingFilterChip(label: l10n.reviewsFilterAll, ratingValue: null),
               for (final star in [5, 4, 3, 2, 1]) ...[
                 const SizedBox(width: 8),
                 _buildRatingFilterChip(
-                  label: '$star sao',
+                  label: l10n.reviewsFilterStar(star),
                   ratingValue: star,
                 ),
               ],
@@ -115,7 +179,7 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
           error: (err, _) => Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.s8),
             child: Text(
-              'Không thể tải đánh giá vào lúc này.',
+              l10n.reviewsLoadError,
               style: AppTypography.caption.copyWith(color: AppColors.textMuted),
             ),
           ),
@@ -125,8 +189,8 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.s12),
                 child: Text(
                   _selectedRating != null
-                      ? 'Chưa có đánh giá $_selectedRating sao nào cho chỗ nghỉ này.'
-                      : 'Chưa có đánh giá nào cho villa này. Hãy là vị khách đầu tiên trải nghiệm!',
+                      ? l10n.reviewsEmptyRating(_selectedRating!)
+                      : l10n.reviewsEmpty,
                   style: AppTypography.body.copyWith(
                     color: AppColors.textMuted,
                     fontStyle: FontStyle.italic,
@@ -153,7 +217,20 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                   separatorBuilder: (_, __) =>
                       const SizedBox(height: AppSpacing.s24),
                   itemBuilder: (context, index) {
+                    // CONFLICT-RESOLVED: Lấy phần tử từ `visibleReviews[index]` theo cửa sổ phân trang và gắn trạng thái bản dịch `displayComment` / `displayHostReply` từ `origin/develop`.
                     final review = visibleReviews[index];
+                    final isTranslated =
+                        _translatedReviewIds.contains(review.id);
+                    final isTranslating =
+                        _translatingReviewIds.contains(review.id);
+                    final displayComment = isTranslated &&
+                            _translatedComments.containsKey(review.id)
+                        ? _translatedComments[review.id]!
+                        : review.comment;
+                    final displayHostReply = isTranslated &&
+                            _translatedHostReplies.containsKey(review.id)
+                        ? _translatedHostReplies[review.id]!
+                        : review.hostReply;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -213,7 +290,7 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                         ),
                         const SizedBox(height: AppSpacing.s8),
                         Text(
-                          review.comment,
+                          displayComment,
                           style: AppTypography.bodyLarge.copyWith(
                             fontSize: 15,
                             height: 1.48,
@@ -221,8 +298,54 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                             color: AppColors.textPrimary,
                           ),
                         ),
-                        if (review.hostReply != null &&
-                            review.hostReply!.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: InkWell(
+                            onTap: isTranslating
+                                ? null
+                                : () => _toggleTranslation(review, targetLang),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    LucideIcons.languages,
+                                    size: 14,
+                                    color: AppColors.primary,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    isTranslating
+                                        ? l10n.reviewsTranslating
+                                        : (isTranslated
+                                            ? l10n.reviewsShowOriginal
+                                            : l10n.reviewsTranslate),
+                                    style: const TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                  if (isTranslated) ...[
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '(${l10n.reviewsTranslatedBadge})',
+                                      style: const TextStyle(
+                                        fontSize: 11.5,
+                                        color: AppColors.textSecondary,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (displayHostReply != null &&
+                            displayHostReply.isNotEmpty) ...[
                           const SizedBox(height: AppSpacing.s12),
                           Container(
                             margin: const EdgeInsets.only(left: AppSpacing.s4),
@@ -243,7 +366,7 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Phản hồi từ chủ nhà',
+                                  l10n.reviewsHostReply,
                                   style: AppTypography.caption.copyWith(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
@@ -252,7 +375,7 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  review.hostReply!,
+                                  displayHostReply,
                                   style: AppTypography.bodyMedium.copyWith(
                                     fontSize: 13.5,
                                     height: 1.45,
@@ -276,7 +399,7 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                           _visibleLimit += _pageSize;
                         });
                       },
-                      child: const Text('Xem thêm đánh giá'),
+                      child: Text(l10n.reviewsLoadMore),
                     ),
                   ),
                 ],

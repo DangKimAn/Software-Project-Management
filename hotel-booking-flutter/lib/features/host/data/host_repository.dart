@@ -1298,6 +1298,7 @@ class HostRepository {
     return raw.map(maskSensitivePayoutMap).toList();
   }
 
+  // CONFLICT-RESOLVED: Giữ cả phương thức phân trang toàn bộ lịch sử chi trả `getMyPayouts` của nhánh refactor và phương thức tạo yêu cầu rút tiền `requestPayout` từ `origin/develop`.
   // Giải thuật phân trang toàn bộ lịch sử đối soát chi trả của Host (page = 1..totalPages, limit = 50, che số tài khoản nhạy cảm):
   /// Tải toàn bộ các trang lịch sử chi trả của Chủ nhà từ `/api/host/payouts`, khử trùng lặp và che giấu số tài khoản nhạy cảm.
   Future<List<Map<String, dynamic>>> getMyPayouts({
@@ -1373,6 +1374,32 @@ class HostRepository {
     }
 
     return merged;
+  }
+
+  /// Gửi yêu cầu rút doanh thu khả dụng của Chủ nhà (`POST /api/host/payouts/request`).
+  Future<Map<String, dynamic>> requestPayout({
+    required double amount,
+    int? payoutAccountId,
+    String? notes,
+  }) async {
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/payouts/request',
+      data: {
+        'amount': amount,
+        if (payoutAccountId != null) 'payoutAccountId': payoutAccountId,
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+      },
+    );
+    if (response.data is Map<String, dynamic>) {
+      final resMap = response.data as Map<String, dynamic>;
+      if (resMap['data'] is Map<String, dynamic>) {
+        return maskSensitivePayoutMap(
+          resMap['data'] as Map<String, dynamic>,
+        );
+      }
+      return maskSensitivePayoutMap(resMap);
+    }
+    return <String, dynamic>{};
   }
 
   // ===========================================================================
@@ -1704,15 +1731,22 @@ class HostRepository {
   /// `POST /api/conversations/:conversationId/messages`
   Future<Map<String, dynamic>> sendConversationMessage(
     String conversationId,
-    String content,
-  ) async {
+    String content, {
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
+  }) async {
     final trimmed = content.trim();
-    if (trimmed.isEmpty) {
+    if (trimmed.isEmpty && (attachments == null || attachments.isEmpty)) {
       throw ArgumentError('Nội dung tin nhắn không được để trống.');
     }
     final response = await _client.dio.post<dynamic>(
       '/api/conversations/$conversationId/messages',
-      data: {'content': trimmed},
+      data: {
+        'content': trimmed,
+        'messageType': messageType,
+        if (attachments != null && attachments.isNotEmpty)
+          'attachments': attachments,
+      },
     );
     return _unwrapMap(response.data);
   }
