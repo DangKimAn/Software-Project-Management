@@ -4741,7 +4741,7 @@ abstract class AppLocalizations {
   /// No description provided for @contactVerifiedBadge.
   ///
   /// In vi, this message translates to:
-  /// **'Xác thực'**
+  /// **'Đã xác minh cấu hình'**
   String get contactVerifiedBadge;
 
   /// No description provided for @contactCallNow.

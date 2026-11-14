@@ -2746,7 +2746,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get contactHotlineTitle => 'Hotline & Zalo tư vấn';
 
   @override
-  String get contactVerifiedBadge => 'Xác thực';
+  String get contactVerifiedBadge => 'Đã xác minh cấu hình';
 
   @override
   String get contactCallNow => 'Gọi ngay';

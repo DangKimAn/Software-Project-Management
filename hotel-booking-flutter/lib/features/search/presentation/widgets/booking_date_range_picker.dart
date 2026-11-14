@@ -83,6 +83,9 @@ class BookingDateRangePicker extends StatefulWidget {
   /// Ngày tối thiểu được phép bắt đầu chọn (mặc định là hôm nay theo giờ Việt Nam).
   final BookingDate? minDate;
 
+  /// Cho phép mở rộng hiển thị 2 tháng liên tiếp cạnh nhau khi không gian ngang >= 680px.
+  final bool enableDualMonth;
+
   /// Hàm gọi lại trả về cặp `(checkIn, checkOut)` mỗi khi người dùng thay đổi lựa chọn.
   final ValueChanged<(BookingDate?, BookingDate?)> onRangeSelected;
 
@@ -94,6 +97,7 @@ class BookingDateRangePicker extends StatefulWidget {
     this.bookedDates = const {},
     this.bookedDatesIso = const {},
     this.minDate,
+    this.enableDualMonth = false,
     required this.onRangeSelected,
   });
 
@@ -256,9 +260,11 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           // Giải thuật bố cục lịch thích ứng 1 hoặc 2 tháng song song (Responsive Dual-Month Calendar):
-          // Trên màn hình rộng Desktop (>= 680px và hệ số phóng chữ <= 1.2x), hiển thị 2 tháng liên tiếp cạnh nhau
-          // giúp khách chọn nhanh các kỳ nghỉ vắt qua ranh giới tháng; thu gọn về 1 tháng trên thiết bị di động.
-          final showTwoMonths = constraints.maxWidth >= 680 && textScale <= 1.2;
+          // Khi màn hình bật chế độ hai tháng (`enableDualMonth`) trên khung nhìn rộng (>= 680px và hệ số phóng chữ <= 1.2x),
+          // hiển thị 2 tháng liên tiếp cạnh nhau giúp khách chọn nhanh kỳ nghỉ vắt tháng; mặc định giữ 1 tháng chuẩn.
+          final showTwoMonths = widget.enableDualMonth &&
+              constraints.maxWidth >= 680 &&
+              textScale <= 1.2;
           final firstMonthTitle = LocaleFormatters.formatMonthYear(
             _currentMonth.year,
             _currentMonth.month,

@@ -203,17 +203,22 @@ class _ContactScreenState extends ConsumerState<ContactScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        // Giải thuật bố cục dòng tiêu đề phụ co giãn thích ứng (Responsive Eyebrow & CTA Wrap):
+        // Chuyển sang Wrap hai đầu thay vì Row cố định để trên màn hình 320dp kèm hệ số chữ lớn (1.3x–1.6x)
+        // nhãn điều hướng tự động xuống dòng mượt mà, triệt tiêu hoàn toàn lỗi tràn ngang RenderFlex.
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: AppSpacing.xs,
+          runSpacing: 4,
           children: [
-            Expanded(
-              child: Text(
-                activeL10n.contactEyebrow,
-                style: AppTypography.caption.copyWith(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.6,
-                  color: AppColors.primary,
-                ),
+            Text(
+              activeL10n.contactEyebrow,
+              style: AppTypography.caption.copyWith(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.4,
+                color: AppColors.primary,
               ),
             ),
             TextButton.icon(
@@ -230,6 +235,8 @@ class _ContactScreenState extends ConsumerState<ContactScreen> {
               ),
               label: Text(
                 activeL10n.contactBrowseVillas,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: AppTypography.caption.copyWith(
                   fontWeight: FontWeight.w600,
                   color: AppColors.textStrong,
@@ -333,54 +340,58 @@ class _ContactScreenState extends ConsumerState<ContactScreen> {
           spacing: AppSpacing.xs,
           runSpacing: AppSpacing.xs,
           children: [
-            OutlinedButton.icon(
+            _buildQuickSupportPill(
+              icon: LucideIcons.bookOpenCheck,
+              label: activeL10n.footerLinkBookingGuide,
               onPressed: () => context.push('/ho-tro/huong-dan-dat-phong'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.textStrong,
-                minimumSize: const Size(48, 44),
-                shape: const StadiumBorder(),
-                side: const BorderSide(color: AppColors.borderSoft),
-              ),
-              icon: const Icon(
-                LucideIcons.bookOpenCheck,
-                size: 15,
-                color: AppColors.iconStrong,
-              ),
-              label: Text(activeL10n.footerLinkBookingGuide),
             ),
-            OutlinedButton.icon(
+            _buildQuickSupportPill(
+              icon: LucideIcons.shieldCheck,
+              label: activeL10n.footerLinkCancellationPolicy,
               onPressed: () => context.push('/ho-tro/chinh-sach-huy-phong'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.textStrong,
-                minimumSize: const Size(48, 44),
-                shape: const StadiumBorder(),
-                side: const BorderSide(color: AppColors.borderSoft),
-              ),
-              icon: const Icon(
-                LucideIcons.shieldCheck,
-                size: 15,
-                color: AppColors.iconStrong,
-              ),
-              label: Text(activeL10n.footerLinkCancellationPolicy),
             ),
-            OutlinedButton.icon(
+            _buildQuickSupportPill(
+              icon: LucideIcons.circleHelp,
+              label: activeL10n.faqTitle,
               onPressed: () => context.push('/ho-tro/cau-hoi-thuong-gap'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.textStrong,
-                minimumSize: const Size(48, 44),
-                shape: const StadiumBorder(),
-                side: const BorderSide(color: AppColors.borderSoft),
-              ),
-              icon: const Icon(
-                LucideIcons.circleHelp,
-                size: 15,
-                color: AppColors.iconStrong,
-              ),
-              label: Text(activeL10n.faqTitle),
             ),
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildQuickSupportPill({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return OutlinedButton(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.textStrong,
+        minimumSize: const Size(48, 44),
+        shape: const StadiumBorder(),
+        side: const BorderSide(color: AppColors.borderSoft),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 15,
+            color: AppColors.iconStrong,
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

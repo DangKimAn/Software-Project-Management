@@ -803,15 +803,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             alignment: WrapAlignment.spaceBetween,
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              Text(
-                                lookupAppLocalizations(
-                                  Locale(ref.watch(localeProvider)),
-                                ).homeApprovedVillasCountTitle(villas.length),
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF18181B),
-                                ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      ref.watch(localeProvider) == 'vi'
+                                          ? 'Danh sách chỗ nghỉ đã duyệt'
+                                          : (ref.watch(localeProvider) == 'ko'
+                                              ? '검수 완료 숙소'
+                                              : 'Verified Stays'),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF18181B),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF4F4F5),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      '${villas.length}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF52525B),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                               Text(
                                 lookupAppLocalizations(

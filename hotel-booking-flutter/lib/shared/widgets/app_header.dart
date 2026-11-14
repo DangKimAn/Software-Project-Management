@@ -296,7 +296,7 @@ class AppTopHeader extends ConsumerWidget {
                               )
                             : const SizedBox.shrink(),
                       ),
-                      if (isDesktop) ...[
+                      if (isDesktop && centerSearchTrigger == null) ...[
                         HeaderCurrencyLanguageButton(
                           isOverlayTop: isOverlayTop,
                           showCodePill: screenWidth >= 1220,

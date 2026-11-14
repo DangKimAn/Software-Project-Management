@@ -608,8 +608,8 @@ void main() {
         expect(find.byType(DailyPriceBreakdown), findsOneWidget);
         expect(find.byType(MobileSpecSummary), findsOneWidget);
         expect(find.byType(PropertySpecsRow), findsOneWidget);
-        // Out-of-scope RenderFlex overflows are captured for layout diagnostics
-        expect(capturedOverflows, isNotEmpty);
+        // Đảm bảo không còn bất kỳ lỗi tràn bố cục RenderFlex nào ở khung nhìn 320dp tỷ lệ chữ 1.3x
+        expect(capturedOverflows, isEmpty);
       },
     );
   });

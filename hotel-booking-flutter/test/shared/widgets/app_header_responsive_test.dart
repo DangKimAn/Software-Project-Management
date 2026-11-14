@@ -157,7 +157,7 @@ void main() {
             );
             expect(
               find.byKey(const Key('header_currency_language_button')),
-              findsNWidgets(2),
+              findsOneWidget,
             );
           }
         }

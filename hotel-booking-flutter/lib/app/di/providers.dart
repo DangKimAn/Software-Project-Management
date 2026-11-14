@@ -788,38 +788,50 @@ final villaFilterProvider = StateProvider<VillaFilterState>((ref) {
 
 /// Loads villas live from Backend API.
 /// Provider tải danh sách biệt thự trực tiếp từ REST API theo `villaFilterProvider` kèm hủy truy vấn cũ tự động.
+///
+/// Giải thuật giữ phiên truy vấn sống qua ranh giới bất đồng bộ (`KeepAlive In-Flight Cancellation`):
+/// Giữ `keepAliveLink` trong suốt thời gian chờ HTTP để `container.read(villaListProvider.future)` không bị `autoDispose`
+/// hủy sớm ở cuối microtask khi chưa có widget lắng nghe; chỉ gọi `cancelToken.cancel` khi bộ lọc thực sự đổi giữa chừng
+/// hoặc `ProviderContainer` bị giải phóng trước khi phản hồi hoàn tất (`!completed`).
 final villaListProvider = FutureProvider.autoDispose<List<Villa>>((ref) async {
   final repository = ref.watch(villaRepositoryProvider);
   final filter = ref.watch(villaFilterProvider);
+  final keepAliveLink = ref.keepAlive();
   final cancelToken = CancelToken();
+  var completed = false;
   ref.onDispose(() {
-    if (!cancelToken.isCancelled) {
+    if (!completed && !cancelToken.isCancelled) {
       cancelToken.cancel('Filter updated');
     }
   });
 
-  return repository.getVillas(
-    searchQuery: filter.searchQuery,
-    locationGroup: filter.locationGroup,
-    lat: filter.lat,
-    lng: filter.lng,
-    radius: filter.radius,
-    propertyType: filter.propertyType,
-    priceMin: filter.priceMin,
-    priceMax: filter.priceMax,
-    minGuests: filter.effectiveGuests > 0 ? filter.effectiveGuests : null,
-    bedrooms: filter.bedrooms,
-    beds: filter.beds,
-    bathrooms: filter.bathrooms,
-    pets: filter.pets > 0 ? true : null,
-    amenities: filter.amenities,
-    checkIn: filter.checkIn,
-    checkOut: filter.checkOut,
-    sort: filter.sort,
-    page: filter.page,
-    limit: filter.limit,
-    cancelToken: cancelToken,
-  );
+  try {
+    return await repository.getVillas(
+      searchQuery: filter.searchQuery,
+      locationGroup: filter.locationGroup,
+      lat: filter.lat,
+      lng: filter.lng,
+      radius: filter.radius,
+      propertyType: filter.propertyType,
+      priceMin: filter.priceMin,
+      priceMax: filter.priceMax,
+      minGuests: filter.effectiveGuests > 0 ? filter.effectiveGuests : null,
+      bedrooms: filter.bedrooms,
+      beds: filter.beds,
+      bathrooms: filter.bathrooms,
+      pets: filter.pets > 0 ? true : null,
+      amenities: filter.amenities,
+      checkIn: filter.checkIn,
+      checkOut: filter.checkOut,
+      sort: filter.sort,
+      page: filter.page,
+      limit: filter.limit,
+      cancelToken: cancelToken,
+    );
+  } finally {
+    completed = true;
+    keepAliveLink.close();
+  }
 });
 
 /// Loads paginated villas with pagination metadata.
@@ -828,35 +840,42 @@ final villaPaginatedProvider =
     FutureProvider.autoDispose<PaginatedResult<Villa>>((ref) async {
   final repository = ref.watch(villaRepositoryProvider);
   final filter = ref.watch(villaFilterProvider);
+  final keepAliveLink = ref.keepAlive();
   final cancelToken = CancelToken();
+  var completed = false;
   ref.onDispose(() {
-    if (!cancelToken.isCancelled) {
+    if (!completed && !cancelToken.isCancelled) {
       cancelToken.cancel('Filter updated');
     }
   });
 
-  return repository.getVillasPaginated(
-    searchQuery: filter.searchQuery,
-    locationGroup: filter.locationGroup,
-    lat: filter.lat,
-    lng: filter.lng,
-    radius: filter.radius,
-    propertyType: filter.propertyType,
-    priceMin: filter.priceMin,
-    priceMax: filter.priceMax,
-    minGuests: filter.effectiveGuests > 0 ? filter.effectiveGuests : null,
-    bedrooms: filter.bedrooms,
-    beds: filter.beds,
-    bathrooms: filter.bathrooms,
-    pets: filter.pets > 0 ? true : null,
-    amenities: filter.amenities,
-    checkIn: filter.checkIn,
-    checkOut: filter.checkOut,
-    sort: filter.sort,
-    page: filter.page,
-    limit: filter.limit,
-    cancelToken: cancelToken,
-  );
+  try {
+    return await repository.getVillasPaginated(
+      searchQuery: filter.searchQuery,
+      locationGroup: filter.locationGroup,
+      lat: filter.lat,
+      lng: filter.lng,
+      radius: filter.radius,
+      propertyType: filter.propertyType,
+      priceMin: filter.priceMin,
+      priceMax: filter.priceMax,
+      minGuests: filter.effectiveGuests > 0 ? filter.effectiveGuests : null,
+      bedrooms: filter.bedrooms,
+      beds: filter.beds,
+      bathrooms: filter.bathrooms,
+      pets: filter.pets > 0 ? true : null,
+      amenities: filter.amenities,
+      checkIn: filter.checkIn,
+      checkOut: filter.checkOut,
+      sort: filter.sort,
+      page: filter.page,
+      limit: filter.limit,
+      cancelToken: cancelToken,
+    );
+  } finally {
+    completed = true;
+    keepAliveLink.close();
+  }
 });
 
 /// Loads villa detail live from Backend API.

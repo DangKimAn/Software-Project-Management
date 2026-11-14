@@ -1119,6 +1119,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
             initialCheckIn: _checkIn,
             initialCheckOut: _checkOut,
             bookedDatesIso: villa.bookedDatesIso,
+            enableDualMonth: true,
             onRangeSelected: (range) {
               setState(() {
                 _checkIn = range.$1;
