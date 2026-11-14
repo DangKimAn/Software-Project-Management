@@ -318,36 +318,69 @@ class CouponValidationResult {
   /// Thông điệp giải thích tiếng Việt ưu tiên hiển thị trên giao diện.
   String? get displayMessage => message ?? localizeRejectionReason(reason);
 
-  /// Chuyển đổi mã nguyên nhân từ chối tiếng Anh/hệ thống `rawReason` sang câu thông báo tiếng Việt dễ hiểu.
-  static String? localizeRejectionReason(String? rawReason) {
+  /// Chuyển đổi mã nguyên nhân từ chối tiếng Anh/hệ thống `rawReason` sang câu thông báo đa ngôn ngữ (`vi`/`en`/`ko`).
+  static String? localizeRejectionReason(
+    String? rawReason, {
+    String localeCode = 'vi',
+  }) {
     if (rawReason == null || rawReason.trim().isEmpty) return null;
     final trimmed = rawReason.trim();
     final lower = trimmed.toLowerCase();
-    if (lower.contains('not found')) {
-      return 'Không tìm thấy mã giảm giá này.';
+    final lang = localeCode.toLowerCase().split(RegExp('[-_]')).first;
+
+    if (lower.contains('not found') || lower.contains('coupon is invalid')) {
+      if (lang == 'en') return 'This promo code is invalid or does not exist.';
+      if (lang == 'ko') return '유효하지 않거나 존재하지 않는 프로모션 코드입니다.';
+      return 'Mã giảm giá không hợp lệ hoặc không tồn tại.';
     }
     if (lower.contains('inactive')) {
+      if (lang == 'en') return 'This promo code is currently inactive.';
+      if (lang == 'ko') return '현재 비활성화된 프로모션 코드입니다.';
       return 'Mã giảm giá hiện đang tạm ngưng áp dụng.';
     }
     if (lower.contains('not active yet')) {
+      if (lang == 'en') return 'This promo code is not active yet.';
+      if (lang == 'ko') return '아직 적용 기간이 시작되지 않은 프로모션 코드입니다.';
       return 'Mã giảm giá chưa đến thời gian áp dụng.';
     }
-    if (lower.contains('expired')) {
+    if (lower.contains('expired') || lower.contains('expired or not active')) {
+      if (lang == 'en') return 'This promo code has expired.';
+      if (lang == 'ko') return '만료된 프로모션 코드입니다.';
       return 'Mã giảm giá đã hết hạn.';
     }
-    if (lower.contains('usage limit reached')) {
-      return 'Mã giảm giá đã hết lượt sử dụng.';
-    }
-    if (lower.contains('minordervalue')) {
-      return 'Giá trị đơn đặt phòng chưa đạt mức tối thiểu để áp dụng mã này.';
-    }
     if (lower.contains('user reached coupon usage limit')) {
+      if (lang == 'en') {
+        return 'You have reached the usage limit for this promo code.';
+      }
+      if (lang == 'ko') return '이 프로모션 코드의 개인 사용 한도를 초과했습니다.';
       return 'Bạn đã sử dụng hết số lượt cho phép của mã giảm giá này.';
     }
+    if (lower.contains('usage limit reached') ||
+        lower.contains('usage limit has been reached')) {
+      if (lang == 'en') return 'This promo code has reached its usage limit.';
+      if (lang == 'ko') return '선착순 사용 한도가 마감된 프로모션 코드입니다.';
+      return 'Mã giảm giá đã hết lượt sử dụng.';
+    }
+    if (lower.contains('minordervalue') ||
+        lower.contains('does not meet coupon minimum')) {
+      if (lang == 'en') {
+        return 'Order total does not meet the minimum value for this promo code.';
+      }
+      if (lang == 'ko') return '최소 주문 금액 조건을 충족하지 않습니다.';
+      return 'Giá trị đơn đặt phòng chưa đạt mức tối thiểu để áp dụng mã này.';
+    }
     if (lower.contains('not applicable for this listing')) {
+      if (lang == 'en') {
+        return 'This promo code does not apply to this property.';
+      }
+      if (lang == 'ko') return '이 숙소에는 적용할 수 없는 프로모션 코드입니다.';
       return 'Mã giảm giá không áp dụng cho chỗ nghỉ này.';
     }
     if (RegExp(r'^[A-Za-z0-9]+(_[A-Za-z0-9]+)+$').hasMatch(trimmed)) {
+      if (lang == 'en') {
+        return 'This promo code is not eligible for your booking.';
+      }
+      if (lang == 'ko') return '현재 예약 조건에 적용할 수 없는 프로모션 코드입니다.';
       return 'Mã giảm giá không đủ điều kiện áp dụng cho đơn đặt phòng này.';
     }
     return trimmed;
@@ -1128,8 +1161,10 @@ class Booking {
   String statusDisplayAt([DateTime? now, String? localeCode]) {
     final raw = status.trim().toLowerCase();
     final eff = effectiveStatusAt(now);
-    final isEn = localeCode == 'en' || (localeCode != null && localeCode.startsWith('en'));
-    final isKo = localeCode == 'ko' || (localeCode != null && localeCode.startsWith('ko'));
+    final isEn = localeCode == 'en' ||
+        (localeCode != null && localeCode.startsWith('en'));
+    final isKo = localeCode == 'ko' ||
+        (localeCode != null && localeCode.startsWith('ko'));
 
     if (eff == 'refunded') {
       if (isEn) return 'Refunded';
@@ -1225,8 +1260,10 @@ class Booking {
     if (rawReason == null || rawReason.trim().isEmpty) return null;
     final trimmed = rawReason.trim();
     final upper = trimmed.toUpperCase();
-    final isEn = localeCode == 'en' || (localeCode != null && localeCode.startsWith('en'));
-    final isKo = localeCode == 'ko' || (localeCode != null && localeCode.startsWith('ko'));
+    final isEn = localeCode == 'en' ||
+        (localeCode != null && localeCode.startsWith('en'));
+    final isKo = localeCode == 'ko' ||
+        (localeCode != null && localeCode.startsWith('ko'));
 
     switch (upper) {
       case 'PAYMENT_EXPIRED':

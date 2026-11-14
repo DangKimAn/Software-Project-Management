@@ -6,11 +6,17 @@ import '../../../villas/presentation/screens/villa_list_screen.dart';
 ///
 /// `/search` and `/noi-luu-tru` render the full Search & Filter screen (`SearchPage.tsx`).
 class SearchScreen extends ConsumerWidget {
+  /// Tham số truy vấn URL khởi tạo (nếu người dùng truy cập trực tiếp đường dẫn có query string).
+  final Map<String, String> initialQueryParameters;
+
   /// Khởi tạo màn hình tìm kiếm `SearchScreen`.
-  const SearchScreen({super.key});
+  const SearchScreen({
+    super.key,
+    this.initialQueryParameters = const <String, String>{},
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return const VillaListScreen();
+    return VillaListScreen(initialQueryParameters: initialQueryParameters);
   }
 }

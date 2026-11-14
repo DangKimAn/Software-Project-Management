@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -96,9 +97,12 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
     }
     if (filter.dateMode == 'flexible') {
       final label = switch (filter.flexDuration) {
-        'week' => (locale == 'en' ? '1 week' : (locale == 'ko' ? '1주일' : '1 tuần')),
-        'month' => (locale == 'en' ? '1 month' : (locale == 'ko' ? '1개월' : '1 tháng')),
-        _ => (locale == 'en' ? 'Weekend' : (locale == 'ko' ? '주말' : 'Cuối tuần')),
+        'week' =>
+          (locale == 'en' ? '1 week' : (locale == 'ko' ? '1주일' : '1 tuần')),
+        'month' =>
+          (locale == 'en' ? '1 month' : (locale == 'ko' ? '1개월' : '1 tháng')),
+        _ =>
+          (locale == 'en' ? 'Weekend' : (locale == 'ko' ? '주말' : 'Cuối tuần')),
       };
       if (locale == 'en') return 'Flexible ($label)';
       if (locale == 'ko') return '유연한 일정 ($label)';
@@ -147,9 +151,12 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
     }
     if (filter.dateMode == 'flexible') {
       final label = switch (filter.flexDuration) {
-        'week' => (locale == 'en' ? '1 week' : (locale == 'ko' ? '1주일' : '1 tuần')),
-        'month' => (locale == 'en' ? '1 month' : (locale == 'ko' ? '1개월' : '1 tháng')),
-        _ => (locale == 'en' ? 'Weekend' : (locale == 'ko' ? '주말' : 'Cuối tuần')),
+        'week' =>
+          (locale == 'en' ? '1 week' : (locale == 'ko' ? '1주일' : '1 tuần')),
+        'month' =>
+          (locale == 'en' ? '1 month' : (locale == 'ko' ? '1개월' : '1 tháng')),
+        _ =>
+          (locale == 'en' ? 'Weekend' : (locale == 'ko' ? '주말' : 'Cuối tuần')),
       };
       if (locale == 'en') return 'Flexible • $label';
       if (locale == 'ko') return '유연한 일정 • $label';
@@ -618,6 +625,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
   bool _selectingCheckOut = false;
   late int _calendarMonth;
   late int _calendarYear;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -634,6 +642,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _queryCtrl.dispose();
     super.dispose();
   }
@@ -647,6 +656,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
   }
 
   void _submitSearch() {
+    _searchDebounce?.cancel();
     final q = _queryCtrl.text.trim();
     if (q.isNotEmpty) {
       ref.read(searchHistoryProvider.notifier).addTerm(q);
@@ -660,7 +670,8 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     widget.onSubmitted();
   }
 
-  String? _activeLocationBadge(VillaFilterState filter, {String locale = 'vi'}) {
+  String? _activeLocationBadge(VillaFilterState filter,
+      {String locale = 'vi'}) {
     if (filter.locationGroup != null && filter.locationGroup!.isNotEmpty) {
       final match = VungTauMapConstants.findLocationGroup(filter.locationGroup);
       if (match != null) return match.label;
@@ -830,23 +841,17 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
 
     final tabs = [
       (
-        label: locale == 'vi'
-            ? 'Địa điểm'
-            : (locale == 'ko' ? '여행지' : 'Where'),
+        label: locale == 'vi' ? 'Địa điểm' : (locale == 'ko' ? '여행지' : 'Where'),
         icon: LucideIcons.mapPin,
         hasValue: locBadge != null,
       ),
       (
-        label: locale == 'vi'
-            ? 'Thời gian'
-            : (locale == 'ko' ? '날짜' : 'Dates'),
+        label: locale == 'vi' ? 'Thời gian' : (locale == 'ko' ? '날짜' : 'Dates'),
         icon: LucideIcons.calendar,
         hasValue: dateBadge != null,
       ),
       (
-        label: locale == 'vi'
-            ? 'Khách'
-            : (locale == 'ko' ? '게스트' : 'Guests'),
+        label: locale == 'vi' ? 'Khách' : (locale == 'ko' ? '게스트' : 'Guests'),
         icon: LucideIcons.users,
         hasValue: guestBadge != null,
       ),
@@ -1372,13 +1377,19 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
           ),
           onChanged: (val) {
             setState(() {});
-            ref.read(villaFilterProvider.notifier).update(
-                  (s) => s.copyWith(
-                    searchQuery: val,
-                    clearLocationGroup: val.trim().isNotEmpty,
-                    page: 1,
-                  ),
-                );
+            // Giải thuật trì hoãn gõ từ khóa tìm kiếm (Search Input Debouncing 250ms):
+            // Hủy bộ hẹn giờ cũ khi người dùng gõ liên tiếp nhằm giảm truy vấn trung gian và tránh nhấp nháy danh sách.
+            _searchDebounce?.cancel();
+            _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+              if (!mounted) return;
+              ref.read(villaFilterProvider.notifier).update(
+                    (s) => s.copyWith(
+                      searchQuery: val,
+                      clearLocationGroup: val.trim().isNotEmpty,
+                      page: 1,
+                    ),
+                  );
+            });
           },
         ),
         if (trimmedQuery.isNotEmpty) ...[
@@ -1502,7 +1513,19 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                     (s) => s.copyWith(
                       lat: lat,
                       lng: lng,
-                      radius: VungTauMapConstants.defaultRadiusMeters,
+                      radius:
+                          s.radius ?? VungTauMapConstants.defaultRadiusMeters,
+                      clearLocationGroup: true,
+                      page: 1,
+                    ),
+                  );
+            },
+            onRadiusChanged: (radius) {
+              ref.read(villaFilterProvider.notifier).update(
+                    (s) => s.copyWith(
+                      lat: s.lat ?? VungTauMapConstants.defaultLat,
+                      lng: s.lng ?? VungTauMapConstants.defaultLng,
+                      radius: radius,
                       clearLocationGroup: true,
                       page: 1,
                     ),
@@ -2005,33 +2028,40 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
 
         if (mode == 'dates') ...[
           // Quick 1-tap stay presets
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildPresetChip(
-                label: 'Đêm mai',
-                selected: filter.checkIn == today.addDays(1) &&
-                    filter.checkOut == today.addDays(2),
-                onTap: () =>
-                    _applyQuickStay(today.addDays(1), today.addDays(2)),
-              ),
-              _buildPresetChip(
-                label: 'Cuối tuần này',
-                selected: filter.checkIn == upcomingSat &&
-                    filter.checkOut == upcomingSat.addDays(1),
-                onTap: () =>
-                    _applyQuickStay(upcomingSat, upcomingSat.addDays(1)),
-              ),
-              if (!upcomingFri.isBefore(today))
-                _buildPresetChip(
-                  label: 'Thứ 6 – CN (2 đêm)',
-                  selected: filter.checkIn == upcomingFri &&
-                      filter.checkOut == upcomingSat.addDays(1),
-                  onTap: () =>
-                      _applyQuickStay(upcomingFri, upcomingSat.addDays(1)),
-                ),
-            ],
+          // Giải thuật xác định kỳ nghỉ 2 đêm cho nút chọn nhanh 'Cuối tuần này':
+          // Nếu Thứ Sáu chưa qua thì chọn Thứ Sáu -> Chủ Nhật (2 đêm), nếu đã sang Thứ Bảy/Chủ Nhật thì chọn từ Thứ Bảy/hôm nay + 2 đêm.
+          Builder(
+            builder: (context) {
+              final weekendStart =
+                  !upcomingFri.isBefore(today) ? upcomingFri : upcomingSat;
+              final weekendEnd = weekendStart.addDays(2);
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildPresetChip(
+                    label: 'Đêm mai',
+                    selected: filter.checkIn == today.addDays(1) &&
+                        filter.checkOut == today.addDays(2),
+                    onTap: () =>
+                        _applyQuickStay(today.addDays(1), today.addDays(2)),
+                  ),
+                  _buildPresetChip(
+                    label: 'Cuối tuần này',
+                    selected: filter.checkIn == weekendStart &&
+                        filter.checkOut == weekendEnd,
+                    onTap: () => _applyQuickStay(weekendStart, weekendEnd),
+                  ),
+                  _buildPresetChip(
+                    label: 'Thứ 7 – Thứ 2 (2 đêm)',
+                    selected: filter.checkIn == upcomingSat &&
+                        filter.checkOut == upcomingSat.addDays(2),
+                    onTap: () =>
+                        _applyQuickStay(upcomingSat, upcomingSat.addDays(2)),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 12),
 
@@ -2167,102 +2197,178 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: AppColors.borderSoft),
             ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: LayoutBuilder(
+              builder: (context, calConstraints) {
+                // Giải thuật hiển thị lịch kép 2 tháng liên tiếp trên khung tìm kiếm rộng (>= 640px):
+                // Tính tháng kế tiếp qua DateTime(_calendarYear, _calendarMonth + 1, 1) để tự động chuyển năm khi sang tháng 1.
+                final showDualMonths =
+                    calConstraints.maxWidth >= 640 && textScale <= 1.2;
+                final nextMonthDate =
+                    DateTime(_calendarYear, _calendarMonth + 1, 1);
+                void handleDaySelected(BookingDate date) {
+                  final currentIn = filter.checkIn;
+                  if (!_selectingCheckOut ||
+                      currentIn == null ||
+                      !date.isAfter(currentIn)) {
+                    ref.read(villaFilterProvider.notifier).update(
+                          (s) => s.copyWith(
+                            checkIn: date,
+                            checkOut: date.addDays(1),
+                            page: 1,
+                          ),
+                        );
+                    setState(() => _selectingCheckOut = true);
+                  } else {
+                    ref.read(villaFilterProvider.notifier).update(
+                          (s) => s.copyWith(
+                            checkOut: date,
+                            page: 1,
+                          ),
+                        );
+                    setState(() => _selectingCheckOut = false);
+                  }
+                }
+
+                return Column(
                   children: [
-                    Semantics(
-                      button: true,
-                      label: context.l10n.calendarPrevMonth,
-                      child: InkWell(
-                        onTap: () => _stepCalendarMonth(-1),
-                        borderRadius: BorderRadius.circular(999),
-                        child: const SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: Center(
-                            child: Icon(
-                              LucideIcons.chevronLeft,
-                              size: 18,
-                              color: AppColors.iconStrong,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Semantics(
+                          button: true,
+                          label: context.l10n.calendarPrevMonth,
+                          child: InkWell(
+                            onTap: () => _stepCalendarMonth(-1),
+                            borderRadius: BorderRadius.circular(999),
+                            child: const SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: Center(
+                                child: Icon(
+                                  LucideIcons.chevronLeft,
+                                  size: 18,
+                                  color: AppColors.iconStrong,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                    Flexible(
-                      child: Text(
-                        LocaleFormatters.formatMonthYear(
-                          _calendarYear,
-                          _calendarMonth,
-                          localeCode: context.activeLanguageCode,
-                          includeComma: false,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    Semantics(
-                      button: true,
-                      label: context.l10n.calendarNextMonth,
-                      child: InkWell(
-                        onTap: () => _stepCalendarMonth(1),
-                        borderRadius: BorderRadius.circular(999),
-                        child: const SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: Center(
-                            child: Icon(
-                              LucideIcons.chevronRight,
-                              size: 18,
-                              color: AppColors.iconStrong,
+                        if (showDualMonths) ...[
+                          Expanded(
+                            child: Text(
+                              LocaleFormatters.formatMonthYear(
+                                _calendarYear,
+                                _calendarMonth,
+                                localeCode: context.activeLanguageCode,
+                                includeComma: false,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            child: Text(
+                              LocaleFormatters.formatMonthYear(
+                                nextMonthDate.year,
+                                nextMonthDate.month,
+                                localeCode: context.activeLanguageCode,
+                                includeComma: false,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ] else
+                          Flexible(
+                            child: Text(
+                              LocaleFormatters.formatMonthYear(
+                                _calendarYear,
+                                _calendarMonth,
+                                localeCode: context.activeLanguageCode,
+                                includeComma: false,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        Semantics(
+                          button: true,
+                          label: context.l10n.calendarNextMonth,
+                          child: InkWell(
+                            onTap: () => _stepCalendarMonth(1),
+                            borderRadius: BorderRadius.circular(999),
+                            child: const SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: Center(
+                                child: Icon(
+                                  LucideIcons.chevronRight,
+                                  size: 18,
+                                  color: AppColors.iconStrong,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    MonthInSwitcher(
+                      monthKey: '$_calendarYear-$_calendarMonth',
+                      child: showDualMonths
+                          ? Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _SimpleMonthGrid(
+                                    year: _calendarYear,
+                                    month: _calendarMonth,
+                                    checkIn: filter.checkIn,
+                                    checkOut: filter.checkOut,
+                                    onDayTapped: handleDaySelected,
+                                  ),
+                                ),
+                                const SizedBox(width: 20),
+                                Expanded(
+                                  child: _SimpleMonthGrid(
+                                    year: nextMonthDate.year,
+                                    month: nextMonthDate.month,
+                                    checkIn: filter.checkIn,
+                                    checkOut: filter.checkOut,
+                                    onDayTapped: handleDaySelected,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : _SimpleMonthGrid(
+                              year: _calendarYear,
+                              month: _calendarMonth,
+                              checkIn: filter.checkIn,
+                              checkOut: filter.checkOut,
+                              onDayTapped: handleDaySelected,
+                            ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 6),
-                MonthInSwitcher(
-                  monthKey: '$_calendarYear-$_calendarMonth',
-                  child: _SimpleMonthGrid(
-                    year: _calendarYear,
-                    month: _calendarMonth,
-                    checkIn: filter.checkIn,
-                    checkOut: filter.checkOut,
-                    onDayTapped: (date) {
-                      final currentIn = filter.checkIn;
-                      if (!_selectingCheckOut ||
-                          currentIn == null ||
-                          !date.isAfter(currentIn)) {
-                        ref.read(villaFilterProvider.notifier).update(
-                              (s) => s.copyWith(
-                                checkIn: date,
-                                checkOut: date.addDays(1),
-                                page: 1,
-                              ),
-                            );
-                        setState(() => _selectingCheckOut = true);
-                      } else {
-                        ref.read(villaFilterProvider.notifier).update(
-                              (s) => s.copyWith(
-                                checkOut: date,
-                                page: 1,
-                              ),
-                            );
-                        setState(() => _selectingCheckOut = false);
-                      }
-                    },
-                  ),
-                ),
-              ],
+                );
+              },
             ),
           ),
         ] else ...[

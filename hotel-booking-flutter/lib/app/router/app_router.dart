@@ -321,28 +321,36 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/villas',
         pageBuilder: (context, state) => _buildSlideTransitionPage(
           state: state,
-          child: const VillaListScreen(),
+          child: VillaListScreen(
+            initialQueryParameters: state.uri.queryParameters,
+          ),
         ),
       ),
       GoRoute(
         path: '/search',
         pageBuilder: (context, state) => _buildSlideTransitionPage(
           state: state,
-          child: const SearchScreen(),
+          child: SearchScreen(
+            initialQueryParameters: state.uri.queryParameters,
+          ),
         ),
       ),
       GoRoute(
         path: '/noi-luu-tru',
         pageBuilder: (context, state) => _buildSlideTransitionPage(
           state: state,
-          child: const SearchScreen(),
+          child: SearchScreen(
+            initialQueryParameters: state.uri.queryParameters,
+          ),
         ),
       ),
       GoRoute(
         path: '/tim-kiem',
         pageBuilder: (context, state) => _buildSlideTransitionPage(
           state: state,
-          child: const SearchScreen(),
+          child: SearchScreen(
+            initialQueryParameters: state.uri.queryParameters,
+          ),
         ),
       ),
       GoRoute(

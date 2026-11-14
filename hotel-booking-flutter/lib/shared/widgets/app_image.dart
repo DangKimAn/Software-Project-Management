@@ -16,6 +16,7 @@ class AppImage extends StatelessWidget {
   final double? height;
   final Alignment alignment;
   final BorderRadius? borderRadius;
+  final Widget? errorWidget;
 
   const AppImage({
     super.key,
@@ -26,6 +27,7 @@ class AppImage extends StatelessWidget {
     this.height,
     this.alignment = Alignment.center,
     this.borderRadius,
+    this.errorWidget,
   });
 
   static const List<String> _bundledAssetFiles = [
@@ -120,7 +122,7 @@ class AppImage extends StatelessWidget {
             : null;
 
     if (raw.isEmpty) {
-      content = _buildPlaceholder();
+      content = errorWidget ?? _buildPlaceholder();
     } else {
       final assetPath = resolveLocalAsset(raw);
       if (assetPath != null) {
@@ -131,12 +133,12 @@ class AppImage extends StatelessWidget {
           cacheWidth: targetCacheWidth,
           fit: fit,
           alignment: alignment,
-          errorBuilder: (_, __, ___) => _buildPlaceholder(),
+          errorBuilder: (_, __, ___) => errorWidget ?? _buildPlaceholder(),
         );
       } else {
         final resolvedUrl = resolveNetworkUrl(raw);
         if (!UrlSecurityValidator.isSafeUploadOrMediaUrl(resolvedUrl)) {
-          content = _buildPlaceholder();
+          content = errorWidget ?? _buildPlaceholder();
         } else {
           content = Image.network(
             resolvedUrl,
@@ -153,7 +155,7 @@ class AppImage extends StatelessWidget {
                 color: AppColors.surfaceMuted,
               );
             },
-            errorBuilder: (_, __, ___) => _buildPlaceholder(),
+            errorBuilder: (_, __, ___) => errorWidget ?? _buildPlaceholder(),
           );
         }
       }

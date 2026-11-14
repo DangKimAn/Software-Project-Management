@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -239,6 +240,7 @@ class _FakeVillaRepository implements VillaRepository {
     String? sort,
     int page = 1,
     int limit = 20,
+    CancelToken? cancelToken,
   }) async {
     getVillasCalls += 1;
     return villas;
@@ -265,6 +267,7 @@ class _FakeVillaRepository implements VillaRepository {
     String? sort,
     int page = 1,
     int limit = 12,
+    CancelToken? cancelToken,
   }) async {
     getVillasCalls += 1;
     return PaginatedResult<Villa>(items: villas);

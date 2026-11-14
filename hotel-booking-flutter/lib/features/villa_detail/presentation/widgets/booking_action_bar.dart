@@ -35,6 +35,12 @@ class BookingActionBar extends StatelessWidget {
   /// Hàm gọi lại dự phòng khi liên hệ qua tổng đài điện thoại.
   final VoidCallback? onCallHotline;
 
+  /// Vô hiệu hóa nút đặt phòng chính (ví dụ đang gửi đơn hoặc chủ nhà xem căn của chính mình).
+  final bool isDisabled;
+
+  /// Nhãn thay thế trên nút đặt phòng khi ở trạng thái `isDisabled`.
+  final String? disabledLabel;
+
   /// Khởi tạo thanh hành động đặt phòng `BookingActionBar`.
   const BookingActionBar({
     super.key,
@@ -45,6 +51,8 @@ class BookingActionBar extends StatelessWidget {
     this.onInquireZalo,
     this.onMessageHost,
     this.onCallHotline,
+    this.isDisabled = false,
+    this.disabledLabel,
   });
 
   @override
@@ -108,26 +116,30 @@ class BookingActionBar extends StatelessWidget {
               Expanded(
                 flex: 5,
                 child: AppButton(
-                  text: onBookNow != null
-                      ? (villa.instantBook
-                          ? context.l10n.ctaBookInstant
-                          : context.l10n.ctaRequestBooking)
-                      : context.l10n.ctaBookNow,
-                  onPressed: onBookNow ??
-                      onInquireZalo ??
-                      () {
-                        final msg = ContactService.buildZaloInquiryMessage(
-                          villaName: villa.name,
-                          villaCode: villa.code,
-                        );
-                        ContactService.openZaloInquiry(messageText: msg);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(context.l10n.ctaZaloCopied),
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
-                      },
+                  text: isDisabled
+                      ? (disabledLabel ?? context.l10n.ctaBookNow)
+                      : (onBookNow != null
+                          ? (villa.instantBook
+                              ? context.l10n.ctaBookInstant
+                              : context.l10n.ctaRequestBooking)
+                          : context.l10n.ctaBookNow),
+                  onPressed: isDisabled
+                      ? null
+                      : (onBookNow ??
+                          onInquireZalo ??
+                          () {
+                            final msg = ContactService.buildZaloInquiryMessage(
+                              villaName: villa.name,
+                              villaCode: villa.code,
+                            );
+                            ContactService.openZaloInquiry(messageText: msg);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(context.l10n.ctaZaloCopied),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          }),
                 ),
               ),
             ],

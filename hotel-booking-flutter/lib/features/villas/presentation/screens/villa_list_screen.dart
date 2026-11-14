@@ -20,8 +20,14 @@ import '../widgets/property_card.dart';
 ///
 /// Complete port of `Source goc/frontend/src/views/pages/Search/SearchPage.tsx`.
 class VillaListScreen extends ConsumerStatefulWidget {
+  /// Tham số truy vấn URL khởi tạo khi mở trực tiếp trang tìm kiếm có bộ lọc trên đường dẫn.
+  final Map<String, String> initialQueryParameters;
+
   /// Khởi tạo màn hình danh sách biệt thự `VillaListScreen`.
-  const VillaListScreen({super.key});
+  const VillaListScreen({
+    super.key,
+    this.initialQueryParameters = const <String, String>{},
+  });
 
   @override
   ConsumerState<VillaListScreen> createState() => _VillaListScreenState();
@@ -32,6 +38,7 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
   late final ScrollVisibilityTracker _scrollTracker;
   bool _isHeaderVisible = true;
   bool _showInlineMap = false;
+  bool _hydratedFromUrl = false;
 
   @override
   void initState() {
@@ -44,6 +51,42 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
       },
     );
     _scrollController.addListener(_onScroll);
+    if (widget.initialQueryParameters.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _hydratedFromUrl) return;
+        _hydratedFromUrl = true;
+        final next = VillaFilterState.fromQueryParameters(
+          widget.initialQueryParameters,
+          base: ref.read(villaFilterProvider),
+        );
+        ref.read(villaFilterProvider.notifier).state = next;
+        if (next.lat != null && next.lng != null) {
+          setState(() => _showInlineMap = true);
+        }
+      });
+    }
+  }
+
+  /// Giải thuật đồng bộ hai chiều trạng thái bộ lọc với thanh địa chỉ trình duyệt (`URL Query Sync`):
+  /// Chỉ cập nhật `context.replace(...)` khi tập tham số mới khác với query hiện tại trên `GoRouterState`,
+  /// giúp người dùng F5 hoặc sao chép liên kết tìm kiếm đều giữ nguyên mọi tiêu chí lọc và phân trang.
+  void _syncFilterToUrl(VillaFilterState next) {
+    try {
+      final router = GoRouter.maybeOf(context);
+      if (router == null) return;
+      final currentUri = GoRouterState.of(context).uri;
+      final path = currentUri.path.isNotEmpty ? currentUri.path : '/tim-kiem';
+      final nextParams = next.toQueryParameters();
+      final nextUri = Uri(
+        path: path,
+        queryParameters: nextParams.isEmpty ? null : nextParams,
+      );
+      if (currentUri.toString() != nextUri.toString()) {
+        Router.neglect(context, () => router.replace<void>(nextUri.toString()));
+      }
+    } catch (_) {
+      // Bỏ qua trong môi trường kiểm thử widget không gắn GoRouterState.
+    }
   }
 
   void _onScroll() {
@@ -63,6 +106,11 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<VillaFilterState>(villaFilterProvider, (prev, next) {
+      if (prev != next) {
+        _syncFilterToUrl(next);
+      }
+    });
     final paginatedAsync = ref.watch(villaPaginatedProvider);
     final filter = ref.watch(villaFilterProvider);
     final favorites = ref.watch(favoritesProvider);
@@ -177,8 +225,24 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                           (s) => s.copyWith(
                                             lat: lat,
                                             lng: lng,
-                                            radius: VungTauMapConstants
-                                                .defaultRadiusMeters,
+                                            radius: s.radius ??
+                                                VungTauMapConstants
+                                                    .defaultRadiusMeters,
+                                            clearLocationGroup: true,
+                                            page: 1,
+                                          ),
+                                        );
+                                  },
+                                  onRadiusChanged: (radius) {
+                                    ref
+                                        .read(villaFilterProvider.notifier)
+                                        .update(
+                                          (s) => s.copyWith(
+                                            lat: s.lat ??
+                                                VungTauMapConstants.defaultLat,
+                                            lng: s.lng ??
+                                                VungTauMapConstants.defaultLng,
+                                            radius: radius,
                                             clearLocationGroup: true,
                                             page: 1,
                                           ),
@@ -271,8 +335,8 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                                 child: PropertyCard(
                                                   villa: villa,
                                                   isFavorite: isFav,
-                                                  onFavoriteToggle: () {
-                                                    ref
+                                                  onFavoriteToggle: () async {
+                                                    final err = await ref
                                                         .read(
                                                           favoritesProvider
                                                               .notifier,
@@ -280,6 +344,16 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                                         .toggleFavorite(
                                                           villa.id,
                                                         );
+                                                    if (err != null &&
+                                                        context.mounted) {
+                                                      ScaffoldMessenger.of(
+                                                        context,
+                                                      ).showSnackBar(
+                                                        SnackBar(
+                                                          content: Text(err),
+                                                        ),
+                                                      );
+                                                    }
                                                   },
                                                   onTap: () => context.push(
                                                     '/villa/${villa.id}',

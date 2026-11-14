@@ -957,11 +957,14 @@ const List<VungTauWard> kVungTauWards = [
 ];
 
 /// Kiểm tra tọa độ địa lý (`latitude`, `longitude`) có nằm trong khung giới hạn lãnh thổ Vũng Tàu hay không.
+///
+/// Giải thuật kiểm định hộp biên địa lý đồng nhất với `VUNG_TAU_MAP_BOUNDS` trên máy chủ (`10.28..10.50` Bắc, `107.00..107.26` Đông):
+/// Bao phủ đầy đủ từ Mũi Nghinh Phong - Bãi Sau tới Xã Long Sơn và trục ven biển Chí Linh - Cửa Lấp.
 bool isWithinVungTauBounds(double latitude, double longitude) {
-  return latitude >= 10.30 &&
-      latitude <= 10.48 &&
-      longitude >= 106.98 &&
-      longitude <= 107.20;
+  return latitude >= 10.28 &&
+      latitude <= 10.50 &&
+      longitude >= 107.00 &&
+      longitude <= 107.26;
 }
 
 /// Danh sách mốc giờ cách nhau mỗi 30 phút dùng cho cấu hình giờ nhận phòng và trả phòng.

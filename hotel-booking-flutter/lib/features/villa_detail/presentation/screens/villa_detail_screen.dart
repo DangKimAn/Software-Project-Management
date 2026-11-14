@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/date/booking_date.dart';
+import '../../../../core/errors/app_failure.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../../shared/animations/animated_heart_button.dart';
@@ -18,6 +20,8 @@ import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../../reviews/presentation/widgets/review_list_widget.dart';
 import '../../../search/presentation/widgets/booking_date_range_picker.dart';
+import '../../../trips/domain/entities/booking.dart';
+import '../../../villas/domain/entities/nightly_price.dart';
 import '../../../villas/domain/entities/villa.dart';
 import '../view_models/villa_detail_view_model.dart';
 import '../../../villas/presentation/widgets/property_card.dart';
@@ -64,16 +68,130 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
   bool _isValidatingCoupon = false;
   bool _isSubmittingBooking = false;
   String? _recordedVillaId;
+  bool _hasCustomSelectedDates = false;
+  bool _didAutoAdjustInitialDates = false;
+  String? _pendingAutoCouponCode;
 
   @override
   void initState() {
     super.initState();
     final filter = ref.read(villaFilterProvider);
     final today = BookingDate.todayVn();
+    _hasCustomSelectedDates = filter.checkIn != null && filter.checkOut != null;
     _checkIn = filter.checkIn ?? today.addDays(1);
     _checkOut = filter.checkOut ?? today.addDays(3);
     if (filter.effectiveGuests > 0) {
       _guestsCount = filter.effectiveGuests;
+    }
+
+    // Giải thuật khôi phục ý định đặt phòng sau đăng nhập (Post-Login Pending Booking Intent Hydration):
+    // Nếu kho lưu trữ cục bộ có bản ghi `PendingBookingIntent` khớp `widget.villaId`, tự động điền lại
+    // ngày nhận/trả, số lượng khách, mã ưu đãi và yêu cầu đặc biệt rồi xóa bản ghi tạm để tránh lặp lại.
+    final pendingIntent =
+        ref.read(villaDetailViewModelProvider).getPendingBookingIntent();
+    if (pendingIntent != null &&
+        pendingIntent['listingId']?.toString() == widget.villaId) {
+      final restoredIn =
+          BookingDate.tryParse(pendingIntent['checkInDate']?.toString());
+      final restoredOut =
+          BookingDate.tryParse(pendingIntent['checkOutDate']?.toString());
+      if (restoredIn != null &&
+          restoredOut != null &&
+          restoredOut.isAfter(restoredIn)) {
+        _checkIn = restoredIn;
+        _checkOut = restoredOut;
+        _hasCustomSelectedDates = true;
+      }
+      final restoredGuests = (pendingIntent['guestsCount'] as num?)?.toInt();
+      if (restoredGuests != null && restoredGuests > 0) {
+        _guestsCount = restoredGuests;
+      }
+      final restoredCoupon = pendingIntent['couponCode']?.toString().trim();
+      if (restoredCoupon != null && restoredCoupon.isNotEmpty) {
+        _couponCtrl.text = restoredCoupon.toUpperCase();
+        _pendingAutoCouponCode = restoredCoupon.toUpperCase();
+      }
+      final restoredNotes = pendingIntent['specialRequests']?.toString().trim();
+      if (restoredNotes != null && restoredNotes.isNotEmpty) {
+        _specialRequestsCtrl.text = restoredNotes;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(villaDetailViewModelProvider).clearPendingBookingIntent();
+        }
+      });
+    }
+  }
+
+  /// Giải thuật dời tự động khoảng ngày mặc định qua các đêm đã kín phòng (`Auto-Shift Available Stay Window`):
+  /// Khi khách mở trang chi tiết chưa tự chọn ngày và khoảng mặc định `today + 1 .. today + 3` đụng phải
+  /// `villa.bookedDatesIso`, quét tịnh tiến tối đa 120 ngày tiếp theo để tìm cửa sổ `desiredNights` liên tiếp đầu tiên còn trống.
+  void _ensureInitialDatesAvailable(Villa villa) {
+    if (_didAutoAdjustInitialDates) return;
+    _didAutoAdjustInitialDates = true;
+    if (_hasCustomSelectedDates || villa.bookedDatesIso.isEmpty) return;
+
+    final currentIn = _checkIn;
+    final currentOut = _checkOut;
+    if (currentIn == null || currentOut == null) return;
+
+    final bookedSet = <BookingDate>{
+      for (final iso in villa.bookedDatesIso)
+        if (BookingDate.tryParse(iso) != null) BookingDate.parse(iso),
+    };
+    if (bookedSet.isEmpty) return;
+
+    final desiredNights =
+        currentIn.differenceInNights(currentOut).clamp(villa.minNights, 30);
+    if (BookingDate.isRangeAvailable(
+      checkIn: currentIn,
+      checkOut: currentIn.addDays(desiredNights),
+      bookedNights: bookedSet,
+    )) {
+      return;
+    }
+
+    final startScan = BookingDate.todayVn().addDays(1);
+    for (int offset = 0; offset <= 120; offset++) {
+      final candidateIn = startScan.addDays(offset);
+      final candidateOut = candidateIn.addDays(desiredNights);
+      if (BookingDate.isRangeAvailable(
+        checkIn: candidateIn,
+        checkOut: candidateOut,
+        bookedNights: bookedSet,
+      )) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(() {
+            _checkIn = candidateIn;
+            _checkOut = candidateOut;
+          });
+        });
+        break;
+      }
+    }
+  }
+
+  void _clearCouponState({bool clearInput = false}) {
+    setState(() {
+      if (clearInput) {
+        _couponCtrl.clear();
+      }
+      _couponDiscountVnd = 0;
+      _appliedCouponCode = null;
+      _couponMessage = null;
+    });
+  }
+
+  void _handleBookingParamsMutated(Villa villa) {
+    if (_appliedCouponCode != null && _couponCtrl.text.trim().isNotEmpty) {
+      _applyCoupon(villa);
+    } else if (_couponMessage != null || _couponDiscountVnd > 0) {
+      setState(() {
+        _couponDiscountVnd = 0;
+        _appliedCouponCode = null;
+        _couponMessage = null;
+      });
     }
   }
 
@@ -98,21 +216,41 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     int serviceFee,
     int discount,
     int finalTotal,
-  }) _calculatePricing(Villa villa) {
+  }) _calculatePricing(
+    Villa villa, {
+    List<NightlyPrice>? nightlyPrices,
+    int? couponDiscountOverride,
+  }) {
     return VillaDetailPricingCalculator.calculatePricing(
       villa: villa,
       checkIn: _checkIn,
       checkOut: _checkOut,
       guestsCount: _guestsCount,
-      couponDiscountVnd: _couponDiscountVnd,
+      couponDiscountVnd: couponDiscountOverride ?? _couponDiscountVnd,
+      nightlyPrices: nightlyPrices,
     );
   }
 
-  /// Đối soát mã ưu đãi người dùng nhập với máy chủ dựa trên khoảng ngày lưu trú, số khách và tiền phòng tạm tính.
-  Future<void> _applyCoupon(Villa villa) async {
+  /// Đối soát mã ưu đãi người dùng nhập với máy chủ dựa trên khoảng ngày lưu trú, số khách và tổng tạm tính trước giảm giá.
+  Future<void> _applyCoupon(
+    Villa villa, {
+    List<NightlyPrice>? nightlyPrices,
+  }) async {
     final code = _couponCtrl.text.trim().toUpperCase();
     if (code.isEmpty || _checkIn == null || _checkOut == null) return;
-    final pricing = _calculatePricing(villa);
+    final pricing = _calculatePricing(
+      villa,
+      nightlyPrices: nightlyPrices,
+      couponDiscountOverride: 0,
+    );
+    // Giải thuật đồng bộ cơ sở tính mã giảm giá với `booking-pricing.service.ts` trên máy chủ:
+    // Gửi tổng gộp trước giảm giá (`preDiscountTotal = roomSubtotal + extraGuestTotal + cleaningFee + serviceFee`)
+    // để mức chiết khấu phần trăm (%) trên giao diện khớp tuyệt đối tới từng đồng VNĐ với đơn tạo thực tế.
+    final preDiscountTotal = pricing.roomSubtotal +
+        pricing.extraGuestTotal +
+        pricing.cleaningFee +
+        pricing.serviceFee;
+    final localeCode = context.activeLanguageCode;
 
     setState(() {
       _isValidatingCoupon = true;
@@ -126,7 +264,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
             checkInDate: _checkIn!.toIsoDate(),
             checkOutDate: _checkOut!.toIsoDate(),
             guestsCount: _guestsCount,
-            subtotalAmount: pricing.roomSubtotal,
+            subtotalAmount: preDiscountTotal,
           );
       if (!mounted) return;
       setState(() {
@@ -138,16 +276,25 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
         } else {
           _couponDiscountVnd = 0;
           _appliedCouponCode = null;
-          _couponMessage = res.message ?? 'Mã giảm giá không hợp lệ';
+          _couponMessage = CouponValidationResult.localizeRejectionReason(
+                res.reason ?? res.message,
+                localeCode: localeCode,
+              ) ??
+              'Mã giảm giá không hợp lệ.';
         }
       });
     } catch (e) {
       if (!mounted) return;
+      final rawMsg = DioClient.handleError(e).message;
       setState(() {
         _isValidatingCoupon = false;
         _couponDiscountVnd = 0;
         _appliedCouponCode = null;
-        _couponMessage = DioClient.handleError(e).message;
+        _couponMessage = CouponValidationResult.localizeRejectionReason(
+              rawMsg,
+              localeCode: localeCode,
+            ) ??
+            rawMsg;
       });
     }
   }
@@ -197,6 +344,8 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
             checkInDate: _checkIn!.toIsoDate(),
             checkOutDate: _checkOut!.toIsoDate(),
             guestsCount: _guestsCount,
+            couponCode: _appliedCouponCode ?? _couponCtrl.text.trim(),
+            specialRequests: _specialRequestsCtrl.text.trim(),
           );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -204,7 +353,26 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
           content: Text(context.l10n.villaDetailLoginToBook),
         ),
       );
-      await context.push('/dang-nhap');
+      final loginUri = Uri(
+        path: '/dang-nhap',
+        queryParameters: {'redirectTo': '/villa/${villa.id}'},
+      );
+      await context.push(loginUri.toString());
+      return;
+    }
+
+    if (villa.host != null &&
+        villa.host!.hostId.isNotEmpty &&
+        user.id == villa.host!.hostId) {
+      final lang = context.activeLanguageCode;
+      final selfMsg = lang == 'en'
+          ? 'Hosts cannot book their own property.'
+          : (lang == 'ko'
+              ? '호스트는 본인 소유의 숙소를 예약할 수 없습니다.'
+              : 'Chủ nhà không thể tự đặt chỗ nghỉ thuộc sở hữu của chính mình.');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(selfMsg)),
+      );
       return;
     }
 
@@ -239,8 +407,30 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSubmittingBooking = false);
+      final failure = DioClient.handleError(e);
+      final lang = context.activeLanguageCode;
+      String displayError = failure.message;
+      if (failure is ConflictFailure ||
+          failure.message.toLowerCase().contains('not available') ||
+          failure.message.toLowerCase().contains('conflict')) {
+        // Giải thuật tự động làm mới lịch khả dụng khi xung đột đặt đồng thời (HTTP 409 Race Recovery):
+        // Vô hiệu hóa `villaDetailProvider` để nạp lại danh sách đêm vừa bị khách khác giữ chỗ trên giao diện.
+        ref.invalidate(villaDetailProvider(widget.villaId));
+        displayError = lang == 'en'
+            ? 'Selected dates were just booked by another guest. Please choose different dates.'
+            : (lang == 'ko'
+                ? '선택하신 날짜가 방금 다른 게스트에 의해 예약되었습니다. 다른 날짜를 선택해 주세요.'
+                : 'Khoảng ngày bạn chọn vừa có khách khác đặt trước. Vui lòng chọn ngày khác.');
+      } else if (failure is ForbiddenFailure ||
+          failure.message.toLowerCase().contains('own listing')) {
+        displayError = lang == 'en'
+            ? 'Hosts cannot book their own property.'
+            : (lang == 'ko'
+                ? '호스트는 본인 소유의 숙소를 예약할 수 없습니다.'
+                : 'Chủ nhà không thể tự đặt chỗ nghỉ thuộc sở hữu của chính mình.');
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(DioClient.handleError(e).message)),
+        SnackBar(content: Text(displayError)),
       );
     }
   }
@@ -282,6 +472,16 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
           });
         }
 
+        _ensureInitialDatesAvailable(villa);
+        if (_pendingAutoCouponCode != null) {
+          _pendingAutoCouponCode = null;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _applyCoupon(villa);
+            }
+          });
+        }
+
         // Giải thuật tính khoảng ngày nhận/trả phòng mặc định theo múi giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7):
         // Mặc định nhận phòng vào ngày mai (todayVn + 1) và lưu trú 2 đêm để không chọn nhầm ngày quá khứ theo giờ máy.
         final checkIn = _checkIn ?? BookingDate.todayVn().addDays(1);
@@ -295,7 +495,18 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
             ref.watch(villaNightlyPricingProvider(pricingParams));
         final recommendationsAsync =
             ref.watch(villaRecommendationsProvider(villa.id));
-        final calc = _calculatePricing(villa);
+        final calc = _calculatePricing(
+          villa,
+          nightlyPrices: pricingAsync.valueOrNull,
+        );
+        final authUser = ref.watch(authNotifierProvider).valueOrNull;
+        final isOwnListing = authUser != null &&
+            villa.host != null &&
+            villa.host!.hostId.isNotEmpty &&
+            authUser.id == villa.host!.hostId;
+        final screenWidth = MediaQuery.sizeOf(context).width;
+        final useDesktopBentoCover =
+            screenWidth >= 900 && villa.imageUrls.length >= 5;
 
         return Scaffold(
           backgroundColor: AppColors.surfaceBase,
@@ -303,7 +514,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
             slivers: [
               // SliverAppBar with monochrome stroke icons directly on UI (no CircleAvatar around icons!)
               SliverAppBar(
-                expandedHeight: 300,
+                expandedHeight: useDesktopBentoCover ? 400 : 300,
                 pinned: true,
                 elevation: 0,
                 backgroundColor: AppColors.surfaceBase,
@@ -355,10 +566,11 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                     label: context.l10n.ctaCopyLink,
                     child: InkWell(
                       onTap: () {
+                        final shareLink = kIsWeb
+                            ? '${Uri.base.origin}/#/villa/${villa.id}'
+                            : 'minhthanhvilla://villa/${villa.id}';
                         Clipboard.setData(
-                          ClipboardData(
-                            text: 'https://vungtaustay.vn/villa/${villa.id}',
-                          ),
+                          ClipboardData(text: shareLink),
                         );
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -384,10 +596,15 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                     padding: const EdgeInsets.only(right: 12.0),
                     child: AnimatedHeartButton(
                       isFavorite: isFav,
-                      onToggle: () {
-                        ref
+                      onToggle: () async {
+                        final err = await ref
                             .read(favoritesProvider.notifier)
                             .toggleFavorite(villa.id);
+                        if (err != null && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(err)),
+                          );
+                        }
                       },
                     ),
                   ),
@@ -396,14 +613,17 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                   background: Stack(
                     fit: StackFit.expand,
                     children: [
-                      Hero(
-                        tag: 'villa_image_${villa.id}',
-                        child: PropertyImageCarousel(
-                          imageUrls: villa.imageUrls,
-                          aspectRatio: 16 / 10,
-                          borderRadius: BorderRadius.zero,
+                      if (useDesktopBentoCover)
+                        _buildDesktopBentoGallery(context, villa)
+                      else
+                        Hero(
+                          tag: 'villa_image_${villa.id}',
+                          child: PropertyImageCarousel(
+                            imageUrls: villa.imageUrls,
+                            aspectRatio: 16 / 10,
+                            borderRadius: BorderRadius.zero,
+                          ),
                         ),
-                      ),
                       Positioned(
                         right: 16,
                         bottom: 16,
@@ -416,7 +636,8 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                             color: AppColors.iconStrong,
                           ),
                           label: Text(
-                            context.l10n.villaDetailViewAllPhotos(villa.imageUrls.length),
+                            context.l10n.villaDetailViewAllPhotos(
+                                villa.imageUrls.length),
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -549,6 +770,44 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                               _buildSectionDivider(),
                             ],
 
+                            if (isOwnListing) ...[
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 16),
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceMuted,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border:
+                                      Border.all(color: AppColors.borderSoft),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      LucideIcons.info,
+                                      size: 18,
+                                      color: AppColors.iconStrong,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        context.activeLanguageCode == 'en'
+                                            ? 'You are viewing your own property. Self-booking is disabled.'
+                                            : (context.activeLanguageCode ==
+                                                    'ko'
+                                                ? '본인 소유의 숙소를 보고 있습니다. 본인 숙소 예약은 비활성화되어 있습니다.'
+                                                : 'Bạn đang xem chỗ nghỉ do chính mình quản lý. Tính năng tự đặt chỗ được vô hiệu hóa.'),
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+
                             // Interactive Availability Calendar & Booking Configurator (`ListingDetailPage.tsx`)
                             _buildBookingConfiguratorCard(context, villa, calc),
 
@@ -631,11 +890,21 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                                               villa: rec,
                                               isFavorite:
                                                   favorites.contains(rec.id),
-                                              onFavoriteToggle: () {
-                                                ref
+                                              onFavoriteToggle: () async {
+                                                final err = await ref
                                                     .read(favoritesProvider
                                                         .notifier)
                                                     .toggleFavorite(rec.id);
+                                                if (err != null &&
+                                                    context.mounted) {
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(err),
+                                                    ),
+                                                  );
+                                                }
                                               },
                                               onTap: () => context
                                                   .push('/villa/${rec.id}'),
@@ -671,17 +940,26 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
             villa: villa,
             totalCalculatedVnd: calc.finalTotal,
             selectedNights: calc.nights,
-            onMessageHost: () =>
-                context.push('/villa/${villa.id}/nhan-tin-host'),
-            onBookNow:
-                _isSubmittingBooking ? null : () => _handleBookNow(villa),
+            isDisabled: _isSubmittingBooking || isOwnListing,
+            disabledLabel: isOwnListing
+                ? (context.activeLanguageCode == 'en'
+                    ? 'Your property'
+                    : (context.activeLanguageCode == 'ko'
+                        ? '본인 소유 숙소'
+                        : 'Chỗ nghỉ của bạn'))
+                : null,
+            onMessageHost: isOwnListing
+                ? null
+                : () => context.push('/villa/${villa.id}/nhan-tin-host'),
+            onBookNow: (_isSubmittingBooking || isOwnListing)
+                ? null
+                : () => _handleBookNow(villa),
           ),
         );
       },
       loading: () => Scaffold(
         appBar: AppBar(),
-        body: AppLoading(
-            message: context.l10n.loadingVillaDetail),
+        body: AppLoading(message: context.l10n.loadingVillaDetail),
       ),
       error: (err, stack) => Scaffold(
         appBar: AppBar(),
@@ -705,8 +983,7 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     final hostName =
         rawName.isNotEmpty ? rawName : context.l10n.hostDefaultName;
     final rawBio = villa.host?.bio?.trim() ?? '';
-    final hostBio =
-        rawBio.isNotEmpty ? rawBio : context.l10n.hostDefaultBio;
+    final hostBio = rawBio.isNotEmpty ? rawBio : context.l10n.hostDefaultBio;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -805,7 +1082,9 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
               setState(() {
                 _checkIn = range.$1;
                 _checkOut = range.$2;
+                _hasCustomSelectedDates = range.$1 != null && range.$2 != null;
               });
+              _handleBookingParamsMutated(villa);
             },
           ),
           const Divider(height: 28, color: AppColors.divider),
@@ -848,7 +1127,10 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                   _GuestStepperButton(
                     icon: LucideIcons.minus,
                     enabled: _guestsCount > 1,
-                    onTap: () => setState(() => _guestsCount--),
+                    onTap: () {
+                      setState(() => _guestsCount--);
+                      _handleBookingParamsMutated(villa);
+                    },
                   ),
                   SizedBox(
                     width: 40,
@@ -865,7 +1147,10 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                   _GuestStepperButton(
                     icon: LucideIcons.plus,
                     enabled: _guestsCount < maxGuests,
-                    onTap: () => setState(() => _guestsCount++),
+                    onTap: () {
+                      setState(() => _guestsCount++);
+                      _handleBookingParamsMutated(villa);
+                    },
                   ),
                 ],
               ),
@@ -880,9 +1165,23 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                 child: TextField(
                   controller: _couponCtrl,
                   textCapitalization: TextCapitalization.characters,
+                  onChanged: (_) => setState(() {}),
                   style: const TextStyle(fontSize: 14),
                   decoration: _compactFieldDecoration(
                     hintText: context.l10n.villaDetailPromoCodeHint,
+                    suffixIcon: (_couponCtrl.text.isNotEmpty ||
+                            _appliedCouponCode != null)
+                        ? IconButton(
+                            tooltip: 'Xóa mã ưu đãi',
+                            onPressed: () =>
+                                _clearCouponState(clearInput: true),
+                            icon: const Icon(
+                              LucideIcons.circleX,
+                              size: 16,
+                              color: AppColors.iconMuted,
+                            ),
+                          )
+                        : null,
                   ),
                 ),
               ),
@@ -993,8 +1292,8 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
                 ),
               if (calc.discount > 0)
                 _PriceLine(
-                  label: context.l10n.villaDetailDiscountLabel(
-                      _appliedCouponCode ?? ''),
+                  label: context.l10n
+                      .villaDetailDiscountLabel(_appliedCouponCode ?? ''),
                   value: formatter.formatDiscount(
                     calc.discount,
                     context: MoneyDisplayContext.breakdown,
@@ -1137,28 +1436,41 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     final lang = context.activeLanguageCode;
     if (lang == 'vi') return item;
     final lower = item.trim().toLowerCase();
-    if (lower.contains('wifi') || lower.contains('wi-fi') || lower.contains('internet')) {
+    if (lower.contains('wifi') ||
+        lower.contains('wi-fi') ||
+        lower.contains('internet')) {
       return lang == 'ko' ? '초고속 와이파이' : 'High-speed Wi-Fi';
     }
-    if (lower.contains('điều hòa') || lower.contains('máy lạnh') || lower.contains('air')) {
+    if (lower.contains('điều hòa') ||
+        lower.contains('máy lạnh') ||
+        lower.contains('air')) {
       return lang == 'ko' ? '각 방 에어컨' : 'Air conditioning in each room';
     }
-    if (lower.contains('bếp') && (lower.contains('dụng cụ') || lower.contains('đầy đủ') || lower.contains('kitchen'))) {
+    if (lower.contains('bếp') &&
+        (lower.contains('dụng cụ') ||
+            lower.contains('đầy đủ') ||
+            lower.contains('kitchen'))) {
       return lang == 'ko' ? '주방 조리도구 완비' : 'Fully equipped kitchen';
     }
-    if (lower.contains('đỗ xe') || lower.contains('đậu xe') || lower.contains('parking')) {
+    if (lower.contains('đỗ xe') ||
+        lower.contains('đậu xe') ||
+        lower.contains('parking')) {
       return lang == 'ko' ? '주차 공간' : 'Car parking space';
     }
     if (lower.contains('tv') || lower.contains('tivi')) {
       return lang == 'ko' ? '65인치 스마트 TV' : '65-inch Smart TV';
     }
-    if (lower.contains('view biển') || lower.contains('biển') || lower.contains('ocean')) {
+    if (lower.contains('view biển') ||
+        lower.contains('biển') ||
+        lower.contains('ocean')) {
       return lang == 'ko' ? '오션뷰' : 'Direct sea view';
     }
     if (lower.contains('ban công') || lower.contains('balcony')) {
       return lang == 'ko' ? '발코니' : 'Airy balcony';
     }
-    if (lower.contains('hồ bơi') || lower.contains('bể bơi') || lower.contains('pool')) {
+    if (lower.contains('hồ bơi') ||
+        lower.contains('bể bơi') ||
+        lower.contains('pool')) {
       return lang == 'ko' ? '프라이빗 수영장' : 'Private pool';
     }
     if (lower.contains('bbq') || lower.contains('nướng')) {
@@ -1194,8 +1506,8 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     final policyItems = <Widget>[
       _PolicyItem(
         icon: AppSemanticIcons.checkIn,
-        label: context.l10n.villaDetailCheckInTime(
-            rules.checkInFrom, rules.checkInUntil),
+        label: context.l10n
+            .villaDetailCheckInTime(rules.checkInFrom, rules.checkInUntil),
       ),
       _PolicyItem(
         icon: AppSemanticIcons.checkOut,
@@ -1280,10 +1592,77 @@ class _VillaDetailScreenState extends ConsumerState<VillaDetailScreen> {
     );
   }
 
-  InputDecoration _compactFieldDecoration({required String hintText}) {
+  /// Giải thuật dựng lưới 5 ảnh bìa kiểu Bento (`1` ảnh chính bên trái `50%` + `2x2` ảnh phụ bên phải `50%`) trên Desktop (`>= 900px`).
+  Widget _buildDesktopBentoGallery(BuildContext context, Villa villa) {
+    final urls = villa.imageUrls;
+    Widget buildCell(String url, {bool isHero = false}) {
+      final image = AppImage(
+        url: url,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      );
+      return GestureDetector(
+        onTap: () => _openFullscreenGallery(context, villa),
+        child:
+            isHero ? Hero(tag: 'villa_image_${villa.id}', child: image) : image,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 56, 24, 12),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1120),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Row(
+              children: [
+                Expanded(
+                  child: buildCell(urls[0], isHero: true),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Expanded(child: buildCell(urls[1])),
+                            const SizedBox(width: 8),
+                            Expanded(child: buildCell(urls[2])),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Expanded(child: buildCell(urls[3])),
+                            const SizedBox(width: 8),
+                            Expanded(child: buildCell(urls[4])),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _compactFieldDecoration({
+    required String hintText,
+    Widget? suffixIcon,
+  }) {
     final radius = BorderRadius.circular(12);
     return InputDecoration(
       hintText: hintText,
+      suffixIcon: suffixIcon,
       hintStyle: const TextStyle(
         fontSize: 14,
         color: AppColors.textSecondary,
@@ -1433,8 +1812,7 @@ class FullscreenGalleryModal extends StatefulWidget {
   const FullscreenGalleryModal({super.key, required this.villa});
 
   @override
-  State<FullscreenGalleryModal> createState() =>
-      _FullscreenGalleryModalState();
+  State<FullscreenGalleryModal> createState() => _FullscreenGalleryModalState();
 }
 
 class _FullscreenGalleryModalState extends State<FullscreenGalleryModal> {
@@ -1563,11 +1941,15 @@ class _FullscreenGalleryModalState extends State<FullscreenGalleryModal> {
                         borderRadius: BorderRadius.circular(24),
                         child: AspectRatio(
                           aspectRatio: 16 / 10,
-                          child: AppImage(
-                            url: img.url,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
+                          child: InteractiveViewer(
+                            minScale: 1.0,
+                            maxScale: 4.0,
+                            child: AppImage(
+                              url: img.url,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                            ),
                           ),
                         ),
                       ),

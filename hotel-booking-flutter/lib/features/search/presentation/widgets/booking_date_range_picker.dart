@@ -248,183 +248,255 @@ class _BookingDateRangePickerState extends State<BookingDateRangePicker> {
 
   @override
   Widget build(BuildContext context) {
-    final monthTitle = LocaleFormatters.formatMonthYear(
-      _currentMonth.year,
-      _currentMonth.month,
-      localeCode: context.activeLanguageCode,
-      includeComma: false,
-    );
+    final firstBookedAfter = _firstBookedAfterCheckIn;
+    final nextMonth = DateTime(_currentMonth.year, _currentMonth.month + 1);
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
 
+    return CalFadeIn(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Giải thuật bố cục lịch thích ứng 1 hoặc 2 tháng song song (Responsive Dual-Month Calendar):
+          // Trên màn hình rộng Desktop (>= 680px và hệ số phóng chữ <= 1.2x), hiển thị 2 tháng liên tiếp cạnh nhau
+          // giúp khách chọn nhanh các kỳ nghỉ vắt qua ranh giới tháng; thu gọn về 1 tháng trên thiết bị di động.
+          final showTwoMonths = constraints.maxWidth >= 680 && textScale <= 1.2;
+          final firstMonthTitle = LocaleFormatters.formatMonthYear(
+            _currentMonth.year,
+            _currentMonth.month,
+            localeCode: context.activeLanguageCode,
+            includeComma: false,
+          );
+          final secondMonthTitle = LocaleFormatters.formatMonthYear(
+            nextMonth.year,
+            nextMonth.month,
+            localeCode: context.activeLanguageCode,
+            includeComma: false,
+          );
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Month Navigation Header (LucideIcons, 48x48 touch target, neutral color)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Semantics(
+                    button: true,
+                    label: context.l10n.calendarPrevMonth,
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _currentMonth = DateTime(
+                            _currentMonth.year,
+                            _currentMonth.month - 1,
+                          );
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: const SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Center(
+                          child: Icon(
+                            LucideIcons.chevronLeft,
+                            size: 20,
+                            color: AppColors.iconStrong,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (showTwoMonths) ...[
+                    Expanded(
+                      child: Text(
+                        firstMonthTitle.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: AppTypography.cardTitle.copyWith(fontSize: 15),
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      child: Text(
+                        secondMonthTitle.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: AppTypography.cardTitle.copyWith(fontSize: 15),
+                      ),
+                    ),
+                  ] else
+                    Flexible(
+                      child: Text(
+                        firstMonthTitle.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.cardTitle.copyWith(fontSize: 15),
+                      ),
+                    ),
+                  Semantics(
+                    button: true,
+                    label: context.l10n.calendarNextMonth,
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _currentMonth = DateTime(
+                            _currentMonth.year,
+                            _currentMonth.month + 1,
+                          );
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: const SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Center(
+                          child: Icon(
+                            LucideIcons.chevronRight,
+                            size: 20,
+                            color: AppColors.iconStrong,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              MonthInSwitcher(
+                monthKey: '${_currentMonth.year}-${_currentMonth.month}',
+                child: showTwoMonths
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _buildSingleMonthColumn(
+                              context,
+                              _currentMonth,
+                              firstBookedAfter,
+                            ),
+                          ),
+                          const SizedBox(width: 24),
+                          Expanded(
+                            child: _buildSingleMonthColumn(
+                              context,
+                              nextMonth,
+                              firstBookedAfter,
+                            ),
+                          ),
+                        ],
+                      )
+                    : _buildSingleMonthColumn(
+                        context,
+                        _currentMonth,
+                        firstBookedAfter,
+                      ),
+              ),
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Text(
+                    _errorMessage!,
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.errorRed,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// Dựng một cột lưới tháng dương lịch hoàn chỉnh gồm hàng tiêu đề thứ `T2..CN` và ma trận ô ngày.
+  Widget _buildSingleMonthColumn(
+    BuildContext context,
+    DateTime monthDate,
+    BookingDate? firstBookedAfter,
+  ) {
     // Giải thuật tính số ngày trong tháng và độ lệch thứ đầu tháng (Thứ Hai = cột 0 .. Chủ Nhật = cột 6):
     // Dùng DateTime(year, month + 1, 0).day để lấy ngày cuối cùng của tháng hiện tại (xử lý chính xác năm nhuận),
     // chèn (firstWeekday - 1) ô rỗng đầu lưới để căn thẳng hàng từng ngày với nhãn thứ T2..CN.
-    final daysInMonth =
-        DateTime(_currentMonth.year, _currentMonth.month + 1, 0).day;
-    final firstWeekday = DateTime(_currentMonth.year, _currentMonth.month, 1)
-        .weekday; // 1 = Mon, 7 = Sun
-    final firstBookedAfter = _firstBookedAfterCheckIn;
+    final daysInMonth = DateTime(monthDate.year, monthDate.month + 1, 0).day;
+    final firstWeekday = DateTime(monthDate.year, monthDate.month, 1).weekday;
 
-    return CalFadeIn(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Month Navigation Header (LucideIcons, 48x48 touch target, neutral color)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Semantics(
-                button: true,
-                label: context.l10n.calendarPrevMonth,
-                child: InkWell(
-                  onTap: () {
-                    setState(() {
-                      _currentMonth =
-                          DateTime(_currentMonth.year, _currentMonth.month - 1);
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: const SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Center(
-                      child: Icon(
-                        LucideIcons.chevronLeft,
-                        size: 20,
-                        color: AppColors.iconStrong,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Flexible(
-                child: Text(
-                  monthTitle.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.cardTitle.copyWith(fontSize: 15),
-                ),
-              ),
-              Semantics(
-                button: true,
-                label: context.l10n.calendarNextMonth,
-                child: InkWell(
-                  onTap: () {
-                    setState(() {
-                      _currentMonth =
-                          DateTime(_currentMonth.year, _currentMonth.month + 1);
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: const SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Center(
-                      child: Icon(
-                        LucideIcons.chevronRight,
-                        size: 20,
-                        color: AppColors.iconStrong,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 8),
-
-          // Weekday labels
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: LocaleFormatters.weekdayHeaders(
-              localeCode: context.activeLanguageCode,
-            ).map((w) {
-              return Expanded(
-                child: Text(
-                  w,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: AppTypography.caption.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-
-          const SizedBox(height: 8),
-
-          // Calendar Grid with MonthInSwitcher transition (180ms ease-out)
-          MonthInSwitcher(
-            monthKey: '${_currentMonth.year}-${_currentMonth.month}',
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: (firstWeekday - 1) + daysInMonth,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7,
-                mainAxisSpacing: 4,
-                crossAxisSpacing: 0,
-              ),
-              itemBuilder: (context, index) {
-                if (index < firstWeekday - 1) {
-                  return const SizedBox.shrink();
-                }
-
-                final dayNumber = index - (firstWeekday - 1) + 1;
-                final date = BookingDate(
-                  year: _currentMonth.year,
-                  month: _currentMonth.month,
-                  day: dayNumber,
-                );
-
-                final isPast = date.isBefore(_effectiveMinDate);
-                final isBooked = _effectiveBookedDates.contains(date);
-                final isAllowedCheckOutBoundary = firstBookedAfter != null &&
-                    date.isAtSameMomentAs(firstBookedAfter);
-                final isAfterFirstBooked =
-                    firstBookedAfter != null && date.isAfter(firstBookedAfter);
-                final isCheckIn =
-                    _checkIn != null && date.isAtSameMomentAs(_checkIn!);
-                final isCheckOut =
-                    _checkOut != null && date.isAtSameMomentAs(_checkOut!);
-                final isInRange = _checkIn != null &&
-                    _checkOut != null &&
-                    date.isAfter(_checkIn!) &&
-                    date.isBefore(_checkOut!);
-
-                return _buildCalendarDayCell(
-                  date: date,
-                  dayNumber: dayNumber,
-                  isPast: isPast,
-                  isBooked: isBooked && !isAllowedCheckOutBoundary,
-                  isBlockedAfterBooked: isAfterFirstBooked,
-                  isAllowedCheckOutBoundary: isAllowedCheckOutBoundary,
-                  isCheckIn: isCheckIn,
-                  isCheckOut: isCheckOut,
-                  isInRange: isInRange,
-                );
-              },
-            ),
-          ),
-
-          if (_errorMessage != null) ...[
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: LocaleFormatters.weekdayHeaders(
+            localeCode: context.activeLanguageCode,
+          ).map((w) {
+            return Expanded(
               child: Text(
-                _errorMessage!,
+                w,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
                 style: AppTypography.caption.copyWith(
-                  color: AppColors.errorRed,
                   fontWeight: FontWeight.w600,
+                  color: AppColors.textMuted,
                 ),
               ),
-            ),
-          ],
-        ],
-      ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 8),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: (firstWeekday - 1) + daysInMonth,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 7,
+            mainAxisSpacing: 4,
+            crossAxisSpacing: 0,
+          ),
+          itemBuilder: (context, index) {
+            if (index < firstWeekday - 1) {
+              return const SizedBox.shrink();
+            }
+
+            final dayNumber = index - (firstWeekday - 1) + 1;
+            final date = BookingDate(
+              year: monthDate.year,
+              month: monthDate.month,
+              day: dayNumber,
+            );
+
+            final isPast = date.isBefore(_effectiveMinDate);
+            final isBooked = _effectiveBookedDates.contains(date);
+            final isAllowedCheckOutBoundary = firstBookedAfter != null &&
+                date.isAtSameMomentAs(firstBookedAfter);
+            final isAfterFirstBooked =
+                firstBookedAfter != null && date.isAfter(firstBookedAfter);
+            final isCheckIn =
+                _checkIn != null && date.isAtSameMomentAs(_checkIn!);
+            final isCheckOut =
+                _checkOut != null && date.isAtSameMomentAs(_checkOut!);
+            final isInRange = _checkIn != null &&
+                _checkOut != null &&
+                date.isAfter(_checkIn!) &&
+                date.isBefore(_checkOut!);
+
+            return _buildCalendarDayCell(
+              date: date,
+              dayNumber: dayNumber,
+              isPast: isPast,
+              isBooked: isBooked && !isAllowedCheckOutBoundary,
+              isBlockedAfterBooked: isAfterFirstBooked,
+              isAllowedCheckOutBoundary: isAllowedCheckOutBoundary,
+              isCheckIn: isCheckIn,
+              isCheckOut: isCheckOut,
+              isInRange: isInRange,
+            );
+          },
+        ),
+      ],
     );
   }
 

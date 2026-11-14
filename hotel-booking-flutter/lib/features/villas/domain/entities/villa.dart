@@ -1,5 +1,6 @@
 import '../../../../core/date/booking_date.dart';
 import '../../../../l10n/l10n.dart';
+import 'nightly_price.dart';
 import 'villa_specs.dart';
 
 /// Phân loại nhãn nổi bật của biệt thự theo thứ tự ưu tiên nghiệp vụ tăng dần.
@@ -120,14 +121,15 @@ class VillaImage {
     }
   }
 
-  /// Giải mã đối tượng JSON từ API thành thực thể `VillaImage` an toàn kiểu dữ liệu.
+  /// Giải mã đối tượng JSON từ API thành thực thể `VillaImage` an toàn kiểu dữ liệu (hỗ trợ cả khóa `aiImageType`/`aiConfidence`).
   factory VillaImage.fromJson(Map<String, dynamic> json) {
     return VillaImage(
       imageId: (json['imageId'] ?? json['id'] ?? '').toString(),
       url: (json['url'] ?? json['imageUrl'] ?? '').toString(),
-      type: json['type']?.toString(),
-      typeConfidence: (json['typeConfidence'] as num?)?.toDouble(),
-      typeSource: json['typeSource']?.toString(),
+      type: (json['type'] ?? json['aiImageType'])?.toString(),
+      typeConfidence: ((json['typeConfidence'] ?? json['aiConfidence']) as num?)
+          ?.toDouble(),
+      typeSource: (json['typeSource'] ?? json['aiSource'])?.toString(),
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
       isCover: json['isCover'] == true,
     );
@@ -553,10 +555,12 @@ class VillaDetailPricingCalculator {
     required BookingDate? checkOut,
     required int guestsCount,
     int couponDiscountVnd = 0,
+    List<NightlyPrice>? nightlyPrices,
   }) {
     // Giải thuật tổng hợp chi phí đặt phòng đa thành phần:
     // Bước 1: Tính tổng số đêm, số đêm cuối tuần và suy ra số đêm ngày thường.
-    // Bước 2: Nhân đơn giá cơ sở ngày thường (basePriceVnd) và cuối tuần (saturdayPriceVnd ?? basePrice).
+    // Bước 2: Nếu đã nạp lịch giá từng đêm từ máy chủ (`nightlyPrices`), ưu tiên cộng dồn `priceVnd` từng đêm
+    //         trong khoảng nửa mở `[checkIn, checkOut)`; ngược lại lùi về `basePriceVnd` và `saturdayPriceVnd`.
     // Bước 3: Tính phụ thu khách vượt ngưỡng includedGuests (theo đầu người * số đêm + phụ phí cố định).
     // Bước 4: Áp phí dọn dẹp, phí dịch vụ (% hoặc cố định) và kẹp biên mã giảm giá trong [0, gross].
     final nights = calculateNights(checkIn, checkOut);
@@ -564,8 +568,27 @@ class VillaDetailPricingCalculator {
     final weekdayNights = (nights - weekendNights).clamp(0, nights);
     final basePrice = villa.basePriceVnd ?? 0;
     final weekendNightPrice = villa.saturdayPriceVnd ?? basePrice;
-    final roomSubtotal =
+    int roomSubtotal =
         weekdayNights * basePrice + weekendNights * weekendNightPrice;
+    if (nightlyPrices != null &&
+        nightlyPrices.isNotEmpty &&
+        checkIn != null &&
+        checkOut != null &&
+        checkOut.isAfter(checkIn)) {
+      final byDate = <String, NightlyPrice>{
+        for (final np in nightlyPrices) np.date.toIsoDate(): np,
+      };
+      var sum = 0;
+      for (final night in BookingDate.getNightsBetween(checkIn, checkOut)) {
+        final overrideEntry = byDate[night.toIsoDate()];
+        if (overrideEntry != null && overrideEntry.priceVnd > 0) {
+          sum += overrideEntry.priceVnd;
+        } else {
+          sum += night.isWeekend ? weekendNightPrice : basePrice;
+        }
+      }
+      roomSubtotal = sum;
+    }
     final extraGuests = (guestsCount - villa.includedGuests).clamp(0, 100);
     final flatSurcharge =
         guestsCount > villa.includedGuests ? villa.surchargeAmountVnd : 0;
@@ -796,9 +819,7 @@ String localizeVillaDescription({
         : 'Beachfront accommodation with sunset view.';
   }
   if (descLower.contains('studio nghỉ dưỡng')) {
-    return lang == 'ko'
-        ? '리조트 스튜디오 아파트입니다.'
-        : 'Resort studio apartment.';
+    return lang == 'ko' ? '리조트 스튜디오 아파트입니다.' : 'Resort studio apartment.';
   }
   if (descLower.contains('biệt thự nghỉ dưỡng cao cấp tại bãi sau')) {
     return lang == 'ko'

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import '../../../../core/date/booking_date.dart';
 import '../../../../core/media/app_media_helper.dart';
 import '../../../../core/network/dio_client.dart';
@@ -200,6 +201,7 @@ class VillaRepositoryImpl implements VillaRepository {
     String? sort,
     int page = 1,
     int limit = 20,
+    CancelToken? cancelToken,
   }) async {
     final result = await getVillasPaginated(
       searchQuery: searchQuery,
@@ -221,6 +223,7 @@ class VillaRepositoryImpl implements VillaRepository {
       sort: sort,
       page: page,
       limit: limit,
+      cancelToken: cancelToken,
     );
     return result.items;
   }
@@ -247,10 +250,12 @@ class VillaRepositoryImpl implements VillaRepository {
     String? sort,
     int page = 1,
     int limit = 12,
+    CancelToken? cancelToken,
   }) async {
     try {
       final response = await _client.dio.get<Map<String, dynamic>>(
         '/api/listings',
+        cancelToken: cancelToken,
         queryParameters: _buildSearchQueryParams(
           searchQuery: searchQuery,
           locationGroup: locationGroup,
@@ -724,9 +729,10 @@ class VillaRepositoryImpl implements VillaRepository {
         ((json['cleaningFee'] ?? json['cleaning_fee']) as num?)?.toInt() ?? 0;
     final serviceFee =
         ((json['serviceFee'] ?? json['service_fee']) as num?)?.toInt() ?? 0;
-    final serviceFeePct =
+    final rawServiceFeePct =
         ((json['serviceFeePct'] ?? json['service_fee_pct']) as num?)
             ?.toDouble();
+    final serviceFeePct = rawServiceFeePct ?? (serviceFee > 0 ? null : 10.0);
     final extraGuestFee =
         ((json['extraGuestFee'] ?? json['extra_guest_fee']) as num?)?.toInt() ??
             0;

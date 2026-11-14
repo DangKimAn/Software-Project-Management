@@ -48,13 +48,29 @@ class VillaDetailViewModel {
     required String checkInDate,
     required String checkOutDate,
     required int guestsCount,
+    String? couponCode,
+    String? specialRequests,
   }) {
     return _preferencesService.setPendingBookingIntent({
       'listingId': listingId,
       'checkInDate': checkInDate,
       'checkOutDate': checkOutDate,
       'guestsCount': guestsCount,
+      if (couponCode != null && couponCode.trim().isNotEmpty)
+        'couponCode': couponCode.trim(),
+      if (specialRequests != null && specialRequests.trim().isNotEmpty)
+        'specialRequests': specialRequests.trim(),
     });
+  }
+
+  /// Đọc ý định đặt phòng đã lưu tạm trước khi chuyển sang màn hình đăng nhập.
+  Map<String, dynamic>? getPendingBookingIntent() {
+    return _preferencesService.getPendingBookingIntent();
+  }
+
+  /// Xóa ý định đặt phòng tạm sau khi đã khôi phục thành công lên biểu mẫu chi tiết biệt thự.
+  Future<void> clearPendingBookingIntent() {
+    return _preferencesService.clearPendingBookingIntent();
   }
 
   /// Khởi tạo đơn đặt phòng trên máy chủ và vô hiệu hóa bộ đệm `myBookingsProvider` để đồng bộ danh sách chuyến đi.

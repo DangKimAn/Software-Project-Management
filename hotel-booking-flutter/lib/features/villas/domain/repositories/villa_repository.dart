@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import '../../../../core/date/booking_date.dart';
 import '../../../../core/network/dio_client.dart';
 import '../entities/nightly_price.dart';
@@ -28,6 +29,7 @@ abstract class VillaRepository {
     String? sort,
     int page = 1,
     int limit = 20,
+    CancelToken? cancelToken,
   });
 
   /// Truy vấn danh sách biệt thự kèm thông tin phân trang (`PaginatedResult<Villa>`) phục vụ lưới kết quả tìm kiếm.
@@ -51,6 +53,7 @@ abstract class VillaRepository {
     String? sort,
     int page = 1,
     int limit = 12,
+    CancelToken? cancelToken,
   });
 
   /// Tải thông tin chi tiết đầy đủ của một biệt thự theo `id` (bao gồm lịch kín phòng và nội quy lưu trú).

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../app/theme/app_colors.dart';
 import '../animations/source_animations.dart';
+import 'app_image.dart';
 
 /// Mô hình cụm khu vực địa lý chuẩn tại thành phố biển Vũng Tàu (ví dụ Bãi Sau, Bãi Trước, Long Cung, Chí Linh).
 class VungTauLocationGroup {
@@ -38,7 +39,7 @@ class VungTauLocationGroup {
 /// Tập hằng số biên địa lý, tâm phường/xã và danh mục 8 cụm khu vực du lịch chuẩn tại Vũng Tàu.
 ///
 /// Cung cấp các phép kiểm tra và kẹp biên hộp giới hạn (`Bounding Box Clamping`) nhằm giữ
-/// khung nhìn bản đồ luôn nằm gọn trong địa phận thành phố Vũng Tàu (`10.28..10.50` Bắc, `107.01..107.26` Đông).
+/// khung nhìn bản đồ luôn nằm gọn trong địa phận thành phố Vũng Tàu (`10.28..10.50` Bắc, `107.00..107.26` Đông).
 class VungTauMapConstants {
   VungTauMapConstants._();
 
@@ -48,8 +49,8 @@ class VungTauMapConstants {
   /// Vĩ độ cực Bắc của hộp giới hạn bản đồ Vũng Tàu (khu vực Long Sơn / cửa ngõ thành phố).
   static const double maxLat = 10.50;
 
-  /// Kinh độ cực Tây của hộp giới hạn bản đồ Vũng Tàu (vịnh Gành Rái / Bãi Dâu).
-  static const double minLng = 107.01;
+  /// Kinh độ cực Tây của hộp giới hạn bản đồ Vũng Tàu (vịnh Gành Rái / Xã Long Sơn / Bãi Dâu).
+  static const double minLng = 107.00;
 
   /// Kinh độ cực Đông của hộp giới hạn bản đồ Vũng Tàu (trục ven biển Chí Linh - Cửa Lấp).
   static const double maxLng = 107.26;
@@ -244,6 +245,9 @@ class VungTauMapPicker extends StatefulWidget {
   /// Hàm gọi lại trả về tọa độ `(lat, lng)` đã kẹp biên và nhãn mô tả khi người dùng chọn vị trí mới.
   final void Function(double lat, double lng, String? label)? onLocationChanged;
 
+  /// Hàm gọi lại khi người dùng điều chỉnh thanh trượt bán kính tìm kiếm (`500m..5000m`).
+  final ValueChanged<int>? onRadiusChanged;
+
   /// Khởi tạo bộ chọn bản đồ Vũng Tàu `VungTauMapPicker`.
   const VungTauMapPicker({
     super.key,
@@ -254,6 +258,7 @@ class VungTauMapPicker extends StatefulWidget {
     this.showRadiusCircle = true,
     this.showPresetChips = true,
     this.onLocationChanged,
+    this.onRadiusChanged,
   });
 
   @override
@@ -511,10 +516,12 @@ class _VungTauMapPickerState extends State<VungTauMapPicker> {
                         top: top,
                         width: 256,
                         height: 256,
-                        child: Image.network(
-                          tileUrl,
+                        child: AppImage(
+                          imageUrl: tileUrl,
+                          width: 256,
+                          height: 256,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => CustomPaint(
+                          errorWidget: CustomPaint(
                             painter: _FallbackMapGridPainter(),
                           ),
                         ),
@@ -641,6 +648,74 @@ class _VungTauMapPickerState extends State<VungTauMapPicker> {
             ),
           ),
         ),
+        if (widget.showRadiusCircle && widget.onRadiusChanged != null) ...[
+          const SizedBox(height: 10),
+          // Giải thuật lượng tử hóa bán kính tìm kiếm địa lý (500m..5000m, bước nhảy 500m):
+          // Kẹp giá trị hiện tại vào đoạn [500, 5000] để tương thích cả mức mặc định 800m lẫn các nấc kéo 0.5km - 5.0km.
+          Builder(
+            builder: (context) {
+              final clampedMeters = widget.radiusMeters.clamp(500, 5000);
+              final kmLabel = (clampedMeters / 1000).toStringAsFixed(1);
+              return Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceMuted,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.borderSoft),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Bán kính tìm kiếm',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        Text(
+                          '$kmLabel km (${widget.radiusMeters}m)',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: AppColors.primary,
+                        inactiveTrackColor: AppColors.border,
+                        thumbColor: AppColors.primary,
+                        overlayColor: AppColors.primary.withValues(alpha: 0.12),
+                        trackHeight: 3,
+                      ),
+                      child: Slider(
+                        key: const ValueKey('vung_tau_map_radius_slider'),
+                        min: 500,
+                        max: 5000,
+                        divisions: 9,
+                        value: clampedMeters.toDouble(),
+                        label: '$kmLabel km',
+                        onChanged: (next) {
+                          final rounded =
+                              ((next / 500).round() * 500).clamp(500, 5000);
+                          widget.onRadiusChanged?.call(rounded);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
       ],
     );
   }

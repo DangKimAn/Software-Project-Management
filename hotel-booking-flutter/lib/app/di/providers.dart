@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/date/booking_date.dart';
@@ -176,12 +177,14 @@ class FavoritesNotifier extends StateNotifier<Set<String>> {
     }
   }
 
-  // Giải thuật đồng bộ tức thời thao tác thả tim / bỏ tim (Optimistic Wishlist Sync):
-  // Cập nhật ngay lập tức trạng thái cục bộ, ghi nhận danh sách vừa bỏ tim trong phiên để không bị dữ liệu cũ ghi đè,
-  // đồng thời làm mới `wishlistDetailProvider` ngay trước và sau khi gọi API để thẻ trên màn hình Yêu thích biến mất tức thì.
-  // CONFLICT-RESOLVED: Khắc phục lỗi thẻ biệt thự đã bỏ tim vẫn hiển thị trên `FavoritesScreen` do `wishlistDetailProvider` giữ cache cũ.
-  /// Đảo trạng thái yêu thích của `villaId` theo cơ chế cập nhật lạc quan (Optimistic Update) và đồng bộ lên máy chủ nếu đã đăng nhập.
-  Future<void> toggleFavorite(String villaId) async {
+  // Giải thuật đồng bộ tức thời thao tác thả tim / bỏ tim (Optimistic Wishlist Sync & Rollback):
+  // Cập nhật ngay lập tức trạng thái cục bộ để phản hồi tức thì, đồng thời lưu ảnh chụp trạng thái trước đó (`previousState`).
+  // Nếu phiên đã đăng nhập gọi API máy chủ thất bại (lỗi 4xx/5xx/mạng), hoàn tác về `previousState` và trả về chuỗi thông báo lỗi.
+  // CONFLICT-RESOLVED: Khắc phục lỗi thẻ biệt thự đã bỏ tim vẫn hiển thị trên `FavoritesScreen` và bổ sung hoàn tác khi lỗi API.
+  /// Đảo trạng thái yêu thích của `villaId` theo cơ chế cập nhật lạc quan và hoàn tác nếu đồng bộ máy chủ thất bại.
+  Future<String?> toggleFavorite(String villaId) async {
+    final previousState = Set<String>.from(state);
+    final wasRemovedInSession = _sessionRemovedIds.contains(villaId);
     final updated = Set<String>.from(state);
     final isAdding = !updated.contains(villaId);
     if (isAdding) {
@@ -205,10 +208,23 @@ class FavoritesNotifier extends StateNotifier<Set<String>> {
         if (mounted) {
           _onWishlistMutated?.call();
         }
-      } catch (_) {
-        // Silently keep local state if offline
+      } catch (e) {
+        if (wasRemovedInSession) {
+          _sessionRemovedIds.add(villaId);
+        } else {
+          _sessionRemovedIds.remove(villaId);
+        }
+        if (mounted) {
+          state = previousState;
+        }
+        await _prefs.setFavorites(previousState.toList());
+        if (mounted) {
+          _onWishlistMutated?.call();
+        }
+        return DioClient.handleError(e).message;
       }
     }
+    return null;
   }
 
   /// Kiểm tra xem biệt thự `villaId` có đang nằm trong danh sách yêu thích hay không.
@@ -594,6 +610,114 @@ class VillaFilterState {
     );
   }
 
+  /// Giải thuật khôi phục trạng thái bộ lọc tìm kiếm từ tham số truy vấn URL (`URL Query Hydration`):
+  /// Chuyển đổi an toàn từng khóa `q`, `locationGroup`, `lat`/`lng`/`radius`, `propertyType`, `priceMin`/`priceMax`,
+  /// `guests`, `bedrooms`/`beds`/`bathrooms`, `amenities`, `checkIn`/`checkOut`, `sort`, `page`, `limit` sang kiểu miền chuẩn.
+  factory VillaFilterState.fromQueryParameters(
+    Map<String, String> params, {
+    VillaFilterState? base,
+  }) {
+    final initial = base ?? const VillaFilterState();
+    if (params.isEmpty) return initial;
+
+    final q = (params['q'] ?? params['searchQuery'] ?? '').trim();
+    final locationGroup = params['locationGroup']?.trim();
+    final lat = double.tryParse(params['lat'] ?? '');
+    final lng = double.tryParse(params['lng'] ?? '');
+    final radius = int.tryParse(params['radius'] ?? '');
+    final propertyType = params['propertyType']?.trim();
+    final priceMin = int.tryParse(params['priceMin'] ?? '');
+    final priceMax = int.tryParse(params['priceMax'] ?? '');
+    final guests = int.tryParse(params['guests'] ?? params['minGuests'] ?? '');
+    final bedrooms = int.tryParse(params['bedrooms'] ?? '');
+    final beds = int.tryParse(params['beds'] ?? '');
+    final bathrooms = int.tryParse(params['bathrooms'] ?? '');
+    final petsParam = params['pets']?.trim().toLowerCase();
+    final pets = (petsParam == 'true' || petsParam == '1')
+        ? 1
+        : (int.tryParse(petsParam ?? '') ?? initial.pets);
+    final rawAmenities = params['amenities']?.trim() ?? '';
+    final amenities = rawAmenities.isNotEmpty
+        ? rawAmenities
+            .split(',')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList()
+        : initial.amenities;
+    final checkIn = BookingDate.tryParse(params['checkIn']);
+    final checkOut = BookingDate.tryParse(params['checkOut']);
+    final sort = params['sort']?.trim();
+    final page = int.tryParse(params['page'] ?? '') ?? initial.page;
+    final limit = int.tryParse(params['limit'] ?? '') ?? initial.limit;
+
+    return initial.copyWith(
+      searchQuery: q.isNotEmpty ? q : initial.searchQuery,
+      locationGroup: (locationGroup != null && locationGroup.isNotEmpty)
+          ? locationGroup
+          : initial.locationGroup,
+      lat: lat ?? initial.lat,
+      lng: lng ?? initial.lng,
+      radius: radius ?? initial.radius,
+      propertyType: (propertyType != null && propertyType.isNotEmpty)
+          ? propertyType
+          : initial.propertyType,
+      priceMin: priceMin ?? initial.priceMin,
+      priceMax: priceMax ?? initial.priceMax,
+      minGuests: guests ?? initial.minGuests,
+      adults: guests != null && guests > 0 ? guests : initial.adults,
+      pets: pets,
+      bedrooms: bedrooms ?? initial.bedrooms,
+      beds: beds ?? initial.beds,
+      bathrooms: bathrooms ?? initial.bathrooms,
+      amenities: amenities,
+      checkIn: checkIn ?? initial.checkIn,
+      checkOut: checkOut ?? initial.checkOut,
+      sort: (sort != null && sort.isNotEmpty) ? sort : initial.sort,
+      page: page > 0 ? page : 1,
+      limit: limit > 0 ? limit : 12,
+    );
+  }
+
+  /// Giải thuật tuần tự hóa trạng thái bộ lọc hiện hành ra từ điển tham số truy vấn URL (`URL Query Serialization`):
+  /// Chỉ xuất các tiêu chí khác giá trị mặc định để giữ đường dẫn chia sẻ gọn sạch và đồng nhất với REST API.
+  Map<String, String> toQueryParameters() {
+    final out = <String, String>{};
+    if (searchQuery.trim().isNotEmpty) out['q'] = searchQuery.trim();
+    if (locationGroup != null && locationGroup!.trim().isNotEmpty) {
+      out['locationGroup'] = locationGroup!.trim();
+    }
+    if (lat != null) out['lat'] = lat!.toStringAsFixed(4);
+    if (lng != null) out['lng'] = lng!.toStringAsFixed(4);
+    if (radius != null && radius! > 0) out['radius'] = radius.toString();
+    if (propertyType.trim().isNotEmpty && propertyType != 'all') {
+      out['propertyType'] = propertyType.trim();
+    }
+    if (priceMin != null && priceMin! > 0) {
+      out['priceMin'] = priceMin.toString();
+    }
+    if (priceMax != null && priceMax! > 0) {
+      out['priceMax'] = priceMax.toString();
+    }
+    if (effectiveGuests > 0) out['guests'] = effectiveGuests.toString();
+    if (bedrooms != null && bedrooms! > 0) {
+      out['bedrooms'] = bedrooms.toString();
+    }
+    if (beds != null && beds! > 0) out['beds'] = beds.toString();
+    if (bathrooms != null && bathrooms! > 0) {
+      out['bathrooms'] = bathrooms.toString();
+    }
+    if (pets > 0) out['pets'] = 'true';
+    if (amenities.isNotEmpty) out['amenities'] = amenities.join(',');
+    if (checkIn != null) out['checkIn'] = checkIn!.toIsoDate();
+    if (checkOut != null) out['checkOut'] = checkOut!.toIsoDate();
+    if (sort.trim().isNotEmpty && sort != 'newest') {
+      out['sort'] = sort.trim();
+    }
+    if (page > 1) out['page'] = page.toString();
+    if (limit != 12) out['limit'] = limit.toString();
+    return out;
+  }
+
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
@@ -663,10 +787,16 @@ final villaFilterProvider = StateProvider<VillaFilterState>((ref) {
 });
 
 /// Loads villas live from Backend API.
-/// Provider tải danh sách biệt thự trực tiếp từ REST API theo `villaFilterProvider`.
+/// Provider tải danh sách biệt thự trực tiếp từ REST API theo `villaFilterProvider` kèm hủy truy vấn cũ tự động.
 final villaListProvider = FutureProvider.autoDispose<List<Villa>>((ref) async {
   final repository = ref.watch(villaRepositoryProvider);
   final filter = ref.watch(villaFilterProvider);
+  final cancelToken = CancelToken();
+  ref.onDispose(() {
+    if (!cancelToken.isCancelled) {
+      cancelToken.cancel('Filter updated');
+    }
+  });
 
   return repository.getVillas(
     searchQuery: filter.searchQuery,
@@ -688,15 +818,22 @@ final villaListProvider = FutureProvider.autoDispose<List<Villa>>((ref) async {
     sort: filter.sort,
     page: filter.page,
     limit: filter.limit,
+    cancelToken: cancelToken,
   );
 });
 
 /// Loads paginated villas with pagination metadata.
-/// Provider tải danh sách biệt thự kèm siêu dữ liệu phân trang (`PaginatedResult<Villa>`) theo `villaFilterProvider`.
+/// Provider tải danh sách biệt thự kèm siêu dữ liệu phân trang (`PaginatedResult<Villa>`) và tự động hủy yêu cầu cũ khi đổi bộ lọc.
 final villaPaginatedProvider =
     FutureProvider.autoDispose<PaginatedResult<Villa>>((ref) async {
   final repository = ref.watch(villaRepositoryProvider);
   final filter = ref.watch(villaFilterProvider);
+  final cancelToken = CancelToken();
+  ref.onDispose(() {
+    if (!cancelToken.isCancelled) {
+      cancelToken.cancel('Filter updated');
+    }
+  });
 
   return repository.getVillasPaginated(
     searchQuery: filter.searchQuery,
@@ -718,6 +855,7 @@ final villaPaginatedProvider =
     sort: filter.sort,
     page: filter.page,
     limit: filter.limit,
+    cancelToken: cancelToken,
   );
 });
 
