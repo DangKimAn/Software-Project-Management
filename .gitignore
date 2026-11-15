@@ -70,6 +70,10 @@ docs/ai-fix/
 # Golden test diff failure artifacts (keep master snapshots in test/goldens/ trackable)
 **/test/**/failures/
 
+# Local self-generated QA test suites (DO NOT PUSH TO GITHUB)
+**/qa-auto-*.test.ts
+**/qa_auto_*_test.dart
+
 # Certificates, keys and credentials
 certs/
 **/certs/
