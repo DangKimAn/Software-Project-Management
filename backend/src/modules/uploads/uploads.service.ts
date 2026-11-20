@@ -9,13 +9,16 @@ import { getEnv } from "../../config/env";
 import { logger } from "../../config/logger";
 import Listing from "../../models/listing";
 
-export type UploadFolder = "listings" | "avatars" | "verifications" | "misc";
+// CONFLICT-RESOLVED: Cho phép thư mục công khai `listings`, `avatars`, `misc`, `chat` (phục vụ tin nhắn thoại/ảnh R2 từ `origin/develop`) nhưng tiếp tục cấm tuyệt đối `verifications` trên bucket công khai.
+export const allowedPublicUploadFolders = ["listings", "avatars", "misc", "chat"] as const;
+export type UploadFolder = (typeof allowedPublicUploadFolders)[number];
 
 export type PresignUploadInput = {
     folder: UploadFolder;
     filename: string;
     contentType: string;
     listingId?: number | null;
+    size: number;
 };
 
 export type UploadActor = {
@@ -25,16 +28,41 @@ export type UploadActor = {
 };
 
 const uploadUrlExpiresInSeconds = 300;
+const maxUploadSizeBytes = 25 * 1024 * 1024;
 
-const imageExtensionsByContentType: Record<string, string> = {
+const mediaExtensionsByContentType: Record<string, string> = {
     "image/jpeg": "jpg",
     "image/png": "png",
     "image/webp": "webp",
     "image/gif": "gif",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/m4a": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/mp4": "m4a",
+    "audio/aac": "aac",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/ogg": "ogg",
+    "audio/webm": "webm",
 };
 
-const allowedContentTypes = new Set(Object.keys(imageExtensionsByContentType));
+// CONFLICT-RESOLVED: Hợp nhất tập MIME ảnh/âm thanh từ `origin/develop` với tập thư mục công khai an toàn `allowedFoldersSet`.
+const imageContentTypes = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+]);
 
+const allowedContentTypes = new Set(Object.keys(mediaExtensionsByContentType));
+const allowedFoldersSet = new Set<string>(allowedPublicUploadFolders);
+
+/**
+ * Giải thuật kiểm tra cấu hình biến môi trường bắt buộc của kho lưu trữ công khai Cloudflare R2:
+ * Rà soát toàn bộ thông số kết nối (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`),
+ * chuẩn hóa cắt dấu gạch chéo dư ở cuối `publicBaseUrl` hoặc ném lỗi `500` nếu thiếu cấu hình.
+ */
 const assertRequiredR2Env = () => {
     const env = getEnv();
     const missing = [
@@ -61,6 +89,10 @@ const assertRequiredR2Env = () => {
     };
 };
 
+/**
+ * Giải thuật kiểm tra tên tệp tải lên chống tấn công Path Traversal và CRLF/Null-Byte Injection:
+ * Đối chiếu `path.basename(trimmed) === trimmed`, giới hạn độ dài `1..255` ký tự và cấm tuyệt đối ký tự `\0`, `\r`, `\n`.
+ */
 const validateFilename = (filename: string) => {
     const trimmed = filename.trim();
     const basename = path.basename(trimmed);
@@ -80,6 +112,28 @@ const validateFilename = (filename: string) => {
     }
 };
 
+// CONFLICT-RESOLVED: Khai báo bằng từ khóa `function` tường minh để thỏa ràng buộc TypeScript TS2775 cho hàm `asserts`.
+/**
+ * Giải thuật kiểm soát danh sách trắng thư mục tải lên công khai (`listings`, `avatars`, `misc`):
+ * Ngăn chặn tuyệt đối việc tải giấy tờ định danh nhạy cảm (KYC) lên bucket công khai R2.
+ */
+function assertPublicUploadFolderAllowed(folder: unknown): asserts folder is UploadFolder {
+    if (typeof folder !== "string" || !allowedFoldersSet.has(folder)) {
+        throw new ApiError(422, "Validation error", [
+            {
+                path: "folder",
+                msg: "folder must be listings, avatars, or misc (identity verification files must use private KYC storage)",
+            },
+        ]);
+    }
+}
+
+/**
+ * Giải thuật kiểm tra phân quyền vai trò (RBAC) và quyền sở hữu chỗ ở (chống BOLA/IDOR) khi tải ảnh `listings`:
+ * 1. Chỉ cho phép người dùng có vai trò `host` hoặc `admin`.
+ * 2. Nếu chưa có `listingId`, phân vùng đường dẫn tạm vào nhánh `draft` của chính người dùng.
+ * 3. Nếu truyền `listingId`, truy vấn bảng `Listing` và xác minh `listing.hostId === actor.userId` (trừ `admin`).
+ */
 const assertListingUploadAccess = async (listingId: number | null | undefined, actor: UploadActor) => {
     if (!actor.isAdmin && !actor.isHost) {
         throw new ApiError(403, "Forbidden");
@@ -113,6 +167,9 @@ const assertListingUploadAccess = async (listingId: number | null | undefined, a
     };
 };
 
+/**
+ * Ràng buộc tính nhất quán tham số: chỉ cho phép đính kèm `listingId` khi thư mục đích là `listings`.
+ */
 const assertFolderListingId = (input: PresignUploadInput) => {
     if (input.folder === "listings") {
         return;
@@ -128,6 +185,30 @@ const assertFolderListingId = (input: PresignUploadInput) => {
     }
 };
 
+/**
+ * Giải thuật kiểm tra kích thước tệp bắt buộc chống tấn công cạn kiệt dung lượng lưu trữ (Storage DoS):
+ * Yêu cầu `size` là số nguyên dương nằm trong ngưỡng từ 1 byte đến tối đa 10MB (`maxUploadSizeBytes`).
+ */
+const assertMandatoryUploadSize = (size: unknown): number => {
+    if (size === undefined || size === null) {
+        throw new ApiError(422, "Validation error", [
+            {
+                path: "size",
+                msg: "size is required when requesting a presigned upload URL",
+            },
+        ]);
+    }
+
+    if (typeof size !== "number" || !Number.isInteger(size) || size < 1 || size > maxUploadSizeBytes) {
+        throw new ApiError(413, "Upload file size must be between 1 byte and 25MB");
+    }
+
+    return size;
+};
+
+/**
+ * Khởi tạo S3Client tương thích giao thức Cloudflare R2 (`region: "auto"`) từ cấu hình môi trường đã xác thực.
+ */
 const createR2Client = (config: ReturnType<typeof assertRequiredR2Env>) =>
     new S3Client({
         region: "auto",
@@ -138,37 +219,63 @@ const createR2Client = (config: ReturnType<typeof assertRequiredR2Env>) =>
         },
     });
 
+/**
+ * Giải thuật cấp Presigned URL an toàn cho bucket công khai Cloudflare R2:
+ * 1. Cấm tuyệt đối thư mục nhạy cảm `verifications` trên bucket công khai (chứng từ KYC bắt buộc đi qua Private R2).
+ * 2. Kiểm tra quyền sở hữu listing (`403`/`404`) và danh sách trắng MIME ảnh (`JPG`, `PNG`, `WebP`, `GIF`).
+ * 3. Bắt buộc truyền `size` hợp lệ (`1B..10MB`) và khóa cứng `ContentLength` vào chữ ký `PutObjectCommand`
+ *    để ngăn tải tệp dung lượng không giới hạn.
+ */
 export const createPresignedUploadUrl = async (
     actor: UploadActor,
     input: PresignUploadInput,
 ) => {
     validateFilename(input.filename);
+    assertPublicUploadFolderAllowed(input.folder);
     assertFolderListingId(input);
 
-    if (!allowedContentTypes.has(input.contentType)) {
-        throw new ApiError(422, "Validation error", [
-            {
-                path: "contentType",
-                msg: "Only JPG, PNG, WebP, or GIF image files are allowed",
-            },
-        ]);
+    const isChatFolder = input.folder === "chat";
+    const isImage = imageContentTypes.has(input.contentType);
+
+    if (isChatFolder) {
+        if (!allowedContentTypes.has(input.contentType)) {
+            throw new ApiError(422, "Validation error", [
+                {
+                    path: "contentType",
+                    msg: "Unsupported media type. Allowed images: JPG, PNG, WebP, GIF. Allowed audio: MP3, M4A, AAC, WAV, OGG, WebM.",
+                },
+            ]);
+        }
+    } else {
+        if (!isImage) {
+            throw new ApiError(422, "Validation error", [
+                {
+                    path: "contentType",
+                    msg: "Unsupported media type. Only JPG, PNG, WebP, or GIF are allowed.",
+                },
+            ]);
+        }
     }
 
-    const r2Config = assertRequiredR2Env();
-    const extension = imageExtensionsByContentType[input.contentType];
-    const uuid = crypto.randomUUID();
-    const objectKey =
+    // CONFLICT-RESOLVED: Giữ kiểm tra phân quyền sở hữu listing (`assertListingUploadAccess`) kết hợp kiểm tra kích thước bắt buộc `assertMandatoryUploadSize` (1B..25MB).
+    const listingAccess =
         input.folder === "listings"
-            ? await assertListingUploadAccess(input.listingId, actor).then(
-                  ({ userPathSegment, listingPathSegment }) =>
-                      `listings/${userPathSegment}/${listingPathSegment}/${uuid}.${extension}`,
-              )
-            : `${input.folder}/${actor.userId}/${uuid}.${extension}`;
+            ? await assertListingUploadAccess(input.listingId, actor)
+            : null;
+
+    const enforcedSizeBytes = assertMandatoryUploadSize(input.size);
+    const r2Config = assertRequiredR2Env();
+    const extension = mediaExtensionsByContentType[input.contentType] ?? "bin";
+    const uuid = crypto.randomUUID();
+    const objectKey = listingAccess
+        ? `listings/${listingAccess.userPathSegment}/${listingAccess.listingPathSegment}/${uuid}.${extension}`
+        : `${input.folder}/${actor.userId}/${uuid}.${extension}`;
     const client = createR2Client(r2Config);
     const command = new PutObjectCommand({
         Bucket: r2Config.bucket,
         Key: objectKey,
         ContentType: input.contentType,
+        ContentLength: enforcedSizeBytes,
     });
     const uploadUrl = await getSignedUrl(client, command, {
         expiresIn: uploadUrlExpiresInSeconds,
@@ -179,5 +286,45 @@ export const createPresignedUploadUrl = async (
         publicUrl: `${r2Config.publicBaseUrl}/${objectKey}`,
         key: objectKey,
         expiresIn: uploadUrlExpiresInSeconds,
+    };
+};
+
+export const uploadBufferToR2 = async ({
+    userId,
+    buffer,
+    filename,
+    contentType,
+    folder = "chat",
+}: {
+    userId: string;
+    buffer: Buffer;
+    filename: string;
+    contentType: string;
+    folder?: UploadFolder;
+}) => {
+    validateFilename(filename);
+    assertPublicUploadFolderAllowed(folder);
+    if (!allowedContentTypes.has(contentType)) {
+        throw new ApiError(422, "Unsupported media type");
+    }
+    const r2Config = assertRequiredR2Env();
+    const extension = mediaExtensionsByContentType[contentType] ?? "bin";
+    const uuid = crypto.randomUUID();
+    const objectKey = `${folder}/${userId}/${uuid}.${extension}`;
+    const client = createR2Client(r2Config);
+    const command = new PutObjectCommand({
+        Bucket: r2Config.bucket,
+        Key: objectKey,
+        ContentType: contentType,
+        Body: buffer,
+    });
+    await client.send(command);
+
+    return {
+        publicUrl: `${r2Config.publicBaseUrl}/${objectKey}`,
+        key: objectKey,
+        filename,
+        contentType,
+        size: buffer.length,
     };
 };

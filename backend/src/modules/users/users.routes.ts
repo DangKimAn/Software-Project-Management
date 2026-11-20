@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP hồ sơ cá nhân và quản trị người dùng (`/api/users`):
+ * - Bắt buộc xác thực (`authenticate`) trên toàn tuyến, kết hợp kiểm chứng schema (`validate`) và phân quyền `requireRole("admin")` cho các thao tác quản trị danh sách/trạng thái tài khoản.
+ */
+
 import express from "express";
 
 import { authenticate } from "../../middlewares/authenticate.middleware";

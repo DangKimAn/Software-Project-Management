@@ -675,8 +675,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Verify real identity verification status is shown (NOT hardcoded "Đã xác minh")
-      expect(find.text('Chưa xác minh'), findsOneWidget);
+      // Identity verification line was removed from profile UI
+      expect(find.textContaining('Xác minh danh tính'), findsNothing);
       expect(find.text('Kỹ sư phần mềm'), findsOneWidget);
       expect(find.text('ĐH Bách Khoa'), findsOneWidget);
 

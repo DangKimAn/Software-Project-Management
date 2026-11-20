@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
 import 'package:hotel_booking_flutter/app/theme/app_theme.dart';
+import 'package:hotel_booking_flutter/features/host/data/host_repository.dart';
 import 'package:hotel_booking_flutter/features/host/domain/host_models.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/screens/host_onboarding_screens.dart';
 import 'package:hotel_booking_flutter/features/host/services/host_file_picker_service.dart';
@@ -27,6 +28,7 @@ class _FakeHostFilePickerService implements HostFilePickerService {
   HostPickedFile? defaultFile;
   Object? errorToThrow;
   final List<String> requestedTitles = <String>[];
+  final List<bool> requestedImageOnlyFlags = <bool>[];
 
   void enqueue(HostPickedFile? file) {
     _queue.add(file);
@@ -36,8 +38,12 @@ class _FakeHostFilePickerService implements HostFilePickerService {
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = 'Chọn tài liệu xác minh',
+    // CONFLICT-RESOLVED: Đáp ứng chữ ký `pickKycDocument` hợp nhất gồm cả `imageOnly` và `source`.
+    bool imageOnly = false,
+    HostKycFileSource source = HostKycFileSource.deviceFile,
   }) async {
     requestedTitles.add(title);
+    requestedImageOnlyFlags.add(imageOnly);
     if (errorToThrow != null) {
       throw errorToThrow!;
     }
@@ -75,8 +81,9 @@ class _FakePermissionService implements HostOnboardingPermissionService {
 
   @override
   Future<HostKycPermissionResult> requestPermission(
-    HostKycFileSource source,
-  ) async {
+    HostKycFileSource source, {
+    BuildContext? context,
+  }) async {
     requestedSources.add(source);
     return result;
   }
@@ -94,14 +101,26 @@ class _FakeHostOnboardingRepository extends HostOnboardingApiService {
   HostApplicationRecord? currentRecord;
   Object? fetchError;
   Object? submitError;
+  Object? cancelError;
   HostApplicationStatus submitReturnedStatus;
   Completer<void>? submitCompleter;
   bool simulateProgressSteps = true;
 
   int getMyApplicationCount = 0;
   int submitCount = 0;
+  int cancelCount = 0;
   HostKycSubmissionDto? lastSubmittedDto;
   final List<double> recordedOverallProgress = <double>[];
+
+  @override
+  Future<bool> cancelApplication() async {
+    cancelCount += 1;
+    if (cancelError != null) {
+      throw cancelError!;
+    }
+    currentRecord = null;
+    return true;
+  }
 
   @override
   Future<HostApplicationRecord?> getMyApplicationRecord() async {
@@ -211,6 +230,33 @@ class _FakeHostOnboardingRepository extends HostOnboardingApiService {
     );
     currentRecord = created;
     return created;
+  }
+}
+
+class _FakeHostRepositoryForOnboarding extends HostRepository {
+  _FakeHostRepositoryForOnboarding() : super(Dio());
+  int _callIndex = 0;
+
+  @override
+  Future<HostIdentityAiResult> analyzeIdentityCard({
+    required List<int> bytes,
+    required String filename,
+    required String mimeType,
+  }) async {
+    _callIndex++;
+    final isBack =
+        filename.toLowerCase().contains('back') || (_callIndex % 2 == 0);
+    return HostIdentityAiResult(
+      documentType: 'cccd',
+      side: isBack ? 'back' : 'front',
+      idNumber: '079090123456',
+      fullName: isBack ? null : 'NGUYỄN VĂN AN',
+      isDocumentValid: true,
+      isClear: true,
+      confidence: 0.99,
+      warnings: const [],
+      summaryVi: isBack ? 'CCCD mặt sau' : 'CCCD mặt trước - NGUYỄN VĂN AN',
+    );
   }
 }
 
@@ -366,6 +412,8 @@ Widget _buildRouterApp({
   return ProviderScope(
     overrides: [
       hostOnboardingApiProvider.overrideWithValue(repository),
+      hostRepositoryProvider
+          .overrideWithValue(_FakeHostRepositoryForOnboarding()),
       if (pickerService != null)
         hostFilePickerProvider.overrideWithValue(pickerService),
       if (permissionService != null)
@@ -438,6 +486,12 @@ Future<void> _tapPickButton(WidgetTester tester, String slotKey) async {
   await tester.ensureVisible(btn);
   await tester.tap(btn);
   await tester.pumpAndSettle();
+
+  final fileOption = find.byKey(Key('kyc_source_file_$slotKey'));
+  if (fileOption.evaluate().isNotEmpty) {
+    await tester.tap(fileOption);
+    await tester.pumpAndSettle();
+  }
 }
 
 void main() {
@@ -556,7 +610,127 @@ void main() {
               findsNothing,
             );
           }
+
+          if (tc.statusApiValue == 'pending') {
+            expect(
+              find.byKey(const Key('status_cancel_application_btn')),
+              findsOneWidget,
+            );
+          } else {
+            expect(
+              find.byKey(const Key('status_cancel_application_btn')),
+              findsNothing,
+            );
+          }
         }
+      },
+    );
+
+    testWidgets(
+      'TrangThaiHostScreen handles cancel host application flow with confirmation and reset to none',
+      (tester) async {
+        final pendingRecord =
+            _sampleRecord(status: HostApplicationStatus.pending);
+        final repo =
+            _FakeHostOnboardingRepository(currentRecord: pendingRecord);
+
+        await tester.pumpWidget(
+          _buildRouterApp(
+            initialLocation: '/tro-thanh-host/trang-thai',
+            repository: repo,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. Cancel button exists for pending application
+        final cancelBtn =
+            find.byKey(const Key('status_cancel_application_btn'));
+        expect(cancelBtn, findsOneWidget);
+
+        // 2. Tapping opens confirmation dialog
+        await tester.tap(cancelBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('confirm_cancel_application_dialog')),
+          findsOneWidget,
+        );
+        expect(find.text('Hủy nộp đơn làm Host?'), findsOneWidget);
+
+        // 3. User cancels dialog -> application stays intact
+        await tester.tap(find.byKey(const Key('cancel_dialog_back_btn')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('confirm_cancel_application_dialog')),
+          findsNothing,
+        );
+        expect(repo.cancelCount, 0);
+        expect(
+          find.byKey(const Key('status_cancel_application_btn')),
+          findsOneWidget,
+        );
+
+        // 4. User opens dialog again and confirms cancellation
+        await tester.tap(cancelBtn);
+        await tester.pumpAndSettle();
+
+        await tester
+            .tap(find.byKey(const Key('confirm_cancel_application_btn')));
+        await tester.pumpAndSettle();
+
+        expect(repo.cancelCount, 1);
+        expect(
+          find.text('Đã hủy đơn đăng ký làm Host thành công.'),
+          findsOneWidget,
+        );
+
+        // 5. Screen reloads to status none (Chưa có hồ sơ đăng ký Host)
+        expect(find.byKey(const Key('kyc_status_card_none')), findsOneWidget);
+        expect(find.byKey(const Key('status_resubmit_btn')), findsOneWidget);
+        expect(find.text('Đăng ký làm Host'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'TrangThaiHostScreen handles cancellation error by displaying error SnackBar',
+      (tester) async {
+        final pendingRecord =
+            _sampleRecord(status: HostApplicationStatus.pending);
+        final repo = _FakeHostOnboardingRepository(
+          currentRecord: pendingRecord,
+        )..cancelError = DioException(
+            requestOptions:
+                RequestOptions(path: '/api/host/applications/cancel'),
+            response: Response(
+              requestOptions:
+                  RequestOptions(path: '/api/host/applications/cancel'),
+              statusCode: 400,
+              data: {'message': 'Không thể hủy hồ sơ vào lúc này.'},
+            ),
+          );
+
+        await tester.pumpWidget(
+          _buildRouterApp(
+            initialLocation: '/tro-thanh-host/trang-thai',
+            repository: repo,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester
+            .tap(find.byKey(const Key('status_cancel_application_btn')));
+        await tester.pumpAndSettle();
+
+        await tester
+            .tap(find.byKey(const Key('confirm_cancel_application_btn')));
+        await tester.pumpAndSettle();
+
+        expect(repo.cancelCount, 1);
+        expect(
+          find.byKey(const Key('cancel_application_error_snackbar')),
+          findsOneWidget,
+        );
+        expect(find.text('Không thể hủy hồ sơ vào lúc này.'), findsOneWidget);
       },
     );
 
@@ -813,13 +987,15 @@ void main() {
     );
 
     testWidgets(
-      'requests permission via 36dp source sheet, handles denied permission, renders real PDF & Image previews, and supports delete & reselect',
+      'requests permission via 36dp source sheet, rejects PDF on identity slot, renders PDF on businessLicense & Image preview on identitySingle, and supports delete & reselect',
       (tester) async {
         final repo = _FakeHostOnboardingRepository();
         final picker = _FakeHostFilePickerService(
           queue: <HostPickedFile?>[
             _makePdfFile('passport_scan.pdf'),
+            _makePngFile('passport_valid.png'),
             _makePngFile('passport_reselected.png'),
+            _makePdfFile('gpkd_scan.pdf'),
           ],
         );
         final permission = _FakePermissionService(
@@ -842,6 +1018,7 @@ void main() {
 
         await _fillValidContactForm(
           tester,
+          profileType: HostProfileType.business,
           documentType: HostDocumentType.passport,
         );
 
@@ -871,16 +1048,25 @@ void main() {
           findsWidgets,
         );
 
-        // Grant permission and pick PDF file
+        // Grant permission and attempt to pick PDF file into identitySingle -> MUST be rejected!
         permission.result = const HostKycPermissionResult(
           status: HostKycPermissionStatus.granted,
         );
         await _tapPickButton(tester, 'identitySingle');
+        expect(picker.requestedImageOnlyFlags.first, isTrue);
         expect(
-          find.byKey(const Key('kyc_pdf_preview_identitySingle')),
+          find.byKey(const Key('kyc_slot_error_identitySingle')),
           findsOneWidget,
         );
-        expect(find.textContaining('passport_scan.pdf'), findsWidgets);
+        expect(
+          find.byKey(const Key('kyc_pdf_preview_identitySingle')),
+          findsNothing,
+        );
+        expect(find.textContaining('không hỗ trợ tệp PDF'), findsWidgets);
+
+        // Pick valid PNG image into identitySingle -> accepted
+        await _tapPickButton(tester, 'identitySingle');
+        expect(find.textContaining('passport_valid.png'), findsWidgets);
 
         // Open 36dp modal preview sheet
         final previewBtn = find.byKey(
@@ -897,17 +1083,33 @@ void main() {
         await tester.tap(find.byTooltip('Đóng xem trước'));
         await tester.pumpAndSettle();
 
-        // Reselect with PNG image
+        // Reselect with another PNG image
         final reselectBtn = find.byKey(
           const Key('kyc_reselect_btn_identitySingle'),
         );
         await tester.ensureVisible(reselectBtn);
         await tester.tap(reselectBtn);
         await tester.pumpAndSettle();
+        final reselectFileOption = find.byKey(
+          const Key('kyc_source_file_identitySingle'),
+        );
+        if (reselectFileOption.evaluate().isNotEmpty) {
+          await tester.tap(reselectFileOption);
+          await tester.pumpAndSettle();
+        }
 
         expect(find.textContaining('passport_reselected.png'), findsWidgets);
 
-        // Delete file from slot
+        // Pick PDF into businessLicense -> PDF is still allowed for businessLicense!
+        await _tapPickButton(tester, 'businessLicense');
+        expect(picker.requestedImageOnlyFlags.last, isFalse);
+        expect(
+          find.byKey(const Key('kyc_pdf_preview_businessLicense')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('gpkd_scan.pdf'), findsWidgets);
+
+        // Delete file from identitySingle slot
         final removeBtn = find.byKey(
           const Key('kyc_remove_btn_identitySingle'),
         );
@@ -1516,6 +1718,39 @@ void main() {
         // Guarded: never approved on POST submission
         expect(submitted.status, HostApplicationStatus.pending);
         expect(recordedRequests.last.data, isA<FormData>());
+      },
+    );
+
+    test(
+      'HostOnboardingApiService.cancelApplication sends POST /api/host/applications/cancel',
+      () async {
+        final dio = Dio(BaseOptions(baseUrl: 'http://localhost:4000'));
+        final recordedRequests = <RequestOptions>[];
+        dio.httpClientAdapter = _CallbackHttpClientAdapter((options) async {
+          recordedRequests.add(options);
+          if (options.method == 'POST' &&
+              options.path == '/api/host/applications/cancel') {
+            return ResponseBody.fromString(
+              jsonEncode(<String, dynamic>{
+                'success': true,
+                'message': 'Đã hủy đơn đăng ký Host thành công.',
+                'data': {'status': null},
+              }),
+              200,
+              headers: <String, List<String>>{
+                Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+              },
+            );
+          }
+          return ResponseBody.fromString('{}', 404);
+        });
+
+        final service = HostOnboardingApiService(dio: dio);
+        final success = await service.cancelApplication();
+        expect(success, isTrue);
+        expect(recordedRequests.length, 1);
+        expect(recordedRequests.first.path, '/api/host/applications/cancel');
+        expect(recordedRequests.first.method, 'POST');
       },
     );
   });

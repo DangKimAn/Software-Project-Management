@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { before, describe, it } = require("node:test");
+const { after, before, describe, it } = require("node:test");
 
 const request = require("supertest");
 const { Op } = require("sequelize");
@@ -22,8 +22,7 @@ const Review = require("../dist/models/review").default;
 const publicListingsService = require("../dist/modules/listings/listings.service");
 const hostListingsService = require("../dist/modules/host-listings/host-listings.service");
 const adminListingsService = require("../dist/modules/admin/admin.service");
-const semanticSearchService = require("../dist/modules/semantic-search/semantic-search.service");
-const locationGroups = require("../dist/common/vung-tau-location-groups");
+const locationGroups = require("../dist/modules/listings/vung-tau-location-groups");
 
 const originalGetPublicListings = publicListingsService.getPublicListings;
 
@@ -91,14 +90,6 @@ type CapturedAdminApproval = {
 };
 
 type SequelizeWhere = Record<PropertyKey, unknown>;
-type CapturedAiSearchPayload = {
-    query?: string;
-    limit?: number;
-    city?: string;
-    minPrice?: number;
-    maxPrice?: number;
-    guests?: number;
-};
 
 const users = new Map<string, TestUserRecord>([
     [
@@ -153,19 +144,6 @@ const users = new Map<string, TestUserRecord>([
             roles: ["admin"],
         },
     ],
-    [
-        "901",
-        {
-            _id: 901,
-            id: 901,
-            email: "moderator@example.com",
-            phone: "0909999998",
-            username: "moderator",
-            fullName: "Moderator User",
-            status: "active",
-            roles: ["moderator"],
-        },
-    ],
 ]);
 
 let capturedPublicSearch: PublicSearchQuery = {};
@@ -173,7 +151,6 @@ let capturedCreatePayload: CapturedCreatePayload = {};
 let capturedUpdatePayload: CapturedUpdatePayload = {};
 let capturedCalendarPayload: CapturedCalendarPayload = {};
 let capturedAdminApproval: CapturedAdminApproval = {};
-let capturedAiListingSearch: CapturedAiSearchPayload = {};
 
 before(() => {
     authService.verifyAuthToken = (token: string) => {
@@ -187,10 +164,6 @@ before(() => {
 
         if (token === "admin-token") {
             return { userId: "900", role: "admin" };
-        }
-
-        if (token === "moderator-token") {
-            return { userId: "901", role: "moderator" };
         }
 
         if (token === "guest-token") {
@@ -318,58 +291,6 @@ before(() => {
             approvedAt: new Date().toISOString(),
         };
     };
-    semanticSearchService.semanticSearchListings = async (payload: CapturedAiSearchPayload) => {
-        capturedAiListingSearch = payload;
-        return {
-            items: [
-                {
-                    listingId: 802,
-                    title: "Beach AI stay",
-                    description: "Public semantic search result",
-                    basePrice: 1200000,
-                    weekendPrice: null,
-                    currency: "VND",
-                    ratingAvg: 4.7,
-                    reviewCount: 8,
-                    isAvailable: true,
-                    addressLine: "2 Thuy Van",
-                    ward: "Ward 2",
-                    district: "Vung Tau",
-                    city: "Vung Tau",
-                    vungTauAreas: ["Bai Sau"],
-                    vungTauAreaKeys: ["bai_sau"],
-                    propertyType: "villa",
-                    roomType: "entire_place",
-                    maxGuests: 4,
-                    bedrooms: 2,
-                    beds: 2,
-                    bathrooms: 2,
-                    imageUrl: null,
-                    semanticScore: 0.91,
-                    finalScore: 0.88,
-                    matchedReasons: ["Semantic match"],
-                },
-            ],
-            pagination: { page: 1, limit: payload.limit ?? 12, total: 1, totalPages: 1 },
-            fallback: false,
-            searchMeta: {
-                query: payload.query,
-                semanticQuery: payload.query,
-                usedVectorSearch: true,
-                candidateCount: 1,
-                forceVungTauOnly: true,
-                filters: {
-                    city: payload.city ?? "Vung Tau",
-                    minPrice: payload.minPrice,
-                    maxPrice: payload.maxPrice,
-                    guests: payload.guests ?? 1,
-                    amenityIds: [],
-                    amenityCodes: [],
-                    vungTauAreaKeys: [],
-                },
-            },
-        };
-    };
 });
 
 const app = require("../dist/app").default;
@@ -377,7 +298,6 @@ const app = require("../dist/app").default;
 const hostAuth = { Authorization: "Bearer host-token" };
 const otherHostAuth = { Authorization: "Bearer other-host-token" };
 const adminAuth = { Authorization: "Bearer admin-token" };
-const moderatorAuth = { Authorization: "Bearer moderator-token" };
 const guestAuth = { Authorization: "Bearer guest-token" };
 
 const createListingPayload = () => ({
@@ -413,30 +333,6 @@ const createListingPayload = () => ({
 });
 
 describe("Listings endpoint contracts", () => {
-    it("allows public AI listing search before protected image AI routes", async () => {
-        capturedAiListingSearch = {};
-
-        const response = await request(app)
-            .post("/api/ai/listings/search")
-            .send({
-                query: "bai sau",
-                limit: 5,
-                filters: {
-                    city: "Vung Tau",
-                    guests: 2,
-                },
-            });
-
-        assert.equal(response.status, 200);
-        assert.equal(response.body.data.query, "bai sau");
-        assert.equal(response.body.data.mode, "semantic");
-        assert.equal(response.body.data.items[0].title, "Beach AI stay");
-        assert.equal(capturedAiListingSearch.query, "bai sau");
-        assert.equal(capturedAiListingSearch.limit, 5);
-        assert.equal(capturedAiListingSearch.city, "Vung Tau");
-        assert.equal(capturedAiListingSearch.guests, 2);
-    });
-
     it("passes supported public search filters to the listing service", async () => {
         const response = await request(app).get(
             "/api/listings?q=pool%20villa&city=Vung%20Tau&district=District%201&checkIn=2026-04-20&checkOut=2026-04-22&guests=4&propertyType=villa&roomType=entire_place&priceMin=1000000&priceMax=2000000&amenities=wifi,pool&locationGroup=B%C3%A3i%20Sau&lat=10.345&lng=107.084&radius=800&sort=price_asc&page=2&limit=5",
@@ -621,12 +517,18 @@ describe("Listings endpoint contracts", () => {
         assert.equal(capturedAdminApproval.admin!.roles.includes("admin"), true);
     });
 
-    it("rejects moderator access to admin listing approval routes", async () => {
-        const response = await request(app)
+    it("rejects non-admin access to admin listing approval routes", async () => {
+        const hostResponse = await request(app)
             .patch("/api/admin/listings/900/approve")
-            .set(moderatorAuth);
+            .set(hostAuth);
 
-        assert.equal(response.status, 403);
+        assert.equal(hostResponse.status, 403);
+
+        const guestResponse = await request(app)
+            .patch("/api/admin/listings/900/approve")
+            .set(guestAuth);
+
+        assert.equal(guestResponse.status, 403);
     });
 });
 
@@ -795,8 +697,8 @@ describe("Listings service availability rules", () => {
             };
 
             await originalGetPublicListings({
-                checkIn: "2026-07-20",
-                checkOut: "2026-07-22",
+                checkIn: "2027-07-20",
+                checkOut: "2027-07-22",
             });
 
             assert.equal(capturedBookingQueries.length, 1);
@@ -860,7 +762,7 @@ describe("Vung Tau location group helpers", () => {
         );
     });
 
-    it("detects location groups from semantic-style queries", () => {
+    it("detects location groups from natural-language keyword queries", () => {
         assert.equal(locationGroups.detectLocationGroupFromQuery("villa bãi sau có hồ bơi"), "Bãi Sau");
         assert.equal(locationGroups.detectLocationGroupFromQuery("căn ở Tran Phu view biển"), "Trần Phú");
         assert.equal(locationGroups.detectLocationGroupFromQuery("villa Hoanh Son có karaoke"), "Long Cung");
@@ -868,5 +770,14 @@ describe("Vung Tau location group helpers", () => {
             locationGroups.detectLocationGroupFromQuery("villa Thuy Tien yên tĩnh"),
             "Thủy Tiên",
         );
+    });
+
+    after(async () => {
+        const sequelize = require("../dist/config/database").default || require("../dist/config/database").sequelize;
+        try {
+            await sequelize.close();
+        } catch {
+            // ignore
+        }
     });
 });

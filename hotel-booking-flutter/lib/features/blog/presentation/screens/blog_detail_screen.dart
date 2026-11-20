@@ -1,25 +1,28 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/errors/app_failure.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/animations/fade_slide_in.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
-import '../../../booking_inquiry/domain/services/contact_service.dart';
-import '../../data/blog_repository.dart';
+import '../../../../shared/widgets/app_header.dart';
+import '../../../support/domain/services/contact_service.dart';
+import '../view_models/blog_view_model.dart';
 import 'blog_screen.dart';
 
 /// Port of `Source goc/frontend/src/views/pages/Blog/BlogDetailPage.tsx`
-/// adhering to Minh Thanh Villa Light Luxury Design System (FLUTTER_RULES.md).
+/// adhering to The Palm Light Luxury Design System (FLUTTER_RULES.md).
 class BlogDetailScreen extends ConsumerWidget {
   final String slug;
 
@@ -74,9 +77,18 @@ class BlogDetailScreen extends ConsumerWidget {
   }
 
   /// Builds a canonical deep link / share URL for a validated blog [slug].
+  // Giải thuật tạo liên kết chia sẻ chuẩn hóa cho bài viết cẩm nang:
+  // ưu tiên URL Web đầy đủ có giao thức và tên miền hiện tại trên trình duyệt (`kIsWeb`),
+  // đồng thời giữ nguyên cấu trúc deep link ứng dụng trên môi trường di động/máy ảo kiểm thử.
   static String? buildCanonicalShareUrl(String rawSlug) {
     final cleanSlug = BlogContentSanitizer.normalizeSlug(rawSlug);
     if (cleanSlug.isEmpty) return null;
+    if (kIsWeb) {
+      final origin = Uri.base.origin.trim();
+      if (origin.startsWith('http://') || origin.startsWith('https://')) {
+        return '$origin/#/blog/$cleanSlug';
+      }
+    }
     final scheme = AppConfig.deepLinkScheme.trim().isNotEmpty
         ? AppConfig.deepLinkScheme.trim().toLowerCase()
         : 'minhthanhvilla';
@@ -120,10 +132,10 @@ class BlogDetailScreen extends ConsumerWidget {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
-            const SnackBar(
+            SnackBar(
               behavior: SnackBarBehavior.floating,
-              content: Text('Liên kết bài viết không hợp lệ để chia sẻ.'),
-              duration: Duration(seconds: 2),
+              content: Text(context.l10n.blogShareInvalidLink),
+              duration: const Duration(seconds: 2),
             ),
           );
       }
@@ -141,28 +153,28 @@ class BlogDetailScreen extends ConsumerWidget {
           behavior: SnackBarBehavior.floating,
           content: Text(
             copied
-                ? 'Đã sao chép liên kết bài viết vào bộ nhớ tạm'
-                : 'Không thể sao chép liên kết bài viết trên thiết bị này.',
+                ? context.l10n.blogShareSuccess
+                : context.l10n.blogShareFailure,
           ),
           duration: const Duration(seconds: 2),
         ),
       );
   }
 
-  (String, String) _resolveErrorTitleAndMessage(Object err) {
-    if (err is NetworkFailure) {
-      return ('Không có kết nối mạng', err.message);
+  (String, String) _resolveErrorTitleAndMessage(
+    Object err,
+    BuildContext context,
+    String localeCode,
+  ) {
+    final errorCopy = LocaleFormatters.localizeFailure(
+      err,
+      localeCode: localeCode,
+      l10n: context.l10n,
+    );
+    if (err is AppFailure && err.message.trim().isNotEmpty) {
+      return (errorCopy.title, err.message);
     }
-    if (err is ServerFailure) {
-      return ('Lỗi máy chủ', err.message);
-    }
-    if (err is RateLimitFailure) {
-      return ('Tạm thời quá tải', err.message);
-    }
-    if (err is AppFailure) {
-      return ('Không thể tải bài viết', err.message);
-    }
-    return ('Không thể tải bài viết', err.toString());
+    return (errorCopy.title, errorCopy.message);
   }
 
   Widget _buildNotFoundView(BuildContext context, {VoidCallback? onRetry}) {
@@ -179,7 +191,7 @@ class BlogDetailScreen extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             Text(
-              'Không tìm thấy bài viết',
+              context.l10n.blogNotFoundTitle,
               textAlign: TextAlign.center,
               style: AppTypography.sectionHeading.copyWith(
                 fontSize: 18,
@@ -187,8 +199,8 @@ class BlogDetailScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.xs),
-            const Text(
-              'Bài viết có thể đã được gỡ hoặc đường dẫn không chính xác.',
+            Text(
+              context.l10n.blogNotFoundDescription,
               textAlign: TextAlign.center,
               style: AppTypography.bodyMuted,
             ),
@@ -211,7 +223,7 @@ class BlogDetailScreen extends ConsumerWidget {
                       size: 16,
                       color: AppColors.iconStrong,
                     ),
-                    label: const Text('Thử lại'),
+                    label: Text(context.l10n.ctaRetry),
                   ),
                 FilledButton(
                   onPressed: () => context.go('/blog'),
@@ -219,7 +231,7 @@ class BlogDetailScreen extends ConsumerWidget {
                     minimumSize: const Size(48, 48),
                     shape: const StadiumBorder(),
                   ),
-                  child: const Text('Quay lại Blog'),
+                  child: Text(context.l10n.blogBackToBlog),
                 ),
               ],
             ),
@@ -236,7 +248,6 @@ class BlogDetailScreen extends ConsumerWidget {
       return Scaffold(
         backgroundColor: AppColors.background,
         body: SafeArea(
-          bottom: false,
           child: Column(
             children: [
               const AppTopHeader(currentPath: '/blog'),
@@ -248,6 +259,7 @@ class BlogDetailScreen extends ConsumerWidget {
     }
 
     final postAsync = ref.watch(blogDetailProvider(cleanSlug));
+    final localeCode = ref.watch(localeProvider);
     // Watch blog list for related posts; if it errors or is loading, gracefully
     // fallback to empty list so the main article never fails.
     final allBlogsAsync = ref.watch(blogListProvider(null));
@@ -258,14 +270,13 @@ class BlogDetailScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        bottom: false,
         child: Column(
           children: [
             const AppTopHeader(currentPath: '/blog'),
             Expanded(
               child: postAsync.when(
-                data: (post) {
-                  if (post == null) {
+                data: (rawPost) {
+                  if (rawPost == null) {
                     return _buildNotFoundView(
                       context,
                       onRetry: () =>
@@ -273,7 +284,12 @@ class BlogDetailScreen extends ConsumerWidget {
                     );
                   }
 
-                  final relatedPosts = selectRelatedPosts(post, allBlogs);
+                  final post = LocaleFormatters.localizeBlogPost(
+                    rawPost,
+                    localeCode: localeCode,
+                    l10n: context.l10n,
+                  );
+                  final relatedPosts = selectRelatedPosts(rawPost, allBlogs);
 
                   return SingleChildScrollView(
                     key: ValueKey('blog-detail-scroll-${post.slug}'),
@@ -316,8 +332,8 @@ class BlogDetailScreen extends ConsumerWidget {
                                                 size: 16,
                                                 color: AppColors.iconStrong,
                                               ),
-                                              label: const Text(
-                                                'Tất cả bài viết',
+                                              label: Text(
+                                                context.l10n.blogAllArticles,
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -329,7 +345,7 @@ class BlogDetailScreen extends ConsumerWidget {
                                         key: const ValueKey(
                                           'blog-share-button',
                                         ),
-                                        tooltip: 'Chia sẻ bài viết',
+                                        tooltip: context.l10n.blogShareTooltip,
                                         icon: const Icon(
                                           LucideIcons.share2,
                                           size: 20,
@@ -347,7 +363,7 @@ class BlogDetailScreen extends ConsumerWidget {
                                       vertical: 5,
                                     ),
                                     decoration: const BoxDecoration(
-                                      color: AppColors.surfaceWarmSand,
+                                      color: AppColors.surfaceBase,
                                       borderRadius: AppRadii.roundedPill,
                                     ),
                                     child: Text(
@@ -438,8 +454,7 @@ class BlogDetailScreen extends ConsumerWidget {
                                                 vertical: 6,
                                               ),
                                               decoration: BoxDecoration(
-                                                color:
-                                                    AppColors.surfaceWarmSand,
+                                                color: AppColors.surfaceBase,
                                                 borderRadius:
                                                     AppRadii.roundedPill,
                                                 border: Border.all(
@@ -459,91 +474,6 @@ class BlogDetailScreen extends ConsumerWidget {
                                           .toList(),
                                     ),
                                   ],
-                                  const SizedBox(height: AppSpacing.xxl),
-                                  // Consultation CTA Card (24dp radius, pill CTAs, bare Lucide icons)
-                                  Container(
-                                    width: double.infinity,
-                                    padding: EdgeInsets.all(
-                                      screenWidth < 360
-                                          ? AppSpacing.md
-                                          : AppSpacing.xl,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.surfaceBase,
-                                      borderRadius: AppRadii.roundedCard,
-                                      border: Border.all(
-                                        color: AppColors.borderSoft,
-                                      ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Cần tư vấn đặt biệt thự Vũng Tàu?',
-                                          style: AppTypography.sectionHeading
-                                              .copyWith(
-                                            fontSize: 18,
-                                            color: AppColors.textStrong,
-                                          ),
-                                        ),
-                                        const SizedBox(height: AppSpacing.xs),
-                                        const Text(
-                                          'Kết nối với đội ngũ Minh Thanh Villa để kiểm tra lịch trống và báo giá chính xác theo đoàn khách của bạn.',
-                                          style: AppTypography.bodyMuted,
-                                        ),
-                                        const SizedBox(height: AppSpacing.md),
-                                        Wrap(
-                                          spacing: AppSpacing.sm,
-                                          runSpacing: AppSpacing.sm,
-                                          children: [
-                                            FilledButton.icon(
-                                              onPressed: () =>
-                                                  context.push('/lien-he'),
-                                              style: FilledButton.styleFrom(
-                                                backgroundColor:
-                                                    AppColors.primary,
-                                                foregroundColor: Colors.white,
-                                                minimumSize: const Size(48, 48),
-                                                shape: const StadiumBorder(),
-                                              ),
-                                              icon: const Icon(
-                                                LucideIcons.messageCircle,
-                                                size: 16,
-                                                color: Colors.white,
-                                              ),
-                                              label: const Text(
-                                                'Liên hệ tư vấn',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            OutlinedButton.icon(
-                                              onPressed: () =>
-                                                  context.push('/tim-kiem'),
-                                              style: OutlinedButton.styleFrom(
-                                                minimumSize: const Size(48, 48),
-                                                shape: const StadiumBorder(),
-                                                side: const BorderSide(
-                                                  color: AppColors.border,
-                                                ),
-                                              ),
-                                              icon: const Icon(
-                                                LucideIcons.search,
-                                                size: 16,
-                                                color: AppColors.iconStrong,
-                                              ),
-                                              label: const Text(
-                                                'Tìm kiếm villa',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -571,23 +501,25 @@ class BlogDetailScreen extends ConsumerWidget {
                                       crossAxisAlignment:
                                           WrapCrossAlignment.center,
                                       children: [
-                                        const Column(
+                                        Column(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              'BÀI VIẾT LIÊN QUAN',
-                                              style: TextStyle(
+                                              context.l10n
+                                                  .blogRelatedArticlesBadge,
+                                              style: const TextStyle(
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w700,
                                                 letterSpacing: 1.2,
                                                 color: AppColors.textSecondary,
                                               ),
                                             ),
-                                            SizedBox(height: 4),
+                                            const SizedBox(height: 4),
                                             Text(
-                                              'Gợi ý đọc tiếp',
-                                              style: TextStyle(
+                                              context.l10n
+                                                  .blogRelatedArticlesTitle,
+                                              style: const TextStyle(
                                                 fontSize: 22,
                                                 fontWeight: FontWeight.w800,
                                                 color: AppColors.textPrimary,
@@ -613,8 +545,8 @@ class BlogDetailScreen extends ConsumerWidget {
                                               size: 16,
                                               color: AppColors.iconStrong,
                                             ),
-                                            label: const Text(
-                                              'Xem tất cả bài viết',
+                                            label: Text(
+                                              context.l10n.blogViewAllArticles,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
@@ -666,14 +598,13 @@ class BlogDetailScreen extends ConsumerWidget {
                               ),
                             ),
                           ),
-                        const AppFooter(),
                       ],
                     ),
                   );
                 },
                 loading: () => Center(
                   child: Semantics(
-                    label: 'Đang tải bài viết',
+                    label: context.l10n.blogLoadingArticle,
                     child: const CircularProgressIndicator(
                       color: AppColors.primary,
                     ),
@@ -687,7 +618,8 @@ class BlogDetailScreen extends ConsumerWidget {
                           ref.invalidate(blogDetailProvider(cleanSlug)),
                     );
                   }
-                  final (title, message) = _resolveErrorTitleAndMessage(err);
+                  final (title, message) =
+                      _resolveErrorTitleAndMessage(err, context, localeCode);
                   return AppErrorView(
                     title: title,
                     message: message,
@@ -862,7 +794,7 @@ class _BlogRichContentRendererState extends State<BlogRichContentRenderer> {
           width: double.infinity,
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: const BoxDecoration(
-            color: AppColors.surfaceWarmSand,
+            color: AppColors.surfaceBase,
             borderRadius: BorderRadius.all(Radius.circular(20)),
             border: Border(
               left: BorderSide(color: AppColors.primary, width: 3),
@@ -915,7 +847,7 @@ class _BlogRichContentRendererState extends State<BlogRichContentRenderer> {
   }
 }
 
-class _RelatedBlogPostCard extends StatelessWidget {
+class _RelatedBlogPostCard extends ConsumerWidget {
   final BlogPost post;
   final VoidCallback onTap;
 
@@ -925,18 +857,24 @@ class _RelatedBlogPostCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final locale = ref.watch(localeProvider);
+    final localizedPost = LocaleFormatters.localizeBlogPost(
+      post,
+      localeCode: locale,
+      l10n: context.l10n,
+    );
     final metaParts = <String>[
-      if (post.publishedAt.isNotEmpty) post.publishedAt,
-      if (post.readTime.isNotEmpty) post.readTime,
+      if (localizedPost.publishedAt.isNotEmpty) localizedPost.publishedAt,
+      if (localizedPost.readTime.isNotEmpty) localizedPost.readTime,
     ];
     final metaText = metaParts.join(' · ');
 
     return Semantics(
       button: true,
-      label: 'Bài viết liên quan: ${post.title}',
+      label: 'Bài viết liên quan: ${localizedPost.title}',
       child: InkWell(
-        key: ValueKey('related-blog-card-${post.slug}'),
+        key: ValueKey('related-blog-card-${localizedPost.slug}'),
         onTap: onTap,
         borderRadius: AppRadii.roundedCard,
         child: Container(
@@ -950,7 +888,7 @@ class _RelatedBlogPostCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               BlogCoverImage(
-                rawUrl: post.coverImage,
+                rawUrl: localizedPost.coverImage,
                 aspectRatio: 16 / 10,
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(AppRadii.card),
@@ -967,11 +905,11 @@ class _RelatedBlogPostCard extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: const BoxDecoration(
-                        color: AppColors.surfaceWarmSand,
+                        color: AppColors.surfaceBase,
                         borderRadius: AppRadii.roundedPill,
                       ),
                       child: Text(
-                        post.category,
+                        localizedPost.category,
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
@@ -981,7 +919,7 @@ class _RelatedBlogPostCard extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      post.title,
+                      localizedPost.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -991,10 +929,10 @@ class _RelatedBlogPostCard extends StatelessWidget {
                         height: 1.3,
                       ),
                     ),
-                    if (post.excerpt.isNotEmpty) ...[
+                    if (localizedPost.excerpt.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
-                        post.excerpt,
+                        localizedPost.excerpt,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(

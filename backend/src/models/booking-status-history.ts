@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu vết lịch sử chuyển đổi trạng thái máy hữu hạn (FSM) của đơn đặt phòng kèm tác nhân và lý do.
+ */
 import {
     CreationOptional,
     DataTypes,

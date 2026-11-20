@@ -17,6 +17,10 @@ typedef ReconnectDelayBuilder = Duration Function(int attempt);
 /// - `conversation:join`, `conversation:leave`, and `conversation:typing` room events
 /// - Incoming `message:new`, `notification:new`, `conversation:error`, and `conversation:typing` events
 /// - Single-flight connection guard, token refresh reconnection, and bounded exponential backoff
+/// Dịch vụ kết nối thời gian thực theo giao thức Engine.IO v4 / Socket.IO v4 đồng bộ với máy chủ Backend.
+///
+/// Đảm nhiệm bắt tay xác thực JWT qua gói tin `40{"token":"..."}`, duy trì nhịp tim `2`/`3`, quản lý phòng hội thoại
+/// và tự động kết nối lại theo cấp số nhân có giới hạn.
 class SocketService {
   final SecureStorageService _secureStorage;
   final SocketChannelFactory _channelFactory;
@@ -47,6 +51,8 @@ class SocketService {
       StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _typingController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _reactionController =
+      StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _connectErrorController =
       StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<void> _connectedController =
@@ -63,12 +69,14 @@ class SocketService {
         _onTokenRefreshRequested = onTokenRefreshRequested,
         _reconnectDelayBuilder = reconnectDelayBuilder ?? _defaultBackoffDelay;
 
+  /// Tính độ trễ kết nối lại mặc định theo lũy thừa cơ số 2: `2^clamp(attempt, 1, 6)` giây (`2s, 4s, 8s, 16s, 32s, 64s`).
   static Duration _defaultBackoffDelay(int attempt) {
     final clamped = attempt.clamp(1, 6);
     return Duration(seconds: 1 << clamped); // 2s, 4s, 8s, 16s, 32s, 64s
   }
 
   /// Normalizes a raw JWT string by stripping any leading `Bearer ` prefix.
+  /// Chuẩn hóa chuỗi JWT đầu vào bằng cách cắt khoảng trắng và loại bỏ tiền tố `Bearer ` không phân biệt hoa thường.
   static String normalizeToken(String? rawToken) {
     if (rawToken == null) return '';
     return rawToken
@@ -95,12 +103,15 @@ class SocketService {
   Stream<Map<String, dynamic>> get onConversationError =>
       _conversationErrorController.stream;
   Stream<Map<String, dynamic>> get onTyping => _typingController.stream;
+  Stream<Map<String, dynamic>> get onMessageReaction =>
+      _reactionController.stream;
   Stream<Map<String, dynamic>> get onConnectError =>
       _connectErrorController.stream;
   Stream<void> get onConnected => _connectedController.stream;
 
   /// Builds the Engine.IO v4 WebSocket URI WITHOUT placing the JWT in the URL query string.
   /// Authentication is performed exclusively via the Socket.IO CONNECT handshake packet (`40{"token":"..."}`).
+  /// Xây dựng `Uri` kết nối WebSocket chuẩn Engine.IO v4 (`/socket.io/?EIO=4&transport=websocket`), tuyệt đối không gắn JWT lên chuỗi truy vấn URL để chống lộ token trong nhật ký mạng.
   Uri buildSocketUri([String? overrideBaseUrl]) {
     final baseUri = Uri.tryParse(overrideBaseUrl ?? AppConfig.apiBaseUrl);
     final isSecure = baseUri?.scheme == 'https';
@@ -123,12 +134,14 @@ class SocketService {
   }
 
   /// Builds the Socket.IO v4 CONNECT packet carrying the handshake auth payload (`40{"token":"..."}`).
+  /// Đóng gói khung tin bắt tay xác thực không gian tên gốc của Socket.IO v4 (`40{"token":"..."}`).
   static String buildConnectHandshakePacket(String token) {
     final cleanToken = normalizeToken(token);
     final authPayload = jsonEncode({'token': cleanToken});
     return '40$authPayload';
   }
 
+  /// Mở kết nối WebSocket với khóa hợp nhất đơn luồng (`_connectingFuture`) nhằm ngăn mở trùng nhiều kênh song song.
   Future<void> connect({bool isAutoReconnect = false}) async {
     if (_isDisposed) return;
     if (_connectingFuture != null) {
@@ -146,6 +159,11 @@ class SocketService {
     }
   }
 
+  /// Giải thuật thiết lập vòng đời phiên WebSocket nội bộ (`_connectInternal`):
+  /// 1. Đọc JWT từ `SecureStorageService` và đối chiếu `_connectionEpoch`; nếu không có token thì ngắt kết nối sạch.
+  /// 2. Chốt chặn chống lặp vô hạn: từ chối kết nối lại nếu `token` trùng khớp với `_lastRejectedToken` vừa bị máy chủ từ chối xác thực.
+  /// 3. Nếu người dùng vừa đổi tài khoản hoặc xoay vòng token mới (`_activeToken != token`), đóng kênh cũ và đặt lại bộ đếm thử lại về `0`.
+  /// 4. Tăng `_connectionEpoch`, khởi tạo kênh WebSocket và lắng nghe luồng khung tin văn bản chuyển cho `_handlePacket`.
   Future<void> _connectInternal({required bool isAutoReconnect}) async {
     if (_isDisposed) return;
 
@@ -226,6 +244,7 @@ class SocketService {
   }
 
   /// Exposed for unit testing Engine.IO / Socket.IO packet frames without a live WebSocket.
+  /// Điểm vào kiểm thử đơn vị cho phép bơm trực tiếp khung tin thô Engine.IO / Socket.IO mà không cần mở kết nối mạng thực.
   void handleRawPacketForTesting(String packet, {String token = 'test-token'}) {
     if (_isDisposed) return;
     final normalized = normalizeToken(token);
@@ -233,6 +252,14 @@ class SocketService {
     _handlePacket(packet, normalized);
   }
 
+  /// Giải thuật phân tích khung tin giao thức Engine.IO v4 / Socket.IO v4 (`_handlePacket`):
+  /// 1. Khung `0...` (Engine.IO OPEN): Ngay khi mở kênh vận chuyển thành công, gửi trả gói bắt tay xác thực Socket.IO `40{"token":"..."}`.
+  /// 2. Khung `1` (Engine.IO CLOSE): Máy chủ đóng kênh vận chuyển, chuyển sang `_handleDisconnect()` để dọn tài nguyên và xét lịch kết nối lại.
+  /// 3. Khung `2...` / `3...` (Engine.IO PING / PONG): Phản hồi tức thì gói `3` giữ nhịp tim sống (heartbeat keep-alive) kèm tải trọng đối xứng nếu có.
+  /// 4. Khung `41...` (Socket.IO SERVER DISCONNECT): Máy chủ ngắt không gian tên, hạ cờ `_isConnected` và đóng kênh hiện tại.
+  /// 5. Khung `44...` (Socket.IO CONNECT ERROR): Ghi nhận `_lastRejectedToken` để chặn lặp kết nối mù, phát lỗi ra `onConnectError`, đóng kênh và kích hoạt `_handleAuthRejection` để xin làm mới JWT.
+  /// 6. Khung `40...` (Socket.IO CONNECT ACK): Xác nhận kết nối thành công (`_isConnected = true`), đặt lại `_reconnectAttempts = 0` và tự động phát lại `conversation:join` cho toàn bộ phòng hội thoại đang theo dõi.
+  /// 7. Khung `42["eventName", payload]` (Socket.IO EVENT): Giải mã mảng JSON hai phần tử và định tuyến sự kiện về các luồng phát sóng tương ứng (`message:new`, `notification:new`, `conversation:error` tự gỡ phòng bị từ chối quyền, `conversation:typing`).
   void _handlePacket(String packet, String token) {
     if (packet.isEmpty || _isDisposed) return;
 
@@ -348,6 +375,11 @@ class SocketService {
                 _typingController.add(payload);
               }
               break;
+            case 'message:reaction':
+              if (!_reactionController.isClosed) {
+                _reactionController.add(payload);
+              }
+              break;
           }
         }
       } catch (_) {
@@ -356,6 +388,9 @@ class SocketService {
     }
   }
 
+  /// Giải thuật phục hồi khi máy chủ từ chối JWT lúc bắt tay (`_handleAuthRejection`):
+  /// Dùng cờ `_isRefreshingToken` đảm bảo chỉ gọi làm mới một lần, xin token mới qua `_onTokenRefreshRequested` (hoặc đọc lại kho bảo mật),
+  /// và chỉ kết nối lại khi nhận được token mới khác với `rejectedToken`.
   Future<void> _handleAuthRejection(String rejectedToken) async {
     if (_isDisposed || _manuallyDisconnected || _isRefreshingToken) return;
     _isRefreshingToken = true;
@@ -379,6 +414,7 @@ class SocketService {
     }
   }
 
+  /// Đăng ký tham gia phòng hội thoại `conversationId` (lưu vào `_joinedConversations` để tự động tham gia lại sau khi rớt mạng) và phát sự kiện `conversation:join`.
   void joinConversation(String conversationId) {
     if (_isDisposed) return;
     final normalized = conversationId.trim();
@@ -394,6 +430,7 @@ class SocketService {
     }
   }
 
+  /// Rời khỏi phòng hội thoại `conversationId`, xóa khỏi danh sách theo dõi và phát sự kiện `conversation:leave` nếu đang kết nối.
   void leaveConversation(String conversationId) {
     if (_isDisposed) return;
     final normalized = conversationId.trim();
@@ -405,6 +442,7 @@ class SocketService {
     }
   }
 
+  /// Phát trạng thái đang gõ phím (`conversation:typing`) vào phòng hội thoại `conversationId` khi kênh đang kết nối.
   void sendTyping(String conversationId, {required bool isTyping}) {
     if (_isDisposed || !_isConnected) return;
     final normalized = conversationId.trim();
@@ -413,6 +451,25 @@ class SocketService {
     _emit('conversation:typing', {
       'conversationId': idNum ?? normalized,
       'isTyping': isTyping,
+    });
+  }
+
+  /// Phát sự kiện thả biểu cảm tin nhắn (`message:reaction`) thời gian thực vào phòng hội thoại `conversationId`.
+  void sendReaction(
+    String conversationId, {
+    required String messageId,
+    required String reaction,
+  }) {
+    if (_isDisposed || !_isConnected) return;
+    final convClean = conversationId.trim();
+    final msgClean = messageId.trim();
+    if (convClean.isEmpty || msgClean.isEmpty) return;
+    final convNum = int.tryParse(convClean);
+    final msgNum = int.tryParse(msgClean);
+    _emit('message:reaction', {
+      'conversationId': convNum ?? convClean,
+      'messageId': msgNum ?? msgClean,
+      'reaction': reaction.trim(),
     });
   }
 
@@ -448,6 +505,9 @@ class SocketService {
     }
   }
 
+  /// Giải thuật lên lịch kết nối lại tự động theo cấp số nhân (`_scheduleReconnect`):
+  /// Hủy lịch nếu người dùng đã ngắt thủ công, đối tượng đã hủy, token đang bị từ chối hoặc số lần thử đã chạm trần `maxReconnectAttempts`;
+  /// ngược lại tăng `_reconnectAttempts` và đặt hẹn giờ theo `_reconnectDelayBuilder`.
   void _scheduleReconnect() {
     if (_manuallyDisconnected || _isDisposed) return;
     if (_activeToken != null && _activeToken == _lastRejectedToken) {
@@ -467,6 +527,7 @@ class SocketService {
   }
 
   /// Updates the auth token or reconnects when the session token changes.
+  /// Đồng bộ JWT mới sau khi làm mới phiên: nếu token trống thì ngắt kết nối, nếu token thay đổi hoặc kênh đang đóng thì mở lại kết nối mới.
   Future<void> refreshAuthToken([String? newToken]) async {
     if (_isDisposed) return;
     final rawToken = newToken ?? await _secureStorage.getAuthToken();
@@ -483,6 +544,7 @@ class SocketService {
     }
   }
 
+  /// Ngắt kết nối chủ động khi đăng xuất: tăng `_connectionEpoch`, hủy hẹn giờ thử lại, xóa danh sách phòng hội thoại và đóng kênh WebSocket.
   void disconnect() {
     _connectionEpoch++;
     _manuallyDisconnected = true;
@@ -495,6 +557,7 @@ class SocketService {
     _closeCurrentChannel();
   }
 
+  /// Giải phóng vĩnh viễn dịch vụ Socket, ngắt kết nối hiện tại và đóng toàn bộ các `StreamController` phát sự kiện.
   void dispose() {
     _isDisposed = true;
     disconnect();
@@ -502,6 +565,7 @@ class SocketService {
     _newNotificationController.close();
     _conversationErrorController.close();
     _typingController.close();
+    _reactionController.close();
     _connectErrorController.close();
     _connectedController.close();
   }

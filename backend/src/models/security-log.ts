@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize ghi nhật ký sự kiện an ninh và cảnh báo truy cập bất thường phục vụ giám sát Trust & Safety.
+ */
 import {
     CreationOptional,
     DataTypes,

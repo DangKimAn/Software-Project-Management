@@ -1,4 +1,4 @@
-# OS generated files
+﻿# OS generated files
 .DS_Store
 .DS_Store?
 ._*
@@ -8,7 +8,8 @@ ehthumbs.db
 Thumbs.db
 Desktop.ini
 $RECYCLE.BIN/
-
+Báo cáo
+BAO_CAO_CUOI_KY_HOAN_THIEN
 # IDE and Editor files
 .idea/
 **/.idea/
@@ -33,13 +34,19 @@ Source goc.zip
 *.rar
 *.7z
 *.tar.gz
-
-# Internal AI audit & fix reports
+pic
+# Internal plans, notes, AI audit & fix reports (DO NOT COMMIT .md / .txt)
 docs/ai-fix/
 **/docs/ai-fix/
 *.md
-!README.md
-!**/README.md
+**/*.md
+*.txt
+**/*.txt
+# CONFLICT-RESOLVED: Gộp quy tắc bỏ qua cả tệp .pdf và .docx trên toàn bộ cây thư mục từ hai nhánh.
+*.pdf
+**/*.pdf
+*.docx
+**/*.docx
 
 # Node.js (Source goc/backend, Source goc/frontend)
 **/node_modules/
@@ -60,6 +67,12 @@ docs/ai-fix/
 **/.env.production.local
 !**/.env.example
 !**/.env.*.example
+# Golden test diff failure artifacts (keep master snapshots in test/goldens/ trackable)
+**/test/**/failures/
+
+# Local self-generated QA test suites (DO NOT PUSH TO GITHUB)
+**/qa-auto-*.test.ts
+**/qa_auto_*_test.dart
 
 # Certificates, keys and credentials
 certs/
@@ -68,6 +81,14 @@ secrets/
 **/secrets/
 private/
 **/private/
+Setup Notifications/
+"Setup Notifications/"
+**/google-services.json
+**/GoogleService-Info.plist
+**/firebase-adminsdk*.json
+**/*service-account*.json
+**/google-credentials*.json
+**/client_secret*.json
 *.pem
 **/*.pem
 *.key
@@ -90,7 +111,7 @@ private/
 **/doc/api/
 app.*.symbols
 app.*.map.txt
-
+rule.md
 # Android build artifacts & keystores
 **/.gradle/
 **/android/.gradle/
@@ -112,7 +133,7 @@ app.*.map.txt
 *.hprof
 hs_err_pid*.log
 replay_pid*.log
-
+agent
 # iOS / macOS / Linux / Windows ephemeral and pods
 **/ios/Flutter/ephemeral/
 **/ios/Flutter/App.framework

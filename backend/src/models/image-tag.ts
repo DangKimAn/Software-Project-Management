@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize liên kết nhãn phân loại không gian và tiện nghi được nhận diện tự động cho từng ảnh chỗ nghỉ.
+ */
 import {
     CreationOptional,
     DataTypes,

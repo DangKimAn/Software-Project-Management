@@ -1,8 +1,16 @@
+/**
+ * Lược đồ kiểm chứng dữ liệu đầu vào bằng Zod cho phân hệ đặt phòng (`bookings`):
+ * - Ràng buộc định dạng ngày nhận/trả phòng (`checkIn`/`checkOut`), số lượng khách nguyên dương, danh sách đặt phòng gộp (`bulk`), lý do hủy và bộ lọc phân trang.
+ */
+
 import { z } from "zod";
 
 import { isValidIsoDate } from "../../common/validation";
 import { bookingStatusValues } from "../../models/booking";
 
+/**
+ * Schema kiểm chứng tham số đường dẫn `bookingId` nguyên dương.
+ */
 export const bookingIdParamSchema = z.object({
     bookingId: z.coerce.number().int().positive(),
 });
@@ -11,6 +19,9 @@ const isoDateSchema = z.string().refine(isValidIsoDate, {
     message: "Date must use YYYY-MM-DD format",
 });
 
+/**
+ * Schema kiểm chứng dữ liệu tạo đơn đặt phòng (chỗ ở, khoảng ngày lưu trú hợp lệ, số khách, mã giảm giá, ghi chú).
+ */
 export const createBookingBodySchema = z.object({
     listingId: z.coerce.number().int().positive(),
     checkInDate: isoDateSchema.optional(),
@@ -21,6 +32,8 @@ export const createBookingBodySchema = z.object({
     guests: z.coerce.number().int().positive().optional(),
     guestsCount: z.coerce.number().int().positive().optional(),
     couponCode: z.string().trim().min(1).max(64).optional(),
+    bookingNote: z.string().trim().max(2000).optional(),
+    specialRequests: z.string().trim().max(2000).optional(),
 }).superRefine((value, ctx) => {
     const checkInDate = value.checkInDate ?? value.checkIn;
     const checkOutDate = value.checkOutDate ?? value.checkOut;
@@ -56,6 +69,18 @@ export const createBookingBodySchema = z.object({
             path: ["checkOutDate"],
             message: "checkOutDate must be after checkInDate",
         });
+    } else if (checkInDate && checkOutDate && isValidIsoDate(checkInDate) && isValidIsoDate(checkOutDate)) {
+        const diffDays = Math.round(
+            (Date.parse(`${checkOutDate}T00:00:00.000Z`) - Date.parse(`${checkInDate}T00:00:00.000Z`)) /
+                86_400_000,
+        );
+        if (diffDays > 365) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["checkOutDate"],
+                message: "Booking duration cannot exceed 365 nights",
+            });
+        }
     }
 }).transform((value) => ({
     listingId: value.listingId,
@@ -63,16 +88,51 @@ export const createBookingBodySchema = z.object({
     checkOutDate: value.checkOutDate ?? value.checkOut!,
     guestCount: value.guestCount ?? value.guests ?? value.guestsCount!,
     couponCode: value.couponCode,
+    bookingNote: value.bookingNote ?? value.specialRequests,
 }));
 
+/**
+ * Schema kiểm chứng danh sách các mục đặt phòng khi tạo đơn hàng loạt.
+ */
 export const createBulkBookingBodySchema = z.object({
     items: z.array(createBookingBodySchema).min(1).max(10),
 });
 
+/**
+ * Schema kiểm chứng lý do hủy đơn đặt phòng cho chủ nhà / quản trị.
+ */
 export const cancelBookingBodySchema = z.object({
     reason: z.string().trim().max(2000).optional(),
+    bankName: z.string().trim().max(150).optional(),
+    accountNumber: z
+        .string()
+        .trim()
+        .refine((val) => !val || /^\d{10,12}$/.test(val), {
+            message: "Account number must be 10 to 12 digits",
+        })
+        .optional()
+        .or(z.literal("")),
+    accountName: z
+        .string()
+        .trim()
+        .refine((val) => !val || !/[0-9]/.test(val), {
+            message: "Account owner name cannot contain digits",
+        })
+        .max(255)
+        .optional()
+        .or(z.literal("")),
 });
 
+/**
+ * Schema kiểm chứng yêu cầu hủy đơn từ phía khách hàng, bắt buộc cung cấp lý do hủy không rỗng (TC-053).
+ */
+export const guestCancelBookingBodySchema = cancelBookingBodySchema.extend({
+    reason: z.string().trim().min(1, "Vui lòng nhập lý do hủy đơn đặt phòng").max(2000),
+});
+
+/**
+ * Schema kiểm chứng bộ lọc trạng thái và phân trang khi tra cứu danh sách đơn đặt phòng.
+ */
 export const bookingsQuerySchema = z.object({
     status: z
         .enum([

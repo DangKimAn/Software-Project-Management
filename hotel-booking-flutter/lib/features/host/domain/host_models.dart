@@ -1,11 +1,22 @@
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 
-/// Allowed file upload limits and MIME types per backend validator.
+import 'host_booking_status_helper.dart';
+
+export 'host_booking_status_helper.dart';
+export 'host_portal_kpi_helper.dart';
+export 'host_sheet_sync_models.dart';
+
+/// Giới hạn dung lượng tải tệp tối đa cho phân hệ Chủ nhà (5MB), khớp bộ kiểm tra của Backend.
 const int kMaxHostUploadBytes = 5 * 1024 * 1024; // 5MB
+
+/// Số lượng ảnh tối đa được phép tải lên cho một chỗ nghỉ.
 const int kMaxListingImagesCount = 30;
+
+/// Số lượng tệp đính kèm tối đa trong một bộ hồ sơ đăng ký KYC Chủ nhà.
 const int kMaxKycFilesCount = 4;
 
+/// Tập kiểu MIME hợp lệ cho chứng từ KYC tổng quát (bao gồm Giấy phép kinh doanh hỗ trợ PDF).
 const Set<String> kAllowedKycMimeTypes = {
   'image/jpeg',
   'image/png',
@@ -13,6 +24,14 @@ const Set<String> kAllowedKycMimeTypes = {
   'application/pdf',
 };
 
+/// Tập kiểu MIME hợp lệ dành riêng cho ảnh giấy tờ định danh cá nhân (CCCD, CMND, Hộ chiếu, GPLX).
+const Set<String> kAllowedIdentityKycMimeTypes = {
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+};
+
+/// Tập kiểu MIME hợp lệ cho ảnh không gian chỗ nghỉ tải lên Cloudflare R2.
 const Set<String> kAllowedListingImageMimeTypes = {
   'image/jpeg',
   'image/png',
@@ -20,7 +39,7 @@ const Set<String> kAllowedListingImageMimeTypes = {
   'image/gif',
 };
 
-/// Represents a real file selected from the user's device.
+/// Đại diện cho một tệp tin thực được người dùng chọn từ bộ nhớ thiết bị hoặc trình duyệt.
 class HostPickedFile {
   final String name;
   final String mimeType;
@@ -28,6 +47,7 @@ class HostPickedFile {
   final Uint8List bytes;
   final String? path;
 
+  /// Khởi tạo đối tượng tệp đã chọn kèm dữ liệu nhị phân `bytes` và `mimeType` chuẩn.
   const HostPickedFile({
     required this.name,
     required this.mimeType,
@@ -36,12 +56,15 @@ class HostPickedFile {
     this.path,
   });
 
+  /// Cho biết tệp có định dạng tài liệu PDF hay không.
   bool get isPdf =>
       mimeType.toLowerCase() == 'application/pdf' ||
       name.toLowerCase().endsWith('.pdf');
 
+  /// Cho biết tệp có thuộc nhóm định dạng hình ảnh (`image/*`) hay không.
   bool get isImage => mimeType.toLowerCase().startsWith('image/');
 
+  /// Chuỗi hiển thị dung lượng tệp dễ đọc theo đơn vị `B`, `KB` hoặc `MB`.
   String get formattedSize {
     if (sizeBytes < 1024) return '$sizeBytes B';
     final kb = sizeBytes / 1024;
@@ -51,7 +74,7 @@ class HostPickedFile {
   }
 }
 
-/// Validates a KYC document file according to backend multer/express-validator rules.
+/// Kiểm tra tính hợp lệ của tệp chứng từ KYC tổng quát `file` theo quy tắc dung lượng (tối đa 5MB) và MIME của Backend.
 String? validateKycPickedFile(HostPickedFile file) {
   if (file.name.trim().isEmpty) {
     return 'Tên tệp không hợp lệ.';
@@ -69,7 +92,30 @@ String? validateKycPickedFile(HostPickedFile file) {
   return null;
 }
 
-/// Validates a listing image file according to backend uploads validator.
+// Giải thuật kiểm tra tệp ảnh giấy tờ định danh cá nhân (CCCD/CMND mặt trước & sau, Hộ chiếu, GPLX):
+// CONFLICT-RESOLVED: Đồng bộ với quy tắc image/* của Backend cho giấy tờ tùy thân; từ chối tệp PDF và chỉ chấp nhận JPG, PNG hoặc WebP <= 5MB.
+/// Kiểm tra tính hợp lệ của tệp ảnh giấy tờ định danh cá nhân `file` (chỉ chấp nhận ảnh `JPG`, `PNG`, `WebP` không quá 5MB).
+String? validateIdentityKycPickedFile(HostPickedFile file) {
+  if (file.name.trim().isEmpty) {
+    return 'Tên tệp ảnh không hợp lệ.';
+  }
+  if (file.sizeBytes <= 0 || file.bytes.isEmpty) {
+    return 'Tệp "${file.name}" rỗng hoặc không đọc được dữ liệu.';
+  }
+  if (file.sizeBytes > kMaxHostUploadBytes) {
+    return 'Ảnh "${file.name}" vượt quá giới hạn 5MB (${file.formattedSize}).';
+  }
+  final normalizedMime = file.mimeType.trim().toLowerCase();
+  if (file.isPdf || normalizedMime == 'application/pdf') {
+    return 'Giấy tờ định danh "${file.name}" không hỗ trợ tệp PDF. Vui lòng chọn ảnh chụp JPG, PNG hoặc WebP rõ nét.';
+  }
+  if (!kAllowedIdentityKycMimeTypes.contains(normalizedMime)) {
+    return 'Định dạng "${file.name}" ($normalizedMime) không hỗ trợ cho giấy tờ định danh. Chỉ chấp nhận ảnh JPG, PNG hoặc WebP.';
+  }
+  return null;
+}
+
+/// Kiểm tra tệp ảnh chỗ nghỉ `file` đảm bảo không rỗng, không vượt quá 5MB và đúng định dạng ảnh được phép.
 String? validateListingImagePickedFile(HostPickedFile file) {
   if (file.name.trim().isEmpty) {
     return 'Tên ảnh không hợp lệ.';
@@ -91,6 +137,7 @@ String? validateListingImagePickedFile(HostPickedFile file) {
 // BUG-10: HOST APPLICATION & KYC MODELS
 // ============================================================================
 
+/// Trạng thái xét duyệt hồ sơ đăng ký trở thành Chủ nhà (Host KYC).
 enum HostApplicationStatus {
   none,
   pending,
@@ -99,6 +146,7 @@ enum HostApplicationStatus {
   revoked,
   supplementRequired;
 
+  /// Chuẩn hóa chuỗi trạng thái thô `raw` từ API sang giá trị `HostApplicationStatus`.
   static HostApplicationStatus fromApi(dynamic raw) {
     final normalized = (raw?.toString() ?? '').trim().toLowerCase();
     switch (normalized) {
@@ -158,6 +206,7 @@ enum HostApplicationStatus {
   }
 }
 
+/// Phân loại tư cách pháp lý của hồ sơ Chủ nhà (Cá nhân hoặc Doanh nghiệp / Hộ kinh doanh).
 enum HostProfileType {
   individual('individual', 'Cá nhân'),
   business('business', 'Doanh nghiệp / Hộ kinh doanh');
@@ -166,6 +215,7 @@ enum HostProfileType {
   final String labelVi;
   const HostProfileType(this.value, this.labelVi);
 
+  /// Chuyển đổi chuỗi `raw` từ API sang `HostProfileType` tương ứng.
   static HostProfileType fromApi(String? raw) {
     if (raw?.trim().toLowerCase() == 'business') {
       return HostProfileType.business;
@@ -174,6 +224,7 @@ enum HostProfileType {
   }
 }
 
+/// Loại giấy tờ định danh cá nhân dùng trong quy trình xác minh KYC Chủ nhà.
 enum HostDocumentType {
   cccd('cccd', 'Căn cước công dân (CCCD)'),
   cmnd('cmnd', 'Chứng minh nhân dân (CMND)'),
@@ -184,6 +235,7 @@ enum HostDocumentType {
   final String labelVi;
   const HostDocumentType(this.value, this.labelVi);
 
+  /// Chuyển đổi chuỗi `raw` từ API sang `HostDocumentType` tương ứng.
   static HostDocumentType fromApi(String? raw) {
     switch (raw?.trim().toLowerCase()) {
       case 'cmnd':
@@ -198,15 +250,103 @@ enum HostDocumentType {
     }
   }
 
+  /// Cho biết loại giấy tờ bắt buộc tải đủ cả hai mặt trước và sau (CCCD, CMND).
   bool get requiresFrontAndBack =>
       this == HostDocumentType.cccd || this == HostDocumentType.cmnd;
 
+  /// Cho biết loại giấy tờ yêu cầu mặt trước bắt buộc và mặt sau tùy chọn (GPLX).
   bool get requiresFrontOnlyWithOptionalBack =>
       this == HostDocumentType.driverLicense;
 
+  /// Cho biết loại giấy tờ chỉ sử dụng một ảnh trang thông tin duy nhất (Hộ chiếu).
   bool get requiresSingleDocument => this == HostDocumentType.passport;
 }
 
+/// Kết quả bóc tách thông tin giấy tờ tùy thân tự động bằng AI OCR (`/api/ai/id-card-vision/extract`).
+class HostIdentityAiResult {
+  final String documentType;
+  final String side;
+  final String? idNumber;
+  final String? fullName;
+  final String? dateOfBirth;
+  final String? gender;
+  final String? nationality;
+  final String? placeOfOrigin;
+  final String? placeOfResidence;
+  final String? expiryDate;
+  final String? issueDate;
+  final String? issuePlace;
+  final String? mrz;
+  final bool isClear;
+  final bool isDocumentValid;
+  final double confidence;
+  final List<String> warnings;
+  final String summaryVi;
+
+  const HostIdentityAiResult({
+    required this.documentType,
+    required this.side,
+    this.idNumber,
+    this.fullName,
+    this.dateOfBirth,
+    this.gender,
+    this.nationality,
+    this.placeOfOrigin,
+    this.placeOfResidence,
+    this.expiryDate,
+    this.issueDate,
+    this.issuePlace,
+    this.mrz,
+    this.isClear = true,
+    this.isDocumentValid = true,
+    this.confidence = 1.0,
+    this.warnings = const [],
+    this.summaryVi = '',
+  });
+
+  factory HostIdentityAiResult.fromJson(Map<String, dynamic> json) {
+    return HostIdentityAiResult(
+      documentType: json['documentType']?.toString() ?? 'cccd',
+      side: json['side']?.toString() ?? 'front',
+      idNumber: json['idNumber']?.toString(),
+      fullName: json['fullName']?.toString(),
+      dateOfBirth: json['dateOfBirth']?.toString(),
+      gender: json['gender']?.toString(),
+      nationality: json['nationality']?.toString(),
+      placeOfOrigin: json['placeOfOrigin']?.toString(),
+      placeOfResidence: json['placeOfResidence']?.toString(),
+      expiryDate: json['expiryDate']?.toString(),
+      issueDate: json['issueDate']?.toString(),
+      issuePlace: json['issuePlace']?.toString(),
+      mrz: json['mrz']?.toString(),
+      isClear: json['isClear'] == true,
+      isDocumentValid: json['isDocumentValid'] == true,
+      confidence: (json['confidence'] as num?)?.toDouble() ?? 1.0,
+      warnings: (json['warnings'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      summaryVi: json['summaryVi']?.toString() ?? '',
+    );
+  }
+
+  /// Trích xuất số định danh hiệu lực từ trường `idNumber` hoặc giải mã chuỗi `mrz` mặt sau CCCD (`IDVNM...`).
+  String? get effectiveIdNumber {
+    if (idNumber != null && idNumber!.trim().isNotEmpty) {
+      return idNumber!.trim();
+    }
+    if (mrz != null && mrz!.isNotEmpty) {
+      final match =
+          RegExp(r'IDVNM(\d{9,12})', caseSensitive: false).firstMatch(mrz!);
+      if (match != null) {
+        return match.group(1);
+      }
+    }
+    return null;
+  }
+}
+
+/// Thông tin siêu dữ liệu của một chứng từ đính kèm trong hồ sơ đăng ký Chủ nhà.
 class HostApplicationDocument {
   final String documentType;
   final String fileUrl;
@@ -247,6 +387,7 @@ class HostApplicationDocument {
       };
 }
 
+/// Bản ghi hồ sơ đăng ký KYC của Chủ nhà được chuẩn hóa từ phản hồi `/api/host/applications/me`.
 class HostApplicationRecord {
   final int? id;
   final HostApplicationStatus status;
@@ -335,7 +476,7 @@ class HostApplicationRecord {
   }
 }
 
-/// DTO for `POST /api/host/applications` (`multipart/form-data`).
+/// Đối tượng truyền dữ liệu (DTO) nộp hồ sơ đăng ký Chủ nhà qua `POST /api/host/applications` (`multipart/form-data`).
 class HostKycSubmissionDto {
   final String contactName;
   final String contactEmail;
@@ -349,6 +490,7 @@ class HostKycSubmissionDto {
   final HostPickedFile? identitySingle;
   final HostPickedFile? businessLicense;
 
+  /// Khởi tạo bộ dữ liệu nộp hồ sơ KYC Chủ nhà.
   const HostKycSubmissionDto({
     required this.contactName,
     required this.contactEmail,
@@ -366,7 +508,7 @@ class HostKycSubmissionDto {
   static final RegExp _vnPhoneRegex = RegExp(r'^(0|\+84)[0-9]{9}$');
   static final RegExp _emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
 
-  /// Validates all fields & files against backend `host-applications.validator.ts`.
+  /// Kiểm tra toàn bộ trường thông tin và tổ hợp tệp đính kèm theo đúng quy tắc của `host-applications.validator.ts`.
   String? validate() {
     final trimmedName = contactName.trim();
     if (trimmedName.isEmpty) {
@@ -417,7 +559,7 @@ class HostKycSubmissionDto {
         break;
       case HostDocumentType.passport:
         if (identitySingle == null) {
-          return 'Vui lòng chọn ảnh hoặc PDF Hộ chiếu (Passport).';
+          return 'Vui lòng chọn ảnh Hộ chiếu (Passport) định dạng JPG, PNG hoặc WebP.';
         }
         if (identityFront != null || identityBack != null) {
           return 'Hộ chiếu chỉ sử dụng 1 tệp giấy tờ định danh duy nhất.';
@@ -442,10 +584,13 @@ class HostKycSubmissionDto {
     }
 
     // Validate each present file
-    final filesToCheck = <HostPickedFile>[
+    final identityFiles = <HostPickedFile>[
       if (identityFront != null) identityFront!,
       if (identityBack != null) identityBack!,
       if (identitySingle != null) identitySingle!,
+    ];
+    final filesToCheck = <HostPickedFile>[
+      ...identityFiles,
       if (businessLicense != null) businessLicense!,
     ];
 
@@ -456,15 +601,20 @@ class HostKycSubmissionDto {
       return 'Tối đa $kMaxKycFilesCount tệp đính kèm.';
     }
 
-    for (final file in filesToCheck) {
-      final err = validateKycPickedFile(file);
+    // CONFLICT-RESOLVED: Giấy tờ định danh chỉ cho phép ảnh JPG/PNG/WebP; Giấy phép kinh doanh vẫn hỗ trợ thêm PDF.
+    for (final file in identityFiles) {
+      final err = validateIdentityKycPickedFile(file);
+      if (err != null) return err;
+    }
+    if (businessLicense != null) {
+      final err = validateKycPickedFile(businessLicense!);
       if (err != null) return err;
     }
 
     return null;
   }
 
-  /// Builds real `FormData` (`multipart/form-data`) for `POST /api/host/applications`.
+  /// Đóng gói dữ liệu biểu mẫu và tệp nhị phân thành `FormData` (`multipart/form-data`) gửi tới `POST /api/host/applications`.
   FormData toFormData() {
     final validationError = validate();
     if (validationError != null) {
@@ -516,6 +666,7 @@ class HostKycSubmissionDto {
 // BUG-11 & BUG-12: HOST LISTINGS, ENUMS, VUNG TAU WARDS & DTOs
 // ============================================================================
 
+/// Trạng thái vòng đời hiển thị và kiểm duyệt của một chỗ nghỉ thuộc quyền quản lý của Host.
 enum HostListingStatus {
   draft('draft', 'Bản nháp'),
   pendingApproval('pending_approval', 'Chờ duyệt'),
@@ -527,6 +678,7 @@ enum HostListingStatus {
   final String labelVi;
   const HostListingStatus(this.value, this.labelVi);
 
+  /// Giải mã giá trị chuỗi `raw` từ API sang trạng thái `HostListingStatus`.
   static HostListingStatus fromApi(dynamic raw) {
     final normalized = (raw?.toString() ?? '').trim().toLowerCase();
     switch (normalized) {
@@ -549,6 +701,19 @@ enum HostListingStatus {
     }
   }
 
+  // Giải thuật ánh xạ trạng thái chỗ nghỉ từ bản ghi JSON của Backend:
+  // CONFLICT-RESOLVED: Ưu tiên kiểm tra internalStatus == 'rejected' song song với status == 'rejected'.
+  /// Giải mã trạng thái chỗ nghỉ từ bản đồ JSON `raw`, ưu tiên nhận diện cờ `internalStatus == 'rejected'`.
+  static HostListingStatus fromListingMap(Map<Object?, Object?> raw) {
+    final internal =
+        (raw['internalStatus'] ?? '').toString().trim().toLowerCase();
+    if (internal == 'rejected') {
+      return HostListingStatus.rejected;
+    }
+    return fromApi(raw['status']);
+  }
+
+  /// Kiểm tra máy trạng thái chỗ nghỉ có cho phép chuyển tiếp sang trạng thái đích `target` hay không.
   bool canTransitionTo(HostListingStatus target, {bool isAdmin = false}) {
     if (isAdmin) return true;
     switch (this) {
@@ -565,11 +730,126 @@ enum HostListingStatus {
         return target == HostListingStatus.published ||
             target == HostListingStatus.hidden;
       case HostListingStatus.rejected:
-        return target == HostListingStatus.draft;
+        // CONFLICT-RESOLVED: Backend cho phép chỗ nghỉ bị từ chối chuyển sang draft, pending_approval hoặc giữ nguyên rejected khi sửa.
+        return target == HostListingStatus.draft ||
+            target == HostListingStatus.pendingApproval ||
+            target == HostListingStatus.rejected;
     }
   }
 }
 
+/// Tóm tắt thông tin chỗ nghỉ chuẩn hóa cho danh sách Chỗ nghỉ của Host (`GET /api/host/listings/mine`).
+class HostListingSummary {
+  final String id;
+  final String title;
+  final HostListingStatus status;
+  final String? internalStatus;
+  final String? rejectionReason;
+  final double basePrice;
+  final double? weekendPrice;
+  final int maxGuests;
+  final HostPropertyType propertyType;
+  final String imageUrl;
+  final String addressDisplay;
+
+  const HostListingSummary({
+    required this.id,
+    required this.title,
+    required this.status,
+    this.internalStatus,
+    this.rejectionReason,
+    required this.basePrice,
+    this.weekendPrice,
+    required this.maxGuests,
+    required this.propertyType,
+    this.imageUrl = '',
+    this.addressDisplay = '',
+  });
+
+  // Giải thuật phân tích dữ liệu thẻ chỗ nghỉ từ JSON Backend (bao gồm trạng thái bị từ chối và lý do từ chối):
+  // CONFLICT-RESOLVED: Trích xuất đồng bộ status/internalStatus == 'rejected' và rejectionReason (string | null).
+  factory HostListingSummary.fromJson(Map<String, dynamic> json) {
+    final id = (json['listingId'] ?? json['id'] ?? '').toString();
+    final title = (json['title'] ?? 'Chỗ nghỉ #$id').toString();
+    final status = HostListingStatus.fromListingMap(json);
+    final rawInternal = json['internalStatus']?.toString().trim();
+    final rawReason =
+        (json['rejectionReason'] ?? json['rejectReason'])?.toString().trim();
+
+    double parseDouble(dynamic val) {
+      if (val is num) return val.toDouble();
+      return double.tryParse('${val ?? 0}') ?? 0;
+    }
+
+    String extractCoverUrl(Map<String, dynamic> raw) {
+      for (final key in const [
+        'coverImageUrl',
+        'imageUrl',
+        'thumbnailUrl',
+        'coverImage',
+      ]) {
+        final v = raw[key]?.toString().trim() ?? '';
+        if (v.isNotEmpty) return v;
+      }
+      final images = raw['images'];
+      if (images is List && images.isNotEmpty) {
+        Map<Object?, Object?>? coverMap;
+        for (final item in images) {
+          if (item is Map && item['isCover'] == true) {
+            coverMap = item;
+            break;
+          }
+        }
+        final target =
+            coverMap ?? (images.first is Map ? images.first as Map : null);
+        if (target != null) {
+          for (final key in const ['url', 'imageUrl', 'publicUrl']) {
+            final v = target[key]?.toString().trim() ?? '';
+            if (v.isNotEmpty) return v;
+          }
+        } else if (images.first is String) {
+          return (images.first as String).trim();
+        }
+      }
+      return '';
+    }
+
+    final addressDisplay = [
+      json['addressLine'],
+      json['ward'],
+      json['district'],
+      json['city'],
+    ]
+        .map((e) => e?.toString().trim() ?? '')
+        .where((e) => e.isNotEmpty)
+        .join(', ');
+
+    final rawGuests = json['maxGuests'];
+    final maxGuests = rawGuests is num
+        ? rawGuests.toInt()
+        : (int.tryParse('${rawGuests ?? 1}') ?? 1);
+
+    return HostListingSummary(
+      id: id,
+      title: title,
+      status: status,
+      internalStatus:
+          (rawInternal != null && rawInternal.isNotEmpty) ? rawInternal : null,
+      rejectionReason:
+          (rawReason != null && rawReason.isNotEmpty) ? rawReason : null,
+      basePrice: parseDouble(json['basePrice'] ?? json['pricePerNight'] ?? 0),
+      weekendPrice: json['weekendPrice'] != null
+          ? parseDouble(json['weekendPrice'])
+          : null,
+      maxGuests: maxGuests < 1 ? 1 : maxGuests,
+      propertyType: HostPropertyType.fromApi(json['propertyType']),
+      imageUrl: extractCoverUrl(json),
+      addressDisplay: addressDisplay,
+    );
+  }
+}
+
+/// Loại hình bất động sản nghỉ dưỡng của chỗ nghỉ (Villa, Căn hộ, Homestay, Khách sạn).
 enum HostPropertyType {
   villa('villa', 'Villa'),
   apartment('apartment', 'Căn hộ'),
@@ -580,6 +860,7 @@ enum HostPropertyType {
   final String labelVi;
   const HostPropertyType(this.value, this.labelVi);
 
+  /// Giải mã giá trị `raw` từ API sang `HostPropertyType` (mặc định `villa`).
   static HostPropertyType fromApi(dynamic raw) {
     final normalized = (raw?.toString() ?? '').trim().toLowerCase();
     for (final item in HostPropertyType.values) {
@@ -589,6 +870,7 @@ enum HostPropertyType {
   }
 }
 
+/// Hình thức cho thuê không gian lưu trú (Nguyên căn, Phòng riêng, Phòng chung).
 enum HostRoomType {
   entirePlace('entire_place', 'Nguyên căn'),
   privateRoom('private_room', 'Phòng riêng'),
@@ -598,6 +880,7 @@ enum HostRoomType {
   final String labelVi;
   const HostRoomType(this.value, this.labelVi);
 
+  /// Giải mã giá trị `raw` từ API sang `HostRoomType` (mặc định `entirePlace`).
   static HostRoomType fromApi(dynamic raw) {
     final normalized = (raw?.toString() ?? '').trim().toLowerCase();
     for (final item in HostRoomType.values) {
@@ -607,6 +890,7 @@ enum HostRoomType {
   }
 }
 
+/// Chính sách hoàn hủy đặt phòng áp dụng cho chỗ nghỉ.
 enum HostCancellationPolicy {
   flexible('flexible', 'Linh hoạt'),
   moderate('moderate', 'Vừa phải'),
@@ -616,6 +900,7 @@ enum HostCancellationPolicy {
   final String labelVi;
   const HostCancellationPolicy(this.value, this.labelVi);
 
+  /// Giải mã giá trị `raw` từ API sang `HostCancellationPolicy` (mặc định `flexible`).
   static HostCancellationPolicy fromApi(dynamic raw) {
     final normalized = (raw?.toString() ?? '').trim().toLowerCase();
     for (final item in HostCancellationPolicy.values) {
@@ -625,11 +910,13 @@ enum HostCancellationPolicy {
   }
 }
 
+/// Đơn vị hành chính Phường/Xã tại thành phố Vũng Tàu kèm tọa độ tâm bản đồ mặc định.
 class VungTauWard {
   final String name;
   final double latitude;
   final double longitude;
 
+  /// Khởi tạo thông tin Phường/Xã tại Vũng Tàu.
   const VungTauWard({
     required this.name,
     required this.latitude,
@@ -637,10 +924,16 @@ class VungTauWard {
   });
 }
 
+/// Tên thành phố mặc định cho các chỗ nghỉ trên hệ thống.
 const String kVungTauCity = 'Vũng Tàu';
+
+/// Vĩ độ trung tâm mặc định tại thành phố Vũng Tàu.
 const double kDefaultVungTauLat = 10.3460;
+
+/// Kinh độ trung tâm mặc định tại thành phố Vũng Tàu.
 const double kDefaultVungTauLng = 107.0843;
 
+/// Danh mục 17 Phường/Xã chuẩn tại Vũng Tàu dùng cho bộ chọn địa chỉ chỗ nghỉ.
 const List<VungTauWard> kVungTauWards = [
   VungTauWard(name: 'Phường 1', latitude: 10.3468, longitude: 107.0748),
   VungTauWard(name: 'Phường 2', latitude: 10.3372, longitude: 107.0846),
@@ -663,13 +956,18 @@ const List<VungTauWard> kVungTauWards = [
   VungTauWard(name: 'Xã Long Sơn', latitude: 10.4495, longitude: 107.0226),
 ];
 
+/// Kiểm tra tọa độ địa lý (`latitude`, `longitude`) có nằm trong khung giới hạn lãnh thổ Vũng Tàu hay không.
+///
+/// Giải thuật kiểm định hộp biên địa lý đồng nhất với `VUNG_TAU_MAP_BOUNDS` trên máy chủ (`10.28..10.50` Bắc, `107.00..107.26` Đông):
+/// Bao phủ đầy đủ từ Mũi Nghinh Phong - Bãi Sau tới Xã Long Sơn và trục ven biển Chí Linh - Cửa Lấp.
 bool isWithinVungTauBounds(double latitude, double longitude) {
-  return latitude >= 10.30 &&
-      latitude <= 10.48 &&
-      longitude >= 106.98 &&
-      longitude <= 107.20;
+  return latitude >= 10.28 &&
+      latitude <= 10.50 &&
+      longitude >= 107.00 &&
+      longitude <= 107.26;
 }
 
+/// Danh sách mốc giờ cách nhau mỗi 30 phút dùng cho cấu hình giờ nhận phòng và trả phòng.
 const List<String> kHalfHourTimeOptions = [
   '00:00',
   '00:30',
@@ -721,6 +1019,7 @@ const List<String> kHalfHourTimeOptions = [
   '23:30',
 ];
 
+/// Đối tượng truyền dữ liệu (DTO) phục vụ tạo mới và cập nhật thông tin chỗ nghỉ của Chủ nhà.
 class HostListingUpsertDto {
   final String title;
   final String description;
@@ -792,7 +1091,10 @@ class HostListingUpsertDto {
     this.status = HostListingStatus.draft,
   });
 
-  String? validate() {
+  // Giải thuật kiểm tra hợp lệ dữ liệu tạo mới / chỉnh sửa chỗ nghỉ:
+  // CONFLICT-RESOLVED: Chỉ ràng buộc status là draft/pending_approval khi tạo mới (isCreate == true); khi chỉnh sửa cho phép published, hidden, rejected.
+  /// Kiểm tra toàn bộ ràng buộc trường dữ liệu, khung tọa độ Vũng Tàu, đơn giá và quy tắc trạng thái theo cờ `isCreate`.
+  String? validate({bool isCreate = true}) {
     if (title.trim().isEmpty) return 'Vui lòng nhập tiêu đề chỗ nghỉ.';
     if (title.trim().length > 255) return 'Tiêu đề tối đa 255 ký tự.';
     if (description.trim().isEmpty) return 'Vui lòng nhập mô tả chỗ nghỉ.';
@@ -816,14 +1118,15 @@ class HostListingUpsertDto {
     if (maxNights != null && maxNights! < minNights) {
       return 'Số đêm tối đa phải lớn hơn hoặc bằng số đêm tối thiểu.';
     }
-    if (status != HostListingStatus.draft &&
+    if (isCreate &&
+        status != HostListingStatus.draft &&
         status != HostListingStatus.pendingApproval) {
       return 'Trạng thái tạo mới chỉ cho phép Lưu nháp (draft) hoặc Gửi duyệt (pending_approval).';
     }
     return null;
   }
 
-  /// Exact payload for `POST /api/host/listings`.
+  /// Sinh bản đồ dữ liệu JSON chuẩn gửi tới `POST /api/host/listings`.
   Map<String, dynamic> toCreateJson() {
     return {
       'title': title.trim(),
@@ -864,12 +1167,19 @@ class HostListingUpsertDto {
     };
   }
 
-  /// Exact payload for `PATCH /api/host/listings/:listingId`.
-  Map<String, dynamic> toUpdateJson({HostListingStatus? nextStatus}) {
+  // Giải thuật tạo payload PATCH cập nhật chỗ nghỉ an toàn theo hợp đồng trạng thái Backend:
+  // CONFLICT-RESOLVED: Chỉ đính kèm trường status khi includeStatus == true hoặc nextStatus != null để lưu thay đổi thông thường trên published/hidden không gây lỗi 422.
+  /// Sinh bản đồ JSON gửi tới `PATCH /api/host/listings/:id`, chỉ đính kèm `status` khi có chuyển trạng thái tường minh.
+  Map<String, dynamic> toUpdateJson({
+    bool includeStatus = false,
+    HostListingStatus? nextStatus,
+  }) {
     final map = toCreateJson();
     map.remove('amenityIds');
     if (nextStatus != null) {
       map['status'] = nextStatus.value;
+    } else if (includeStatus) {
+      map['status'] = status.value;
     } else {
       map.remove('status');
     }
@@ -877,6 +1187,7 @@ class HostListingUpsertDto {
   }
 }
 
+/// Đối tượng truyền dữ liệu (DTO) cập nhật nội quy lưu trú của chỗ nghỉ (`PATCH /api/host/listings/:id/rules`).
 class HostListingRulesDto {
   final String? checkInFrom;
   final String? checkOutBefore;
@@ -908,17 +1219,20 @@ class HostListingRulesDto {
 // AI IMAGE VISION & 22-TAG TAXONOMY MODELS
 // ============================================================================
 
+/// Định nghĩa một nhãn phân loại không gian/tiện ích chuẩn trong bộ từ điển thị giác máy tính (AI Vision Taxonomy).
 class ImageTagTaxonomy {
   final String code;
   final String labelVi;
   final String category;
 
+  /// Khởi tạo mục phân loại nhãn ảnh AI.
   const ImageTagTaxonomy({
     required this.code,
     required this.labelVi,
     required this.category,
   });
 
+  /// Khởi tạo `ImageTagTaxonomy` từ JSON.
   factory ImageTagTaxonomy.fromJson(Map<String, dynamic> json) {
     return ImageTagTaxonomy(
       code: (json['code'] ?? json['tag'] ?? '').toString(),
@@ -929,7 +1243,7 @@ class ImageTagTaxonomy {
   }
 }
 
-/// The 22 canonical AI Vision taxonomy tags from `Source goc`.
+/// Tập 22 nhãn từ điển phân loại ảnh AI chuẩn hóa cho biệt thự và căn hộ nghỉ dưỡng.
 const List<ImageTagTaxonomy> kDefaultImageTagTaxonomies = [
   ImageTagTaxonomy(code: 'bedroom', labelVi: 'Phòng ngủ', category: 'room'),
   ImageTagTaxonomy(
@@ -966,6 +1280,7 @@ const List<ImageTagTaxonomy> kDefaultImageTagTaxonomies = [
       category: 'capacity'),
 ];
 
+/// Nhãn nhận diện không gian/tiện ích gắn trên từng ảnh chỗ nghỉ (do AI tự động gán hoặc Chủ nhà chỉnh sửa thủ công).
 class ListingImageAiTag {
   final String tag;
   final String labelVi;
@@ -1022,6 +1337,7 @@ class ListingImageAiTag {
   }
 }
 
+/// Thực thể ảnh chỗ nghỉ đã lưu trên hệ thống kèm trạng thái phân tích AI Vision và danh sách nhãn gắn kèm.
 class ExistingListingImage {
   final int imageId;
   final int? listingId;
@@ -1161,399 +1477,18 @@ class ExistingListingImage {
 }
 
 // ============================================================================
-// BUG-13: HOST BOOKING STATUS & ACTION STATE MACHINE (Port of bookingStatus.ts)
+// BUG-13: HOST BOOKING STATUS & ACTION STATE MACHINE
+// Extracted to host_booking_status_helper.dart (re-exported at top of file).
 // ============================================================================
-
-enum BookingActionRole { guest, host, admin }
-
-enum BookingStatusTone { warning, danger, success, info, muted }
-
-class BookingStatusActions {
-  final bool canConfirm;
-  final bool canCheckIn;
-  final bool canCheckOut;
-  final bool canCancel;
-
-  const BookingStatusActions({
-    this.canConfirm = false,
-    this.canCheckIn = false,
-    this.canCheckOut = false,
-    this.canCancel = false,
-  });
-
-  bool get hasAnyAction => canConfirm || canCheckIn || canCheckOut || canCancel;
-}
-
-class BookingDisplayStatus {
-  final String label;
-  final BookingStatusTone tone;
-  final String normalizedStatus;
-  final String code;
-  final String? reason;
-  final bool isTerminal;
-  final BookingStatusActions actions;
-
-  const BookingDisplayStatus({
-    required this.label,
-    required this.tone,
-    required this.normalizedStatus,
-    required this.code,
-    this.reason,
-    required this.isTerminal,
-    required this.actions,
-  });
-}
-
-/// Returns current date string `YYYY-MM-DD` in Vietnam timezone (`UTC+7`).
-String getVietnamTodayDateString([DateTime? now]) {
-  final current = (now ?? DateTime.now()).toUtc().add(const Duration(hours: 7));
-  final y = current.year.toString().padLeft(4, '0');
-  final m = current.month.toString().padLeft(2, '0');
-  final d = current.day.toString().padLeft(2, '0');
-  return '$y-$m-$d';
-}
-
-String? _extractDateOnly(dynamic value) {
-  if (value == null) return null;
-  final raw = value.toString().trim();
-  if (raw.isEmpty) return null;
-  final datePart = raw.split('T').first;
-  if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(datePart)) {
-    return datePart;
-  }
-  final parsed = DateTime.tryParse(raw);
-  if (parsed == null) return null;
-  final y = parsed.year.toString().padLeft(4, '0');
-  final m = parsed.month.toString().padLeft(2, '0');
-  final d = parsed.day.toString().padLeft(2, '0');
-  return '$y-$m-$d';
-}
-
-bool isDateReachedInVietnam(dynamic dateValue, [DateTime? now]) {
-  final dateStr = _extractDateOnly(dateValue);
-  if (dateStr == null) return false;
-  return dateStr.compareTo(getVietnamTodayDateString(now)) <= 0;
-}
-
-const Set<String> _terminalStatuses = {
-  'payment_expired',
-  'completed',
-  'cancelled_by_guest',
-  'cancelled_by_host',
-  'cancelled_by_admin',
-  'rejected',
-};
-
-const Set<String> _paidStatuses = {
-  'paid',
-  'confirmed',
-  'checked_in',
-  'checked_out',
-  'completed',
-};
-
-String? _normalizeKnownBookingCode(dynamic value) {
-  final normalized = (value?.toString() ?? '').trim().toLowerCase();
-  switch (normalized) {
-    case 'pending':
-    case 'pending_payment':
-      return 'pending_payment';
-    case 'expired':
-    case 'payment_expired':
-      return 'payment_expired';
-    case 'pending_host':
-    case 'pending_host_confirmation':
-    case 'paid':
-      return 'paid';
-    case 'confirmed':
-      return 'confirmed';
-    case 'checked_in':
-      return 'checked_in';
-    case 'checked_out':
-      return 'checked_out';
-    case 'completed':
-      return 'completed';
-    case 'cancelled_by_guest':
-      return 'cancelled_by_guest';
-    case 'host_cancelled':
-    case 'cancelled_by_host':
-      return 'cancelled_by_host';
-    case 'cancelled_by_admin':
-      return 'cancelled_by_admin';
-    case 'rejected':
-      return 'rejected';
-    case 'refund_pending':
-      return 'refund_pending';
-    case 'refunded':
-      return 'refunded';
-    case 'payout_pending':
-      return 'payout_pending';
-    case 'payout_paid':
-      return 'payout_paid';
-    default:
-      return null;
-  }
-}
-
-String _normalizeLegacyCancellation(Map<String, dynamic> booking) {
-  final reason =
-      (booking['cancellationReason'] ?? booking['cancellation_reason'] ?? '')
-          .toString()
-          .trim()
-          .toUpperCase();
-  if (reason == 'ADMIN_CANCELLED') return 'cancelled_by_admin';
-  if (reason == 'HOST_REJECTED') return 'rejected';
-  final cancelledBy =
-      booking['cancelledByUserId'] ?? booking['cancelled_by_user_id'];
-  final hostId = booking['hostUserId'] ?? booking['host_user_id'];
-  if (cancelledBy != null && hostId != null && '$cancelledBy' == '$hostId') {
-    return 'cancelled_by_host';
-  }
-  return 'cancelled_by_guest';
-}
-
-String getBookingLifecycleStatus(Map<String, dynamic> booking) {
-  final displayMap = booking['displayStatus'] is Map<Object?, Object?>
-      ? Map<String, dynamic>.from(
-          booking['displayStatus'] as Map<Object?, Object?>,
-        )
-      : null;
-  final backendDisplayCode =
-      _normalizeKnownBookingCode(displayMap?['normalizedStatus']) ??
-          _normalizeKnownBookingCode(displayMap?['code']);
-  final publicStatus = _normalizeKnownBookingCode(booking['status']);
-  final persistedStatus =
-      _normalizeKnownBookingCode(booking['persistedStatus']);
-  final internalStatus = _normalizeKnownBookingCode(booking['internalStatus']);
-
-  final rawStatus = (booking['internalStatus'] ??
-          booking['persistedStatus'] ??
-          booking['status'] ??
-          '')
-      .toString()
-      .trim()
-      .toLowerCase();
-  if (rawStatus == 'cancelled') {
-    return _normalizeLegacyCancellation(booking);
-  }
-
-  if (backendDisplayCode != null &&
-      _terminalStatuses.contains(backendDisplayCode)) {
-    return backendDisplayCode;
-  }
-  if (publicStatus != null && _terminalStatuses.contains(publicStatus)) {
-    return publicStatus;
-  }
-
-  return internalStatus ??
-      persistedStatus ??
-      backendDisplayCode ??
-      publicStatus ??
-      'unknown';
-}
-
-bool _isBookingPaid(Map<String, dynamic> booking, String lifecycleStatus) {
-  final paymentStatus =
-      (booking['paymentStatus'] ?? booking['payment_status'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-  return paymentStatus == 'paid' ||
-      booking['paidAt'] != null ||
-      _paidStatuses.contains(lifecycleStatus);
-}
-
-String _getEffectiveLifecycleStatus(
-  Map<String, dynamic> booking,
-  DateTime now,
-) {
-  final lifecycle = getBookingLifecycleStatus(booking);
-  final reason =
-      (booking['cancellationReason'] ?? '').toString().trim().toUpperCase();
-
-  if (reason == 'PAYMENT_EXPIRED') return 'payment_expired';
-
-  if (lifecycle == 'pending_payment' && _isBookingPaid(booking, lifecycle)) {
-    return 'paid';
-  }
-
-  return lifecycle;
-}
-
-BookingStatusActions getBookingStatusActions(
-  Map<String, dynamic> booking, {
-  BookingActionRole role = BookingActionRole.host,
-  DateTime? now,
-}) {
-  final currentNow = now ?? DateTime.now();
-  final lifecycle = _getEffectiveLifecycleStatus(booking, currentNow);
-
-  if (_terminalStatuses.contains(lifecycle)) {
-    return const BookingStatusActions();
-  }
-
-  final isStaff =
-      role == BookingActionRole.host || role == BookingActionRole.admin;
-  if (!isStaff) {
-    // Guests NEVER get host confirm/checkIn/checkOut actions!
-    return BookingStatusActions(
-      canCancel:
-          const {'pending_payment', 'paid', 'confirmed'}.contains(lifecycle),
-    );
-  }
-
-  final checkInDate = booking['checkInDate'] ?? booking['check_in_date'];
-  final checkOutDate = booking['checkOutDate'] ?? booking['check_out_date'];
-
-  return BookingStatusActions(
-    canConfirm: lifecycle == 'paid',
-    canCheckIn: lifecycle == 'confirmed' &&
-        isDateReachedInVietnam(checkInDate, currentNow),
-    canCheckOut: lifecycle == 'checked_in' &&
-        isDateReachedInVietnam(checkOutDate, currentNow),
-    canCancel: lifecycle == 'paid' || lifecycle == 'confirmed',
-  );
-}
-
-BookingDisplayStatus getBookingDisplayStatus(
-  Map<String, dynamic> booking, {
-  BookingActionRole role = BookingActionRole.host,
-  DateTime? now,
-}) {
-  final currentNow = now ?? DateTime.now();
-  final lifecycle = _getEffectiveLifecycleStatus(booking, currentNow);
-  final actions = getBookingStatusActions(booking, role: role, now: currentNow);
-
-  String code = lifecycle;
-  final payoutStatus =
-      (booking['payoutStatus'] ?? '').toString().trim().toLowerCase();
-  final refundStatus =
-      (booking['refundStatus'] ?? '').toString().trim().toLowerCase();
-  final paymentStatus =
-      (booking['paymentStatus'] ?? '').toString().trim().toLowerCase();
-
-  if ((role == BookingActionRole.host || role == BookingActionRole.admin) &&
-      (lifecycle == 'checked_out' || lifecycle == 'completed')) {
-    if (payoutStatus == 'paid') {
-      code = 'payout_paid';
-    } else if (const {'pending', 'approved', 'processing'}
-        .contains(payoutStatus)) {
-      code = 'payout_pending';
-    }
-  }
-
-  if (paymentStatus == 'refunded' || refundStatus == 'succeeded') {
-    code = 'refunded';
-  } else if (_terminalStatuses.contains(lifecycle) &&
-      const {'pending', 'processing'}.contains(refundStatus)) {
-    code = 'refund_pending';
-  }
-
-  String label;
-  BookingStatusTone tone;
-  switch (code) {
-    case 'pending_payment':
-      label = 'Chờ thanh toán';
-      tone = BookingStatusTone.warning;
-      break;
-    case 'payment_expired':
-      label = 'Quá hạn thanh toán';
-      tone = BookingStatusTone.danger;
-      break;
-    case 'paid':
-      label = 'Thanh toán thành công';
-      tone = BookingStatusTone.success;
-      break;
-    case 'confirmed':
-      label = 'Đã xác nhận';
-      tone = BookingStatusTone.success;
-      break;
-    case 'checked_in':
-      label = 'Đã nhận phòng';
-      tone = BookingStatusTone.info;
-      break;
-    case 'checked_out':
-      label = 'Đã trả phòng';
-      tone = BookingStatusTone.info;
-      break;
-    case 'completed':
-      label = 'Hoàn tất';
-      tone = BookingStatusTone.success;
-      break;
-    case 'cancelled_by_guest':
-      label = 'Khách đã hủy';
-      tone = BookingStatusTone.muted;
-      break;
-    case 'cancelled_by_host':
-      label = 'Host đã hủy';
-      tone = BookingStatusTone.danger;
-      break;
-    case 'cancelled_by_admin':
-      label = 'Admin đã hủy';
-      tone = BookingStatusTone.danger;
-      break;
-    case 'rejected':
-      label = 'Host đã từ chối';
-      tone = BookingStatusTone.danger;
-      break;
-    case 'refund_pending':
-      label = 'Đang chờ hoàn tiền';
-      tone = BookingStatusTone.warning;
-      break;
-    case 'refunded':
-      label = 'Đã hoàn tiền';
-      tone = BookingStatusTone.success;
-      break;
-    case 'payout_pending':
-      label = 'Đang chờ chi trả';
-      tone = BookingStatusTone.warning;
-      break;
-    case 'payout_paid':
-      label = 'Đã chi trả';
-      tone = BookingStatusTone.success;
-      break;
-    default:
-      label = 'Không rõ';
-      tone = BookingStatusTone.muted;
-      break;
-  }
-
-  return BookingDisplayStatus(
-    label: label,
-    tone: tone,
-    normalizedStatus: code,
-    code: code,
-    reason: booking['cancellationReason']?.toString(),
-    isTerminal: _terminalStatuses.contains(lifecycle) ||
-        _terminalStatuses.contains(code) ||
-        code == 'refunded',
-    actions: actions,
-  );
-}
-
-bool bookingMatchesDisplayStatus(
-  Map<String, dynamic> booking,
-  String filterStatus, {
-  BookingActionRole role = BookingActionRole.host,
-  DateTime? now,
-}) {
-  if (filterStatus == 'all' || filterStatus.isEmpty) return true;
-  final display = getBookingDisplayStatus(booking, role: role, now: now);
-  if (filterStatus == 'cancelled') {
-    return const {
-      'cancelled_by_guest',
-      'cancelled_by_host',
-      'cancelled_by_admin',
-      'rejected',
-    }.contains(display.normalizedStatus);
-  }
-  return display.normalizedStatus == filterStatus;
-}
 
 // ============================================================================
 // BUG-13 & BUG-38: CALENDAR, PAYOUT, REPORT & BANK MODELS
 // ============================================================================
 
+/// Mô hình trạng thái chi tiết của một ngày trên lịch vận hành chỗ nghỉ (`YYYY-MM-DD`).
+///
+/// Đóng gói giá cơ bản, giá ghi đè `priceOverride`, số đêm tối thiểu ghi đè `minNightsOverride`,
+/// cờ khóa thủ công `isBlockedByHost`, cờ có khách đặt `isBooked` và quyền chỉnh sửa `canEdit`.
 class HostCalendarDay {
   final String date; // YYYY-MM-DD
   final double basePrice;
@@ -1570,6 +1505,7 @@ class HostCalendarDay {
   final String? guestName;
   final String? notes;
 
+  /// Khởi tạo thông tin một ngày trên lịch vận hành của Chủ nhà.
   const HostCalendarDay({
     required this.date,
     required this.basePrice,
@@ -1587,6 +1523,7 @@ class HostCalendarDay {
     this.notes,
   });
 
+  /// Kiểm tra ô ngày có được phép chỉnh sửa giá hoặc đóng/mở phòng so với ngày `todayVietnam` hay không.
   bool isEditable({String? todayVietnam}) {
     if (!canEdit || isBooked || isPast) return false;
     if (todayVietnam != null &&
@@ -1614,12 +1551,21 @@ class HostCalendarDay {
         : (override ??
             (json['price'] != null ? toDoubleVal(json['price']) : base));
 
+    // Giải thuật xác định trạng thái khóa ngày theo đơn đặt phòng hợp lệ trên lịch lưu trú:
+    // CONFLICT-RESOLVED: Dùng isCalendarBlockingStatusCode(bookingStatus) để các đơn đã hủy/từ chối/quá hạn không khóa ngày lịch.
     final rawBookingStatus = json['bookingStatus']?.toString();
     final hasBookingStatus =
         rawBookingStatus != null && rawBookingStatus.trim().isNotEmpty;
-    final booked = (json['isBooked'] as bool?) ?? hasBookingStatus;
+    final hasBlockingBookingStatus =
+        isCalendarBlockingStatusCode(rawBookingStatus);
+    final booked = hasBookingStatus
+        ? hasBlockingBookingStatus
+        : (json['isBooked'] == true);
     final past = (json['isPast'] as bool?) ?? false;
-    final editable = (json['canEdit'] as bool?) ?? (!booked && !past);
+    final rawCanEdit = json['canEdit'] as bool?;
+    final editable = (hasBookingStatus && !hasBlockingBookingStatus)
+        ? !past
+        : (rawCanEdit ?? (!booked && !past));
 
     return HostCalendarDay(
       date: (json['date'] ?? '').toString().split('T').first,
@@ -1644,12 +1590,21 @@ class HostCalendarDay {
   }
 }
 
+/// Kết quả phân loại tập ngày được chọn khi cập nhật lịch hàng loạt (Bulk Calendar Update).
 class CalendarDateSelectionValidation {
+  /// Danh sách ngày hợp lệ (`YYYY-MM-DD`) đủ điều kiện cập nhật giá hoặc đóng/mở phòng.
   final List<String> editableDates;
+
+  /// Danh sách ngày đang bị khóa do đã có khách đặt hoặc không được phép chỉnh sửa (`!canEdit`).
   final List<String> bookedDates;
+
+  /// Danh sách ngày nằm trong quá khứ so với ngày hiện tại tại Việt Nam.
   final List<String> pastDates;
+
+  /// Danh sách chuỗi ngày sai định dạng chuẩn ISO `YYYY-MM-DD`.
   final List<String> invalidFormatDates;
 
+  /// Khởi tạo kết quả kiểm định tập ngày lịch hàng loạt.
   const CalendarDateSelectionValidation({
     this.editableDates = const [],
     this.bookedDates = const [],
@@ -1657,13 +1612,16 @@ class CalendarDateSelectionValidation {
     this.invalidFormatDates = const [],
   });
 
+  /// Cho biết tập ngày chọn có chứa bất kỳ ngày vi phạm ràng buộc (đã đặt, quá khứ, sai định dạng) hay không.
   bool get hasUnauthorizedDates =>
       bookedDates.isNotEmpty ||
       pastDates.isNotEmpty ||
       invalidFormatDates.isNotEmpty;
 
+  /// Cho biết toàn bộ ngày được chọn đều hợp lệ và có ít nhất một ngày khả dụng để cập nhật hay không.
   bool get isAllValid => !hasUnauthorizedDates && editableDates.isNotEmpty;
 
+  /// Thông điệp lỗi tiếng Việt tổng hợp ưu tiên theo thứ tự: sai định dạng -> trùng đơn khách đặt -> ngày quá khứ.
   String? get errorMessage {
     if (invalidFormatDates.isNotEmpty) {
       return 'Định dạng ngày không hợp lệ: ${invalidFormatDates.join(', ')}';
@@ -1678,6 +1636,19 @@ class CalendarDateSelectionValidation {
   }
 }
 
+// Giải thuật thẩm định danh sách ngày cập nhật lịch hàng loạt (`validateCalendarBulkDates`):
+// Bước 1 (Lập chỉ mục lịch `O(N)`): Dựng bảng tra cứu `dayByDate` từ `currentCalendarDays` (hoặc `calendarDays`)
+//   để truy xuất trạng thái khóa phòng/giá ghi đè của từng ngày trong thời gian hằng số `O(1)`.
+// Bước 2 (Khử trùng & Phân tích định dạng `YYYY-MM-DD`): Cắt khoảng trắng và khử trùng lặp mảng `dates` qua `Set`
+//   (hỗ trợ cả tập ngày rời rạc lẫn dải ngày liên tiếp sinh từ điều kiện `startDate <= endDate` có giới hạn số ngày tối đa),
+//   sau đó kiểm tra biểu thức chính quy `^\d{4}-\d{2}-\d{2}$`; chuỗi sai chuẩn được tách vào `invalidFormatDates`.
+// Bước 3 (Kiểm tra ràng buộc đặt phòng, khóa lịch & quá khứ):
+//   - Nếu `known.isBooked == true`, đưa vào `bookedDates` để ngăn ghi đè giá hoặc mở khóa đè lên đơn đặt phòng thực.
+//   - Nếu `known.isPast == true` hoặc chuỗi ngày nhỏ hơn `todayVietnam` theo thứ tự từ điển ISO, đưa vào `pastDates`.
+//   - Nếu `known.canEdit == false`, đưa vào `bookedDates` để bảo vệ các ngày bị khóa cứng từ hệ thống.
+// Bước 4 (Chuẩn hóa thứ tự tăng dần): Các ngày hợp lệ còn lại được thêm vào `editableDates`; sắp xếp từ điển tăng dần
+//   cả 4 danh sách (`startDate <= ... <= endDate`) trước khi trả về `CalendarDateSelectionValidation`.
+/// Kiểm tra và phân loại danh sách ngày `dates` (`YYYY-MM-DD`) phục vụ cập nhật giá/khóa phòng hàng loạt trên lịch Host.
 CalendarDateSelectionValidation validateCalendarBulkDates(
   List<String> dates, {
   List<HostCalendarDay> calendarDays = const [],
@@ -1729,8 +1700,7 @@ CalendarDateSelectionValidation validateCalendarBulkDates(
   );
 }
 
-/// Deterministic masking of sensitive bank account numbers so raw digits are
-/// never exposed in payout lists or account summaries (`****1234`).
+/// Che giấu tất định số tài khoản ngân hàng nhạy cảm thành dạng `****1234` để bảo vệ dữ liệu tài chính trên giao diện.
 String maskBankAccountNumber(dynamic rawAccountNumber) {
   final raw = (rawAccountNumber ?? '').toString().trim();
   if (raw.isEmpty) return '—';
@@ -1746,8 +1716,7 @@ String maskBankAccountNumber(dynamic rawAccountNumber) {
   return '****$last4';
 }
 
-/// Ensures payout account or batch maps always have `accountNumberMasked`
-/// populated and any raw `accountNumber` masked before display.
+/// Tạo bản sao bản đồ tài khoản/đợt chi trả `source` với trường `accountNumberMasked` và `accountNumber` đã được che bảo mật.
 Map<String, dynamic> maskSensitivePayoutMap(Map<String, dynamic> source) {
   final copy = Map<String, dynamic>.from(source);
   final rawAcc = copy['accountNumber'] ??
@@ -1765,17 +1734,18 @@ Map<String, dynamic> maskSensitivePayoutMap(Map<String, dynamic> source) {
   return copy;
 }
 
-/// Returns true if the given role is an approved Host or Admin allowed to
-/// access Host Portal and perform Host mutations.
+/// Kiểm tra chuỗi vai trò `role` có phải Chủ nhà (`host`) hoặc Quản trị viên (`admin`) được phép thao tác trên Host Portal hay không.
 bool isApprovedHostRole(String? role) {
   final normalized = (role ?? '').trim().toLowerCase();
   return normalized == 'host' || normalized == 'admin';
 }
 
+/// Ngoại lệ ném ra khi người dùng chưa đăng nhập (`401`) hoặc không có quyền Chủ nhà (`403`) thực hiện thao tác thay đổi dữ liệu.
 class HostAuthorizationException extends StateError {
   final int statusCode;
   final String? userRole;
 
+  /// Khởi tạo ngoại lệ phân quyền Host kèm mã trạng thái HTTP `statusCode` và `userRole` hiện tại.
   HostAuthorizationException(
     super.message, {
     this.statusCode = 403,
@@ -1783,6 +1753,7 @@ class HostAuthorizationException extends StateError {
   });
 }
 
+/// Phân loại nhóm lỗi chuẩn hóa trong toàn bộ phân hệ Chủ nhà.
 enum HostErrorType {
   offline,
   authExpired,
@@ -1794,12 +1765,14 @@ enum HostErrorType {
   unknown,
 }
 
+/// Đối tượng đóng gói kết quả phân loại lỗi của phân hệ Chủ nhà kèm thông điệp tiếng Việt và lỗi chi tiết theo từng trường.
 class HostErrorInfo {
   final HostErrorType type;
   final int? statusCode;
   final String message;
   final Map<String, String> fieldErrors;
 
+  /// Khởi tạo thông tin lỗi đã phân loại của Host.
   const HostErrorInfo({
     required this.type,
     required this.message,
@@ -1807,16 +1780,44 @@ class HostErrorInfo {
     this.fieldErrors = const {},
   });
 
+  /// Cho biết lỗi bắt nguồn từ mất kết nối mạng hoặc hết thời gian chờ (timeout).
   bool get isOffline => type == HostErrorType.offline;
+
+  /// Cho biết phiên xác thực của người dùng đã hết hạn (`401`).
   bool get isAuthExpired => type == HostErrorType.authExpired;
+
+  /// Cho biết tài khoản hiện tại bị từ chối quyền truy cập nghiệp vụ Chủ nhà (`403`).
   bool get isForbidden => type == HostErrorType.forbidden;
+
+  /// Cho biết dữ liệu biểu mẫu hoặc tham số đầu vào vi phạm quy tắc kiểm định (`400`/`422`).
   bool get isValidation => type == HostErrorType.validation;
+
+  /// Cho biết lỗi mang tính tạm thời và người dùng có thể nhấn nút thử lại ngay.
   bool get isRetryable =>
       type == HostErrorType.offline ||
       type == HostErrorType.server ||
       type == HostErrorType.unknown;
 }
 
+// Giải thuật phân loại lỗi đa tầng và ánh xạ hướng dẫn xử lý tiếng Việt cho Host (`classifyHostError`):
+// Bước 1 (Kiểm tra ngoại lệ phân quyền nội bộ): Nếu `error` là `HostAuthorizationException`,
+//   trả về ngay `HostErrorType.forbidden` cùng `statusCode` (`401`/`403`) và thông điệp hướng dẫn đăng nhập tài khoản Host.
+// Bước 2 (Giải mã cấu trúc lỗi từ `DioException`): Trích xuất `message`/`error` từ body JSON và duyệt `data['errors']`
+//   (tương thích cả mảng `{ path/field, msg/message }` của `express-validator` lẫn bản đồ khóa-giá trị) để điền
+//   vào `fieldErrors` và ghép nối chuỗi giải thích lỗi cụ thể cho người dùng.
+// Bước 3 (Nhận diện đứt kết nối & Timeout mạng): Khi `statusCode == null` và kiểu lỗi thuộc `connectionError`,
+//   `connectionTimeout`, `receiveTimeout` hoặc `sendTimeout`, gán nhãn `HostErrorType.offline` để bật giao diện thử lại.
+// Bước 4 (Ánh xạ mã trạng thái HTTP `401/403/404/409/400/422/429/5xx`):
+//   - `401` -> `HostErrorType.authExpired`: yêu cầu đăng nhập lại phiên làm việc.
+//   - `403` -> `HostErrorType.forbidden`: thông báo thiếu quyền Chủ nhà.
+//   - `404` -> `HostErrorType.notFound`: báo dữ liệu hoặc chỗ nghỉ không tồn tại.
+//   - `409` -> `HostErrorType.conflict`: cảnh báo trùng lặp mã số hoặc xung đột trạng thái đặt phòng/lịch.
+//   - `400` / `422` -> `HostErrorType.validation`: trả kèm `fieldErrors` để đánh dấu trực tiếp ô nhập sai.
+//   - `>= 500` (`5xx`) -> `HostErrorType.server`: thông báo sự cố máy chủ tạm thời (cho phép thử lại).
+//   - Các mã HTTP còn lại (như giới hạn tần suất `429`) -> `HostErrorType.unknown` kèm nguyên văn hướng dẫn `serverMsg` từ máy chủ.
+// Bước 5 (Chuẩn hóa lỗi cục bộ): Chuyển `ArgumentError` và `StateError` thành `HostErrorType.validation`
+//   để tầng ViewModel/UI xử lý đồng nhất với lỗi kiểm định từ máy chủ.
+/// Phân tích đối tượng lỗi `error` thành `HostErrorInfo` có kiểu ngữ nghĩa rõ ràng và thông điệp tiếng Việt hướng dẫn cách khắc phục.
 HostErrorInfo classifyHostError(Object error, [String? fallback]) {
   if (error is HostAuthorizationException) {
     return HostErrorInfo(
@@ -1923,10 +1924,14 @@ HostErrorInfo classifyHostError(Object error, [String? fallback]) {
       );
     }
     if (statusCode == 409) {
+      final msg =
+          (serverMsg != null && serverMsg.trim().toLowerCase() != 'conflict')
+              ? serverMsg
+              : 'Dữ liệu hoặc mã số bị trùng lặp / xung đột trạng thái (409).';
       return HostErrorInfo(
         type: HostErrorType.conflict,
         statusCode: 409,
-        message: serverMsg ?? 'Dữ liệu bị xung đột trạng thái (409).',
+        message: msg,
       );
     }
     if (statusCode == 400 || statusCode == 422) {
@@ -1972,6 +1977,7 @@ HostErrorInfo classifyHostError(Object error, [String? fallback]) {
   );
 }
 
+/// Thông tin ngân hàng thương mại Việt Nam lấy từ danh mục chuẩn `/api/banks/vn`.
 class VietnamBank {
   final String code;
   final String name;
@@ -1979,6 +1985,7 @@ class VietnamBank {
   final String? bin;
   final String? logo;
 
+  /// Khởi tạo thông tin ngân hàng Việt Nam.
   const VietnamBank({
     required this.code,
     required this.name,
@@ -1987,6 +1994,7 @@ class VietnamBank {
     this.logo,
   });
 
+  /// Khởi tạo `VietnamBank` từ dữ liệu JSON.
   factory VietnamBank.fromJson(Map<String, dynamic> json) {
     final code = (json['code'] ?? json['bankCode'] ?? '').toString().trim();
     final name = (json['name'] ?? json['bankName'] ?? code).toString().trim();
@@ -2001,10 +2009,12 @@ class VietnamBank {
     );
   }
 
+  /// Chuỗi nhãn đầy đủ hiển thị tên viết tắt, tên chính thức và mã BIN trong ô chọn ngân hàng.
   String get displayLabel =>
       '${shortName.isNotEmpty ? shortName : code} - $name${(bin != null && bin!.isNotEmpty) ? ' ($bin)' : ''}';
 }
 
+/// Thông tin tài khoản ngân hàng thụ hưởng dùng để nhận tiền giải ngân đối soát của Chủ nhà.
 class HostBankAccount {
   final String bankCode;
   final String bankName;
@@ -2014,6 +2024,7 @@ class HostBankAccount {
   final String accountHolderName;
   final String? branchName;
 
+  /// Khởi tạo thông tin tài khoản ngân hàng nhận chi trả của Host.
   const HostBankAccount({
     required this.bankCode,
     required this.bankName,
@@ -2024,8 +2035,10 @@ class HostBankAccount {
     this.branchName,
   });
 
+  /// Chuỗi số tài khoản đã được che giấu chỉ giữ 4 ký tự cuối (`****1234`).
   String get accountNumberMasked => maskBankAccountNumber(accountNumber);
 
+  /// Khởi tạo `HostBankAccount` từ dữ liệu JSON.
   factory HostBankAccount.fromJson(Map<String, dynamic> json) {
     return HostBankAccount(
       bankCode: (json['bankCode'] ?? '').toString(),
@@ -2040,6 +2053,7 @@ class HostBankAccount {
     );
   }
 
+  /// Kiểm tra hợp lệ ngân hàng, độ dài chữ số tài khoản (6–30 chữ số) và tên chủ tài khoản.
   String? validate() {
     if (bankCode.trim().isEmpty || bankName.trim().isEmpty) {
       return 'Vui lòng chọn ngân hàng từ danh sách.';
@@ -2073,6 +2087,7 @@ class HostBankAccount {
       };
 }
 
+/// Một điểm dữ liệu theo kỳ thời gian (ngày hoặc tháng) trên biểu đồ báo cáo doanh thu của Chủ nhà.
 class HostRevenueSeriesPoint {
   final String period;
   final double grossRevenue;
@@ -2081,6 +2096,7 @@ class HostRevenueSeriesPoint {
   final int bookingCount;
   final int paymentCount;
 
+  /// Khởi tạo điểm dữ liệu chuỗi thời gian doanh thu.
   const HostRevenueSeriesPoint({
     required this.period,
     required this.grossRevenue,
@@ -2090,6 +2106,7 @@ class HostRevenueSeriesPoint {
     this.paymentCount = 0,
   });
 
+  /// Khởi tạo `HostRevenueSeriesPoint` từ JSON.
   factory HostRevenueSeriesPoint.fromJson(Map<String, dynamic> json) {
     double toD(dynamic v) =>
         v is num ? v.toDouble() : (double.tryParse('${v ?? 0}') ?? 0);
@@ -2108,6 +2125,7 @@ class HostRevenueSeriesPoint {
   }
 }
 
+/// Báo cáo tổng hợp doanh thu, phí nền tảng, doanh thu thực nhận, doanh thu chờ lưu trú và hoàn tiền của Chủ nhà.
 class HostRevenueReport {
   final String from;
   final String to;
@@ -2116,6 +2134,12 @@ class HostRevenueReport {
   final double grossRevenue;
   final double platformRevenue;
   final double hostRevenue;
+  final double pendingStayRevenue;
+  final double pendingStayPlatformRevenue;
+  final double pendingStayHostRevenue;
+  final int pendingStayBookingCount;
+  final double refundedAmount;
+  final int refundCount;
   final int bookingCount;
   final int paymentCount;
   final List<HostRevenueSeriesPoint> series;
@@ -2128,6 +2152,12 @@ class HostRevenueReport {
     this.grossRevenue = 0,
     this.platformRevenue = 0,
     this.hostRevenue = 0,
+    this.pendingStayRevenue = 0,
+    this.pendingStayPlatformRevenue = 0,
+    this.pendingStayHostRevenue = 0,
+    this.pendingStayBookingCount = 0,
+    this.refundedAmount = 0,
+    this.refundCount = 0,
     this.bookingCount = 0,
     this.paymentCount = 0,
     this.series = const [],
@@ -2160,6 +2190,20 @@ class HostRevenueReport {
       grossRevenue: toD(totals['grossRevenue']),
       platformRevenue: toD(totals['platformRevenue']),
       hostRevenue: toD(totals['hostRevenue']),
+      pendingStayRevenue:
+          toD(totals['pendingStayRevenue'] ?? json['pendingStayRevenue']),
+      pendingStayPlatformRevenue: toD(
+        totals['pendingStayPlatformRevenue'] ??
+            json['pendingStayPlatformRevenue'],
+      ),
+      pendingStayHostRevenue: toD(
+        totals['pendingStayHostRevenue'] ?? json['pendingStayHostRevenue'],
+      ),
+      pendingStayBookingCount: toI(
+        totals['pendingStayBookingCount'] ?? json['pendingStayBookingCount'],
+      ),
+      refundedAmount: toD(totals['refundedAmount']),
+      refundCount: toI(totals['refundCount']),
       bookingCount: toI(totals['bookingCount']),
       paymentCount: toI(totals['paymentCount']),
       series: rawSeries

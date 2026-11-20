@@ -6,6 +6,10 @@ import { createGzip } from "node:zlib";
 import { getEnv } from "../config/env";
 import { logger } from "../config/logger";
 
+/**
+ * Giải thuật dọn dẹp bản sao lưu cơ sở dữ liệu cũ quá hạn lưu trữ (retention policy):
+ * Quét thư mục backup, lọc các tệp `.sql.gz` có mtime cũ hơn ngưỡng `retentionDays` và xóa bất đồng bộ.
+ */
 const cleanupOldBackups = async (backupDir: string, retentionDays: number) => {
     const files = await fs.readdir(backupDir);
     const threshold = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
@@ -25,19 +29,23 @@ const cleanupOldBackups = async (backupDir: string, retentionDays: number) => {
     );
 };
 
+/**
+ * Giải thuật sao lưu MySQL an toàn không khóa bảng (`--single-transaction`):
+ * Khởi tạo thư mục quyền 0700, stream dữ liệu từ tiến trình `mysqldump` qua bộ nén Gzip vào tệp quyền 0600,
+ * sau đó kích hoạt chính sách thu hồi bản sao lưu cũ.
+ */
 const runBackup = async () => {
     const env = getEnv();
     const backupDir = path.resolve(process.cwd(), env.backupDir);
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const outputFile = path.join(backupDir, `${env.dbName}-${timestamp}.sql.gz`);
 
-    await fs.mkdir(backupDir, { recursive: true });
+    await fs.mkdir(backupDir, { recursive: true, mode: 0o700 });
 
     const args = [
         `--host=${env.dbHost}`,
         `--port=${env.dbPort}`,
         `--user=${env.dbUser}`,
-        `--password=${env.dbPassword}`,
         "--single-transaction",
         "--quick",
         "--routines",
@@ -49,10 +57,14 @@ const runBackup = async () => {
     await new Promise<void>((resolve, reject) => {
         const dump = spawn("mysqldump", args, {
             stdio: ["ignore", "pipe", "pipe"],
+            env: {
+                ...process.env,
+                MYSQL_PWD: env.dbPassword,
+            },
         });
 
         const gzip = createGzip();
-        const output = createWriteStream(outputFile);
+        const output = createWriteStream(outputFile, { mode: 0o600 });
 
         let stderr = "";
 
@@ -84,4 +96,4 @@ const runBackup = async () => {
 runBackup().catch((error) => {
     logger.error("Database backup failed", error);
     process.exit(1);
-});     
+});

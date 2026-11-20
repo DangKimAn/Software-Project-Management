@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP quản trị danh mục tiện ích chỗ ở (`/api/admin/amenities`):
+ * - Yêu cầu xác thực JWT (`authenticate`), phân quyền `requireRole("admin")` và kiểm chứng tham số khi thêm, sửa, xóa tiện ích.
+ */
+
 import express from "express";
 import { body, param } from "express-validator";
 

@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu từ điển phân loại nhãn hình ảnh chuẩn hóa phục vụ tìm kiếm và gợi ý không gian nghỉ dưỡng.
+ */
 import {
     CreationOptional,
     DataTypes,

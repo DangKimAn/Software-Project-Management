@@ -1,21 +1,24 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/errors/app_failure.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
-import '../../data/blog_repository.dart';
+import '../view_models/blog_view_model.dart';
 
 /// Port of `Source goc/frontend/src/views/pages/Blog/BlogPage.tsx`
-/// adhering to Minh Thanh Villa Light Luxury Design System (FLUTTER_RULES.md).
+/// adhering to The Palm Light Luxury Design System (FLUTTER_RULES.md).
 class BlogScreen extends ConsumerStatefulWidget {
   const BlogScreen({super.key});
 
@@ -39,20 +42,65 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
   static const int _pageSize = 12;
 
   String _selectedCategory = 'Tất cả';
+  String _debouncedQuery = '';
   int _currentPage = 1;
+  Timer? _searchDebounce;
   final TextEditingController _searchCtrl = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
+  // Giải thuật khử dấu tiếng Việt phục vụ tìm kiếm bài viết cẩm nang không phân biệt dấu và hoa thường.
+  static String _foldAccents(String input) {
+    const accented =
+        'àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ';
+    const plain =
+        'aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd';
+    final lower = input.toLowerCase();
+    final buffer = StringBuffer();
+    for (var i = 0; i < lower.length; i++) {
+      final ch = lower[i];
+      final idx = accented.indexOf(ch);
+      buffer.write(idx >= 0 ? plain[idx] : ch);
+    }
+    return buffer.toString();
+  }
+
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
+  // Giải thuật trì hoãn 300ms khi gõ từ khóa tìm kiếm để giảm tải truy vấn máy chủ mà vẫn lọc tức thời trên giao diện.
+  void _onSearchChanged(String rawValue) {
+    setState(() {});
+    _searchDebounce?.cancel();
+    final trimmed = rawValue.trim();
+    if (trimmed.isEmpty) {
+      if (_debouncedQuery.isNotEmpty) {
+        setState(() {
+          _debouncedQuery = '';
+          _currentPage = 1;
+        });
+      }
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      final next = _searchCtrl.text.trim();
+      if (_debouncedQuery != next) {
+        setState(() {
+          _debouncedQuery = next;
+          _currentPage = 1;
+        });
+      }
+    });
+  }
+
   BlogQueryFilter get _activeFilter => BlogQueryFilter(
         category: _selectedCategory == 'Tất cả' ? null : _selectedCategory,
-        query: null,
+        query: _debouncedQuery.isEmpty ? null : _debouncedQuery,
         page: _currentPage,
         limit: _pageSize,
       );
@@ -86,8 +134,10 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
   }
 
   void _resetFilters() {
+    _searchDebounce?.cancel();
     setState(() {
       _selectedCategory = 'Tất cả';
+      _debouncedQuery = '';
       _currentPage = 1;
       _searchCtrl.clear();
     });
@@ -98,20 +148,20 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
     ref.invalidate(blogListProvider(_selectedCategory));
   }
 
-  (String, String) _resolveErrorTitleAndMessage(Object err) {
-    if (err is NetworkFailure) {
-      return ('Không có kết nối mạng', err.message);
+  (String, String) _resolveErrorTitleAndMessage(
+    Object err,
+    BuildContext context,
+    String localeCode,
+  ) {
+    final errorCopy = LocaleFormatters.localizeFailure(
+      err,
+      localeCode: localeCode,
+      l10n: context.l10n,
+    );
+    if (err is AppFailure && err.message.trim().isNotEmpty) {
+      return (errorCopy.title, err.message);
     }
-    if (err is ServerFailure) {
-      return ('Lỗi máy chủ', err.message);
-    }
-    if (err is RateLimitFailure) {
-      return ('Tạm thời quá tải', err.message);
-    }
-    if (err is AppFailure) {
-      return ('Không thể tải danh sách bài viết', err.message);
-    }
-    return ('Không thể tải danh sách bài viết', err.toString());
+    return (errorCopy.title, errorCopy.message);
   }
 
   List<String> _buildCategoryList(List<BlogPost> loadedPosts) {
@@ -134,6 +184,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
   @override
   Widget build(BuildContext context) {
     final paginatedAsync = ref.watch(blogPaginatedProvider(_activeFilter));
+    final localeCode = ref.watch(localeProvider);
     final loadedPosts = paginatedAsync.valueOrNull?.items ?? const <BlogPost>[];
     final categories = _buildCategoryList(loadedPosts);
     final screenWidth = MediaQuery.sizeOf(context).width;
@@ -142,7 +193,6 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
     return Scaffold(
       backgroundColor: AppColors.surfaceBase,
       body: SafeArea(
-        bottom: false,
         child: Column(
           children: [
             const AppTopHeader(currentPath: '/cam-nang'),
@@ -170,7 +220,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'CẨM NANG LƯU TRÚ VŨNG TÀU',
+                                context.l10n.blogListBadge,
                                 style: AppTypography.caption.copyWith(
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 1.6,
@@ -179,7 +229,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                               ),
                               const SizedBox(height: AppSpacing.xs),
                               Text(
-                                'Kinh nghiệm lưu trú, lịch trình & bí quyết đặt Villa biển Vũng Tàu',
+                                context.l10n.blogListHeroTitle,
                                 style: AppTypography.displayMedium.copyWith(
                                   fontSize: screenWidth < 360 ? 22 : 28,
                                   color: AppColors.textStrong,
@@ -192,7 +242,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                 controller: _searchCtrl,
                                 textInputAction: TextInputAction.search,
                                 decoration: InputDecoration(
-                                  hintText: 'Tìm bài viết cẩm nang Vũng Tàu...',
+                                  hintText: context.l10n.blogSearchHint,
                                   filled: true,
                                   fillColor: AppColors.surfaceBase,
                                   contentPadding: const EdgeInsets.symmetric(
@@ -212,15 +262,20 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                   ),
                                   suffixIcon: _searchCtrl.text.isNotEmpty
                                       ? AppIconButton(
-                                          tooltip: 'Xóa từ khóa tìm kiếm',
+                                          tooltip: context
+                                              .l10n.blogClearSearchTooltip,
                                           icon: const Icon(
                                             LucideIcons.x,
                                             size: 18,
                                             color: AppColors.iconStrong,
                                           ),
                                           onPressed: () {
+                                            _searchDebounce?.cancel();
                                             _searchCtrl.clear();
-                                            setState(() {});
+                                            setState(() {
+                                              _debouncedQuery = '';
+                                              _currentPage = 1;
+                                            });
                                           },
                                         )
                                       : null,
@@ -244,7 +299,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                     ),
                                   ),
                                 ),
-                                onChanged: (_) => setState(() {}),
+                                onChanged: _onSearchChanged,
                               ),
                               const SizedBox(height: AppSpacing.md),
                               // Category Pill Chips (>=48dp touch height)
@@ -253,6 +308,12 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                 child: Row(
                                   children: categories.map((cat) {
                                     final selected = _selectedCategory == cat;
+                                    final displayCat =
+                                        LocaleFormatters.localizeBlogCategory(
+                                      cat,
+                                      localeCode: localeCode,
+                                      l10n: context.l10n,
+                                    );
                                     return Padding(
                                       padding: const EdgeInsets.only(
                                         right: AppSpacing.xs,
@@ -260,7 +321,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                       child: Semantics(
                                         button: true,
                                         selected: selected,
-                                        label: 'Chuyên mục $cat',
+                                        label: 'Chuyên mục $displayCat',
                                         child: InkWell(
                                           key: ValueKey('blog-category-$cat'),
                                           onTap: () => _selectCategory(cat),
@@ -278,18 +339,18 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                                               alignment: Alignment.center,
                                               decoration: BoxDecoration(
                                                 color: selected
-                                                    ? AppColors.textStrong
+                                                    ? AppColors.primary
                                                     : AppColors.surfaceBase,
                                                 borderRadius:
                                                     AppRadii.roundedPill,
                                                 border: Border.all(
                                                   color: selected
-                                                      ? AppColors.textStrong
+                                                      ? AppColors.primary
                                                       : AppColors.borderSoft,
                                                 ),
                                               ),
                                               child: Text(
-                                                cat,
+                                                displayCat,
                                                 style: AppTypography.bodyMedium
                                                     .copyWith(
                                                   fontSize: 13,
@@ -319,16 +380,21 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                     data: (result) {
                       final posts = result.items;
                       final pagination = result.pagination;
-                      final query = _searchCtrl.text.trim().toLowerCase();
-                      final filtered = query.isEmpty
+                      final query = _searchCtrl.text.trim();
+                      final foldedQuery = _foldAccents(query);
+                      final filtered = foldedQuery.isEmpty
                           ? posts
                           : posts
                               .where(
                                 (p) =>
-                                    p.title.toLowerCase().contains(query) ||
-                                    p.excerpt.toLowerCase().contains(query) ||
-                                    p.category.toLowerCase().contains(query) ||
-                                    p.location.toLowerCase().contains(query),
+                                    _foldAccents(p.title)
+                                        .contains(foldedQuery) ||
+                                    _foldAccents(p.excerpt)
+                                        .contains(foldedQuery) ||
+                                    _foldAccents(p.category)
+                                        .contains(foldedQuery) ||
+                                    _foldAccents(p.location)
+                                        .contains(foldedQuery),
                               )
                               .toList();
 
@@ -341,15 +407,21 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                               vertical: AppSpacing.xxl,
                             ),
                             child: AppEmptyView(
-                              title: 'Chưa có bài viết phù hợp',
-                              description:
-                                  'Hãy thử chọn chuyên mục khác hoặc từ khóa khác.',
-                              actionText: hasActiveFilter ? 'Xóa bộ lọc' : null,
+                              title: context.l10n.blogEmptyTitle,
+                              description: context.l10n.blogEmptyDescription,
+                              actionText: hasActiveFilter
+                                  ? context.l10n.blogClearFilters
+                                  : null,
                               onAction: hasActiveFilter ? _resetFilters : null,
                             ),
                           ),
                         );
                       }
+
+                      final showFeaturedHero = filtered.length >= 2 &&
+                          _selectedCategory == 'Tất cả' &&
+                          query.isEmpty &&
+                          pagination.page == 1;
 
                       return SliverToBoxAdapter(
                         child: Center(
@@ -360,6 +432,15 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
+                                  if (showFeaturedHero) ...[
+                                    _FeaturedBlogBanner(
+                                      post: filtered.first,
+                                      onTap: () => context.push(
+                                        '/blog/${filtered.first.slug}',
+                                      ),
+                                    ),
+                                    const SizedBox(height: AppSpacing.xl),
+                                  ],
                                   LayoutBuilder(
                                     builder: (context, constraints) {
                                       final cols = constraints.maxWidth >= 900
@@ -407,7 +488,7 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                         padding: const EdgeInsets.all(48),
                         child: Center(
                           child: Semantics(
-                            label: 'Đang tải danh sách bài viết',
+                            label: context.l10n.blogLoadingList,
                             child: const CircularProgressIndicator(
                               color: AppColors.primary,
                             ),
@@ -418,6 +499,8 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                     error: (err, _) {
                       final (title, message) = _resolveErrorTitleAndMessage(
                         err,
+                        context,
+                        localeCode,
                       );
                       return SliverToBoxAdapter(
                         child: AppErrorView(
@@ -428,7 +511,6 @@ class _BlogScreenState extends ConsumerState<BlogScreen> {
                       );
                     },
                   ),
-                  const SliverToBoxAdapter(child: AppFooter()),
                 ],
               ),
             ),
@@ -485,7 +567,7 @@ class BlogCoverImage extends StatelessWidget {
 /// - Card radius 24dp (`AppRadii.roundedCard`), no heavy shadow.
 /// - Fixed aspect ratio image (16:10) with placeholder fallback (zero layout jump).
 /// - Flexible text layout supporting 320dp width and text scaling 1.0/1.3/1.6 without overflow.
-class BlogPostCard extends StatelessWidget {
+class BlogPostCard extends ConsumerWidget {
   final BlogPost post;
   final VoidCallback onTap;
 
@@ -496,12 +578,19 @@ class BlogPostCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final locale = ref.watch(localeProvider);
+    final localizedPost = LocaleFormatters.localizeBlogPost(
+      post,
+      localeCode: locale,
+      l10n: context.l10n,
+    );
+
     return Semantics(
       button: true,
-      label: '${post.title}, chuyên mục ${post.category}',
+      label: '${localizedPost.title}, ${localizedPost.category}',
       child: InkWell(
-        key: ValueKey('blog-card-${post.slug}'),
+        key: ValueKey('blog-card-${localizedPost.slug}'),
         onTap: onTap,
         borderRadius: AppRadii.roundedCard,
         child: Container(
@@ -515,7 +604,7 @@ class BlogPostCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               BlogCoverImage(
-                rawUrl: post.coverImage,
+                rawUrl: localizedPost.coverImage,
                 aspectRatio: 16 / 10,
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(AppRadii.card),
@@ -537,20 +626,34 @@ class BlogPostCard extends StatelessWidget {
                             vertical: 4,
                           ),
                           decoration: const BoxDecoration(
-                            color: AppColors.surfaceWarmSand,
+                            color: AppColors.surfaceBase,
                             borderRadius: AppRadii.roundedPill,
                           ),
                           child: Text(
-                            post.category,
+                            // CONFLICT-RESOLVED: Kết hợp dữ liệu đã bản địa hóa `localizedPost` từ `origin/develop` với ràng buộc `maxLines` chống tràn bố cục khi phóng chữ của nhánh refactor.
+                            localizedPost.category,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: AppTypography.caption.copyWith(
                               fontWeight: FontWeight.w700,
                               color: AppColors.textStrong,
                             ),
                           ),
                         ),
-                        if (post.readTime.isNotEmpty)
+                        if (localizedPost.publishedAt.isNotEmpty)
                           Text(
-                            post.readTime,
+                            localizedPost.publishedAt,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        if (localizedPost.readTime.isNotEmpty)
+                          Text(
+                            localizedPost.readTime,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: AppTypography.caption.copyWith(
                               color: AppColors.textMuted,
                             ),
@@ -559,7 +662,7 @@ class BlogPostCard extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      post.title,
+                      localizedPost.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.cardTitle.copyWith(
@@ -569,11 +672,11 @@ class BlogPostCard extends StatelessWidget {
                         color: AppColors.textStrong,
                       ),
                     ),
-                    if (post.excerpt.isNotEmpty) ...[
+                    if (localizedPost.excerpt.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        post.excerpt,
-                        maxLines: 3,
+                        localizedPost.excerpt,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.bodyMuted.copyWith(
                           height: 1.55,
@@ -592,7 +695,7 @@ class BlogPostCard extends StatelessWidget {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            post.location,
+                            localizedPost.location,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: AppTypography.bodyMedium.copyWith(
@@ -633,6 +736,7 @@ class _BlogPaginationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final currentPage = pagination.page;
     final totalPages = pagination.totalPages;
+    if (totalPages <= 1) return const SizedBox.shrink();
     final pages = <int>[];
     final start = (currentPage - 2).clamp(1, totalPages);
     final end = (currentPage + 2).clamp(1, totalPages);
@@ -649,36 +753,30 @@ class _BlogPaginationBar extends StatelessWidget {
         Semantics(
           button: true,
           enabled: pagination.hasPreviousPage,
-          label: 'Trang trước',
-          child: OutlinedButton.icon(
+          label: context.l10n.blogPaginationPrev,
+          child: OutlinedButton(
             key: const ValueKey('blog-page-prev'),
             onPressed: pagination.hasPreviousPage
                 ? () => onPageSelected(currentPage - 1)
                 : null,
             style: OutlinedButton.styleFrom(
-              minimumSize: const Size(48, 48),
-              shape: const StadiumBorder(),
+              minimumSize: const Size(40, 40),
+              padding: EdgeInsets.zero,
+              shape: const CircleBorder(),
               side: BorderSide(
                 color: pagination.hasPreviousPage
                     ? AppColors.border
                     : AppColors.borderSoft,
               ),
             ),
-            icon: Icon(
-              LucideIcons.chevronLeft,
-              size: 16,
-              color: pagination.hasPreviousPage
-                  ? AppColors.iconStrong
-                  : AppColors.textTertiary,
-            ),
-            label: const Text('Trước'),
+            child: const Text('<'),
           ),
         ),
         for (final p in pages)
           Semantics(
             button: true,
             selected: p == currentPage,
-            label: 'Trang $p',
+            label: context.l10n.blogPaginationPage(p),
             child: InkWell(
               key: ValueKey('blog-page-$p'),
               onTap: p == currentPage ? null : () => onPageSelected(p),
@@ -693,12 +791,12 @@ class _BlogPaginationBar extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: p == currentPage
-                        ? AppColors.textStrong
+                        ? AppColors.primary
                         : AppColors.surfaceBase,
                     borderRadius: AppRadii.roundedPill,
                     border: Border.all(
                       color: p == currentPage
-                          ? AppColors.textStrong
+                          ? AppColors.primary
                           : AppColors.borderSoft,
                     ),
                   ),
@@ -718,32 +816,201 @@ class _BlogPaginationBar extends StatelessWidget {
         Semantics(
           button: true,
           enabled: pagination.hasNextPage,
-          label: 'Trang sau',
-          child: OutlinedButton.icon(
+          label: context.l10n.blogPaginationNext,
+          child: OutlinedButton(
             key: const ValueKey('blog-page-next'),
             onPressed: pagination.hasNextPage
                 ? () => onPageSelected(currentPage + 1)
                 : null,
             style: OutlinedButton.styleFrom(
-              minimumSize: const Size(48, 48),
-              shape: const StadiumBorder(),
+              minimumSize: const Size(40, 40),
+              padding: EdgeInsets.zero,
+              shape: const CircleBorder(),
               side: BorderSide(
                 color: pagination.hasNextPage
                     ? AppColors.border
                     : AppColors.borderSoft,
               ),
             ),
-            icon: Icon(
-              LucideIcons.chevronRight,
-              size: 16,
-              color: pagination.hasNextPage
-                  ? AppColors.iconStrong
-                  : AppColors.textTertiary,
-            ),
-            label: const Text('Sau'),
+            child: const Text('>'),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Khối bài viết nổi bật (Featured Hero) đầu trang Cẩm nang trên màn hình danh sách.
+class _FeaturedBlogBanner extends ConsumerWidget {
+  final BlogPost post;
+  final VoidCallback onTap;
+
+  const _FeaturedBlogBanner({
+    required this.post,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final locale = ref.watch(localeProvider);
+    final localizedPost = LocaleFormatters.localizeBlogPost(
+      post,
+      localeCode: locale,
+      l10n: context.l10n,
+    );
+    final isWide = MediaQuery.sizeOf(context).width >= 840;
+
+    final imageBlock = BlogCoverImage(
+      rawUrl: localizedPost.coverImage,
+      aspectRatio: isWide ? 16 / 10 : 16 / 9,
+      borderRadius: isWide
+          ? const BorderRadius.horizontal(
+              left: Radius.circular(AppRadii.card),
+            )
+          : const BorderRadius.vertical(
+              top: Radius.circular(AppRadii.card),
+            ),
+    );
+
+    final textBlock = Padding(
+      padding: EdgeInsets.all(isWide ? AppSpacing.xxl : AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xxs,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: AppRadii.roundedPill,
+                ),
+                child: Text(
+                  localizedPost.category,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              if (localizedPost.publishedAt.isNotEmpty)
+                Text(
+                  localizedPost.publishedAt,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              if (localizedPost.readTime.isNotEmpty)
+                Text(
+                  localizedPost.readTime,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textMuted,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            localizedPost.title,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.displayMedium.copyWith(
+              fontSize: isWide ? 24 : 20,
+              fontWeight: FontWeight.w800,
+              height: 1.32,
+              color: AppColors.textStrong,
+            ),
+          ),
+          if (localizedPost.excerpt.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              localizedPost.excerpt,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodyMuted.copyWith(
+                height: 1.55,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.lg),
+          Row(
+            children: [
+              const Icon(
+                LucideIcons.mapPin,
+                size: 16,
+                color: AppColors.iconStrong,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  localizedPost.location,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textStrong,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              const Icon(
+                LucideIcons.arrowUpRight,
+                size: 18,
+                color: AppColors.iconStrong,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    return Semantics(
+      button: true,
+      label: localizedPost.title,
+      child: InkWell(
+        key: ValueKey('blog-featured-${localizedPost.slug}'),
+        onTap: onTap,
+        borderRadius: AppRadii.roundedCard,
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surfaceElevated,
+            borderRadius: AppRadii.roundedCard,
+            border: Border.all(color: AppColors.borderSoft),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: isWide
+              ? IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(flex: 6, child: imageBlock),
+                      Expanded(flex: 5, child: textBlock),
+                    ],
+                  ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    imageBlock,
+                    textBlock,
+                  ],
+                ),
+        ),
+      ),
     );
   }
 }

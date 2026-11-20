@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { afterEach, describe, it } = require("node:test");
+const { after, afterEach, describe, it } = require("node:test");
 const jwt = require("jsonwebtoken");
 import type { PatchEntry, TransactionCallback } from "./helpers/types";
 
@@ -27,6 +27,14 @@ afterEach(() => {
     while (originals.length > 0) {
         const [target, key, value] = originals.pop()!;
         target[key] = value;
+    }
+});
+
+after(async () => {
+    try {
+        await sequelize.close();
+    } catch {
+        // ignore
     }
 });
 

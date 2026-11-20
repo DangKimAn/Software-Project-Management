@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
+import 'package:hotel_booking_flutter/features/admin/domain/admin_status_helper.dart';
 
 class AdminRevenuePoint {
   const AdminRevenuePoint({
@@ -36,10 +39,17 @@ class AdminOverviewStats {
     required this.activeListings,
     this.platformRevenue = 0,
     this.hostRevenue = 0,
+    this.pendingStayRevenue = 0,
+    this.pendingStayPlatformRevenue = 0,
+    this.pendingStayHostRevenue = 0,
+    this.pendingStayBookingCount = 0,
+    this.refundedAmount = 0,
+    this.successfulBookings = 0,
     this.pendingBookings = 0,
     this.paidBookings = 0,
     this.completedBookings = 0,
     this.cancelledBookings = 0,
+    this.expiredBookings = 0,
     this.activeHosts = 0,
     this.verifiedHosts = 0,
     this.listingsCreated = 0,
@@ -55,11 +65,18 @@ class AdminOverviewStats {
   final double grossRevenue;
   final double platformRevenue;
   final double hostRevenue;
+  final double pendingStayRevenue;
+  final double pendingStayPlatformRevenue;
+  final double pendingStayHostRevenue;
+  final int pendingStayBookingCount;
+  final double refundedAmount;
   final int bookings;
+  final int successfulBookings;
   final int pendingBookings;
   final int paidBookings;
   final int completedBookings;
   final int cancelledBookings;
+  final int expiredBookings;
   final int hosts;
   final int activeHosts;
   final int verifiedHosts;
@@ -75,7 +92,10 @@ class AdminOverviewStats {
       users > 0 ||
       pendingListings > 0 ||
       grossRevenue > 0 ||
+      pendingStayRevenue > 0 ||
+      pendingStayBookingCount > 0 ||
       bookings > 0 ||
+      successfulBookings > 0 ||
       hosts > 0 ||
       activeListings > 0 ||
       listingsCreated > 0 ||
@@ -104,9 +124,227 @@ class AdminModerationPolicy {
   static const List<String> supportedRoles = <String>[
     'guest',
     'host',
-    'moderator',
     'admin',
   ];
+
+  static final Map<int, (int, int)> _viRuneWeights = _buildViRuneWeights();
+
+  static Map<int, (int, int)> _buildViRuneWeights() {
+    final map = <int, (int, int)>{
+      0x20: (1, 0),
+    };
+    for (var d = 0; d <= 9; d++) {
+      map[0x30 + d] = (10 + d, 0);
+    }
+    const groups = <List<String>>[
+      ['a', 'à', 'ả', 'ã', 'á', 'ạ'],
+      ['ă', 'ằ', 'ẳ', 'ẵ', 'ắ', 'ặ'],
+      ['â', 'ầ', 'ẩ', 'ẫ', 'ấ', 'ậ'],
+      ['b'],
+      ['c'],
+      ['d'],
+      ['đ'],
+      ['e', 'è', 'ẻ', 'ẽ', 'é', 'ẹ'],
+      ['ê', 'ề', 'ể', 'ễ', 'ế', 'ệ'],
+      ['f'],
+      ['g'],
+      ['h'],
+      ['i', 'ì', 'ỉ', 'ĩ', 'í', 'ị'],
+      ['j'],
+      ['k'],
+      ['l'],
+      ['m'],
+      ['n'],
+      ['o', 'ò', 'ỏ', 'õ', 'ó', 'ọ'],
+      ['ô', 'ồ', 'ổ', 'ỗ', 'ố', 'ộ'],
+      ['ơ', 'ờ', 'ở', 'ỡ', 'ớ', 'ợ'],
+      ['p'],
+      ['q'],
+      ['r'],
+      ['s'],
+      ['t'],
+      ['u', 'ù', 'ủ', 'ũ', 'ú', 'ụ'],
+      ['ư', 'ừ', 'ử', 'ữ', 'ứ', 'ự'],
+      ['v'],
+      ['w'],
+      ['x'],
+      ['y', 'ỳ', 'ỷ', 'ỹ', 'ý', 'ỵ'],
+      ['z'],
+    ];
+    for (var p = 0; p < groups.length; p++) {
+      final primary = 20 + p;
+      final variants = groups[p];
+      for (var t = 0; t < variants.length; t++) {
+        map[variants[t].runes.single] = (primary, t);
+      }
+    }
+    return map;
+  }
+
+  static List<(int, int)> _tokenizeVietnameseName(String raw) {
+    final normalized = raw.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+    if (normalized.isEmpty) return const <(int, int)>[];
+
+    final tokens = <(int, int)>[];
+    for (final rune in normalized.runes) {
+      if (rune == 0x0306) {
+        // Combining breve: a -> ă
+        if (tokens.isNotEmpty && tokens.last.$1 == 20) {
+          tokens[tokens.length - 1] = (21, tokens.last.$2);
+        }
+        continue;
+      }
+      if (rune == 0x0302) {
+        // Combining circumflex: a -> â, e -> ê, o -> ô
+        if (tokens.isNotEmpty) {
+          final prev = tokens.last;
+          if (prev.$1 == 20) {
+            tokens[tokens.length - 1] = (22, prev.$2);
+          } else if (prev.$1 == 27) {
+            tokens[tokens.length - 1] = (28, prev.$2);
+          } else if (prev.$1 == 38) {
+            tokens[tokens.length - 1] = (39, prev.$2);
+          }
+        }
+        continue;
+      }
+      if (rune == 0x031B) {
+        // Combining horn: o -> ơ, u -> ư
+        if (tokens.isNotEmpty) {
+          final prev = tokens.last;
+          if (prev.$1 == 38) {
+            tokens[tokens.length - 1] = (40, prev.$2);
+          } else if (prev.$1 == 46) {
+            tokens[tokens.length - 1] = (47, prev.$2);
+          }
+        }
+        continue;
+      }
+      final combiningTone = switch (rune) {
+        0x0300 => 1, // huyền
+        0x0309 => 2, // hỏi
+        0x0303 => 3, // ngã
+        0x0301 => 4, // sắc
+        0x0323 => 5, // nặng
+        _ => null,
+      };
+      if (combiningTone != null) {
+        if (tokens.isNotEmpty) {
+          tokens[tokens.length - 1] = (tokens.last.$1, combiningTone);
+        }
+        continue;
+      }
+      tokens.add(_viRuneWeights[rune] ?? (1000 + rune, 0));
+    }
+    return tokens;
+  }
+
+  /// Case-insensitive Vietnamese alphabetical comparison (`a < ă < â < ... < d < đ < ...`).
+  static int compareVietnameseNames(String a, String b) {
+    final tokensA = _tokenizeVietnameseName(a);
+    final tokensB = _tokenizeVietnameseName(b);
+    final minLen =
+        tokensA.length < tokensB.length ? tokensA.length : tokensB.length;
+
+    for (var i = 0; i < minLen; i++) {
+      final primaryCmp = tokensA[i].$1.compareTo(tokensB[i].$1);
+      if (primaryCmp != 0) return primaryCmp;
+    }
+    if (tokensA.length != tokensB.length) {
+      return tokensA.length.compareTo(tokensB.length);
+    }
+    for (var i = 0; i < minLen; i++) {
+      final toneCmp = tokensA[i].$2.compareTo(tokensB[i].$2);
+      if (toneCmp != 0) return toneCmp;
+    }
+    return 0;
+  }
+
+  static String resolvePrimaryRole(Map<String, dynamic> user) {
+    final direct = '${user['role'] ?? ''}'.trim().toLowerCase();
+    if (direct.isNotEmpty && direct != 'null') {
+      return direct;
+    }
+    final rawRoles = user['roles'];
+    if (rawRoles is Iterable) {
+      final normalized = rawRoles
+          .map((e) => '$e'.trim().toLowerCase())
+          .where((e) => e.isNotEmpty && e != 'null')
+          .toList();
+      if (normalized.contains('admin')) return 'admin';
+      if (normalized.contains('host')) return 'host';
+      if (normalized.contains('guest')) return 'guest';
+      if (normalized.isNotEmpty) return normalized.first;
+    }
+    return 'guest';
+  }
+
+  static int roleSortRank(String role) {
+    switch (role.trim().toLowerCase()) {
+      case 'guest':
+        return 0;
+      case 'host':
+        return 1;
+      case 'admin':
+        return 2;
+      default:
+        return 3;
+    }
+  }
+
+  static String resolveUserDisplayName(Map<String, dynamic> user) {
+    for (final key in const ['fullName', 'name', 'username']) {
+      final raw = '${user[key] ?? ''}'.trim();
+      if (raw.isNotEmpty && raw != 'null') {
+        return raw;
+      }
+    }
+    final userId = '${user['userId'] ?? user['id'] ?? ''}'.trim();
+    return userId.isNotEmpty ? 'User #$userId' : '';
+  }
+
+  static int compareAdminUsers(
+    Map<String, dynamic> a,
+    Map<String, dynamic> b,
+  ) {
+    final roleRankA = roleSortRank(resolvePrimaryRole(a));
+    final roleRankB = roleSortRank(resolvePrimaryRole(b));
+    if (roleRankA != roleRankB) {
+      return roleRankA.compareTo(roleRankB);
+    }
+
+    final nameCmp = compareVietnameseNames(
+      resolveUserDisplayName(a),
+      resolveUserDisplayName(b),
+    );
+    if (nameCmp != 0) {
+      return nameCmp;
+    }
+
+    final emailA = '${a['email'] ?? ''}'.trim().toLowerCase();
+    final emailB = '${b['email'] ?? ''}'.trim().toLowerCase();
+    final emailCmp = emailA.compareTo(emailB);
+    if (emailCmp != 0) {
+      return emailCmp;
+    }
+
+    final idStrA = '${a['userId'] ?? a['id'] ?? ''}'.trim();
+    final idStrB = '${b['userId'] ?? b['id'] ?? ''}'.trim();
+    final idNumA = int.tryParse(idStrA);
+    final idNumB = int.tryParse(idStrB);
+    if (idNumA != null && idNumB != null) {
+      return idNumA.compareTo(idNumB);
+    }
+    return idStrA.compareTo(idStrB);
+  }
+
+  static List<Map<String, dynamic>> sortAdminUsers(
+    Iterable<Map<String, dynamic>> users,
+  ) {
+    final sorted = List<Map<String, dynamic>>.of(users);
+    sorted.sort(compareAdminUsers);
+    return sorted;
+  }
 
   static bool isAdminRole({
     String? primaryRole,
@@ -116,20 +354,6 @@ class AdminModerationPolicy {
       return true;
     }
     return roles.any((r) => r.trim().toLowerCase() == 'admin');
-  }
-
-  static bool isModeratorOrAdminRole({
-    String? primaryRole,
-    Iterable<String> roles = const <String>[],
-  }) {
-    if (isAdminRole(primaryRole: primaryRole, roles: roles)) {
-      return true;
-    }
-    if (primaryRole != null &&
-        primaryRole.trim().toLowerCase() == 'moderator') {
-      return true;
-    }
-    return roles.any((r) => r.trim().toLowerCase() == 'moderator');
   }
 
   static String? validateListingApprove({
@@ -526,6 +750,24 @@ class AdminRepository {
             .toList()
         : const <AdminRevenuePoint>[];
 
+    final totalBookingsCount =
+        int.tryParse('${bookTotals['totalBookings'] ?? 0}') ?? 0;
+    final paidBookingsCount =
+        int.tryParse('${bookTotals['paidBookings'] ?? 0}') ?? 0;
+    final completedBookingsCount =
+        int.tryParse('${bookTotals['completedBookings'] ?? 0}') ?? 0;
+    final hasBreakdownFields = bookTotals.containsKey('successfulBookings') ||
+        bookTotals.containsKey('paidBookings') ||
+        bookTotals.containsKey('completedBookings') ||
+        bookTotals.containsKey('pendingBookings') ||
+        bookTotals.containsKey('cancelledBookings') ||
+        bookTotals.containsKey('expiredBookings');
+    final successfulBookingsCount =
+        int.tryParse('${bookTotals['successfulBookings'] ?? ''}') ??
+            (hasBreakdownFields
+                ? (paidBookingsCount + completedBookingsCount)
+                : totalBookingsCount);
+
     return AdminOverviewStats(
       users: usersCount,
       pendingListings: pendingListingsCount,
@@ -533,14 +775,27 @@ class AdminRepository {
       platformRevenue:
           double.tryParse('${revTotals['platformRevenue'] ?? 0}') ?? 0,
       hostRevenue: double.tryParse('${revTotals['hostRevenue'] ?? 0}') ?? 0,
-      bookings: int.tryParse('${bookTotals['totalBookings'] ?? 0}') ?? 0,
+      pendingStayRevenue:
+          double.tryParse('${revTotals['pendingStayRevenue'] ?? 0}') ?? 0,
+      pendingStayPlatformRevenue:
+          double.tryParse('${revTotals['pendingStayPlatformRevenue'] ?? 0}') ??
+              0,
+      pendingStayHostRevenue:
+          double.tryParse('${revTotals['pendingStayHostRevenue'] ?? 0}') ?? 0,
+      pendingStayBookingCount:
+          int.tryParse('${revTotals['pendingStayBookingCount'] ?? 0}') ?? 0,
+      refundedAmount:
+          double.tryParse('${revTotals['refundedAmount'] ?? 0}') ?? 0,
+      bookings: totalBookingsCount,
+      successfulBookings: successfulBookingsCount,
       pendingBookings:
           int.tryParse('${bookTotals['pendingBookings'] ?? 0}') ?? 0,
-      paidBookings: int.tryParse('${bookTotals['paidBookings'] ?? 0}') ?? 0,
-      completedBookings:
-          int.tryParse('${bookTotals['completedBookings'] ?? 0}') ?? 0,
+      paidBookings: paidBookingsCount,
+      completedBookings: completedBookingsCount,
       cancelledBookings:
           int.tryParse('${bookTotals['cancelledBookings'] ?? 0}') ?? 0,
+      expiredBookings:
+          int.tryParse('${bookTotals['expiredBookings'] ?? 0}') ?? 0,
       hosts: hostsCount,
       activeHosts: activeHostsCount,
       verifiedHosts: verifiedHostsCount,
@@ -578,10 +833,17 @@ class AdminRepository {
           'status': status.trim(),
       },
     );
-    return _extractPaginated(
+    final paginated = _extractPaginated(
       res.data,
       fallbackPage: safePage,
       fallbackLimit: safeLimit,
+    );
+    return AdminPaginatedResult<Map<String, dynamic>>(
+      items: AdminModerationPolicy.sortAdminUsers(paginated.items),
+      page: paginated.page,
+      limit: paginated.limit,
+      total: paginated.total,
+      totalPages: paginated.totalPages,
     );
   }
 
@@ -606,8 +868,9 @@ class AdminRepository {
     String userId,
     String status,
   ) async {
+    // CONFLICT-RESOLVED: Chuẩn hóa các trạng thái khóa ('blocked', 'locked') về 'suspended' trước khi gửi API.
     final normalizedStatus =
-        status.trim().toLowerCase() == 'blocked' ? 'suspended' : status.trim();
+        AdminStatusHelper.normalizeOutboundUserStatus(status);
     final res = await _dio.patch<dynamic>(
       '/api/users/$userId/status',
       data: {'status': normalizedStatus},
@@ -627,6 +890,37 @@ class AdminRepository {
   }
 
   // ── Listing Moderation & AI Image Vision ──
+  // Giải thuật truy vấn phân trang danh sách chỗ nghỉ cho Admin theo bộ lọc trạng thái:
+  // Giữ đường dẫn `/api/admin/listings/pending` mặc định khi lọc `pending_approval` để tương thích ngược,
+  // và chuyển sang `/api/admin/listings?status=...` khi lọc các trạng thái khác (`active`, `rejected`, `inactive`, `all`).
+  Future<AdminPaginatedResult<Map<String, dynamic>>> getAdminListingsPaginated({
+    String status = 'pending_approval',
+    int page = 1,
+    int limit = maxListingsPageLimit,
+  }) async {
+    final normalizedStatus = status.trim().toLowerCase();
+    if (normalizedStatus.isEmpty ||
+        normalizedStatus == 'pending_approval' ||
+        normalizedStatus == 'pending') {
+      return getPendingListingsPaginated(page: page, limit: limit);
+    }
+    final safePage = page < 1 ? 1 : page;
+    final safeLimit = limit.clamp(1, maxListingsPageLimit);
+    final res = await _dio.get<dynamic>(
+      '/api/admin/listings',
+      queryParameters: {
+        'status': normalizedStatus,
+        'page': safePage,
+        'limit': safeLimit,
+      },
+    );
+    return _extractPaginated(
+      res.data,
+      fallbackPage: safePage,
+      fallbackLimit: safeLimit,
+    );
+  }
+
   Future<AdminPaginatedResult<Map<String, dynamic>>>
       getPendingListingsPaginated({
     int page = 1,
@@ -738,6 +1032,28 @@ class AdminRepository {
     return _unwrapMap(res.data);
   }
 
+  /// Giải thuật tải luồng byte tài liệu KYC riêng tư cho Admin không lộ token trên URL:
+  /// Sử dụng phiên Dio đã xác thực (`Authorization: Bearer`) kết hợp header `X-Document-Stream-Token`
+  /// thay vì truyền `streamToken` trên URL query string.
+  Future<Uint8List> fetchAdminHostDocumentBytes(
+    String applicationId,
+    String documentId, {
+    String? streamToken,
+  }) async {
+    final trimmedToken = streamToken?.trim() ?? '';
+    final res = await _dio.get<List<int>>(
+      '/api/admin/host-applications/$applicationId/documents/$documentId/file',
+      options: Options(
+        responseType: ResponseType.bytes,
+        headers: <String, dynamic>{
+          if (trimmedToken.isNotEmpty) 'X-Document-Stream-Token': trimmedToken,
+        },
+      ),
+    );
+    final raw = res.data ?? const <int>[];
+    return raw is Uint8List ? raw : Uint8List.fromList(raw);
+  }
+
   Future<void> approveHostApplication(String applicationId) async {
     await _dio.patch<dynamic>(
       '/api/admin/host-applications/$applicationId/approve',
@@ -750,6 +1066,17 @@ class AdminRepository {
   ) async {
     await _dio.patch<dynamic>(
       '/api/admin/host-applications/$applicationId/reject',
+      data: {'reason': reason.trim()},
+    );
+  }
+
+  // Giải thuật yêu cầu Chủ nhà bổ sung hoặc chụp lại chứng từ KYC (`PATCH /api/admin/host-applications/:id/request-more-info`).
+  Future<void> requestMoreInfoHostApplication(
+    String applicationId,
+    String reason,
+  ) async {
+    await _dio.patch<dynamic>(
+      '/api/admin/host-applications/$applicationId/request-more-info',
       data: {'reason': reason.trim()},
     );
   }
@@ -813,5 +1140,217 @@ class AdminRepository {
       '/api/admin/verifications/$verificationId/reject',
       data: {'reason': reason.trim()},
     );
+  }
+
+  Future<Map<String, dynamic>> getPlatformFeeStatus() async {
+    final response =
+        await _dio.get<Map<String, dynamic>>('/api/admin/fees/current');
+    final data = response.data?['data'];
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    return <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> schedulePlatformFeeChange({
+    required double feePct,
+    String? reason,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/admin/fees/schedule',
+      data: {
+        'feePct': feePct,
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
+    final data = response.data?['data'];
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    return <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> cancelScheduledPlatformFee() async {
+    final response =
+        await _dio.post<Map<String, dynamic>>('/api/admin/fees/cancel');
+    final data = response.data?['data'];
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    return <String, dynamic>{};
+  }
+
+  // ===========================================================================
+  // Payouts & Refunds Disbursement Management (Napas 24/7 Engine)
+  // ===========================================================================
+
+  Future<List<Map<String, dynamic>>> getAdminHostPayouts({
+    String? status,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    final response = await _dio.get<dynamic>(
+      '/api/admin/host-payouts',
+      queryParameters: {
+        if (status != null && status.isNotEmpty && status != 'all')
+          'status': status,
+        'page': page,
+        'limit': limit,
+      },
+    );
+    final raw = _extractItems(response.data);
+    return raw;
+  }
+
+  Future<Map<String, dynamic>> disburseHostPayout(String payoutId) async {
+    final response = await _dio.post<dynamic>(
+      '/api/admin/host-payouts/$payoutId/disburse',
+    );
+    final map = _unwrapMap(response.data);
+    return map;
+  }
+
+  // Giải thuật đối soát & chi trả Maker-Checker 3 bước (`POST /host-payouts`, `PATCH /:id/approve`, `PATCH /:id/paid`).
+  Future<Map<String, dynamic>> createAdminHostPayout({
+    required int hostId,
+    required List<int> bookingIds,
+    required int payoutAccountId,
+    required int amount,
+    String? notes,
+  }) async {
+    final response = await _dio.post<dynamic>(
+      '/api/admin/host-payouts',
+      data: <String, dynamic>{
+        'hostId': hostId,
+        'bookingIds': bookingIds,
+        'payoutAccountId': payoutAccountId,
+        'amount': amount,
+        'currency': 'VND',
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> approveHostPayout(String payoutId) async {
+    final response = await _dio.patch<dynamic>(
+      '/api/admin/host-payouts/$payoutId/approve',
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> markHostPayoutPaid(
+    String payoutId,
+    String transferReference,
+  ) async {
+    final response = await _dio.patch<dynamic>(
+      '/api/admin/host-payouts/$payoutId/paid',
+      data: <String, dynamic>{
+        'transferReference': transferReference.trim(),
+      },
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> rejectHostPayout(
+    String payoutId,
+    String reason,
+  ) async {
+    final response = await _dio.post<dynamic>(
+      '/api/admin/host-payouts/$payoutId/reject',
+      data: {'reason': reason},
+    );
+    final map = _unwrapMap(response.data);
+    return map;
+  }
+
+  Future<List<Map<String, dynamic>>> getAdminRefunds({
+    String? status,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    final response = await _dio.get<dynamic>(
+      '/api/admin/refunds',
+      queryParameters: {
+        if (status != null && status.isNotEmpty && status != 'all')
+          'status': status,
+        'page': page,
+        'limit': limit,
+      },
+    );
+    final raw = _extractItems(response.data);
+    return raw;
+  }
+
+  Future<Map<String, dynamic>> approveRefund(String refundId) async {
+    final response = await _dio.post<dynamic>(
+      '/api/admin/refunds/$refundId/approve',
+    );
+    final map = _unwrapMap(response.data);
+    return map;
+  }
+
+  Future<Map<String, dynamic>> rejectRefund(
+    String refundId,
+    String reason,
+  ) async {
+    final response = await _dio.post<dynamic>(
+      '/api/admin/refunds/$refundId/reject',
+      data: {'reason': reason},
+    );
+    final map = _unwrapMap(response.data);
+    return map;
+  }
+
+  // Giải thuật truy vấn phân trang và xử lý báo cáo vi phạm (`GET/PATCH /api/admin/reports`).
+  Future<AdminPaginatedResult<Map<String, dynamic>>> getAdminReportsPaginated({
+    String status = 'all',
+    String targetType = 'all',
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final safePage = page < 1 ? 1 : page;
+    final safeLimit = limit.clamp(1, 100);
+    final res = await _dio.get<dynamic>(
+      '/api/admin/reports',
+      queryParameters: <String, dynamic>{
+        'page': safePage,
+        'limit': safeLimit,
+        if (status.isNotEmpty && status != 'all') 'status': status,
+        if (targetType.isNotEmpty && targetType != 'all')
+          'targetType': targetType,
+      },
+    );
+    return _extractPaginated(
+      res.data,
+      fallbackPage: safePage,
+      fallbackLimit: safeLimit,
+    );
+  }
+
+  Future<Map<String, dynamic>> resolveAdminReport(
+    String reportId,
+    String resolution,
+  ) async {
+    final res = await _dio.patch<dynamic>(
+      '/api/admin/reports/$reportId/resolve',
+      data: <String, dynamic>{
+        'resolution': resolution.trim(),
+      },
+    );
+    return _unwrapMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> rejectAdminReport(
+    String reportId,
+    String reason,
+  ) async {
+    final res = await _dio.patch<dynamic>(
+      '/api/admin/reports/$reportId/reject',
+      data: <String, dynamic>{
+        'reason': reason.trim(),
+      },
+    );
+    return _unwrapMap(res.data);
   }
 }

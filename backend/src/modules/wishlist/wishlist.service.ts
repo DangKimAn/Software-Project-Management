@@ -1,12 +1,15 @@
 import { Op } from "sequelize";
 
 import { ApiError } from "../../common/api-error";
-import { getCoverImage, serializeListingImage } from "../../common/listing-mappers";
-import { getListingImagesMap } from "../../common/listing-relations";
+import { getCoverImage, serializeListingImage } from "../listings/listing-mappers";
+import { getListingImagesMap } from "../listings/listing-relations";
 import Listing, { type ListingDocument } from "../../models/listing";
 import Wishlist, { type WishlistDocument } from "../../models/wishlist";
 import type { AuthenticatedUser } from "../auth/auth.service";
 
+/**
+ * Giải thuật tuần tự hóa thông tin tóm tắt chỗ nghỉ kèm bộ ảnh chuẩn hóa và ảnh bìa (`coverImage`) để hiển thị trong danh sách yêu thích.
+ */
 const serializeListingSummary = async (listing: ListingDocument) => {
     const imageMap = await getListingImagesMap([listing]);
     const images = imageMap.get(listing.listingId) ?? [];
@@ -34,6 +37,9 @@ const serializeListingSummary = async (listing: ListingDocument) => {
     };
 };
 
+/**
+ * Giải thuật đóng gói bản ghi yêu thích (`WishlistDocument`) cùng dữ liệu tóm tắt chỗ nghỉ liên kết.
+ */
 const serializeWishlistItem = async (wishlist: WishlistDocument, listing?: ListingDocument | null) => ({
     id: Number(wishlist.wishlistId),
     wishlistId: Number(wishlist.wishlistId),
@@ -43,6 +49,10 @@ const serializeWishlistItem = async (wishlist: WishlistDocument, listing?: Listi
     listing: listing ? await serializeListingSummary(listing) : null,
 });
 
+/**
+ * Giải thuật bảo vệ truy vấn chỗ nghỉ khi thêm vào danh sách yêu thích:
+ * Chỉ cho phép lưu các căn đang hoạt động công khai (`status = "active"`, `deletedAt IS NULL`); ném lỗi 404 nếu căn không tồn tại hoặc đã bị ẩn/xóa.
+ */
 const getActiveListingOrThrow = async (listingId: number) => {
     const listing = await Listing.findOne({
         where: {
@@ -61,6 +71,12 @@ const getActiveListingOrThrow = async (listingId: number) => {
     return listing;
 };
 
+/**
+ * Giải thuật truy vấn và đối soát danh sách chỗ nghỉ yêu thích của người dùng:
+ * - Tải danh sách yêu thích sắp xếp mới nhất trước (`createdAt DESC, wishlistId DESC`) và truy vấn tập chỗ nghỉ tương ứng còn đang `active`.
+ * - Phân hoạch tập mã căn bằng `Set` O(W) thành `listingIds` hợp lệ và `invalidListingIds` (các căn đã bị ẩn hoặc xóa mềm sau thời điểm lưu),
+ *   giúp client đồng bộ trạng thái yêu thích mà không làm rò rỉ thông tin chỗ nghỉ đã ngừng kinh doanh.
+ */
 export const listMyWishlist = async (user: AuthenticatedUser) => {
     const userId = Number(user.id);
     const wishlists = await Wishlist.findAll({
@@ -98,6 +114,10 @@ export const listMyWishlist = async (user: AuthenticatedUser) => {
     };
 };
 
+/**
+ * Giải thuật thêm chỗ nghỉ vào danh sách yêu thích theo cơ chế lũy đẳng (idempotent `findOrCreate`):
+ * Xác thực căn đang mở bán rồi tìm hoặc tạo duy nhất một bản ghi theo cặp khóa `(userId, listingId)`, chống trùng lặp khi thao tác đồng thời.
+ */
 export const addListingToWishlist = async (user: AuthenticatedUser, listingId: number) => {
     const userId = Number(user.id);
     const listing = await getActiveListingOrThrow(listingId);
@@ -115,6 +135,9 @@ export const addListingToWishlist = async (user: AuthenticatedUser, listingId: n
     return serializeWishlistItem(wishlist, listing);
 };
 
+/**
+ * Giải thuật gỡ chỗ nghỉ khỏi danh sách yêu thích theo cặp khóa `(userId, listingId)` và trả về cờ `removed` phản ánh kết quả xóa thực tế.
+ */
 export const removeListingFromWishlist = async (user: AuthenticatedUser, listingId: number) => {
     const removedCount = await Wishlist.destroy({
         where: {

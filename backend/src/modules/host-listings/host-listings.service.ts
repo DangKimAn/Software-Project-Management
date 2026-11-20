@@ -7,13 +7,13 @@ import {
     buildActiveBookingStatusWhere,
     checkedOutBlockingStatus,
     pendingPaymentBlockingStatus,
-} from "../../common/booking-availability";
+} from "../bookings/booking-availability";
 import {
     getAvailabilityCalendarForListing,
     getListingAmenityIdsForListing,
     getListingImagesForListing,
     getListingRulesForListing,
-} from "../../common/listing-relations";
+} from "../listings/listing-relations";
 import {
     ListingApiStatus,
     getCoverImage,
@@ -21,19 +21,20 @@ import {
     serializeListingImage,
     toApiListingStatus,
     toInternalListingStatus,
-} from "../../common/listing-mappers";
+} from "../listings/listing-mappers";
 import {
     sanitizeNullableSingleLineText,
     sanitizeSingleLineText,
     sanitizeText,
 } from "../../common/sanitization";
 import { isValidIsoDate } from "../../common/validation";
-import { isCoordinateInVungTauBounds } from "../../common/vung-tau-location-groups";
+import { isSafeExternalHttpUrl } from "../../common/url-security";
+import { isCoordinateInVungTauBounds } from "../listings/vung-tau-location-groups";
 import sequelize from "../../config/database";
 import Amenity from "../../models/amenity";
 import AvailabilityCalendar from "../../models/availability-calendar";
 import Booking from "../../models/booking";
-import { getNextSequence } from "../../models/counter";
+import Counter, { getNextSequence } from "../../models/counter";
 import Listing, {
     ListingAvailabilityDayRecord,
     ListingDocument,
@@ -43,11 +44,12 @@ import Listing, {
 import ListingAmenity from "../../models/listing-amenity";
 import ListingImage from "../../models/listing-image";
 import ListingRule from "../../models/listing-rule";
+import Review from "../../models/review";
 import type { AuthenticatedUser } from "../auth/auth.service";
-import { writeAuditLog } from "../../services/audit-log-service";
-import { isHostVerifiedForPublishing } from "../../services/host-verification-status-service";
+import { writeAuditLog } from "../../services/audit-log.service";
+import { isHostVerifiedForPublishing } from "../host-kyc/host-status-sync.service";
 import { notifyListingSubmitted } from "../notifications/notification.service";
-import { scheduleSemanticReindex } from "../semantic-search/semantic-search.indexer";
+import { enqueueHostSheetSyncJobSafe } from "../host-sheet-sync/host-sheet-sync.service";
 
 export type CreateListingInput = {
     title: string;
@@ -183,10 +185,23 @@ const bookingBlockingStatuses = [
     checkedOutBlockingStatus,
 ] as const;
 
+/**
+ * Giải thuật khử trùng lặp mảng số nguyên bằng cấu trúc `Set`, bảo toàn thứ tự xuất hiện đầu tiên trong O(n).
+ */
 const uniqueNumbers = (values: number[] = []) => Array.from(new Set(values));
+
+/**
+ * Giải thuật kiểm tra an toàn thuộc tính sở hữu trực tiếp trên đối tượng (`Object.prototype.hasOwnProperty.call`),
+ * giúp phân biệt chính xác trường không truyền (`undefined`) với trường được gửi giá trị `null`.
+ */
 const hasOwn = <T extends object>(value: T, key: keyof T) =>
-    Object.prototype.hasOwnProperty.call(value, key);
+    Object.prototype.hasOwnProperty.call(value, key) && value[key] !== undefined;
 const defaultListingCity = "Vũng Tàu";
+
+/**
+ * Giải thuật kiểm tra ràng buộc biên địa lý khi đăng/sửa chỗ nghỉ:
+ * Bắt buộc tọa độ (latitude, longitude) nằm trong khung hình chữ nhật bao khu vực Vũng Tàu (`isCoordinateInVungTauBounds`); ném lỗi 422 nếu vi phạm.
+ */
 const assertCoordinateInDefaultListingCity = (latitude: number, longitude: number) => {
     if (isCoordinateInVungTauBounds(latitude, longitude)) {
         return;
@@ -203,6 +218,11 @@ const assertCoordinateInDefaultListingCity = (latitude: number, longitude: numbe
         },
     ]);
 };
+
+/**
+ * Giải thuật chuẩn hóa và kiểm tra miền tọa độ địa lý WGS84 đầu vào:
+ * Hỗ trợ quy đổi dấu phẩy thập phân sang dấu chấm trên dữ liệu chuỗi, ép kiểu số thực hữu hạn và kiểm tra đoạn [-90, 90] cho vĩ độ hoặc [-180, 180] cho kinh độ.
+ */
 const normalizeCoordinateValue = (path: "latitude" | "longitude", value: unknown) => {
     const normalizedValue = typeof value === "string" ? value.trim().replace(",", ".") : value;
     const coordinate = Number(normalizedValue);
@@ -220,6 +240,11 @@ const normalizeCoordinateValue = (path: "latitude" | "longitude", value: unknown
 
     return coordinate;
 };
+
+/**
+ * Giải thuật chuẩn hóa dữ liệu vị trí địa lý khi tạo mới chỗ nghỉ:
+ * Chuẩn hóa cặp tọa độ WGS84, kiểm tra khung biên Vũng Tàu và cố định thành phố mặc định (`Vũng Tàu`) để đảm bảo tính đồng nhất phạm vi kinh doanh.
+ */
 const normalizeCreateListingLocationInput = (input: CreateListingInput): CreateListingInput => {
     const rawInput = input as CreateListingInput & {
         city?: unknown;
@@ -243,6 +268,11 @@ const normalizeCreateListingLocationInput = (input: CreateListingInput): CreateL
         longitude,
     };
 };
+
+/**
+ * Giải thuật chuẩn hóa từng phần thông tin vị trí khi cập nhật chỗ nghỉ:
+ * Chỉ chuẩn hóa lại `city`, `district`, `latitude` hoặc `longitude` khi yêu cầu cập nhật có chạm tới nhóm trường địa lý tương ứng.
+ */
 const normalizeUpdateListingLocationInput = (input: UpdateListingInput): UpdateListingInput => {
     const rawInput = input as UpdateListingInput & {
         city?: unknown;
@@ -250,13 +280,14 @@ const normalizeUpdateListingLocationInput = (input: UpdateListingInput): UpdateL
         latitude?: unknown;
         longitude?: unknown;
     };
+    // CONFLICT-RESOLVED: Kiểm tra `!== undefined` thay vì `hasOwn` vì `matchedData({ includeOptionals: true })` của express-validator gắn khóa `undefined` cho các trường tùy chọn có sanitizer.
     const hasLocationField =
-        hasOwn(input, "addressLine") ||
-        hasOwn(input, "ward") ||
-        hasOwn(input, "district") ||
-        hasOwn(input, "city") ||
-        hasOwn(input, "latitude") ||
-        hasOwn(input, "longitude");
+        rawInput.addressLine !== undefined ||
+        rawInput.ward !== undefined ||
+        rawInput.district !== undefined ||
+        rawInput.city !== undefined ||
+        rawInput.latitude !== undefined ||
+        rawInput.longitude !== undefined;
     const normalized: UpdateListingInput = {
         ...input,
     };
@@ -265,18 +296,18 @@ const normalizeUpdateListingLocationInput = (input: UpdateListingInput): UpdateL
         normalized.city = defaultListingCity;
     }
 
-    if (hasOwn(input, "district") || hasLocationField) {
+    if (rawInput.district !== undefined || hasLocationField) {
         normalized.district =
             typeof rawInput.district === "string" && rawInput.district.trim()
                 ? rawInput.district
                 : defaultListingCity;
     }
 
-    if (hasOwn(input, "latitude")) {
+    if (rawInput.latitude !== undefined) {
         normalized.latitude = normalizeCoordinateValue("latitude", rawInput.latitude);
     }
 
-    if (hasOwn(input, "longitude")) {
+    if (rawInput.longitude !== undefined) {
         normalized.longitude = normalizeCoordinateValue("longitude", rawInput.longitude);
     }
 
@@ -284,6 +315,7 @@ const normalizeUpdateListingLocationInput = (input: UpdateListingInput): UpdateL
 };
 
 const sensitiveListingFields = new Set<keyof UpdateListingInput>([
+    "title",
     "description",
     "addressLine",
     "ward",
@@ -307,17 +339,29 @@ type CreateListingOptions = {
     isAdmin?: boolean;
 };
 
+/**
+ * Giải thuật trích xuất ngữ cảnh tác nhân thực thi (`userId` và cờ đặc quyền `isAdmin`) từ phiên xác thực người dùng.
+ */
 export const toHostActor = (user: AuthenticatedUser): HostActor => ({
     userId: user.id,
     isAdmin: user.roles.includes("admin"),
 });
 
+/**
+ * Giải thuật kiểm soát truy cập theo quyền sở hữu tài nguyên (Ownership & RBAC Guard):
+ * Chỉ cho phép chủ sở hữu trực tiếp của chỗ nghỉ (`listing.hostId === actor.userId`) hoặc Quản trị viên (`actor.isAdmin`) thao tác; ném lỗi 403 nếu vi phạm.
+ */
 export const checkListingOwner = (listing: ListingDocument, actor: HostActor) => {
     if (!actor.isAdmin && String(listing.hostId) !== actor.userId) {
         throw new ApiError(403, "Forbidden");
     }
 };
 
+/**
+ * Giải thuật kiểm tra toàn vẹn tham chiếu danh mục tiện ích:
+ * Khử trùng lặp mảng `amenityIds` và đối chiếu số lượng bản ghi tiện ích đang kích hoạt (`active = true`, `isActive = true`, `deletedAt = null`) trong CSDL;
+ * ném lỗi 422 nếu tồn tại bất kỳ mã tiện ích không hợp lệ hoặc đã bị vô hiệu hóa.
+ */
 const assertAmenityIdsExist = async (amenityIds: number[]) => {
     const uniqueAmenityIds = uniqueNumbers(amenityIds);
 
@@ -342,6 +386,9 @@ const assertAmenityIdsExist = async (amenityIds: number[]) => {
     }
 };
 
+/**
+ * Giải thuật kiểm tra bất biến khoảng số đêm lưu trú hợp lệ: đảm bảo `maxNights >= minNights` khi có thiết lập số đêm tối đa.
+ */
 const assertNightsRange = (minNights: number, maxNights?: number | null) => {
     if (maxNights !== undefined && maxNights !== null && maxNights < minNights) {
         throw new ApiError(422, "Validation error", [
@@ -353,6 +400,9 @@ const assertNightsRange = (minNights: number, maxNights?: number | null) => {
     }
 };
 
+/**
+ * Giải thuật kiểm tra chuỗi văn bản bắt buộc không bị rỗng sau khi qua bộ lọc làm sạch mã độc/thẻ HTML.
+ */
 const assertNonEmptyText = (path: string, value: string) => {
     if (value.length === 0) {
         throw new ApiError(422, "Validation error", [
@@ -364,6 +414,9 @@ const assertNonEmptyText = (path: string, value: string) => {
     }
 };
 
+/**
+ * Giải thuật làm sạch văn bản chống XSS (`sanitizeSingleLineText`, `sanitizeText`) và kiểm tra tính khác rỗng cho toàn bộ trường mô tả/địa chỉ khi tạo chỗ nghỉ mới.
+ */
 const sanitizeCreateListingInput = (input: CreateListingInput): CreateListingInput => {
     const sanitized: CreateListingInput = {
         ...input,
@@ -387,6 +440,9 @@ const sanitizeCreateListingInput = (input: CreateListingInput): CreateListingInp
     return sanitized;
 };
 
+/**
+ * Giải thuật làm sạch từng phần (partial sanitization) chống XSS cho các trường văn bản có mặt trong yêu cầu cập nhật chỗ nghỉ.
+ */
 const sanitizeUpdateListingInput = (input: UpdateListingInput): UpdateListingInput => {
     const sanitized: UpdateListingInput = {
         ...input,
@@ -422,17 +478,21 @@ const sanitizeUpdateListingInput = (input: UpdateListingInput): UpdateListingInp
         assertNonEmptyText("city", sanitized.city);
     }
 
-    if (hasOwn(input, "stateRegion")) {
+    if (input.stateRegion !== undefined) {
         sanitized.stateRegion = sanitizeNullableSingleLineText(input.stateRegion);
     }
 
-    if (hasOwn(input, "postalCode")) {
+    if (input.postalCode !== undefined) {
         sanitized.postalCode = sanitizeNullableSingleLineText(input.postalCode);
     }
 
     return sanitized;
 };
 
+/**
+ * Giải thuật kiểm tra điều kiện xác minh danh tính Chủ nhà trước khi gửi duyệt hoặc mở bán chỗ nghỉ:
+ * Admin được miễn trừ; đối với Host, bắt buộc hồ sơ đối tác đã được xác minh hợp lệ (`isHostVerifiedForPublishing`) mới được chuyển sang `pending_approval` hoặc `active`.
+ */
 const assertHostCanRequestReview = async (
     listingHostId: number,
     requestedStatus: ListingStatus,
@@ -448,6 +508,16 @@ const assertHostCanRequestReview = async (
     }
 };
 
+/**
+ * Giải thuật máy trạng thái hữu hạn (Finite State Machine - FSM) kiểm soát chuyển đổi trạng thái duyệt/ẩn/mở bán chỗ nghỉ phân quyền giữa Host và Admin:
+ * - Quản trị viên (`actor.isAdmin = true`) được cấp toàn quyền chuyển đổi trực tiếp giữa các trạng thái kiểm duyệt và vận hành.
+ * - Chủ nhà (`Host`) bị ràng buộc chặt theo bảng chuyển tiếp trạng thái hợp lệ:
+ *   + `draft <-> pending_approval` (lưu nháp hoặc gửi kiểm duyệt).
+ *   + `active / approved / published <-> inactive` (chủ động tạm ẩn hoặc mở bán lại căn đã được duyệt).
+ *   + `rejected -> draft | pending_approval | rejected` (lưu chỉnh sửa trên căn bị từ chối hoặc gửi duyệt lại).
+ *   + `suspended -> inactive` (chỉ được đưa về ẩn, không thể tự kích hoạt lại căn đang bị khóa vi phạm).
+ * - Ném lỗi 422 nếu cung chuyển trạng thái yêu cầu nằm ngoài tập hợp lệ của `currentStatus`.
+ */
 const assertStatusTransition = (
     currentStatus: ListingStatus,
     requestedStatus: ListingStatus,
@@ -457,6 +527,7 @@ const assertStatusTransition = (
         return;
     }
 
+    // CONFLICT-RESOLVED: Cho phép căn đang 'rejected' giữ nguyên để lưu chỉnh sửa hoặc gửi duyệt lại ('pending_approval') / đưa về 'draft'
     const transitions: Record<ListingStatus, ListingStatus[]> = {
         draft: ["draft", "pending_approval"],
         pending_approval: ["draft", "pending_approval"],
@@ -464,7 +535,7 @@ const assertStatusTransition = (
         approved: ["approved", "inactive"],
         published: ["published", "inactive"],
         inactive: ["active", "inactive"],
-        rejected: ["draft"],
+        rejected: ["draft", "pending_approval", "rejected"],
         suspended: ["inactive"],
     };
 
@@ -478,6 +549,10 @@ const assertStatusTransition = (
     }
 };
 
+/**
+ * Giải thuật truy vấn chỗ nghỉ chưa xóa mềm và xác thực quyền sở hữu (`checkListingOwner`) trong phạm vi giao dịch CSDL.
+ * Ném lỗi 404 nếu không tìm thấy bản ghi và 403 nếu tác nhân không phải chủ sở hữu hay Admin.
+ */
 const getListingForHost = async (listingId: number, actor: HostActor, transaction?: Transaction) => {
     const listing = await Listing.findOne({
         where: {
@@ -495,6 +570,11 @@ const getListingForHost = async (listingId: number, actor: HostActor, transactio
     return listing;
 };
 
+/**
+ * Giải thuật phát hiện tập ngày lịch đang bị chiếm chỗ bởi các đơn đặt phòng có hiệu lực:
+ * Lọc và khử trùng lặp các ngày `date` trong mảng đầu vào thỏa mãn điều kiện nửa khoảng đóng-mở `booking.checkInDate <= date < booking.checkOutDate`.
+ * Độ phức tạp: O(|dates| * |bookings|).
+ */
 const findBookedCalendarDates = async (listingId: number, dates: string[], transaction?: Transaction) => {
     const bookings = await Booking.findAll({
         where: {
@@ -511,11 +591,18 @@ const findBookedCalendarDates = async (listingId: number, dates: string[], trans
     return Array.from(new Set(blockedDates));
 };
 
+/**
+ * Giải thuật chuẩn hóa bản ghi lịch ngày và nhận diện trạng thái mặc định phục vụ tối ưu lưu trữ:
+ * - Cưỡng bức bất biến khóa lịch: nếu ngày bị khóa bởi Admin (`isBlockedByAdmin`) hoặc bởi Host (`isBlockedByHost`) thì `isAvailable` bắt buộc là `false`.
+ * - Đánh dấu `isDefaultState = true` khi ngày mở bán bình thường, không bị khóa và mọi trường ghi đè (`priceOverride`, `minNightsOverride`, `notes`) đều bằng `null`.
+ */
 const normalizeCalendarRow = (row: ListingAvailabilityDayRecord) => {
     const trimmedNotes = row.notes?.trim();
     const normalizedRow: ListingAvailabilityDayRecord = {
         date: row.date,
-        isAvailable: row.isBlockedByHost ? false : row.isAvailable,
+        isAvailable: Boolean(row.isBlockedByAdmin) || row.isBlockedByHost ? false : row.isAvailable,
+        isBlockedByAdmin: Boolean(row.isBlockedByAdmin),
+        lockSource: row.lockSource ?? null,
         isBlockedByHost: row.isBlockedByHost,
         priceOverride: row.priceOverride ?? null,
         minNightsOverride: row.minNightsOverride ?? null,
@@ -535,23 +622,26 @@ const normalizeCalendarRow = (row: ListingAvailabilityDayRecord) => {
     };
 };
 
+/**
+ * Giải thuật kiểm tra an toàn URL ảnh phòng đăng tải:
+ * Áp dụng bộ lọc chống SSRF (`isSafeExternalHttpUrl`) để chặn giao thức phi HTTP(S), thông tin đăng nhập nhúng,
+ * localhost, dải IP nội bộ/metadata cloud và địa chỉ IPv4-mapped IPv6 (`::ffff:127.0.0.1`, `::ffff:169.254.169.254`).
+ */
 const assertSafeImageUrl = (url: string) => {
-    try {
-        const parsed = new URL(url);
-
-        if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) {
-            throw new Error("Invalid image URL");
-        }
-    } catch {
+    if (!isSafeExternalHttpUrl(url)) {
         throw new ApiError(422, "Validation error", [
             {
                 path: "images.url",
-                msg: "images.url must be a valid http(s) URL",
+                msg: "images.url must be a valid public http(s) URL",
             },
         ]);
     }
 };
 
+/**
+ * Giải thuật đồng bộ nguyên tử bảng liên kết nhiều-nhiều `listing_amenities` trong giao dịch CSDL:
+ * Xóa toàn bộ dòng tiện ích cũ của `listingId` rồi chèn hàng loạt (`bulkCreate` với `ignoreDuplicates`) danh sách `amenityIds` mới.
+ */
 const replaceListingAmenityRows = async (listingId: number, amenityIds: number[], transaction?: Transaction) => {
     await ListingAmenity.destroy({
         where: {
@@ -574,6 +664,9 @@ const replaceListingAmenityRows = async (listingId: number, amenityIds: number[]
     }
 };
 
+/**
+ * Giải thuật cập nhật hoặc tạo mới (upsert) bản ghi nội quy lưu trú `ListingRule` của chỗ nghỉ trong cùng giao dịch CSDL.
+ */
 const upsertListingRules = async (
     listingId: number,
     values: {
@@ -608,6 +701,11 @@ const upsertListingRules = async (
     await existing.update(values, { transaction });
 };
 
+/**
+ * Giải thuật tái kiểm duyệt tự động khi thay đổi thông tin nhạy cảm:
+ * Nếu người thực hiện là Chủ nhà (`!actor.isAdmin`) và sửa đổi trường trọng yếu (giá, địa chỉ, tọa độ, mô tả, ảnh) trên căn đang mở bán (`active`),
+ * tự động hạ trạng thái về `pending_approval` để đội ngũ quản trị thẩm định lại.
+ */
 const markPublishedListingPendingIfSensitive = (listing: ListingDocument, actor: HostActor, changed: boolean) => {
     if (!actor.isAdmin && changed && listing.status === "active") {
         listing.status = "pending_approval";
@@ -617,6 +715,9 @@ const markPublishedListingPendingIfSensitive = (listing: ListingDocument, actor:
     return false;
 };
 
+/**
+ * Giải thuật ghi nhận nhật ký kiểm toán (`audit_logs`) bất biến cho các thao tác vòng đời và cấu hình chỗ nghỉ của Chủ nhà/Admin.
+ */
 const writeListingAudit = async (
     actor: HostActor,
     action: string,
@@ -634,6 +735,10 @@ const writeListingAudit = async (
     });
 };
 
+/**
+ * Giải thuật tuần tự hóa thông tin tóm tắt chỗ nghỉ cho trang quản lý của Chủ nhà:
+ * Nạp danh sách ảnh liên kết, trích xuất ảnh bìa (`getCoverImage`) và quy đổi trạng thái nội bộ sang trạng thái API hiển thị.
+ */
 const serializeHostListingSummary = async (listing: ListingDocument) => {
     const images = await getListingImagesForListing(listing);
 
@@ -641,6 +746,8 @@ const serializeHostListingSummary = async (listing: ListingDocument) => {
         listingId: listing.listingId,
         title: listing.title,
         status: toApiListingStatus(listing.status),
+        internalStatus: listing.status,
+        rejectionReason: listing.rejectionReason ?? null,
         description: listing.description,
         addressLine: listing.addressLine,
         ward: listing.ward,
@@ -662,6 +769,10 @@ const serializeHostListingSummary = async (listing: ListingDocument) => {
     };
 };
 
+/**
+ * Giải thuật tổng hợp và tuần tự hóa chi tiết đầy đủ cấu hình chỗ nghỉ dành cho Chủ nhà:
+ * Nạp song song (`Promise.all`) danh sách mã tiện ích, hình ảnh và nội quy lưu trú để dựng dữ liệu cho biểu mẫu chỉnh sửa.
+ */
 const serializeHostListingDetail = async (listing: ListingDocument) => {
     const [amenityIds, images, rules] = await Promise.all([
         getListingAmenityIdsForListing(listing),
@@ -672,6 +783,8 @@ const serializeHostListingDetail = async (listing: ListingDocument) => {
     return {
         listingId: listing.listingId,
         status: toApiListingStatus(listing.status),
+        internalStatus: listing.status,
+        rejectionReason: listing.rejectionReason ?? null,
         hostId: String(listing.hostId),
         title: listing.title,
         description: listing.description,
@@ -715,6 +828,13 @@ const serializeHostListingDetail = async (listing: ListingDocument) => {
     };
 };
 
+/**
+ * Giải thuật tạo mới chỗ nghỉ trong giao dịch nguyên tử (ACID transaction):
+ * - Chuẩn hóa vị trí trong khung biên Vũng Tàu, làm sạch văn bản chống XSS, xác thực sự tồn tại của tập `amenityIds` và bất biến `minNights <= maxNights`.
+ * - Trong giao dịch CSDL: kiểm tra xác minh Host nếu gửi duyệt ngay, cấp phát tuần tự `listingId` an toàn qua bộ đếm `Counter` đối chiếu `MAX(listingId)`,
+ *   khởi tạo bản ghi `Listing` cùng bảng phụ `ListingAmenity` & `ListingRule`, ghi audit log và phát thông báo kiểm duyệt khi trạng thái là `pending_approval`.
+ * - Kích hoạt bất đồng bộ tác vụ đồng bộ dữ liệu sang Google Sheet của Host (`listing_created`).
+ */
 export const createListing = async (
     userId: string,
     input: CreateListingInput,
@@ -734,8 +854,15 @@ export const createListing = async (
     const listing = await sequelize.transaction(async (transaction) => {
         await assertHostCanRequestReview(Number(userId), nextStatus, actor, transaction);
 
+        const maxListingId = Number(await Listing.max("listingId", { transaction })) || 100;
+        let nextListingId = await getNextSequence("listing", 101);
+        if (nextListingId <= maxListingId) {
+            nextListingId = maxListingId + 1;
+            await Counter.upsert({ key: "listing", value: nextListingId }, { transaction });
+        }
+
         const createdListing = new Listing({
-            listingId: await getNextSequence("listing", 101),
+            listingId: nextListingId,
             hostId: Number(userId),
             ...sanitizedInput,
             amenityIds,
@@ -777,7 +904,11 @@ export const createListing = async (
         return createdListing;
     });
 
-    scheduleSemanticReindex(listing.listingId, "listing_create");
+    enqueueHostSheetSyncJobSafe({
+        hostUserId: Number(listing.hostId),
+        jobType: "listing_created",
+        listingId: listing.listingId,
+    });
 
     return {
         listingId: listing.listingId,
@@ -785,6 +916,10 @@ export const createListing = async (
     };
 };
 
+/**
+ * Giải thuật truy vấn phân trang danh sách chỗ nghỉ thuộc quyền quản lý:
+ * Tự động khóa phạm vi `hostId = actor.userId` đối với Chủ nhà (Admin được xem toàn cục), lọc theo trạng thái quy đổi và sắp xếp giảm dần theo thời gian tạo.
+ */
 export const getMyListings = async (actor: HostActor, query: ListMineQuery) => {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(hostListingsMaxPageLimit, Math.max(1, query.limit ?? 10));
@@ -823,16 +958,25 @@ export const getMyListings = async (actor: HostActor, query: ListMineQuery) => {
     };
 };
 
+/**
+ * Giải thuật truy xuất chi tiết chỗ nghỉ cho Chủ nhà/Admin sau khi kiểm tra nghiêm ngặt quyền sở hữu qua `getListingForHost`.
+ */
 export const getListingDetail = async (listingId: number, actor: HostActor) => {
     const listing = await getListingForHost(listingId, actor);
     return serializeHostListingDetail(listing);
 };
 
+/**
+ * Giải thuật cập nhật cấu hình và trạng thái chỗ nghỉ trong giao dịch CSDL:
+ * - Kiểm tra tọa độ mới nằm trong biên Vũng Tàu, bất biến `minNights <= maxNights`, hợp lệ chuyển trạng thái qua FSM `assertStatusTransition` và điều kiện xác minh Host.
+ * - Phát hiện thay đổi trên tập trường nhạy cảm (`sensitiveListingFields`); nếu căn đang `active` và do Host chỉnh sửa, tự động chuyển về `pending_approval` và gửi thông báo kiểm duyệt lại.
+ * - Ghi audit log chi tiết các trường biến đổi (kèm sự kiện tạm ẩn `host_listing.hide` nếu chuyển về `inactive`) và đẩy đồng bộ Google Sheet.
+ */
 export const updateListing = async (listingId: number, actor: HostActor, input: UpdateListingInput) => {
     const sanitizedInput = sanitizeUpdateListingInput(normalizeUpdateListingLocationInput(input));
     const updated = await sequelize.transaction(async (transaction) => {
         const listing = await getListingForHost(listingId, actor, transaction);
-        const hasCoordinateChange = hasOwn(sanitizedInput, "latitude") || hasOwn(sanitizedInput, "longitude");
+        const hasCoordinateChange = sanitizedInput.latitude !== undefined || sanitizedInput.longitude !== undefined;
 
         if (hasCoordinateChange) {
             assertCoordinateInDefaultListingCity(
@@ -846,7 +990,25 @@ export const updateListing = async (listingId: number, actor: HostActor, input: 
         const nextMaxNights = hasOwn(sanitizedInput, "maxNights")
             ? sanitizedInput.maxNights ?? null
             : listing.maxNights;
-        const changedFields = Object.keys(sanitizedInput).filter((key) => key !== "status");
+        // Giải thuật xác định trường thực sự biến đổi giá trị (`changedFields`) khi cập nhật listing (TC-078):
+        // Đối chiếu giá trị sau chuẩn hóa với giá trị đang lưu trên DB để form gửi kèm trường không đổi không bị chuyển oan sang `pending_approval`.
+        const changedFields = Object.keys(sanitizedInput).filter((key) => {
+            if (key === "status") {
+                return false;
+            }
+            const nextVal = sanitizedInput[key as keyof UpdateListingInput];
+            if (nextVal === undefined) {
+                return false;
+            }
+            const currentVal = (listing as unknown as Record<string, unknown>)[key];
+            if (Array.isArray(nextVal) || Array.isArray(currentVal)) {
+                return JSON.stringify(nextVal ?? []) !== JSON.stringify(currentVal ?? []);
+            }
+            if (typeof nextVal === "number" || typeof currentVal === "number") {
+                return Number(nextVal ?? 0) !== Number(currentVal ?? 0);
+            }
+            return String(nextVal ?? "") !== String(currentVal ?? "");
+        });
         const hasSensitiveChange = changedFields.some((field) =>
             sensitiveListingFields.has(field as keyof UpdateListingInput),
         );
@@ -859,6 +1021,9 @@ export const updateListing = async (listingId: number, actor: HostActor, input: 
             await assertHostCanRequestReview(Number(listing.hostId), requestedStatus, actor, transaction);
 
             listing.status = requestedStatus;
+            if (requestedStatus === "draft" || requestedStatus === "pending_approval") {
+                listing.rejectionReason = null;
+            }
         }
 
         if (sanitizedInput.title !== undefined) listing.title = sanitizedInput.title;
@@ -867,26 +1032,26 @@ export const updateListing = async (listingId: number, actor: HostActor, input: 
         if (sanitizedInput.ward !== undefined) listing.ward = sanitizedInput.ward;
         if (sanitizedInput.district !== undefined) listing.district = sanitizedInput.district;
         if (sanitizedInput.city !== undefined) listing.city = sanitizedInput.city;
-        if (hasOwn(sanitizedInput, "stateRegion")) listing.stateRegion = sanitizedInput.stateRegion ?? null;
+        if (sanitizedInput.stateRegion !== undefined) listing.stateRegion = sanitizedInput.stateRegion ?? null;
         if (sanitizedInput.country !== undefined) listing.country = sanitizedInput.country;
-        if (hasOwn(sanitizedInput, "postalCode")) listing.postalCode = sanitizedInput.postalCode ?? null;
+        if (sanitizedInput.postalCode !== undefined) listing.postalCode = sanitizedInput.postalCode ?? null;
         if (sanitizedInput.latitude !== undefined) listing.latitude = sanitizedInput.latitude;
         if (sanitizedInput.longitude !== undefined) listing.longitude = sanitizedInput.longitude;
         if (sanitizedInput.propertyType !== undefined) listing.propertyType = sanitizedInput.propertyType;
         if (sanitizedInput.roomType !== undefined) listing.roomType = sanitizedInput.roomType;
         if (sanitizedInput.basePrice !== undefined) listing.basePrice = sanitizedInput.basePrice;
-        if (hasOwn(sanitizedInput, "weekendPrice")) listing.weekendPrice = sanitizedInput.weekendPrice ?? null;
-        if (hasOwn(sanitizedInput, "cleaningFee")) listing.cleaningFee = sanitizedInput.cleaningFee ?? null;
-        if (hasOwn(sanitizedInput, "surchargeAmount")) listing.surchargeAmount = sanitizedInput.surchargeAmount ?? null;
-        if (hasOwn(sanitizedInput, "serviceFeePct")) listing.serviceFeePct = sanitizedInput.serviceFeePct ?? null;
-        if (hasOwn(sanitizedInput, "extraGuestFee")) listing.extraGuestFee = sanitizedInput.extraGuestFee ?? null;
+        if (sanitizedInput.weekendPrice !== undefined) listing.weekendPrice = sanitizedInput.weekendPrice ?? null;
+        if (sanitizedInput.cleaningFee !== undefined) listing.cleaningFee = sanitizedInput.cleaningFee ?? null;
+        if (sanitizedInput.surchargeAmount !== undefined) listing.surchargeAmount = sanitizedInput.surchargeAmount ?? null;
+        if (sanitizedInput.serviceFeePct !== undefined) listing.serviceFeePct = sanitizedInput.serviceFeePct ?? null;
+        if (sanitizedInput.extraGuestFee !== undefined) listing.extraGuestFee = sanitizedInput.extraGuestFee ?? null;
         if (sanitizedInput.maxGuests !== undefined) listing.maxGuests = sanitizedInput.maxGuests;
-        if (hasOwn(sanitizedInput, "includedGuests")) listing.includedGuests = sanitizedInput.includedGuests ?? null;
+        if (sanitizedInput.includedGuests !== undefined) listing.includedGuests = sanitizedInput.includedGuests ?? null;
         if (sanitizedInput.bedrooms !== undefined) listing.bedrooms = sanitizedInput.bedrooms;
         if (sanitizedInput.beds !== undefined) listing.beds = sanitizedInput.beds;
         if (sanitizedInput.bathrooms !== undefined) listing.bathrooms = sanitizedInput.bathrooms;
         if (sanitizedInput.minNights !== undefined) listing.minNights = sanitizedInput.minNights;
-        if (hasOwn(sanitizedInput, "maxNights")) listing.maxNights = sanitizedInput.maxNights ?? null;
+        if (sanitizedInput.maxNights !== undefined) listing.maxNights = sanitizedInput.maxNights ?? null;
         if (sanitizedInput.cancellationPolicy !== undefined) {
             listing.cancellationPolicy = sanitizedInput.cancellationPolicy;
         }
@@ -917,26 +1082,124 @@ export const updateListing = async (listingId: number, actor: HostActor, input: 
         return listing;
     });
 
-    scheduleSemanticReindex(updated.listingId, "listing_update");
+    enqueueHostSheetSyncJobSafe({
+        hostUserId: Number(updated.hostId),
+        jobType: "listing_updated",
+        listingId: updated.listingId,
+    });
 
     return {
         listingId: updated.listingId,
         status: toApiListingStatus(updated.status),
+        internalStatus: updated.status,
+        rejectionReason: updated.rejectionReason ?? null,
     };
 };
 
+/**
+ * Giải thuật xóa mềm chỗ nghỉ có bảo vệ nghĩa vụ lưu trú đang hiệu lực:
+ * - Kiểm tra mọi đơn đặt phòng giữ chỗ hoặc đang diễn ra có `checkOutDate >= todayVN` (múi giờ Việt Nam); chặn xóa với lỗi xung đột 409 nếu còn khách hoặc giữ chỗ tương lai.
+ * - Đánh dấu `deletedAt`, chuyển trạng thái về `inactive`, ghi audit log và đăng ký hook `afterCommit` đồng bộ trạng thái lưu trữ sang Google Sheet.
+ */
 export const deleteListing = async (listingId: number, actor: HostActor) => {
     await sequelize.transaction(async (transaction) => {
         const listing = await getListingForHost(listingId, actor, transaction);
+        const todayVN = getTodayInVietnamDateString();
+        const activeObligations = await Booking.findAll({
+            where: {
+                listingId: listing.listingId,
+                ...buildActiveBookingStatusWhere(),
+                checkOutDate: {
+                    [Op.gte]: todayVN,
+                },
+            },
+            attributes: ["bookingId", "status", "checkInDate", "checkOutDate"],
+            transaction,
+        });
+
+        if (activeObligations.length > 0) {
+            throw new ApiError(
+                409,
+                "Không thể xóa căn đang có giữ chỗ hoặc đơn đặt phòng còn hiệu lực trong tương lai. Vui lòng chuyển sang Tạm ẩn căn.",
+            );
+        }
+
         listing.deletedAt = new Date();
         listing.status = "inactive";
         await listing.save({ transaction });
         await writeListingAudit(actor, "host_listing.delete", listing.listingId, undefined, transaction);
+        const targetHostId = Number(listing.hostId);
+        const txHook = transaction as unknown as { afterCommit?: (fn: () => void) => void };
+        const enqueueArchive = () =>
+            enqueueHostSheetSyncJobSafe({
+                hostUserId: targetHostId,
+                jobType: "listing_archived",
+                listingId: listing.listingId,
+            });
+        if (typeof txHook?.afterCommit === "function") {
+            txHook.afterCommit(enqueueArchive);
+        } else {
+            setImmediate(enqueueArchive);
+        }
     });
-
-    scheduleSemanticReindex(listingId, "listing_delete");
 };
 
+/**
+ * Giải thuật khôi phục chỗ nghỉ đã xóa mềm:
+ * Xác thực quyền sở hữu, gỡ mốc `deletedAt` và đưa trạng thái về `inactive` (tạm ẩn an toàn) để Chủ nhà rà soát trước khi mở bán lại, đồng thời ghi audit log và đồng bộ Google Sheet.
+ */
+export const restoreListing = async (listingId: number, actor: HostActor) => {
+    const restored = await sequelize.transaction(async (transaction) => {
+        const listing = await Listing.findOne({
+            where: {
+                listingId,
+            },
+            transaction,
+        });
+
+        if (!listing) {
+            throw new ApiError(404, "Listing not found");
+        }
+
+        checkListingOwner(listing, actor);
+
+        if (!listing.deletedAt) {
+            return listing;
+        }
+
+        listing.deletedAt = null;
+        listing.status = "inactive";
+        await listing.save({ transaction });
+        await writeListingAudit(
+            actor,
+            "host_listing.restore",
+            listing.listingId,
+            { status: toApiListingStatus(listing.status) },
+            transaction,
+        );
+
+        return listing;
+    });
+
+    enqueueHostSheetSyncJobSafe({
+        hostUserId: Number(restored.hostId),
+        jobType: "listing_restored",
+        listingId: restored.listingId,
+    });
+
+    return {
+        listingId: restored.listingId,
+        status: toApiListingStatus(restored.status),
+    };
+};
+
+/**
+ * Giải thuật thêm mới và đồng bộ bộ sưu tập ảnh chỗ nghỉ trong giao dịch CSDL:
+ * - Giới hạn tổng số ảnh không vượt quá `maxImagesPerListing` (30), chỉ cho phép tối đa 1 ảnh bìa mới (`isCover`), kiểm tra chống SSRF từng URL qua `assertSafeImageUrl`
+ *   và đảm bảo tính duy nhất của thứ tự sắp xếp `sortOrder` trên toàn bộ ảnh của căn (tự động cấp tiếp `nextSortOrder` nếu không truyền).
+ * - Nếu có ảnh bìa mới, đặt `isCover = false` cho toàn bộ ảnh cũ trước khi `bulkCreate` vào `ListingImage`, cập nhật mảng JSON `listing.images` tăng dần theo `sortOrder`,
+ *   đồng thời tự động chuyển căn đang `active` về `pending_approval` nếu người thao tác là Host.
+ */
 export const addListingImages = async (listingId: number, actor: HostActor, input: AddListingImagesInput) => {
     const inputImages: AddListingImageItem[] = Array.isArray(input.images)
         ? input.images
@@ -1089,6 +1352,10 @@ export const addListingImages = async (listingId: number, actor: HostActor, inpu
     return result;
 };
 
+/**
+ * Giải thuật xóa ảnh chỗ nghỉ trong giao dịch CSDL:
+ * Xác thực quyền sở hữu và sự tồn tại của `imageId`, xóa đồng bộ trên bảng `ListingImage` lẫn mảng JSON `listing.images`, và kích hoạt tái kiểm duyệt nếu Host sửa ảnh trên căn đang mở bán.
+ */
 export const deleteListingImage = async (listingId: number, imageId: number, actor: HostActor) => {
     await sequelize.transaction(async (transaction) => {
         const listing = await getListingForHost(listingId, actor, transaction);
@@ -1121,6 +1388,11 @@ export const deleteListingImage = async (listingId: number, imageId: number, act
     });
 };
 
+/**
+ * Giải thuật thiết lập ảnh bìa độc quyền cho chỗ nghỉ có khóa bi quan (`SELECT ... FOR UPDATE`):
+ * Khóa bản ghi ảnh mục tiêu trong giao dịch CSDL, hạ cờ `isCover = false` của mọi ảnh thuộc căn trước khi bật `isCover = true` cho ảnh được chọn,
+ * đồng bộ lại mảng `listing.images` và chuyển về `pending_approval` nếu Host thay đổi ảnh bìa của căn đang `active`.
+ */
 export const setListingImageCover = async (listingId: number, imageId: number, actor: HostActor) => {
     const updatedImage = await sequelize.transaction(async (transaction) => {
         const listing = await getListingForHost(listingId, actor, transaction);
@@ -1186,6 +1458,10 @@ export const setListingImageCover = async (listingId: number, imageId: number, a
     };
 };
 
+/**
+ * Giải thuật thay thế đồng bộ danh sách tiện ích của chỗ nghỉ:
+ * Khử trùng lặp mảng `amenityIds`, kiểm tra toàn vẹn danh mục đang kích hoạt và cập nhật nguyên tử cả trường JSON `listing.amenityIds` lẫn bảng liên kết `listing_amenities`.
+ */
 export const replaceListingAmenities = async (listingId: number, actor: HostActor, input: ReplaceAmenitiesInput) => {
     const amenityIds = uniqueNumbers(input.amenityIds);
 
@@ -1202,14 +1478,16 @@ export const replaceListingAmenities = async (listingId: number, actor: HostActo
         return existingListing;
     });
 
-    scheduleSemanticReindex(listing.listingId, "listing_amenities_replace");
-
     return {
         listingId: listing.listingId,
         amenityCount: amenityIds.length,
     };
 };
 
+/**
+ * Giải thuật cập nhật đồng bộ nội quy lưu trú của chỗ nghỉ (giờ nhận/trả phòng, hút thuốc, thú cưng, tổ chức tiệc, giờ yên tĩnh đã làm sạch XSS)
+ * trên cả thực thể `Listing` và bảng quan hệ `ListingRule` trong một giao dịch CSDL.
+ */
 export const updateListingRules = async (listingId: number, actor: HostActor, input: UpdateRulesInput) => {
     const listing = await sequelize.transaction(async (transaction) => {
         const existingListing = await getListingForHost(listingId, actor, transaction);
@@ -1243,13 +1521,17 @@ export const updateListingRules = async (listingId: number, actor: HostActor, in
         return existingListing;
     });
 
-    scheduleSemanticReindex(listing.listingId, "listing_rules_update");
-
     return {
         listingId: listing.listingId,
     };
 };
 
+/**
+ * Giải thuật tổng hợp lịch vận hành theo tháng dành cho Chủ nhà:
+ * - Hợp nhất cấu hình lịch riêng (`AvailabilityCalendar`) với tập ngày đã có đơn đặt giữ chỗ giao cắt tháng `[monthStart, monthEnd)`.
+ * - Suy diễn cho từng ngày các cờ `isPast` (trước hôm nay theo giờ Việt Nam), `isBooked` (đang có khách giữ chỗ) và quyền chỉnh sửa `canEdit = !isPast && !isBooked`,
+ *   kèm mức giá/số đêm hiệu lực cùng giá mặc định để đối chiếu trực quan.
+ */
 export const getListingCalendar = async (listingId: number, actor: HostActor, query: GetCalendarQuery) => {
     const listing = await getListingForHost(listingId, actor);
     const now = new Date();
@@ -1320,6 +1602,13 @@ export const getListingCalendar = async (listingId: number, actor: HostActor, qu
     };
 };
 
+/**
+ * Giải thuật cập nhật hàng loạt lịch giá và khóa ngày trong giao dịch CSDL (kèm kiểm tra xung đột 409 và tự động dọn bản ghi mặc định):
+ * - Giai đoạn 1 (Xác thực đầu vào): Đảm bảo có ít nhất một thuộc tính cập nhật, mọi ngày đúng chuẩn ISO `YYYY-MM-DD`, khử trùng lặp & sắp xếp tăng dần, và chặn toàn bộ ngày quá khứ theo múi giờ Việt Nam (`422`).
+ * - Giai đoạn 2 (Kiểm tra xung đột giữ chỗ & khóa Admin): Nếu yêu cầu đóng lịch (`isBlockedByHost = true` hoặc `isAvailable = false`), đối chiếu `findBookedCalendarDates` và ném lỗi xung đột `409` nếu ngày đã có booking đang hiệu lực; đồng thời chặn mở khóa ngày đang bị Admin khóa (`isBlockedByAdmin`, lỗi `409`).
+ * - Giai đoạn 3 (Chuẩn hóa & Tự động thu dọn trạng thái mặc định): Chuẩn hóa từng ngày qua `normalizeCalendarRow`. Nếu bản ghi trở về trạng thái mặc định hoàn toàn (`isDefaultState = true`), xóa khỏi `AvailabilityCalendar` và `availabilityMap` để tránh phình bảng; ngược lại thực hiện upsert kèm tăng bộ đếm `syncRevision + 1` và gắn `lockSource = "app_manual"` khi Host khóa ngày.
+ * - Giai đoạn 4 (Đồng bộ & Kiểm toán): Lưu lại mảng `listing.availabilityCalendar` đã sắp xếp, ghi audit log và kích hoạt hook `afterCommit` đồng bộ lịch sang Google Sheet.
+ */
 export const bulkUpdateListingCalendar = async (
     listingId: number,
     actor: HostActor,
@@ -1369,17 +1658,17 @@ export const bulkUpdateListingCalendar = async (
     return sequelize.transaction(async (transaction) => {
         const listing = await getListingForHost(listingId, actor, transaction);
 
-        if (input.isBlockedByHost === true || input.isAvailable === false) {
-            const bookedDates = await findBookedCalendarDates(listing.listingId, uniqueDates, transaction);
+        // Giải thuật bảo vệ lịch đặt phòng đang hiệu lực (TC-081):
+        // Chặn mọi thao tác đóng lịch hoặc ghi đè giá/đêm tối thiểu trên những ngày đã có booking đang hiệu lực (`409 Conflict`).
+        const bookedDates = await findBookedCalendarDates(listing.listingId, uniqueDates, transaction);
 
-            if (bookedDates.length > 0) {
-                throw new ApiError(409, "Cannot block dates with active bookings", [
-                    {
-                        path: "dates",
-                        msg: `Dates already have active bookings: ${bookedDates.join(", ")}`,
-                    },
-                ]);
-            }
+        if (bookedDates.length > 0) {
+            throw new ApiError(409, "Cannot modify calendar dates with active bookings", [
+                {
+                    path: "dates",
+                    msg: `Dates already have active bookings: ${bookedDates.join(", ")}`,
+                },
+            ]);
         }
 
         const calendarRows = await getAvailabilityCalendarForListing(listing, transaction);
@@ -1399,6 +1688,18 @@ export const bulkUpdateListingCalendar = async (
             const nextRow: ListingAvailabilityDayRecord = {
                 ...current,
             };
+
+            if (
+                current.isBlockedByAdmin &&
+                (input.isAvailable === true || input.isBlockedByHost === false)
+            ) {
+                throw new ApiError(409, "Cannot unlock calendar dates locked by administrator", [
+                    {
+                        path: "dates",
+                        msg: `Date ${date} is locked by administrator`,
+                    },
+                ]);
+            }
 
             if (input.isBlockedByHost !== undefined) {
                 nextRow.isBlockedByHost = input.isBlockedByHost;
@@ -1448,6 +1749,8 @@ export const bulkUpdateListingCalendar = async (
                     date,
                     isAvailable: normalizedRow.isAvailable,
                     isBlockedByHost: normalizedRow.isBlockedByHost,
+                    lockSource: normalizedRow.isBlockedByHost ? "app_manual" : null,
+                    syncRevision: Number(existing?.syncRevision ?? 0) + 1,
                     priceOverride: normalizedRow.priceOverride ?? null,
                     minNightsOverride: normalizedRow.minNightsOverride ?? null,
                     notes: normalizedRow.notes ?? null,
@@ -1465,6 +1768,20 @@ export const bulkUpdateListingCalendar = async (
             left.date.localeCompare(right.date),
         );
         await listing.save({ transaction });
+        const targetHostId = Number(listing.hostId);
+        const txHook = transaction as unknown as { afterCommit?: (fn: () => void) => void };
+        const enqueueCalUpdate = () =>
+            enqueueHostSheetSyncJobSafe({
+                hostUserId: targetHostId,
+                jobType: "app_calendar_updated",
+                listingId: listing.listingId,
+            });
+        if (typeof txHook?.afterCommit === "function") {
+            txHook.afterCommit(enqueueCalUpdate);
+        } else {
+            setImmediate(enqueueCalUpdate);
+        }
+
         await writeListingAudit(actor, "host_listing.calendar.bulk_update", listing.listingId, {
             updatedDates: uniqueDates,
         }, transaction);
@@ -1476,4 +1793,80 @@ export const bulkUpdateListingCalendar = async (
     });
 };
 
+export type HostListingReviewsQuery = {
+    page?: number;
+    limit?: number;
+    rating?: number;
+};
+
+/**
+ * Giải thuật truy vấn và tổng hợp đánh giá dành riêng cho Chủ nhà sở hữu chỗ nghỉ:
+ * - Xác thực quyền sở hữu qua `getListingForHost` thay vì `getPublicListingOrThrow` để căn đang nháp/ẩn/chờ duyệt/từ chối không bị lỗi 404.
+ * - Tính điểm trung bình trên toàn bộ đánh giá hiển thị của căn rồi phân trang theo bộ lọc số sao.
+ */
+export const getHostListingReviews = async (
+    listingId: number,
+    actor: HostActor,
+    query: HostListingReviewsQuery = {},
+) => {
+    await getListingForHost(listingId, actor);
+
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(hostListingsMaxPageLimit, Math.max(1, query.limit ?? 20));
+    const overallReviews = (await Review.find({
+        listingId,
+        isVisible: true,
+        deletedAt: null,
+    })
+        .sort({ createdAt: -1, reviewId: -1 })
+        .lean()) as Array<{
+        reviewId: number;
+        rating: number;
+        comment: string;
+        reviewerName: string;
+        hostReply: string | null;
+        createdAt: Date;
+    }>;
+
+    const summary =
+        overallReviews.length > 0
+            ? {
+                  avgRating: Number(
+                      (
+                          overallReviews.reduce((total, review) => total + review.rating, 0) / overallReviews.length
+                      ).toFixed(1),
+                  ),
+                  reviewCount: overallReviews.length,
+              }
+            : {
+                  avgRating: 0,
+                  reviewCount: 0,
+              };
+
+    const filteredReviews =
+        query.rating !== undefined ? overallReviews.filter((review) => review.rating === query.rating) : overallReviews;
+    const paginatedReviews = filteredReviews.slice((page - 1) * limit, page * limit);
+
+    return {
+        items: paginatedReviews.map((review) => ({
+            reviewId: review.reviewId,
+            rating: review.rating,
+            comment: sanitizeText(review.comment),
+            reviewerName: sanitizeSingleLineText(review.reviewerName),
+            hostReply: review.hostReply ? sanitizeText(review.hostReply) : null,
+            createdAt: review.createdAt,
+        })),
+        summary,
+        pagination: {
+            page,
+            limit,
+            total: filteredReviews.length,
+            totalPages: Math.max(1, Math.ceil(filteredReviews.length / limit)),
+        },
+    };
+};
+
+/**
+ * Giải thuật trả về bản sao mảng các trạng thái đơn đặt phòng có hiệu lực khóa lịch phòng (`bookingBlockingStatuses`), bảo vệ bất biến mảng hằng nội bộ.
+ */
 export const getBookingBlockingStatuses = () => [...bookingBlockingStatuses];

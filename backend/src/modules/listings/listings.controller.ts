@@ -1,3 +1,8 @@
+/**
+ * Bộ điều phối HTTP khám phá và tìm kiếm chỗ ở công khai (`listings`):
+ * - Phục vụ tìm kiếm/lọc danh sách phòng đang hoạt động, xem chi tiết chỗ ở, kiểm tra lịch trống khả dụng, đọc đánh giá và nội quy lưu trú.
+ */
+
 import type { RequestHandler } from "express";
 
 import { asyncHandler } from "../../common/async-handler";
@@ -14,6 +19,9 @@ import {
     PublicListingsQuery,
 } from "./listings.service";
 
+/**
+ * Tìm kiếm và phân trang danh sách chỗ ở đang hoạt động theo bộ lọc địa điểm, ngày lưu trú, số khách và khoảng giá.
+ */
 export const listPublicListings: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -25,6 +33,9 @@ export const listPublicListings: RequestHandler = asyncHandler(async (req, res) 
     });
 });
 
+/**
+ * Kiểm tra lịch trống và tính khả dụng lưu trú của một chỗ ở công khai.
+ */
 export const getPublicListingAvailabilityById: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -37,6 +48,9 @@ export const getPublicListingAvailabilityById: RequestHandler = asyncHandler(asy
     });
 });
 
+/**
+ * Truy vấn phân trang các đánh giá công khai của khách từng lưu trú tại chỗ ở.
+ */
 export const getPublicListingReviewsById: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -49,6 +63,9 @@ export const getPublicListingReviewsById: RequestHandler = asyncHandler(async (r
     });
 });
 
+/**
+ * Truy vấn nội quy lưu trú và chính sách nhận/trả phòng công khai của chỗ ở.
+ */
 export const getPublicListingRulesById: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -60,6 +77,9 @@ export const getPublicListingRulesById: RequestHandler = asyncHandler(async (req
     });
 });
 
+/**
+ * Truy vấn thông tin chi tiết công khai của chỗ ở phục vụ trang xem phòng và đặt chỗ.
+ */
 export const getPublicListingDetailById: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 

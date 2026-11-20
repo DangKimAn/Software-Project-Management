@@ -3,6 +3,7 @@ import type { Transaction } from "sequelize";
 import { ApiError } from "../../common/api-error";
 import BookingStatusHistory from "../../models/booking-status-history";
 import type { BookingDocument, BookingStatus } from "../../models/booking";
+import { enqueueHostSheetSyncJobSafe } from "../host-sheet-sync/host-sheet-sync.service";
 
 export type BookingStateActor = "guest" | "host" | "admin" | "system";
 
@@ -52,6 +53,11 @@ export type BookingTransitionContext = {
     checkOutDate?: string | null;
 };
 
+/**
+ * Chính sách phân tách trạng thái tài chính khỏi máy trạng thái vòng đời lưu trú (FSM Separation of Concerns):
+ * - Các tiến trình hoàn tiền và chi trả cho Host được quản lý độc lập tại `payments.status`, `refunds.status` và `host_payout_batch.status`,
+ *   không trộn lẫn vào cột `bookings.status` nhằm giữ tính đơn định và tránh bùng nổ tổ hợp trạng thái.
+ */
 export const bookingFinancialStatusesExcludedFromLifecycle = [
     "refund_pending",
     "refunded",
@@ -66,6 +72,10 @@ export const separatedFinancialStatusPolicy = {
     excludedBookingStatuses: bookingFinancialStatusesExcludedFromLifecycle,
 } as const;
 
+/**
+ * Tập các trạng thái kết thúc (absorbing/terminal states) của máy trạng thái đơn đặt phòng:
+ * Một đơn đã đi vào tập này thì không được phép dịch chuyển sang bất kỳ trạng thái lưu trú nào khác.
+ */
 export const terminalBookingStatuses = [
     "payment_expired",
     "completed",
@@ -75,6 +85,12 @@ export const terminalBookingStatuses = [
     "rejected",
 ] as const satisfies readonly BookingStatus[];
 
+/**
+ * Ma trận chuyển trạng thái hợp lệ của máy trạng thái hữu hạn (FSM Transition Matrix):
+ * - Mỗi phần tử đặc tả bộ quy tắc `(from, to, actors, condition, sideEffects)`.
+ * - Kiểm soát phân quyền tác nhân chặt chẽ giữa `guest` (khách đặt), `host` (chủ nhà), `admin` (quản trị viên) và `system` (tiến trình tự động),
+ *   đồng thời ràng buộc điều kiện biên về thanh toán và mốc ngày nhận/trả phòng trước khi cho phép đổi trạng thái.
+ */
 export const allowedBookingTransitions = [
     {
         from: ["pending_payment"],
@@ -130,6 +146,19 @@ export const allowedBookingTransitions = [
         actors: ["system"],
         condition: "check_out_date_reached",
         sideEffects: ["mark_checked_out_at", "write_booking_status_history"],
+    },
+    // CONFLICT-RESOLVED: Cho phép hệ thống tự động khép vòng đời đơn 'paid' đã qua ngày checkOutDate sang 'completed'
+    {
+        from: ["paid"],
+        to: "completed",
+        actors: ["system"],
+        condition: "check_out_date_reached",
+        sideEffects: [
+            "clear_payment_hold",
+            "mark_checked_out_at",
+            "write_booking_status_history",
+            "handled_in_payout_status",
+        ],
     },
     {
         from: ["checked_out"],
@@ -200,9 +229,18 @@ export const allowedBookingTransitions = [
     },
 ] as const satisfies readonly BookingTransitionDefinition[];
 
+/**
+ * Giải thuật quy đổi thời điểm hiện tại sang chuỗi ngày lịch `YYYY-MM-DD` theo múi giờ Việt Nam (`UTC+7`)
+ * nhằm đảm bảo các phép so sánh mốc ngày nhận phòng (`checkInDate`) và trả phòng (`checkOutDate`) nhất quán với giờ địa phương.
+ */
 const getVietnamTodayDateString = (now = new Date()) =>
     new Date(now.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+/**
+ * Tập hàm kiểm tra điều kiện gác (Guard Predicates) cho từng quy tắc chuyển trạng thái trong FSM:
+ * - Ràng buộc bất biến thời hạn giữ chỗ (`paymentExpiresAt <= now`), thanh toán hợp lệ trước hạn (`paymentPaidAt <= paymentExpiresAt`),
+ *   và bất biến trình tự thời gian lưu trú (`todayVN === checkInDate`, `todayVN >= checkInDate`, `todayVN >= checkOutDate`).
+ */
 const conditionChecks: Record<BookingTransitionCondition, (context: BookingTransitionContext) => boolean> = {
     none: () => true,
     payment_hold_expired: (context) =>
@@ -231,6 +269,10 @@ const conditionChecks: Record<BookingTransitionCondition, (context: BookingTrans
     host_rejects_before_confirmation: () => true,
 };
 
+/**
+ * Giải thuật tra cứu cung chuyển trạng thái hợp lệ trên ma trận `allowedBookingTransitions`
+ * theo bộ ba tham số `(from, to, actor)`; trả về định nghĩa bước chuyển hoặc `null` nếu tác nhân không có quyền hoặc cung không tồn tại.
+ */
 export const findBookingTransition = (
     from: BookingStatus,
     to: BookingStatus,
@@ -243,6 +285,12 @@ export const findBookingTransition = (
             (transition.actors as readonly BookingStateActor[]).includes(actor),
     ) ?? null;
 
+/**
+ * Giải thuật kiểm định tính hợp lệ toàn diện của một yêu cầu chuyển trạng thái FSM:
+ * 1. Tra cứu quyền chuyển `(from -> to)` của tác nhân `actor` trên ma trận FSM.
+ * 2. Thực thi hàm gác `conditionChecks[transition.condition]` với ngữ cảnh thời gian/thanh toán hiện tại;
+ *    ném ngoại lệ `409 Conflict` ngay lập tức nếu vi phạm bất biến trạng thái hoặc điều kiện biên.
+ */
 export const assertBookingStatusTransition = (params: {
     from: BookingStatus;
     to: BookingStatus;
@@ -262,6 +310,13 @@ export const assertBookingStatusTransition = (params: {
     return transition;
 };
 
+/**
+ * Giải thuật thực thi chuyển trạng thái đơn đặt phòng nguyên tử (ACID), tăng phiên bản và ghi vết lịch sử kiểm toán:
+ * 1. Xác thực cung chuyển FSM và điều kiện bất biến qua `assertBookingStatusTransition`.
+ * 2. Gọi callback `mutate` để cập nhật các trường phụ thuộc, gán `status = toStatus`, tăng bộ đếm `version` thêm 1 và lưu trong `transaction`.
+ * 3. Đăng ký đẩy tác vụ đồng bộ Google Sheet của Host qua hook `afterCommit` (đảm bảo chỉ đồng bộ ra ngoài sau khi DB đã commit thành công).
+ * 4. Ghi nhận bản ghi bất biến vào `BookingStatusHistory` kèm siêu dữ liệu máy trạng thái (`actor`, `condition`, `sideEffects`).
+ */
 export const transitionBookingStatus = async (params: {
     booking: BookingDocument;
     toStatus: BookingStatus;
@@ -290,6 +345,28 @@ export const transitionBookingStatus = async (params: {
     params.booking.status = params.toStatus;
     params.booking.version = (params.booking.version ?? 0) + 1;
     await params.booking.save(persistenceOptions);
+
+    const hostUserId = Number(params.booking.hostUserId ?? 0);
+    const listingId = Number(params.booking.listingId ?? 0) || null;
+    const bookingId = Number(params.booking.bookingId ?? 0) || null;
+    if (hostUserId > 0) {
+        const triggerSheetSync = () => {
+            enqueueHostSheetSyncJobSafe({
+                hostUserId,
+                jobType: "booking_changed",
+                listingId,
+                bookingId,
+            });
+        };
+        const txWithHook = params.transaction as unknown as {
+            afterCommit?: (fn: () => void) => void;
+        };
+        if (typeof txWithHook?.afterCommit === "function") {
+            txWithHook.afterCommit(triggerSheetSync);
+        } else {
+            setImmediate(triggerSheetSync);
+        }
+    }
 
     if (persistenceOptions || process.env.NODE_ENV !== "test") {
         await BookingStatusHistory.create(

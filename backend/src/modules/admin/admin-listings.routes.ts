@@ -1,9 +1,17 @@
+/**
+ * Định tuyến HTTP kiểm duyệt và quản trị chỗ ở (`/api/admin/listings`):
+ * - Áp dụng middleware xác thực (`authenticate`), phân quyền `admin` và kiểm tra tham số định danh chỗ ở.
+ * - Hỗ trợ duyệt danh sách chờ duyệt (`GET /pending`), xem chi tiết, phê duyệt, từ chối và chuyển quyền sở hữu chủ nhà (`transfer-host`).
+ */
+
 import express from "express";
 import { body, param, query } from "express-validator";
 
 import {
     approveListing,
+    transferListingHostHandler,
     getAdminListingDetailHandler,
+    listAllAdminListings,
     listPendingListings,
     rejectListing,
 } from "./admin.controller";
@@ -18,11 +26,29 @@ const listingIdParamValidator = param("listingId")
     .withMessage("listingId must be a positive integer")
     .toInt();
 
-const requireModerator = [authenticate, requireRole("admin", "moderator")];
+const requireAdmin = [authenticate, requireRole("admin")];
+
+router.get(
+    "/",
+    requireAdmin,
+    [
+        query("status")
+            .optional()
+            .isIn(["pending_approval", "pending", "active", "published", "rejected", "inactive", "draft", "all"])
+            .withMessage("status is invalid"),
+        query("page").optional().isInt({ min: 1 }).withMessage("page must be at least 1").toInt(),
+        query("limit")
+            .optional()
+            .isInt({ min: 1, max: adminListingsMaxPageLimit })
+            .withMessage(`limit must be between 1 and ${adminListingsMaxPageLimit}`)
+            .toInt(),
+    ],
+    listAllAdminListings,
+);
 
 router.get(
     "/pending",
-    requireModerator,
+    requireAdmin,
     [
         query("page").optional().isInt({ min: 1 }).withMessage("page must be at least 1").toInt(),
         query("limit")
@@ -34,13 +60,13 @@ router.get(
     listPendingListings,
 );
 
-router.get("/:listingId", requireModerator, [listingIdParamValidator], getAdminListingDetailHandler);
+router.get("/:listingId", requireAdmin, [listingIdParamValidator], getAdminListingDetailHandler);
 
-router.patch("/:listingId/approve", requireModerator, [listingIdParamValidator], approveListing);
+router.patch("/:listingId/approve", requireAdmin, [listingIdParamValidator], approveListing);
 
 router.patch(
     "/:listingId/reject",
-    requireModerator,
+    requireAdmin,
     [
         listingIdParamValidator,
         body("reason")
@@ -51,6 +77,19 @@ router.patch(
             .isLength({ max: 2000 }),
     ],
     rejectListing,
+);
+
+router.patch(
+    "/:listingId/transfer-host",
+    [authenticate, requireRole("admin")],
+    [
+        listingIdParamValidator,
+        body("newHostId")
+            .isInt({ min: 1 })
+            .withMessage("newHostId must be a positive integer")
+            .toInt(),
+    ],
+    transferListingHostHandler,
 );
 
 export default router;

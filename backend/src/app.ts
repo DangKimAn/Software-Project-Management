@@ -18,34 +18,46 @@ import { securityHeaders } from "./middlewares/securityHeaders";
 import adminRoutes from "./modules/admin/admin.routes";
 import amenitiesRoutes from "./modules/amenities/amenities.routes";
 import authRoutes from "./modules/auth/auth.routes";
-import banksRoutes from "./modules/banks/banks.routes";
+// CONFLICT-RESOLVED: Trỏ định tuyến ngân hàng, tài khoản ngân hàng chủ nhà và chi trả về phân hệ chuẩn `modules/payouts`.
+import {
+    banksRouter as banksRoutes,
+    hostBankAccountRouter as hostBankAccountRoutes,
+    hostPayoutsRouter as hostPayoutsRoutes,
+} from "./modules/payouts/payouts.routes";
 import blogsRoutes from "./modules/blogs/blogs.routes";
 import bookingsRoutes, { hostBookingsRoutes } from "./modules/bookings/bookings.routes";
 import conversationsRoutes from "./modules/conversations/conversations.routes";
 import couponsRoutes from "./modules/coupons/coupons.routes";
-import hostApplicationRoutes from "./modules/host-applications/host-application.routes";
-import hostBankAccountRoutes from "./modules/host-bank-account/host-bank-account.routes";
+import exchangeRatesRoutes from "./modules/exchange-rates/exchange-rates.routes";
+// CONFLICT-RESOLVED: Trỏ 3 nhánh định tuyến KYC trùng vai trò về phân hệ hợp nhất `modules/host-kyc`.
+import {
+    hostApplicationsRouter as hostApplicationRoutes,
+    hostOnboardingRouter as hostOnboardingRoutes,
+    hostVerificationsRouter as hostVerificationsRoutes,
+} from "./modules/host-kyc/host-kyc.routes";
 import hostListingsRoutes from "./modules/host-listings/host-listings.routes";
+import hostSheetSyncRoutes from "./modules/host-sheet-sync/host-sheet-sync.routes";
 import notificationsRoutes from "./modules/notifications/notifications.routes";
 import paymentsRoutes from "./modules/payments/payments.routes";
-import hostPayoutsRoutes from "./modules/payouts/host-payouts.routes";
 import publicListingsRoutes from "./modules/listings/listings.routes";
 import reportsRoutes, { hostReportsRouter } from "./modules/reports/reports.routes";
 import reviewsRoutes from "./modules/reviews/reviews.routes";
 import userRoutes from "./modules/users/users.routes";
 import wishlistRoutes from "./modules/wishlist/wishlist.routes";
-import hostVerificationsRoutes from "./modules/verifications/host-verifications.routes";
-import hostOnboardingRoutes from "./modules/host-onboarding/host-onboarding.routes";
 import { sendSuccess } from "./common/http";
-import semanticSearchRoutes, { aiListingSearchRouter } from "./modules/semantic-search/semantic-search.routes";
 import uploadsRoutes from "./modules/uploads/uploads.routes";
+import identityVisionRoutes from "./modules/ai/identity-vision.routes";
 import listingImageVisionRoutes, {
     adminImageVisionRoutes,
     hostImageVisionRoutes,
     hostListingImageVisionRoutes,
 } from "./modules/ai/listing-image-vision.routes";
-import { checkQdrantHealth, getQdrantCollectionName } from "./modules/semantic-search/qdrant-vector.service";
 
+/**
+ * Giải thuật lắp ráp đường ống HTTP Express và đăng ký định tuyến toàn hệ thống:
+ * - Thiết lập tuần tự lớp phòng thủ: `requestId` -> `requestLogger` -> `securityHeaders` (Helmet) -> `cors` -> `GlobalRateLimiter` -> bộ giải mã body có trần kích thước -> `cookieParser` -> `sanitizeInput`.
+ * - Gắn điểm kiểm tra sức khỏe `/api/health` có bộ đệm TTL 5 giây tránh dội truy vấn `SELECT 1` liên tục vào MySQL, sau đó kết thúc bằng `notFound` và `errorHandler`.
+ */
 export const createApp = () => {
     const env = getEnv();
     const app = express();
@@ -77,10 +89,20 @@ export const createApp = () => {
         });
     });
 
+    let cachedDbOkUntil = 0;
+    const HEALTH_CACHE_TTL_MS = 5_000;
+
     app.get("/api/health", async (req, res, next) => {
         try {
-            await sequelize.authenticate();
-            const qdrantStatus = await checkQdrantHealth();
+            const now = Date.now();
+            const isTestEnv = env.nodeEnv === "test";
+
+            if (isTestEnv || cachedDbOkUntil <= now) {
+                await sequelize.authenticate();
+                if (!isTestEnv) {
+                    cachedDbOkUntil = now + HEALTH_CACHE_TTL_MS;
+                }
+            }
 
             return sendSuccess(res, {
                 message: "OK",
@@ -93,13 +115,10 @@ export const createApp = () => {
                         dialect: "mysql",
                         status: "up",
                     },
-                    qdrant: {
-                        status: qdrantStatus,
-                        collection: getQdrantCollectionName(),
-                    },
                 },
             });
         } catch (error) {
+            cachedDbOkUntil = 0;
             logger.error("Health check failed", error, { requestId: req.requestId });
             return next(error);
         }
@@ -107,7 +126,13 @@ export const createApp = () => {
 
     app.get("/api/health/db", async (_req, res, next) => {
         try {
-            await sequelize.authenticate();
+            const now = Date.now();
+            if (env.nodeEnv === "test" || cachedDbOkUntil <= now) {
+                await sequelize.authenticate();
+                if (env.nodeEnv !== "test") {
+                    cachedDbOkUntil = now + HEALTH_CACHE_TTL_MS;
+                }
+            }
             return sendSuccess(res, {
                 message: "Database connection healthy",
                 data: {
@@ -116,6 +141,7 @@ export const createApp = () => {
                 },
             });
         } catch (error) {
+            cachedDbOkUntil = 0;
             return next(error);
         }
     });
@@ -131,14 +157,16 @@ export const createApp = () => {
     app.use("/api/notifications", notificationsRoutes);
     app.use("/api/host/applications", hostApplicationRoutes);
     app.use("/api/host/listings", hostListingsRoutes);
+    app.use("/api/host/sheet-sync", hostSheetSyncRoutes);
     app.use("/api/host/listings", hostListingImageVisionRoutes);
     app.use("/api/host/images", hostImageVisionRoutes);
     app.use("/api/host/verifications", hostVerificationsRoutes);
     app.use("/api/host", hostBankAccountRoutes);
     app.use("/api/host", hostOnboardingRoutes);
     app.use("/api/host", hostPayoutsRoutes);
-    app.use("/api/ai/listings/search", aiListingSearchRouter);
     app.use("/api/ai/listings", listingImageVisionRoutes);
+    app.use("/api/ai/id-card-vision", identityVisionRoutes);
+    app.use("/api/ai/identity", identityVisionRoutes);
     app.use("/api/admin/images", adminImageVisionRoutes);
     app.use("/api/admin", adminRoutes);
     app.use("/api/payments", paymentsRoutes);
@@ -146,10 +174,11 @@ export const createApp = () => {
     app.use("/api/reviews", reviewsRoutes);
     app.use("/api/uploads", uploadsRoutes);
     app.use("/api/listings", publicListingsRoutes);
-    app.use("/api/search", semanticSearchRoutes);
     app.use("/api/reports", reportsRoutes);
     app.use("/api/host/reports", hostReportsRouter);
     app.use("/api/amenities", amenitiesRoutes);
+    app.use("/api/v1/exchange-rates", exchangeRatesRoutes);
+    app.use("/api/exchange-rates", exchangeRatesRoutes);
 
     app.use(notFound);
     app.use(errorHandler);

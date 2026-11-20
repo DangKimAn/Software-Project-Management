@@ -12,6 +12,9 @@ type DatabaseInfoRow = {
     version: string;
 };
 
+/**
+ * Kiểm tra kết nối thực tế đến MySQL/Aiven SSL, xác minh chứng chỉ CA và truy vấn danh mục bảng hiện có.
+ */
 const main = async () => {
     const env = getEnv();
     const caPath = env.dbSslCa ? path.resolve(process.cwd(), env.dbSslCa) : undefined;

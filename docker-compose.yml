@@ -1,0 +1,54 @@
+services:
+  # MySQL 8 Database
+  mysql:
+    image: mysql:8.0
+    container_name: minhthanhvilla-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password_dev}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-booking_room}
+      MYSQL_USER: ${MYSQL_USER:-villa_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-villa_password_dev}
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h localhost -u root"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Node.js API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: minhthanhvilla-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    # CONFLICT-RESOLVED: Đồng bộ cổng Backend Container từ 5000 sang 7000 để thống nhất với backend/src/config/env.ts, backend/.env.example và hotel-booking-flutter/config/dev.json
+    ports:
+      - "127.0.0.1:7000:7000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 7000
+      MYSQLHOST: mysql
+      MYSQLPORT: 3306
+      MYSQLDATABASE: ${MYSQL_DATABASE:-booking_room}
+      MYSQLUSER: ${MYSQL_USER:-villa_user}
+      MYSQLPASSWORD: ${MYSQL_PASSWORD:-villa_password_dev}
+      MYSQL_SSL: "false"
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev_jwt_secret_key_at_least_32_characters_long_for_security}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev_jwt_access_secret_at_least_32_characters_long}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev_jwt_refresh_secret_at_least_32_characters_long}
+      TOKEN_HASH_SECRET: ${TOKEN_HASH_SECRET:-dev_token_hash_secret_at_least_32_characters_long}
+      OTP_HASH_SECRET: ${OTP_HASH_SECRET:-dev_otp_hash_secret_at_least_32_characters_long}
+      COOKIE_SECRET: ${COOKIE_SECRET:-dev_cookie_secret_at_least_32_characters_long}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8080}
+
+volumes:
+  mysql_data:

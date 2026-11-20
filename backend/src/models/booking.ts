@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý đơn đặt phòng trung tâm: kỳ lưu trú, cấu trúc giá, khóa giữ chỗ tạm thời và phiên bản lạc quan.
+ */
 import {
     CreationOptional,
     DataTypes,

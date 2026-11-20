@@ -13,10 +13,19 @@ import { initializeSocket } from "./socket/socket";
 import {
     startPaymentExpirationSweep,
     stopPaymentExpirationSweep,
-} from "./services/booking-expiration.service";
-import { initQdrantCollections } from "./modules/semantic-search/qdrant-vector.service";
+} from "./modules/bookings/booking-expiration.service";
+import {
+    startHostSheetSyncWorker,
+    stopHostSheetSyncWorker,
+} from "./modules/host-sheet-sync/host-sheet-sync.worker";
+
 type ExitProcess = (code: number) => never | void;
 const HOST = process.env.HOST || "0.0.0.0";
+
+/**
+ * Giải thuật đóng máy chủ êm ái (Graceful Shutdown) khi nhận tín hiệu hệ điều hành (`SIGTERM`/`SIGINT`):
+ * - Ngừng nhận kết nối HTTP mới, dừng các tiến trình nền thu hồi giữ chỗ và đồng bộ Google Sheets, sau đó đóng bể kết nối MySQL trước khi thoát tiến trình.
+ */
 export const shutdownServer = async (
     server: Server | undefined,
     signal: NodeJS.Signals,
@@ -38,6 +47,7 @@ export const shutdownServer = async (
             });
         }
         stopPaymentExpirationSweep();
+        stopHostSheetSyncWorker();
         await sequelize.close();
         logger.info("Shutdown complete", { signal });
         exitProcess(0);
@@ -47,6 +57,10 @@ export const shutdownServer = async (
     }
 };
 
+/**
+ * Giải thuật khởi động máy chủ HTTP + Socket.IO và các tiến trình nền:
+ * - Xác thực kết nối MySQL, đồng bộ lược đồ an toàn ở môi trường phi `production`, gắn kênh thời gian thực Socket.IO và kích hoạt worker nền.
+ */
 export const startServer = async () => {
     const env = getEnv();
     const { port } = env;
@@ -57,6 +71,13 @@ export const startServer = async () => {
     });
     process.once("SIGINT", () => {
         void shutdownServer(server, "SIGINT");
+    });
+    process.on("unhandledRejection", (reason) => {
+        logger.error("Unhandled promise rejection", reason);
+    });
+    process.on("uncaughtException", (error) => {
+        logger.error("Uncaught exception", error);
+        void shutdownServer(server, "SIGTERM");
     });
 
     try {
@@ -71,9 +92,6 @@ export const startServer = async () => {
 
         logger.info("MySQL connected successfully");
 
-        // Initialize Qdrant collection (non-blocking: logs error but does not crash)
-        await initQdrantCollections();
-
         server = createServer(app);
         initializeSocket(server);
 
@@ -82,6 +100,7 @@ export const startServer = async () => {
         });
         if (env.nodeEnv !== "test") {
             startPaymentExpirationSweep();
+            startHostSheetSyncWorker();
         }
         return server;
     } catch (error) {

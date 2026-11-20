@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP báo cáo vi phạm và thống kê phân tích cho người dùng, chủ nhà (`hostReportsRouter`) và quản trị viên (`adminReportsRouter`):
+ * - Kết hợp xác thực `authenticate`, phân quyền vai trò tương ứng (`host`/`admin`) và giới hạn tần suất gửi báo cáo (`Limiter`).
+ */
+
 import express from "express";
 import { body, param, query } from "express-validator";
 
@@ -49,6 +54,11 @@ const analyticsQueryValidators = () => [
         .custom((value, { req }) => !req.query?.from || String(req.query.from) <= String(value))
         .withMessage("to must be greater than or equal to from"),
     query("group").optional().isIn(["day", "month", "year"]).withMessage("group is invalid"),
+    query("listingId")
+        .optional()
+        .isInt({ min: 1 })
+        .withMessage("listingId must be a positive integer")
+        .toInt(),
 ];
 
 router.use(authenticate, requireActiveUser);

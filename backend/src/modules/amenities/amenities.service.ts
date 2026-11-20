@@ -1,11 +1,11 @@
-import { Op, QueryTypes } from "sequelize";
+import { Op, QueryTypes, UniqueConstraintError } from "sequelize";
 
 import { ApiError } from "../../common/api-error";
 import { sanitizeNullableSingleLineText, sanitizeSingleLineText } from "../../common/sanitization";
 import sequelize from "../../config/database";
 import Amenity, { AmenityDocument } from "../../models/amenity";
 import type { AuthenticatedUser } from "../auth/auth.service";
-import { writeAuditLog } from "../../services/audit-log-service";
+import { writeAuditLog } from "../../services/audit-log.service";
 
 export type AmenityInput = {
     name: string;
@@ -13,9 +13,19 @@ export type AmenityInput = {
     isActive?: boolean;
 };
 
+/**
+ * Giải thuật làm sạch chuỗi tên tiện ích trên một dòng chống chèn mã độc XSS.
+ */
 const normalizeName = (name: string) => sanitizeSingleLineText(name);
+
+/**
+ * Giải thuật làm sạch chuỗi định danh biểu tượng tiện ích tùy chọn trên một dòng.
+ */
 const normalizeIcon = (icon?: string | null) => sanitizeNullableSingleLineText(icon);
 
+/**
+ * Giải thuật tuần tự hóa bản ghi tiện ích cho cổng quản trị, hợp nhất trạng thái hiệu lực thực tế theo điều kiện `active && isActive && deletedAt === null`.
+ */
 const serializeAmenity = (amenity: AmenityDocument) => ({
     amenityId: amenity.amenityId,
     name: amenity.name,
@@ -25,6 +35,10 @@ const serializeAmenity = (amenity: AmenityDocument) => ({
     updatedAt: amenity.updatedAt,
 });
 
+/**
+ * Giải thuật tra cứu tiện ích theo tên không phân biệt chữ hoa/thường (`LOWER(name) = LOWER(?)`) bằng truy vấn tham số hóa an toàn,
+ * phục vụ kiểm tra chống trùng lặp và khôi phục tiện ích từng bị xóa mềm.
+ */
 const findAmenityByName = async (name: string) => {
     const rows = await sequelize.query<{ amenityId: number }>(
         `
@@ -48,6 +62,9 @@ const findAmenityByName = async (name: string) => {
     return Amenity.findOne({ amenityId });
 };
 
+/**
+ * Giải thuật cấp phát khóa định danh tuần tự kế tiếp cho tiện ích mới theo công thức `COALESCE(MAX(amenity_id), 0) + 1`.
+ */
 const getNextAmenityId = async () => {
     const rows = await sequelize.query<{ nextId: number }>(
         "SELECT COALESCE(MAX(amenity_id), 0) + 1 AS nextId FROM amenities",
@@ -59,6 +76,9 @@ const getNextAmenityId = async () => {
     return Number(rows[0]?.nextId ?? 1);
 };
 
+/**
+ * Giải thuật ghi nhận nhật ký kiểm toán (`audit_logs`) cho các thao tác quản trị danh mục tiện ích.
+ */
 const writeAmenityAudit = async (
     actor: AuthenticatedUser,
     action: string,
@@ -74,6 +94,9 @@ const writeAmenityAudit = async (
     });
 };
 
+/**
+ * Giải thuật truy xuất danh sách tiện ích công khai đang kích hoạt (`active = true`, `isActive = true`, `deletedAt = null`) sắp xếp tăng dần theo `amenityId`.
+ */
 export const listPublicAmenities = async () => {
     const items = await Amenity.find({
         active: true,
@@ -90,6 +113,9 @@ export const listPublicAmenities = async () => {
     };
 };
 
+/**
+ * Giải thuật truy xuất toàn bộ tiện ích chưa xóa mềm phục vụ trang quản trị (bao gồm cả các tiện ích đang tạm tắt `isActive = false`).
+ */
 export const listAdminAmenities = async () => {
     const items = await Amenity.findAll({
         where: {
@@ -105,6 +131,12 @@ export const listAdminAmenities = async () => {
     };
 };
 
+/**
+ * Giải thuật tạo mới hoặc khôi phục thông minh tiện ích trùng tên trong giao dịch CSDL:
+ * - Làm sạch tên và đối chiếu không phân biệt hoa/thường qua `findAmenityByName`; ném lỗi 409 nếu tiện ích trùng tên đang hoạt động.
+ * - Nếu bản ghi trùng tên từng bị xóa mềm hoặc tắt kích hoạt, tự động khôi phục lại bản ghi cũ (`deletedAt = null`) để giữ nguyên `amenityId` lịch sử;
+ *   ngược lại tạo bản ghi mới và bắt ngoại lệ `UniqueConstraintError` chống xung đột đồng thời.
+ */
 export const createAmenity = async (actor: AuthenticatedUser, input: AmenityInput) => {
     const name = normalizeName(input.name);
 
@@ -137,26 +169,38 @@ export const createAmenity = async (actor: AuthenticatedUser, input: AmenityInpu
             return existing;
         }
 
-        const created = await Amenity.create(
-            {
-                amenityId: await getNextAmenityId(),
+        try {
+            const created = await Amenity.create(
+                {
+                    amenityId: await getNextAmenityId(),
+                    name,
+                    icon: normalizeIcon(input.icon),
+                    active: input.isActive ?? true,
+                    isActive: input.isActive ?? true,
+                    deletedAt: null,
+                },
+                { transaction },
+            );
+            await writeAmenityAudit(actor, "admin_amenity.create", created.amenityId, {
                 name,
-                icon: normalizeIcon(input.icon),
-                active: input.isActive ?? true,
-                isActive: input.isActive ?? true,
-                deletedAt: null,
-            },
-            { transaction },
-        );
-        await writeAmenityAudit(actor, "admin_amenity.create", created.amenityId, {
-            name,
-        });
-        return created;
+            });
+            return created;
+        } catch (error) {
+            if (error instanceof UniqueConstraintError) {
+                throw new ApiError(409, "Amenity already exists");
+            }
+            throw error;
+        }
     });
 
     return serializeAmenity(amenity);
 };
 
+/**
+ * Giải thuật cập nhật thông tin tiện ích quản trị:
+ * Xác thực tiện ích tồn tại và chưa xóa mềm, kiểm tra chống đổi tên trùng với một tiện ích đang hoạt động khác (`existing.amenityId !== amenity.amenityId`),
+ * đồng bộ cặp cờ `active`/`isActive` và ghi nhận nhật ký kiểm toán.
+ */
 export const updateAmenity = async (
     actor: AuthenticatedUser,
     amenityId: number,
@@ -208,6 +252,10 @@ export const updateAmenity = async (
     return serializeAmenity(amenity);
 };
 
+/**
+ * Giải thuật xóa mềm tiện ích quản trị:
+ * Hạ đồng thời hai cờ `active = false`, `isActive = false` và gán mốc `deletedAt` nhằm ẩn tiện ích khỏi bộ lọc tìm kiếm mới mà vẫn bảo toàn toàn vẹn tham chiếu lịch sử.
+ */
 export const deleteAmenity = async (actor: AuthenticatedUser, amenityId: number) => {
     const amenity = await Amenity.findOne({ amenityId });
 

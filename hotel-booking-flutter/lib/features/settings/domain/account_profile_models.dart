@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import '../../../core/security/url_security_validator.dart';
 import '../../auth/domain/entities/user.dart';
 
 /// Maximum lengths and constraints aligned with `backend/src/modules/users/users.validator.ts`
@@ -148,11 +149,43 @@ class ProfileDraftData {
         !sameLanguages;
   }
 
+  // Giải thuật kiểm tra thay đổi trường nhạy cảm (số điện thoại), kích hoạt bước xác nhận
+  // cho cả trường hợp thêm mới từ trống, đổi số khác hoặc xóa số điện thoại hiện có.
   bool hasSensitiveChangeComparedTo(User user) {
     if (userId != user.id) return false;
     final oldPhone = (user.phoneNumber ?? '').trim();
     final newPhone = phone.trim();
-    return oldPhone.isNotEmpty && oldPhone != newPhone;
+    return oldPhone != newPhone;
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'userId': userId,
+      'fullName': fullName,
+      'phone': phone,
+      'bio': bio,
+      'location': location,
+      'dreamDestination': dreamDestination,
+      'job': job,
+      'school': school,
+      'languages': languages,
+      'avatarUrl': avatarUrl,
+    };
+  }
+
+  factory ProfileDraftData.fromJson(Map<String, dynamic> json) {
+    return ProfileDraftData(
+      userId: (json['userId'] ?? '').toString(),
+      fullName: (json['fullName'] ?? '').toString(),
+      phone: (json['phone'] ?? '').toString(),
+      bio: (json['bio'] ?? '').toString(),
+      location: (json['location'] ?? '').toString(),
+      dreamDestination: (json['dreamDestination'] ?? '').toString(),
+      job: (json['job'] ?? '').toString(),
+      school: (json['school'] ?? '').toString(),
+      languages: (json['languages'] ?? '').toString(),
+      avatarUrl: (json['avatarUrl'] ?? '').toString(),
+    );
   }
 
   ProfileDraftData copyWith({
@@ -377,10 +410,10 @@ class AvatarR2PresignResult {
         ? (data['expiresIn'] as num).toInt()
         : (int.tryParse('${data['expiresIn'] ?? 300}') ?? 300);
 
-    if (!isValidHttpUrl(uploadUrl)) {
+    if (!UrlSecurityValidator.isSafeUploadOrMediaUrl(uploadUrl)) {
       throw const FormatException('Máy chủ không trả về uploadUrl hợp lệ.');
     }
-    if (!isValidHttpUrl(publicUrl)) {
+    if (!UrlSecurityValidator.isSafeUploadOrMediaUrl(publicUrl)) {
       throw const FormatException('Máy chủ không trả về publicUrl hợp lệ.');
     }
     if (key.isEmpty) {

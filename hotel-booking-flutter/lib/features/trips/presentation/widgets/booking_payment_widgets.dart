@@ -1,32 +1,55 @@
+import 'payment_result_card.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/storage/preferences_service.dart';
-import '../../../../core/utils/currency_formatter.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../domain/entities/booking.dart';
 import '../../domain/repositories/booking_repository.dart';
 
-/// Standalone, testable Payment Result verification widget used by `PaymentResultScreen`.
+/// Thành phần thẻ xác minh kết quả thanh toán độc lập dùng cho `PaymentResultScreen` và kiểm thử tích hợp.
 ///
-/// Guarantees BUG-03 security & business rules:
-/// - Never trusts query string `status=paid` without verifying against `BookingRepository.getPaymentById` and `BookingRepository.getBookingById`.
-/// - When network fails during verification, displays `"Chưa xác nhận được giao dịch"` (`unverified`) instead of fake success or failure.
-/// - Re-verifies on `AppLifecycleState.resumed` without creating duplicate payment transactions.
-/// - Supports `pending`, `paid`, `failed`, `cancelled`, `expired`, `refund_pending`, `refunded`, `unverified`.
+/// Đảm bảo nghiêm ngặt quy tắc bảo mật đối soát giao dịch:
+/// - Không bao giờ tin tưởng mù quáng tham số truy vấn `status=paid` trên URL mà luôn đối chiếu với
+///   `BookingRepository.getPaymentById` và `BookingRepository.getBookingById`.
+/// - Khi mất kết nối mạng trong lúc đối soát, hiển thị trạng thái trung thực `'unverified'` thay vì báo thành công giả.
+/// - Tự động xác minh lại khi ứng dụng quay lại tiền cảnh (`AppLifecycleState.resumed`) mà không tạo giao dịch trùng.
+/// - Hỗ trợ đầy đủ các trạng thái `pending`, `paid`, `failed`, `cancelled`, `expired`, `refund_pending`, `refunded`, `unverified`.
 class PaymentVerificationCard extends StatefulWidget {
+  /// Kho lưu trữ dùng để truy vấn đối soát bản ghi thanh toán và đơn đặt phòng.
   final BookingRepository repository;
+
+  /// Mã đơn đặt phòng cần kiểm tra kết quả.
   final String? bookingId;
+
+  /// Mã phiên thanh toán cần đối soát với máy chủ.
   final String? paymentId;
+
+  /// Gợi ý trạng thái ban đầu truyền qua URL callback (sẽ được hạ về `'pending'` cho tới khi máy chủ xác nhận).
   final String initialStatus;
+
+  /// Phương thức thanh toán hiển thị dự phòng trước khi tải xong bản ghi máy chủ.
   final String? method;
+
+  /// Số tiền giao dịch dự phòng trước khi tải xong bản ghi máy chủ.
   final int? amount;
+
+  /// Hàm gọi lại thông báo mã trạng thái có thẩm quyền sau mỗi lần đối soát xong.
   final void Function(String resolvedStatus)? onStatusVerified;
+
+  /// Thao tác mở lại trang thanh toán khi giao dịch thất bại hoặc bị hủy nhưng đơn vẫn còn hạn giữ chỗ.
   final VoidCallback? onRetryPayment;
+
+  /// Thao tác điều hướng sang danh sách chuyến đi của khách hàng.
   final VoidCallback? onViewTrips;
+
+  /// Thao tác quay về Trang chủ.
   final VoidCallback? onGoHome;
 
+  /// Khởi tạo `PaymentVerificationCard`.
   const PaymentVerificationCard({
     super.key,
     required this.repository,
@@ -94,6 +117,11 @@ class _PaymentVerificationCardState extends State<PaymentVerificationCard>
     }
   }
 
+  // Giải thuật đối soát giao dịch và thăm dò định kỳ (`_verifyTransaction`):
+  // Bước 1: Thu thập `paymentId` và `bookingId`; nếu thiếu cả hai và URL gợi ý `'paid'` thì hạ về `'unverified'`.
+  // Bước 2: Truy vấn tuần tự `getPaymentById` rồi `getBookingById` (suy ra `bookingId` từ bản ghi thanh toán nếu cần).
+  // Bước 3: Phân giải trạng thái cuối qua `deriveAuthoritativePaymentStatus`; nếu vẫn đang `'pending'`,
+  //         lên lịch thăm dò lại mỗi 3 giây tối đa `_maxPollAttempts = 10` lần.
   Future<void> _verifyTransaction({bool resetPollCount = false}) async {
     if (_isVerifying || !mounted) return;
     _pollTimer?.cancel();
@@ -201,58 +229,12 @@ class _PaymentVerificationCardState extends State<PaymentVerificationCard>
     PaymentSessionResult? payment,
     Booking? booking,
   }) {
-    if (payment != null) {
-      final resultStatus = payment.paymentResultStatus;
-      if (resultStatus == 'refund_pending' ||
-          resultStatus == 'refunded' ||
-          resultStatus == 'paid' ||
-          resultStatus == 'failed' ||
-          resultStatus == 'cancelled' ||
-          resultStatus == 'expired') {
-        if (resultStatus == 'pending' && booking != null) {
-          // Fall through to check booking
-        } else {
-          return resultStatus;
-        }
-      }
-    }
-
-    if (booking != null) {
-      final bStatus = booking.status;
-      if (bStatus == 'paid' ||
-          bStatus == 'confirmed' ||
-          bStatus == 'checked_in' ||
-          bStatus == 'checked_out' ||
-          bStatus == 'completed') {
-        return 'paid';
-      }
-      if (bStatus == 'refund_pending') return 'refund_pending';
-      if (bStatus == 'refunded') return 'refunded';
-      if (booking.isExpired ||
-          (bStatus == 'pending_payment' &&
-              booking.computeRemainingPaymentSeconds() <= 0)) {
-        return 'expired';
-      }
-      if (booking.isCancelled) {
-        return 'cancelled';
-      }
-      if (bStatus == 'pending_payment') {
-        if (payment != null) {
-          return payment.paymentResultStatus;
-        }
-        final initialHint = widget.initialStatus.trim().toLowerCase();
-        if (initialHint == 'failed' || initialHint == 'cancelled') {
-          return initialHint;
-        }
-        return 'pending';
-      }
-    }
-
-    if (payment != null) {
-      return payment.paymentResultStatus;
-    }
-
-    return 'unverified';
+    // CONFLICT-RESOLVED: Ủy quyền về deriveAuthoritativePaymentStatus để ưu tiên kiểm tra payment.refundStatus & booking.refundStatus trước khi trả về 'paid'.
+    return deriveAuthoritativePaymentStatus(
+      payment: payment,
+      booking: booking,
+      initialStatusHint: widget.initialStatus,
+    );
   }
 
   ({
@@ -275,7 +257,7 @@ class _PaymentVerificationCardState extends State<PaymentVerificationCard>
           icon: LucideIcons.clock,
           title: 'Giao dịch đang chờ xác nhận',
           subtitle:
-              'Hệ thống đang đồng bộ kết quả từ cổng thanh toán. Trạng thái sẽ tự động cập nhật khi có phản hồi từ máy chủ.',
+              'Kết quả thanh toán sẽ tự động cập nhật sau khi được xác nhận.',
         );
       case 'unverified':
         return (
@@ -296,7 +278,7 @@ class _PaymentVerificationCardState extends State<PaymentVerificationCard>
         return (
           icon: LucideIcons.refreshCw,
           title: 'Đang xử lý hoàn tiền',
-          subtitle: _paymentRecord?.latePaymentReason ??
+          subtitle: _paymentRecord?.latePaymentReasonDisplay ??
               'Yêu cầu hoàn tiền cho đơn đặt phòng của bạn đang được xử lý về phương thức thanh toán ban đầu.',
         );
       case 'refunded':
@@ -352,166 +334,58 @@ class _PaymentVerificationCardState extends State<PaymentVerificationCard>
     final canReverify =
         _effectiveStatus == 'pending' || _effectiveStatus == 'unverified';
 
-    return Container(
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppColors.borderSoft),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            meta.icon,
-            size: 48,
-            color: AppColors.iconStrong,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            meta.title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            meta.subtitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-              height: 1.5,
-            ),
-          ),
-          if (_isVerifying) ...[
-            const SizedBox(height: 16),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                SizedBox(width: 10),
-                Flexible(
-                  child: Text(
-                    'Đang kiểm tra trạng thái từ máy chủ...',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 24),
-          const Divider(color: AppColors.divider),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              children: [
-                if (effectiveBookingId.isNotEmpty)
-                  _KvRow(
-                    label: 'Mã đơn đặt phòng',
-                    value: '#$effectiveBookingId',
-                  ),
-                if (effectivePaymentId.isNotEmpty)
-                  _KvRow(
-                    label: 'Mã giao dịch',
-                    value: effectivePaymentId,
-                  ),
-                if (effectiveMethod.isNotEmpty)
-                  _KvRow(
-                    label: 'Phương thức',
-                    value: effectiveMethod.toUpperCase(),
-                  ),
-                if (effectiveAmount > 0)
-                  _KvRow(
-                    label: 'Số tiền',
-                    value: CurrencyFormatter.formatVnd(effectiveAmount),
-                  ),
-                if (_bookingRecord != null)
-                  _KvRow(
-                    label: 'Trạng thái đơn phòng',
-                    value: _bookingRecord!.statusDisplay,
-                  ),
-              ],
-            ),
-          ),
-          const Divider(color: AppColors.divider),
-          const SizedBox(height: 24),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            alignment: WrapAlignment.center,
-            children: [
-              if (canReverify)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: OutlinedButton.icon(
-                    onPressed: _isVerifying
-                        ? null
-                        : () => _verifyTransaction(resetPollCount: true),
-                    icon: const Icon(
-                      LucideIcons.refreshCw,
-                      size: 16,
-                      color: AppColors.iconStrong,
-                    ),
-                    label: const Text('Kiểm tra lại trạng thái'),
-                  ),
-                ),
-              if (canRetryPayment && widget.onRetryPayment != null)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: ElevatedButton(
-                    onPressed: widget.onRetryPayment,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text('Thử thanh toán lại'),
-                  ),
-                ),
-              if (widget.onViewTrips != null)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: ElevatedButton(
-                    onPressed: widget.onViewTrips,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.textPrimary,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text('Xem chuyến đi của tôi'),
-                  ),
-                ),
-              if (widget.onGoHome != null)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: OutlinedButton(
-                    onPressed: widget.onGoHome,
-                    child: const Text('Về Trang chủ'),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
+    final hasProviderScope =
+        context.findAncestorWidgetOfExactType<UncontrolledProviderScope>() !=
+            null;
+
+    Widget buildCard(MoneyFormatter? formatter) {
+      final isForeign =
+          formatter != null && formatter.effectiveCurrency.isForeign;
+      final isRefundStatus = _effectiveStatus == 'refund_pending' ||
+          _effectiveStatus == 'refunded';
+
+      return PaymentResultCard(
+        icon: meta.icon,
+        title: meta.title,
+        subtitle: meta.subtitle,
+        isVerifying: _isVerifying,
+        details: {
+          if (effectiveBookingId.isNotEmpty)
+            'Mã đặt phòng': '#$effectiveBookingId',
+          if (effectivePaymentId.isNotEmpty) 'Mã giao dịch': effectivePaymentId,
+          if (effectiveMethod.isNotEmpty)
+            'Phương thức': effectiveMethod.toUpperCase(),
+          if (_bookingRecord != null)
+            'Đơn đặt phòng': _bookingRecord!.statusDisplay,
+          if (effectiveAmount > 0)
+            'Số tiền': MoneyFormatter.formatVnd(effectiveAmount),
+          if (isForeign && isRefundStatus)
+            'Lưu ý tiền tệ': formatter.l10n.fxRefundInVndNotice,
+        },
+        onRecheck:
+            canReverify ? () => _verifyTransaction(resetPollCount: true) : null,
+        onRetry: canRetryPayment ? widget.onRetryPayment : null,
+        onViewTrips: widget.onViewTrips,
+        onGoHome: widget.onGoHome,
+      );
+    }
+
+    if (!hasProviderScope) {
+      return buildCard(null);
+    }
+    return Consumer(
+      builder: (context, ref, _) =>
+          buildCard(ref.watch(moneyFormatterProvider)),
     );
   }
 }
 
-/// Testable Profile Summary & Edit Form widget used for BUG-22 verification.
+/// Thẻ hiển thị tóm tắt và biểu mẫu chỉnh sửa hồ sơ tài khoản độc lập phục vụ kiểm thử bảo toàn dữ liệu cá nhân.
 class ProfileAccountEditorCard extends StatefulWidget {
+  /// Thực thể người dùng ban đầu cần hiển thị và chỉnh sửa.
   final User user;
+
+  /// Hàm xử lý gửi cập nhật các trường thông tin hồ sơ cá nhân lên máy chủ.
   final Future<User> Function({
     String? fullName,
     String? phone,
@@ -523,9 +397,12 @@ class ProfileAccountEditorCard extends StatefulWidget {
     List<String>? languages,
     String? avatarUrl,
   }) onUpdateProfile;
+
+  /// Hàm xử lý cập nhật riêng đường dẫn ảnh đại diện mới (nếu có thay đổi).
   final Future<User> Function({required String url, String? key})?
       onUpdateAvatar;
 
+  /// Khởi tạo `ProfileAccountEditorCard`.
   const ProfileAccountEditorCard({
     super.key,
     required this.user,
@@ -753,22 +630,24 @@ class _ProfileAccountEditorCardState extends State<ProfileAccountEditorCard> {
                 ? _currentUser.languages.join(', ')
                 : 'Chưa cập nhật',
           ),
-          _KvRow(
-            label: 'Xác minh danh tính',
-            value: _currentUser.isVerified ? 'Đã xác minh' : 'Chưa xác minh',
-          ),
         ],
       ),
     );
   }
 }
 
-/// Testable responsive Trip card enforcing `booking.canCancel` & `booking.canPayNow`.
+/// Thẻ hiển thị tóm tắt đơn đặt phòng thích ứng kích thước màn hình, tuân thủ điều kiện `booking.canPayNow` và `booking.canCancel`.
 class ResponsiveTripBookingCard extends StatelessWidget {
+  /// Đơn đặt phòng cần hiển thị thông tin và các nút thao tác.
   final Booking booking;
+
+  /// Hàm gọi lại khi người dùng nhấn nút hủy phòng.
   final VoidCallback? onCancel;
+
+  /// Hàm gọi lại khi người dùng nhấn nút thanh toán ngay.
   final VoidCallback? onPay;
 
+  /// Khởi tạo `ResponsiveTripBookingCard`.
   const ResponsiveTripBookingCard({
     super.key,
     required this.booking,
@@ -813,7 +692,7 @@ class ResponsiveTripBookingCard extends StatelessWidget {
             runSpacing: 8,
             alignment: WrapAlignment.spaceBetween,
             children: [
-              Text(CurrencyFormatter.formatVnd(booking.totalAmount)),
+              Text(MoneyFormatter.formatVnd(booking.totalAmount)),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -844,11 +723,15 @@ class ResponsiveTripBookingCard extends StatelessWidget {
   }
 }
 
-/// Testable Multi-Booking Queue & Result view widget for BUG-19 verification.
+/// Thành phần quản lý hàng đợi đặt nhiều căn biệt thự và hiển thị danh sách đơn sau khi tạo hàng loạt.
 class MultiBookingQueueEditor extends StatefulWidget {
+  /// Dịch vụ lưu trữ cục bộ quản lý danh sách hàng đợi đặt phòng.
   final PreferencesService prefs;
+
+  /// Kho lưu trữ thực thi giao dịch đặt phòng hàng loạt `createBulkBookings`.
   final BookingRepository repository;
 
+  /// Khởi tạo `MultiBookingQueueEditor`.
   const MultiBookingQueueEditor({
     super.key,
     required this.prefs,
@@ -952,7 +835,7 @@ class _MultiBookingQueueEditorState extends State<MultiBookingQueueEditor> {
                 children: [
                   Text(_queue[i].title),
                   Text(
-                    'Tạm tính: ${CurrencyFormatter.formatVnd(_queue[i].calculatePriceEstimate().estimatedTotal)}',
+                    'Tạm tính: ${MoneyFormatter.formatVnd(_queue[i].calculatePriceEstimate().estimatedTotal)}',
                   ),
                   Wrap(
                     spacing: 8,

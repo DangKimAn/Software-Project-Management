@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/core/date/booking_date.dart';
+import 'package:hotel_booking_flutter/l10n/l10n.dart';
 import 'package:hotel_booking_flutter/core/storage/preferences_service.dart';
 import 'package:hotel_booking_flutter/features/search/presentation/widgets/booking_date_range_picker.dart';
 import 'package:hotel_booking_flutter/features/villa_detail/presentation/widgets/booking_action_bar.dart';
@@ -135,6 +136,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('vi'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SingleChildScrollView(
               child: BookingDateRangePicker(
@@ -176,6 +180,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('vi'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SingleChildScrollView(
               child: BookingDateRangePicker(
@@ -318,12 +325,14 @@ void main() {
     test(
         'computeForMonths calculates checkIn and checkOut across selected months',
         () {
+      // Giải thuật kiểm chứng giới hạn tối đa 30 đêm ở chế độ tìm kiếm theo tháng:
+      // Từ ngày tham chiếu 2026-05-10, khoảng chọn [5, 6] được kẹp tối đa 30 đêm -> checkOut = 2026-06-09 để tương thích maxNights = 30 trên máy chủ.
       final range = SearchDateModeHelper.computeForMonths(
         [5, 6],
         referenceToday: const BookingDate(year: 2026, month: 5, day: 10),
       );
       expect(range.checkIn, const BookingDate(year: 2026, month: 5, day: 10));
-      expect(range.checkOut, const BookingDate(year: 2026, month: 7, day: 1));
+      expect(range.checkOut, const BookingDate(year: 2026, month: 6, day: 9));
     });
 
     test('computeForFlexible calculates weekend, week, and month durations',
@@ -354,57 +363,6 @@ void main() {
         weekRange.checkOut,
         const BookingDate(year: 2026, month: 5, day: 21),
       );
-    });
-  });
-
-  group('8. AI Search Rejection & Parity (Section 11)', () {
-    test('maps all 6+ rejection codes to distinct title, description, and tips',
-        () {
-      const reasons = [
-        'QUERY_TOO_SHORT',
-        'LOW_INFORMATION_QUERY',
-        'UNSUPPORTED_DOMAIN',
-        'UNSUPPORTED_LOCATION',
-        'OFF_DOMAIN_DESTINATIONS',
-        'NO_APPROVED_LISTINGS',
-        'NO_VIABLE_MATCH',
-      ];
-
-      for (final reason in reasons) {
-        final copy = AiSearchRejectionCopy.resolve(reason);
-        expect(copy.title, isNotEmpty);
-        expect(copy.description, isNotEmpty);
-        expect(copy.tips, isNotEmpty);
-      }
-      expect(
-        AiSearchRejectionCopy.resolve('QUERY_TOO_SHORT').title,
-        contains('ngắn'),
-      );
-      expect(
-        AiSearchRejectionCopy.resolve('UNSUPPORTED_LOCATION').title,
-        contains('Vũng Tàu'),
-      );
-    });
-
-    test(
-        'SemanticSearchResponse identifies rejected mode and filters debug reasons',
-        () {
-      const response = SemanticSearchResponse(
-        query: 'abc',
-        mode: 'rejected',
-        reason: 'LOW_INFORMATION_QUERY',
-        message: 'Truy vấn chưa rõ',
-        items: [],
-      );
-      expect(response.isRejected, isTrue);
-
-      final filteredReasons = VillaSearchQueryNormalizer.filterMatchedReasons([
-        'Có hồ bơi riêng',
-        'semantic(0.84)',
-        'clip_score: 0.71',
-        'Sức chứa 10 khách',
-      ]);
-      expect(filteredReasons, ['Có hồ bơi riêng', 'Sức chứa 10 khách']);
     });
   });
 
@@ -473,6 +431,9 @@ void main() {
     testWidgets('MobileSpecSummary hides zero-valued specs', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
+          locale: Locale('vi'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: MobileSpecSummary(
               specs: VillaSpecs(
@@ -521,6 +482,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('vi'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SingleChildScrollView(
               child: Column(

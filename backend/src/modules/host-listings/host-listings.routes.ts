@@ -1,9 +1,14 @@
+/**
+ * Định tuyến HTTP quản lý chỗ ở của chủ nhà (`/api/host/listings`):
+ * - Áp dụng xác thực phiên (`authenticate`), phân quyền chủ nhà đã duyệt, bộ lọc tải tệp ảnh (`upload`) và kiểm chứng dữ liệu lịch phòng, giá, tiện ích, nội quy.
+ */
+
 import express from "express";
 import type { RequestHandler } from "express";
 import { body, param, query } from "express-validator";
 
 import { ApiError } from "../../common/api-error";
-import { listingApiStatuses } from "../../common/listing-mappers";
+import { listingApiStatuses } from "../listings/listing-mappers";
 import { isValidIsoDate, isValidTime } from "../../common/validation";
 import {
     addHostListingImages,
@@ -13,12 +18,14 @@ import {
     deleteHostListingImage,
     getHostListingCalendar,
     getHostListingDetail,
+    getHostListingReviewsById,
     getMyHostListings,
     replaceHostListingAmenities,
     setHostListingImageCover,
     updateHostListing,
     updateHostListingRules,
 } from "./host-listings.controller";
+import { restoreHostListing } from "./host-listings.controller";
 import { authenticate } from "../../middlewares/authenticate.middleware";
 import { requireHostOnly } from "../../middlewares/require-role.middleware";
 import { hostListingsMaxPageLimit } from "./host-listings.service";
@@ -259,6 +266,21 @@ router.patch(
 );
 
 router.get(
+    "/:listingId/reviews",
+    [
+        listingIdParamValidator,
+        query("page").optional().isInt({ min: 1 }).withMessage("page must be at least 1").toInt(),
+        query("limit")
+            .optional()
+            .isInt({ min: 1, max: hostListingsMaxPageLimit })
+            .withMessage(`limit must be between 1 and ${hostListingsMaxPageLimit}`)
+            .toInt(),
+        query("rating").optional().isInt({ min: 1, max: 5 }).withMessage("rating must be between 1 and 5").toInt(),
+    ],
+    getHostListingReviewsById,
+);
+
+router.get(
     "/:listingId",
     [listingIdParamValidator],
     getHostListingDetail,
@@ -346,6 +368,12 @@ router.delete(
     "/:listingId",
     [listingIdParamValidator],
     deleteHostListing,
+);
+
+router.post(
+    "/:listingId/restore",
+    [listingIdParamValidator],
+    restoreHostListing,
 );
 
 export default router;

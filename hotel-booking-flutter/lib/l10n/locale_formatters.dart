@@ -1,11 +1,13 @@
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
 import '../core/date/booking_date.dart';
+import '../features/blog/data/blog_repository.dart';
 import '../features/villas/domain/entities/villa.dart';
 import 'generated/app_localizations.dart';
 
 /// Structured localized copy for async error states, strictly separating
 /// device/network offline errors from backend server errors (Rule 5).
+/// Mô hình thông điệp lỗi đã bản địa hóa cho các trạng thái bất đồng bộ, tách biệt nghiêm ngặt lỗi mất mạng thiết bị với lỗi máy chủ (`HTTP 5xx`).
 class LocalizedErrorCopy {
   final String title;
   final String message;
@@ -26,10 +28,16 @@ class LocalizedErrorCopy {
 
 /// Locale-aware formatting & domain localization utilities for `vi`, `en`, and `ko`.
 ///
-/// Enforces Minh Thanh Villa business rules:
+/// Enforces The Palm business rules:
 /// - Currency ALWAYS remains integer VND (`₫`) across all locales; never converts currency.
 /// - Calendar dates ALWAYS use `Asia/Ho_Chi_Minh` pure dates (`BookingDate`, `YYYY-MM-DD`).
 /// - Server errors (`ServerFailure` / HTTP 5xx) are NEVER misclassified as offline/network errors.
+/// Tập hợp tiện ích định dạng ngày tháng, tiền tệ VND và bản địa hóa trạng thái nghiệp vụ cho `vi`, `en`, `ko`.
+///
+/// Tuân thủ nghiêm ngặt quy tắc cốt lõi của The Palm Villa:
+/// - Giá gốc luôn giữ nguyên số nguyên VND (`₫`), không bao giờ tự ý nhân chia tỷ giá khi đổi ngôn ngữ.
+/// - Ngày lịch luôn xử lý thuần túy theo múi giờ `Asia/Ho_Chi_Minh` (`BookingDate`, `YYYY-MM-DD`).
+/// - Lỗi máy chủ (`ServerFailure` / `HTTP 5xx`) tuyệt đối không bị phân loại nhầm thành lỗi mất kết nối mạng.
 abstract final class LocaleFormatters {
   static final NumberFormat _vndNumberFormat = NumberFormat('#,###', 'vi_VN');
 
@@ -95,12 +103,14 @@ abstract final class LocaleFormatters {
 
   /// Resolves [AppLocalizations] for a language code (`vi`, `en`, `ko`),
   /// defaulting to Vietnamese (`vi`) if an unsupported code is passed.
+  /// Phân giải đối tượng `AppLocalizations` cho mã ngôn ngữ `localeCode` (`vi`, `en`, `ko`), mặc định về `vi` nếu không được hỗ trợ.
   static AppLocalizations resolveL10n([String localeCode = 'vi']) {
     final normalized = normalizeLanguageCode(localeCode);
     return lookupAppLocalizations(Locale(normalized));
   }
 
   /// Normalizes a locale string (e.g. `vi_VN`, `en-US`, `ko_KR`) to `vi`, `en`, or `ko`.
+  /// Giải thuật chuẩn hóa mã ngôn ngữ đầu vào (như `vi_VN`, `en-US`, `ko_KR`) về đúng một trong ba mã chuẩn `vi`, `en` hoặc `ko`.
   static String normalizeLanguageCode(String? rawCode) {
     if (rawCode == null || rawCode.trim().isEmpty) return 'vi';
     final primary = rawCode.trim().toLowerCase().split(RegExp(r'[-_]')).first;
@@ -112,6 +122,7 @@ abstract final class LocaleFormatters {
 
   /// Formats an integer VND amount (e.g. `3500000` -> `"3.500.000 ₫"`).
   /// Never converts currency when switching locale; localizes only the missing-price fallback.
+  /// Định dạng số tiền nguyên dương theo đơn vị VND (`3.500.000 ₫`) hoặc trả về nhãn liên hệ báo giá khi `amount` rỗng hay không dương.
   static String formatVnd(
     int? amount, {
     String localeCode = 'vi',
@@ -128,6 +139,7 @@ abstract final class LocaleFormatters {
   /// - `vi`: `"Từ 3.500.000 ₫ / đêm"`
   /// - `en`: `"From 3.500.000 ₫ / night"`
   /// - `ko`: `"1박당 3.500.000 ₫부터"`
+  /// Định dạng giá khởi điểm mỗi đêm với nhãn đa ngôn ngữ nhưng vẫn bảo toàn số tiền nguyên VND.
   static String formatPriceFromPerNight(
     int? amount, {
     String localeCode = 'vi',
@@ -145,6 +157,7 @@ abstract final class LocaleFormatters {
   /// - `vi`: `"Thứ 7: 5.200.000 ₫"`
   /// - `en`: `"Sat: 5.200.000 ₫"`
   /// - `ko`: `"토요일: 5.200.000 ₫"`
+  /// Định dạng nhãn giá đêm Thứ Bảy theo ngôn ngữ hiện hành, trả về `null` nếu không có dữ liệu giá dương.
   static String? formatSaturdayPrice(
     int? amount, {
     String localeCode = 'vi',
@@ -162,6 +175,7 @@ abstract final class LocaleFormatters {
   /// - `vi`: `15/10/2026`
   /// - `en`: `Oct 15, 2026` (or `15/10/2026` when [numeric] is true)
   /// - `ko`: `2026. 10. 15.`
+  /// Định dạng đối tượng ngày thuần túy `BookingDate` sang biểu diễn ngày tháng phù hợp với từng ngôn ngữ (`vi`, `en`, `ko`).
   static String formatBookingDate(
     BookingDate date, {
     String localeCode = 'vi',
@@ -186,6 +200,7 @@ abstract final class LocaleFormatters {
   /// - `vi`: `15/10 (T5)`
   /// - `en`: `15/10 (Thu)`
   /// - `ko`: `10/15 (목)`
+  /// Định dạng ngày lưu trú kèm thứ trong tuần viết tắt phục vụ bảng chi tiết giá từng đêm.
   static String formatNightlyDateWithWeekday(
     BookingDate date, {
     String localeCode = 'vi',
@@ -207,13 +222,15 @@ abstract final class LocaleFormatters {
   }
 
   /// Formats calendar month and year header:
-  /// - `vi`: `Tháng 10, 2026`
+  /// - `vi`: `Tháng 10, 2026` (or `Tháng 10 2026` when [includeComma] is false)
   /// - `en`: `October 2026`
   /// - `ko`: `2026년 10월`
+  /// Định dạng tiêu đề tháng và năm cho bộ chọn lịch theo chuẩn văn hóa của từng ngôn ngữ.
   static String formatMonthYear(
     int year,
     int month, {
     String localeCode = 'vi',
+    bool includeComma = true,
   }) {
     final lang = normalizeLanguageCode(localeCode);
     final safeMonth = month.clamp(1, 12);
@@ -224,7 +241,44 @@ abstract final class LocaleFormatters {
         return '$year년 $safeMonth월';
       case 'vi':
       default:
-        return 'Tháng $safeMonth, $year';
+        return includeComma
+            ? 'Tháng $safeMonth, $year'
+            : 'Tháng $safeMonth $year';
+    }
+  }
+
+  /// Formats single month for month selectors:
+  /// - `vi`: `Tháng 10`
+  /// - `en`: `October`
+  /// - `ko`: `10월`
+  static String formatMonth(int month, {String localeCode = 'vi'}) {
+    final lang = normalizeLanguageCode(localeCode);
+    final safeMonth = month.clamp(1, 12);
+    switch (lang) {
+      case 'en':
+        return _enMonths[safeMonth - 1];
+      case 'ko':
+        return '$safeMonth월';
+      case 'vi':
+      default:
+        return 'Tháng $safeMonth';
+    }
+  }
+
+  /// Ordered weekday header labels (Monday through Sunday) for calendar grids:
+  /// - `vi`: `['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']`
+  /// - `en`: `['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']`
+  /// - `ko`: `['월', '화', '수', '목', '금', '토', '일']`
+  static List<String> weekdayHeaders({String localeCode = 'vi'}) {
+    final lang = normalizeLanguageCode(localeCode);
+    switch (lang) {
+      case 'en':
+        return _enWeekdays;
+      case 'ko':
+        return _koWeekdays;
+      case 'vi':
+      default:
+        return _viWeekdays;
     }
   }
 
@@ -232,6 +286,7 @@ abstract final class LocaleFormatters {
   /// - `vi`: `15/10/2026 – 17/10/2026 (2 đêm)`
   /// - `en`: `Oct 15, 2026 – Oct 17, 2026 (2 nights)`
   /// - `ko`: `2026. 10. 15. – 2026. 10. 17. (2박)`
+  /// Định dạng khoảng ngày lưu trú nửa mở `[checkIn, checkOut)` kèm tổng số đêm đã bản địa hóa số ít / số nhiều.
   static String formatStayRange(
     BookingDate checkIn,
     BookingDate checkOut, {
@@ -252,6 +307,7 @@ abstract final class LocaleFormatters {
   /// - 05:00..11:59 -> `"Chào buổi sáng!"` / `"Good morning!"` / `"좋은 아침입니다!"`
   /// - 12:00..17:59 -> `"Chào buổi chiều!"` / `"Good afternoon!"` / `"좋은 오후입니다!"`
   /// - 18:00..04:59 -> `"Chào buổi tối!"` / `"Good evening!"` / `"좋은 저녁입니다!"`
+  /// Giải thuật chọn câu chào theo khung giờ trong ngày (chuẩn hóa modulo 24 cho cả số âm): sáng (`05..11`), chiều (`12..17`) và tối (`18..04`).
   static String greetingForHour(
     int hour, {
     String localeCode = 'vi',
@@ -272,6 +328,10 @@ abstract final class LocaleFormatters {
   ///
   /// CRITICAL RULE 5: Never converts a backend server error (`ServerFailure` / HTTP 5xx)
   /// into a device offline / network connection error.
+  /// Giải thuật phân loại và bản địa hóa lỗi ứng dụng theo thứ tự ưu tiên chặt chẽ:
+  /// 1. Kiểm tra lỗi máy chủ (`ServerFailure`, `SERVER_ERROR`, `statusCode >= 500`) trước tiên để không bao giờ đổ lỗi nhầm cho mạng người dùng.
+  /// 2. Kiểm tra nhóm lỗi tầng truyền tải / ngoại tuyến (`OfflineFailure`, `TimeoutFailure`, `DnsFailure`, `ConnectionRefusedFailure`, `CertificateFailure`).
+  /// 3. Phân nhánh tiếp theo các mã trạng thái nghiệp vụ xác thực (`401`/`403`), không tìm thấy (`404`), giới hạn tần suất (`429`) và dữ liệu không hợp lệ (`409`/`422`).
   static LocalizedErrorCopy localizeFailure(
     Object error, {
     String localeCode = 'vi',
@@ -430,6 +490,7 @@ abstract final class LocaleFormatters {
 
   /// Localizes [VillaBadgeType] without altering the priority order
   /// (`featured > newVilla > nearBeach > saltwater > group`).
+  /// Bản địa hóa nhãn huy hiệu biệt thự `VillaBadgeType` mà không làm thay đổi thứ tự ưu tiên hiển thị.
   static String localizeVillaBadge(
     VillaBadgeType badge, {
     String localeCode = 'vi',
@@ -451,6 +512,7 @@ abstract final class LocaleFormatters {
   }
 
   /// Localizes booking state machine status codes (`pending_payment`, `paid`, `confirmed`, etc.).
+  /// Bản địa hóa các mã trạng thái trong máy trạng thái đơn đặt phòng (`pending_payment`, `paid`, `confirmed`, ...).
   static String localizeBookingStatus(
     String rawStatus, {
     String localeCode = 'vi',
@@ -493,6 +555,7 @@ abstract final class LocaleFormatters {
   }
 
   /// Localizes Host listing status codes (`draft`, `pending_approval`, `published`, `hidden`, `rejected`).
+  /// Bản địa hóa mã trạng thái bài đăng chỗ nghỉ trên cổng Chủ nhà (`draft`, `pending_approval`, `published`, `hidden`, `rejected`).
   static String localizeHostListingStatus(
     String rawStatus, {
     String localeCode = 'vi',
@@ -518,6 +581,7 @@ abstract final class LocaleFormatters {
   }
 
   /// Localizes Admin user account status codes (`active`, `suspended`, `inactive`).
+  /// Bản địa hóa mã trạng thái tài khoản người dùng trên cổng Quản trị (`active`, `suspended`, `inactive`).
   static String localizeAdminUserStatus(
     String rawStatus, {
     String localeCode = 'vi',
@@ -535,5 +599,231 @@ abstract final class LocaleFormatters {
       default:
         return rawStatus;
     }
+  }
+
+  /// Formats raw date string (e.g. `2026-10-27` or ISO8601) according to locale:
+  /// - `vi`: `27/10/2026`
+  /// - `en`: `Oct 27, 2026`
+  /// - `ko`: `2026. 10. 27.`
+  static String formatBlogDate(
+    String rawDate, {
+    String localeCode = 'vi',
+  }) {
+    final trimmed = rawDate.trim();
+    if (trimmed.isEmpty) return '';
+    final match = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})').firstMatch(trimmed);
+    if (match != null) {
+      final y = int.tryParse(match.group(1) ?? '') ?? 2026;
+      final m = int.tryParse(match.group(2) ?? '') ?? 1;
+      final d = int.tryParse(match.group(3) ?? '') ?? 1;
+      return formatBookingDate(
+        BookingDate(year: y, month: m, day: d),
+        localeCode: localeCode,
+      );
+    }
+    final parsed = DateTime.tryParse(trimmed);
+    if (parsed != null) {
+      return formatBookingDate(
+        BookingDate(year: parsed.year, month: parsed.month, day: parsed.day),
+        localeCode: localeCode,
+      );
+    }
+    return trimmed;
+  }
+
+  /// Formats read time in minutes according to locale:
+  /// - `vi`: `7 phút đọc`
+  /// - `en`: `7 mins read` (or `1 min read`)
+  /// - `ko`: `7분 읽기`
+  static String formatBlogReadTime(
+    int minutes, {
+    String rawReadTime = '',
+    String localeCode = 'vi',
+    AppLocalizations? l10n,
+  }) {
+    final effectiveL10n = l10n ?? resolveL10n(localeCode);
+    var mins = minutes;
+    if (mins <= 0 && rawReadTime.isNotEmpty) {
+      final match = RegExp(r'(\d+)').firstMatch(rawReadTime);
+      if (match != null) {
+        mins = int.tryParse(match.group(1) ?? '') ?? 0;
+      }
+    }
+    if (mins <= 0) mins = 5;
+    return effectiveL10n.blogReadMinutes(mins);
+  }
+
+  /// Localizes blog category name according to active locale.
+  static String localizeBlogCategory(
+    String category, {
+    String localeCode = 'vi',
+    AppLocalizations? l10n,
+  }) {
+    final effectiveL10n = l10n ?? resolveL10n(localeCode);
+    final trimmed = category.trim();
+    final lower = trimmed.toLowerCase();
+
+    if (lower == 'tất cả' || lower == 'all' || lower == '전체') {
+      return effectiveL10n.blogCategoryAll;
+    }
+    if (lower.contains('review') || lower.contains('đánh giá')) {
+      return effectiveL10n.blogCategoryReviews;
+    }
+    if (lower.contains('cẩm nang du lịch') ||
+        lower.contains('travel guide') ||
+        lower.contains('여행 가이드')) {
+      return effectiveL10n.blogCategoryTravelGuide;
+    }
+    if (lower.contains('chuyến đi') || lower.contains('trip guide')) {
+      return effectiveL10n.blogCategoryTripGuide;
+    }
+    if (lower.contains('kinh nghiệm đặt phòng') ||
+        lower.contains('booking tips')) {
+      return effectiveL10n.blogCategoryBookingTips;
+    }
+    if (lower.contains('khám phá địa phương') ||
+        lower.contains('khám phá') ||
+        lower.contains('local discovery')) {
+      return effectiveL10n.blogCategoryLocalDiscovery;
+    }
+    if (lower.contains('mẹo lưu trú') ||
+        lower.contains('mẹo') ||
+        lower.contains('stay tips')) {
+      return effectiveL10n.blogCategoryStayTips;
+    }
+    if (lower.contains('gần biển') || lower.contains('near beach')) {
+      return effectiveL10n.blogCategoryNearBeach;
+    }
+    if (lower.contains('checklist')) {
+      return effectiveL10n.blogCategoryBookingChecklist;
+    }
+    return trimmed;
+  }
+
+  /// Localizes blog author attribution.
+  static String localizeBlogAuthor(
+    String author, {
+    String localeCode = 'vi',
+    AppLocalizations? l10n,
+  }) {
+    final effectiveL10n = l10n ?? resolveL10n(localeCode);
+    final trimmed = author.trim();
+    if (trimmed.isEmpty ||
+        trimmed.contains('Ban biên tập') ||
+        trimmed.contains('The Palm') ||
+        trimmed.contains('Editorial')) {
+      return effectiveL10n.blogDefaultAuthor;
+    }
+    return trimmed;
+  }
+
+  /// Localizes blog destination / location name.
+  static String localizeBlogLocation(
+    String location, {
+    String localeCode = 'vi',
+  }) {
+    final lang = normalizeLanguageCode(localeCode);
+    final trimmed = location.trim();
+    final lower = trimmed.toLowerCase();
+    if (trimmed.isEmpty ||
+        lower.contains('vũng tàu') ||
+        lower.contains('vung tau')) {
+      if (lang == 'ko') return '붕따우';
+      if (lang == 'en') return 'Vung Tau';
+      return 'Vũng Tàu';
+    }
+    return trimmed;
+  }
+
+  /// Localizes blog post title for seeded & standard articles.
+  static String localizeBlogTitle(
+    BlogPost post, {
+    String localeCode = 'vi',
+  }) {
+    final lang = normalizeLanguageCode(localeCode);
+    if (lang == 'vi') return post.title;
+
+    if (post.slug.contains('thue-villa-vung-tau-gia-dinh') ||
+        post.title.contains('Kinh nghiệm chọn thuê')) {
+      return lang == 'ko'
+          ? '가족 및 단체 여행을 위한 붕따우 휴양 빌라 렌트 팁'
+          : 'Tips for renting vacation villas in Vung Tau for families and friend groups';
+    }
+    if (post.slug.contains('top-5-bai-bien') ||
+        post.title.contains('Top 5 bãi biển')) {
+      return lang == 'ko'
+          ? '붕따우에서 꼭 방문해야 할 가장 아름답고 평화로운 해변 Top 5'
+          : 'Top 5 most beautiful and peaceful beaches in Vung Tau to explore';
+    }
+    return post.title;
+  }
+
+  /// Localizes blog post excerpt for seeded & standard articles.
+  static String localizeBlogExcerpt(
+    BlogPost post, {
+    String localeCode = 'vi',
+  }) {
+    final lang = normalizeLanguageCode(localeCode);
+    if (lang == 'vi') return post.excerpt;
+
+    if (post.slug.contains('thue-villa-vung-tau-gia-dinh') ||
+        post.title.contains('Kinh nghiệm chọn thuê')) {
+      return lang == 'ko'
+          ? '빌라 예약 시 핵심 기준: 프라이빗 수영장, BBQ 시설, 해변 인접성 및 호스트 신뢰도.'
+          : 'Key criteria when booking villas: private pool, BBQ amenities, beachfront location, and host reputation.';
+    }
+    if (post.slug.contains('top-5-bai-bien') ||
+        post.title.contains('Top 5 bãi biển')) {
+      return lang == 'ko'
+          ? '바이저우, 바이두아의 원시적인 아름다움과 붕따우의 그림 같은 해안 명소를 만나보세요.'
+          : 'Discover the pristine beauty of Bai Dau, Bai Dua and scenic coastal check-in spots in Vung Tau.';
+    }
+    return post.excerpt;
+  }
+
+  /// Localizes an entire [BlogPost] model (title, excerpt, category, location, readTime, date, author).
+  static BlogPost localizeBlogPost(
+    BlogPost post, {
+    String localeCode = 'vi',
+    AppLocalizations? l10n,
+  }) {
+    final effectiveL10n = l10n ?? resolveL10n(localeCode);
+    final activeLang = normalizeLanguageCode(effectiveL10n.localeName);
+    final localizedTitle = localizeBlogTitle(post, localeCode: activeLang);
+    final localizedExcerpt = localizeBlogExcerpt(post, localeCode: activeLang);
+    final localizedCat = localizeBlogCategory(
+      post.category,
+      localeCode: activeLang,
+      l10n: effectiveL10n,
+    );
+    final localizedLoc = localizeBlogLocation(
+      post.location,
+      localeCode: activeLang,
+    );
+    final localizedRead = formatBlogReadTime(
+      post.readTimeMinutes,
+      rawReadTime: post.readTime,
+      localeCode: activeLang,
+      l10n: effectiveL10n,
+    );
+    final localizedDate = formatBlogDate(
+      post.publishedAt,
+      localeCode: activeLang,
+    );
+    final localizedAuthor = localizeBlogAuthor(
+      post.authorName,
+      localeCode: activeLang,
+      l10n: effectiveL10n,
+    );
+
+    return post.copyWith(
+      title: localizedTitle,
+      excerpt: localizedExcerpt,
+      category: localizedCat,
+      location: localizedLoc,
+      readTime: localizedRead,
+      publishedAt: localizedDate,
+      authorName: localizedAuthor,
+    );
   }
 }

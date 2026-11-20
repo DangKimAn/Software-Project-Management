@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/core/config/app_config.dart';
@@ -126,6 +128,57 @@ void main() {
         ),
         throwsStateError,
       );
+    });
+
+    test(
+        'config/prod.json and config/staging.json target local backend http://localhost:7000 and contain verified contacts',
+        () {
+      for (final fileName in ['prod.json', 'staging.json']) {
+        final candidates = <File>[
+          File('config/$fileName'),
+          File('hotel-booking-flutter/config/$fileName'),
+        ];
+        final configFile = candidates.firstWhere((f) => f.existsSync());
+        final json =
+            jsonDecode(configFile.readAsStringSync()) as Map<String, dynamic>;
+        final env = json['APP_ENV'] as String? ?? '';
+        final apiBaseUrl = json['API_BASE_URL'] as String? ?? '';
+        final allowLocal = json['ALLOW_LOCAL_API_IN_NON_DEV'] == 'true';
+        final hotline = json['HOTLINE_NUMBER'] as String? ?? '';
+        final zaloUrl = json['ZALO_OA_URL'] as String? ?? '';
+
+        expect(apiBaseUrl, 'http://localhost:7000',
+            reason:
+                '$fileName API_BASE_URL must target local backend http://localhost:7000 instead of unrelated external domains');
+        expect(apiBaseUrl.contains('minhthanhvilla'), isFalse);
+        expect(allowLocal, isTrue);
+
+        expect(
+          () => AppConfig.validate(
+            expectedEnvironment: env,
+            currentEnvironment: env,
+            currentApiBaseUrl: apiBaseUrl,
+            currentHotline: hotline,
+            currentZaloUrl: zaloUrl,
+            isReleaseBuild: true,
+            enforceVerifiedContactsInProd: true,
+            allowLocalApiOverride: allowLocal,
+          ),
+          returnsNormally,
+        );
+
+        expect(AppConfig.isPlaceholderHotline(hotline), isFalse,
+            reason:
+                '$fileName HOTLINE_NUMBER must not be a blocked placeholder');
+        expect(AppConfig.isVerifiedHotline(hotline), isTrue,
+            reason:
+                '$fileName HOTLINE_NUMBER must pass ContactService/AppConfig verification');
+        expect(AppConfig.isPlaceholderZaloUrl(zaloUrl), isFalse,
+            reason: '$fileName ZALO_OA_URL must not be a blocked placeholder');
+        expect(AppConfig.isVerifiedZaloUrl(zaloUrl), isTrue,
+            reason:
+                '$fileName ZALO_OA_URL must pass ContactService/AppConfig verification');
+      }
     });
   });
 }

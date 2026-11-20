@@ -2,11 +2,20 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_radii.dart';
 import '../../../../shared/widgets/app_image.dart';
 
+/// Khung trình chiếu ảnh vuốt ngang của thẻ biệt thự kèm chấm chỉ báo vị trí động.
+///
+/// Tự động lùi về ảnh tài nguyên nội bộ khi danh sách `imageUrls` rỗng để không bao giờ hiển thị khung trống.
 class PropertyImageCarousel extends StatefulWidget {
+  /// Danh sách đường dẫn ảnh mạng hoặc tài nguyên nội bộ của biệt thự.
   final List<String> imageUrls;
+
+  /// Tỷ lệ khung hình cố định của vùng ảnh (mặc định `4 / 3`).
   final double aspectRatio;
+
+  /// Bán kính bo góc cho khung cắt ảnh `ClipRRect`.
   final BorderRadius borderRadius;
 
+  /// Khởi tạo bộ trình chiếu ảnh `PropertyImageCarousel`.
   const PropertyImageCarousel({
     super.key,
     required this.imageUrls,

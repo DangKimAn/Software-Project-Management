@@ -1,9 +1,11 @@
-import type { Transaction } from "sequelize";
+import { Op, type Transaction } from "sequelize";
 
 import { ApiError } from "../../common/api-error";
+import Booking from "../../models/booking";
 import Coupon from "../../models/coupon";
 import CouponRedemption from "../../models/coupon-redemption";
 import type { ListingDocument } from "../../models/listing";
+import { syncEffectivePlatformFee } from "../admin/admin-fees.service";
 
 export type NightlyPriceSource = "basePrice" | "weekendPrice" | "calendar";
 
@@ -60,20 +62,36 @@ type ListingWithExtraGuestPricing = ListingDocument & {
     extraGuestFee?: number | null;
 };
 
+/**
+ * Giải thuật chuyển đổi an toàn giá trị đầu vào sang kiểu số, mặc định trả về `0` khi giá trị là `null` hoặc `undefined`.
+ */
 const toNumber = (value: unknown) => Number(value ?? 0);
 
+/**
+ * Giải thuật chuẩn hóa mã giảm giá: loại bỏ khoảng trắng thừa và chuyển sang chữ in hoa (`UPPERCASE`); trả về `undefined` nếu rỗng.
+ */
 const normalizeCouponCode = (code?: string) => {
     const trimmed = code?.trim();
 
     return trimmed ? trimmed.toUpperCase() : undefined;
 };
 
+/**
+ * Giải thuật nhận diện ngày lưu trú cuối tuần theo chuẩn lịch UTC (`00:00:00.000Z`),
+ * trả về `true` nếu rơi vào Thứ Bảy (`weekday === 6`) hoặc Chủ Nhật (`weekday === 0`).
+ */
 const isWeekendDate = (date: string) => {
     const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
 
     return weekday === 0 || weekday === 6;
 };
 
+/**
+ * Giải thuật phân giải đơn giá lưu trú cho từng đêm theo cơ chế ưu tiên 3 tầng:
+ * 1. Tầng lịch ghi đè (`calendar`): nếu chủ nhà thiết lập `priceOverride` cho ngày `date`, lấy trực tiếp giá này.
+ * 2. Tầng cuối tuần (`weekendPrice`): nếu ngày thuộc cuối tuần và căn hộ có cấu hình `weekendPrice` khác `null`.
+ * 3. Tầng cơ sở (`basePrice`): áp dụng mức giá ngày thường mặc định của căn hộ.
+ */
 const getNightlyPrice = (
     listing: ListingDocument,
     date: string,
@@ -101,6 +119,12 @@ const getNightlyPrice = (
     };
 };
 
+/**
+ * Giải thuật tính phụ phí khách vượt định mức tiêu chuẩn theo tổng số đêm lưu trú:
+ * - Số khách tiêu chuẩn bao gồm trong giá gốc: `includedGuests = max(1, floor(includedGuests ?? maxGuests))`.
+ * - Số khách vượt chuẩn: `extraGuests = max(0, guestCount - includedGuests)`.
+ * - Tổng phụ phí khách vượt theo đêm: `round(extraGuests * feePerGuestPerNight * totalNights)`.
+ */
 const getExtraGuestPricing = (listing: ListingDocument, guestCount: number, totalNights: number) => {
     const pricedListing = listing as ListingWithExtraGuestPricing;
     const includedGuests = Math.max(1, Math.floor(toNumber(pricedListing.includedGuests ?? listing.maxGuests)));
@@ -115,6 +139,14 @@ const getExtraGuestPricing = (listing: ListingDocument, guestCount: number, tota
     };
 };
 
+/**
+ * Giải thuật xác thực hạn mức coupon khóa bi quan (`FOR UPDATE`) và tính mức chiết khấu cho đơn đặt phòng:
+ * 1. Khóa dòng `Coupon` (`SELECT ... FOR UPDATE`) trong `transaction` để tuần tự hóa kiểm tra hạn mức dưới tải đồng thời.
+ * 2. Kiểm định hiệu lực thời gian (`startDate <= now <= endDate`), trần lượt dùng toàn cục (`usedCount < totalLimit`),
+ *    giá trị đơn hàng tối thiểu (`preDiscountTotal >= minOrderValue`) và hạn mức trên từng người dùng (`redemptionCount + pendingHoldCount < limitPerUser`,
+ *    tính cả các đơn `pending_payment` còn hạn khóa `lockedUntil > now` để chống lạm dụng đặt nhiều đơn song song).
+ * 3. Tính mức giảm theo phần trăm hoặc số tiền cố định, áp trần `maxDiscountAmount` và kẹp trong đoạn `[0, preDiscountTotal]`.
+ */
 const getCouponDiscount = async (
     userId: number,
     couponCode: string | undefined,
@@ -170,7 +202,26 @@ const getCouponDiscount = async (
             transaction,
         });
 
-        if (redemptionCount >= coupon.limitPerUser) {
+        let pendingHoldCount = 0;
+        const canQueryBookingCount =
+            Boolean((transaction as { commit?: unknown })?.commit) ||
+            Object.prototype.hasOwnProperty.call(Booking, "count");
+
+        if (canQueryBookingCount) {
+            pendingHoldCount = await Booking.count({
+                where: {
+                    guestUserId: userId,
+                    couponId: coupon.couponId,
+                    status: "pending_payment",
+                    lockedUntil: {
+                        [Op.gt]: now,
+                    },
+                },
+                transaction,
+            });
+        }
+
+        if (redemptionCount + pendingHoldCount >= coupon.limitPerUser) {
             throw new ApiError(422, "Coupon usage limit has been reached");
         }
     }
@@ -190,6 +241,14 @@ const getCouponDiscount = async (
     };
 };
 
+/**
+ * Giải thuật tổng hợp bảng kê chi tiết giá đặt phòng (`BookingPricingResult`):
+ * 1. Tính giá từng đêm lưu trú `nightlyPrices` (kết hợp `priceOverride` trên lịch, giá cuối tuần và giá cơ sở) để suy ra `subtotalAmount`.
+ * 2. Cộng phụ phí khách vượt chuẩn theo đêm `extraGuestFeeAmount` vào `subtotalAmount` thành `accommodationAmount`.
+ * 3. Cộng phí dọn dẹp `cleaningFeeAmount`, phụ phí vượt ngưỡng khách `surchargeAmount` (khi `guestCount > surchargeIncludedGuests`),
+ *    và phí dịch vụ nền tảng `serviceFeeAmount = round(accommodationAmount * effectiveServiceFeePct / 100)` thành `preDiscountTotal`.
+ * 4. Áp dụng chiết khấu coupon hợp lệ `discountAmount` và chốt tổng thanh toán `totalAmount = max(0, preDiscountTotal - discountAmount)`.
+ */
 export const calculateBookingPricing = async (params: {
     userId: number;
     listing: ListingDocument;
@@ -221,7 +280,17 @@ export const calculateBookingPricing = async (params: {
         (listing as ListingWithExtraGuestPricing).includedGuests ?? listing.maxGuests,
     )));
     const surchargeAmount = guestCount > surchargeIncludedGuests ? rawSurcharge : 0;
-    const serviceFeeAmount = Math.round(accommodationAmount * (toNumber(listing.serviceFeePct) / 100));
+    let effectiveServiceFeePct = 10;
+    if (listing.serviceFeePct != null && listing.serviceFeePct !== undefined) {
+        effectiveServiceFeePct = toNumber(listing.serviceFeePct);
+    } else {
+        try {
+            effectiveServiceFeePct = await syncEffectivePlatformFee();
+        } catch {
+            effectiveServiceFeePct = 10;
+        }
+    }
+    const serviceFeeAmount = Math.round(accommodationAmount * (effectiveServiceFeePct / 100));
     const preDiscountTotal = accommodationAmount + cleaningFeeAmount + surchargeAmount + serviceFeeAmount;
     const normalizedCouponCode = normalizeCouponCode(couponCode);
     const { coupon, discountAmount } = await getCouponDiscount(

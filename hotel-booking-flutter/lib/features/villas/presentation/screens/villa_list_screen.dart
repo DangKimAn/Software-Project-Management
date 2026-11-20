@@ -5,19 +5,29 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/animations/fade_slide_in.dart';
 import '../../../../shared/animations/shimmer_loading.dart';
 import '../../../../shared/animations/source_animations.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/vung_tau_map_picker.dart';
 import '../../../search/presentation/widgets/source_search_bar.dart';
 import '../widgets/property_card.dart';
 
+/// Màn hình danh sách tìm kiếm và khám phá biệt thự tích hợp thanh lọc, bản đồ Vũng Tàu trực tiếp và phân trang.
+///
 /// Complete port of `Source goc/frontend/src/views/pages/Search/SearchPage.tsx`.
 class VillaListScreen extends ConsumerStatefulWidget {
-  const VillaListScreen({super.key});
+  /// Tham số truy vấn URL khởi tạo khi mở trực tiếp trang tìm kiếm có bộ lọc trên đường dẫn.
+  final Map<String, String> initialQueryParameters;
+
+  /// Khởi tạo màn hình danh sách biệt thự `VillaListScreen`.
+  const VillaListScreen({
+    super.key,
+    this.initialQueryParameters = const <String, String>{},
+  });
 
   @override
   ConsumerState<VillaListScreen> createState() => _VillaListScreenState();
@@ -28,6 +38,7 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
   late final ScrollVisibilityTracker _scrollTracker;
   bool _isHeaderVisible = true;
   bool _showInlineMap = false;
+  bool _hydratedFromUrl = false;
 
   @override
   void initState() {
@@ -40,6 +51,42 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
       },
     );
     _scrollController.addListener(_onScroll);
+    if (widget.initialQueryParameters.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _hydratedFromUrl) return;
+        _hydratedFromUrl = true;
+        final next = VillaFilterState.fromQueryParameters(
+          widget.initialQueryParameters,
+          base: ref.read(villaFilterProvider),
+        );
+        ref.read(villaFilterProvider.notifier).state = next;
+        if (next.lat != null && next.lng != null) {
+          setState(() => _showInlineMap = true);
+        }
+      });
+    }
+  }
+
+  /// Giải thuật đồng bộ hai chiều trạng thái bộ lọc với thanh địa chỉ trình duyệt (`URL Query Sync`):
+  /// Chỉ cập nhật `context.replace(...)` khi tập tham số mới khác với query hiện tại trên `GoRouterState`,
+  /// giúp người dùng F5 hoặc sao chép liên kết tìm kiếm đều giữ nguyên mọi tiêu chí lọc và phân trang.
+  void _syncFilterToUrl(VillaFilterState next) {
+    try {
+      final router = GoRouter.maybeOf(context);
+      if (router == null) return;
+      final currentUri = GoRouterState.of(context).uri;
+      final path = currentUri.path.isNotEmpty ? currentUri.path : '/tim-kiem';
+      final nextParams = next.toQueryParameters();
+      final nextUri = Uri(
+        path: path,
+        queryParameters: nextParams.isEmpty ? null : nextParams,
+      );
+      if (currentUri.toString() != nextUri.toString()) {
+        Router.neglect(context, () => router.replace<void>(nextUri.toString()));
+      }
+    } catch (_) {
+      // Bỏ qua trong môi trường kiểm thử widget không gắn GoRouterState.
+    }
   }
 
   void _onScroll() {
@@ -59,9 +106,16 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<VillaFilterState>(villaFilterProvider, (prev, next) {
+      if (prev != next) {
+        _syncFilterToUrl(next);
+      }
+    });
     final paginatedAsync = ref.watch(villaPaginatedProvider);
     final filter = ref.watch(villaFilterProvider);
     final favorites = ref.watch(favoritesProvider);
+    final activeL10n =
+        lookupAppLocalizations(Locale(ref.watch(localeProvider)));
 
     return Scaffold(
       backgroundColor: AppColors.surfaceBase,
@@ -112,8 +166,10 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                     ),
                                     label: Text(
                                       filter.activeFilterCount > 0
-                                          ? 'Bộ lọc (${filter.activeFilterCount})'
-                                          : 'Bộ lọc',
+                                          ? activeL10n.searchFilterActiveBtn(
+                                              filter.activeFilterCount,
+                                            )
+                                          : activeL10n.searchFilterBtn,
                                     ),
                                   ),
                                   OutlinedButton.icon(
@@ -127,18 +183,9 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                     ),
                                     label: Text(
                                       _showInlineMap
-                                          ? 'Ẩn bản đồ Vũng Tàu'
-                                          : 'Bản đồ Vũng Tàu',
+                                          ? activeL10n.searchHideMapBtn
+                                          : activeL10n.searchShowMapBtn,
                                     ),
-                                  ),
-                                  OutlinedButton.icon(
-                                    onPressed: () => context.push('/ai-search'),
-                                    icon: const Icon(
-                                      LucideIcons.sparkles,
-                                      size: 16,
-                                      color: AppColors.iconStrong,
-                                    ),
-                                    label: const Text('Tìm bằng AI'),
                                   ),
                                   if (filter.searchQuery.isNotEmpty ||
                                       filter.locationGroup != null ||
@@ -151,9 +198,9 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                             .read(villaFilterProvider.notifier)
                                             .state = const VillaFilterState();
                                       },
-                                      child: const Text(
-                                        'Xóa toàn bộ lọc',
-                                        style: TextStyle(
+                                      child: Text(
+                                        activeL10n.searchClearAllBtn,
+                                        style: const TextStyle(
                                           color: AppColors.primary,
                                           fontWeight: FontWeight.w700,
                                         ),
@@ -178,8 +225,24 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                           (s) => s.copyWith(
                                             lat: lat,
                                             lng: lng,
-                                            radius: VungTauMapConstants
-                                                .defaultRadiusMeters,
+                                            radius: s.radius ??
+                                                VungTauMapConstants
+                                                    .defaultRadiusMeters,
+                                            clearLocationGroup: true,
+                                            page: 1,
+                                          ),
+                                        );
+                                  },
+                                  onRadiusChanged: (radius) {
+                                    ref
+                                        .read(villaFilterProvider.notifier)
+                                        .update(
+                                          (s) => s.copyWith(
+                                            lat: s.lat ??
+                                                VungTauMapConstants.defaultLat,
+                                            lng: s.lng ??
+                                                VungTauMapConstants.defaultLng,
+                                            radius: radius,
                                             clearLocationGroup: true,
                                             page: 1,
                                           ),
@@ -208,10 +271,9 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 48),
                             child: AppEmptyView(
-                              title: 'Không tìm thấy biệt thự phù hợp',
-                              description:
-                                  'Hãy thử xóa bộ lọc hoặc mở rộng khu vực tìm kiếm tại Vũng Tàu.',
-                              actionText: 'Đặt lại bộ lọc',
+                              title: activeL10n.emptyList,
+                              description: activeL10n.emptyListDesc,
+                              actionText: activeL10n.ctaResetFilter,
                               onAction: () {
                                 ref.read(villaFilterProvider.notifier).state =
                                     const VillaFilterState();
@@ -232,7 +294,9 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Tìm thấy ${pagination.totalItems} nơi lưu trú tại Vũng Tàu',
+                                    activeL10n.searchFoundStaysCount(
+                                      pagination.totalItems,
+                                    ),
                                     style: AppTypography.cardTitle.copyWith(
                                       fontSize: 16,
                                     ),
@@ -240,6 +304,9 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                   const SizedBox(height: 14),
                                   LayoutBuilder(
                                     builder: (context, constraints) {
+                                      // Giải thuật chia cột lưới đáp ứng theo chiều rộng vùng chứa (Responsive Grid Column Sizing):
+                                      // Tự động chuyển đổi 3 cột (>= 960px), 2 cột (>= 620px) hoặc 1 cột trên thiết bị di động,
+                                      // tính chính xác bề rộng mỗi thẻ cardW = (maxWidth - gap * (cols - 1)) / cols kèm hiệu ứng xuất hiện lệch pha.
                                       final cols = constraints.maxWidth >= 960
                                           ? 3
                                           : constraints.maxWidth >= 620
@@ -268,8 +335,8 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                                 child: PropertyCard(
                                                   villa: villa,
                                                   isFavorite: isFav,
-                                                  onFavoriteToggle: () {
-                                                    ref
+                                                  onFavoriteToggle: () async {
+                                                    final err = await ref
                                                         .read(
                                                           favoritesProvider
                                                               .notifier,
@@ -277,6 +344,16 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                                         .toggleFavorite(
                                                           villa.id,
                                                         );
+                                                    if (err != null &&
+                                                        context.mounted) {
+                                                      ScaffoldMessenger.of(
+                                                        context,
+                                                      ).showSnackBar(
+                                                        SnackBar(
+                                                          content: Text(err),
+                                                        ),
+                                                      );
+                                                    }
                                                   },
                                                   onTap: () => context.push(
                                                     '/villa/${villa.id}',
@@ -300,6 +377,14 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                             WrapCrossAlignment.center,
                                         children: [
                                           OutlinedButton(
+                                            style: OutlinedButton.styleFrom(
+                                              minimumSize: const Size(40, 40),
+                                              padding: EdgeInsets.zero,
+                                              shape: const CircleBorder(),
+                                              side: const BorderSide(
+                                                color: AppColors.border,
+                                              ),
+                                            ),
                                             onPressed: pagination.hasPrev
                                                 ? () {
                                                     ref
@@ -314,15 +399,26 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                                         );
                                                   }
                                                 : null,
-                                            child: const Text('Trang trước'),
+                                            child: const Text('<'),
                                           ),
                                           Text(
-                                            'Trang ${pagination.page} / ${pagination.totalPages}',
+                                            activeL10n.paginationPageOf(
+                                              pagination.page,
+                                              pagination.totalPages,
+                                            ),
                                             style: const TextStyle(
                                               fontWeight: FontWeight.w700,
                                             ),
                                           ),
                                           OutlinedButton(
+                                            style: OutlinedButton.styleFrom(
+                                              minimumSize: const Size(40, 40),
+                                              padding: EdgeInsets.zero,
+                                              shape: const CircleBorder(),
+                                              side: const BorderSide(
+                                                color: AppColors.border,
+                                              ),
+                                            ),
                                             onPressed: pagination.hasNext
                                                 ? () {
                                                     ref
@@ -337,7 +433,7 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                                                         );
                                                   }
                                                 : null,
-                                            child: const Text('Trang sau'),
+                                            child: const Text('>'),
                                           ),
                                         ],
                                       ),
@@ -369,8 +465,6 @@ class _VillaListScreenState extends ConsumerState<VillaListScreen> {
                       ),
                     ),
                   ),
-
-                  const SliverToBoxAdapter(child: AppFooter()),
                 ],
               ),
             ),

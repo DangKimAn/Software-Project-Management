@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý thành viên tham gia hội thoại trực tuyến kèm vai trò và mốc thời gian đọc tin nhắn gần nhất.
+ */
 import {
     CreationOptional,
     DataTypes,

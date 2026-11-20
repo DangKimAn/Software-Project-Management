@@ -42,8 +42,12 @@ ResponseBody _jsonResponse(
 void main() {
   group('AdminModerationPolicy — Role guard & moderation business rules', () {
     test(
-      'distinguishes guest, host, moderator, and admin permissions accurately',
+      'distinguishes guest, host, and admin permissions accurately',
       () {
+        expect(
+          AdminModerationPolicy.supportedRoles,
+          equals(const ['guest', 'host', 'admin']),
+        );
         expect(
           AdminModerationPolicy.isAdminRole(
             primaryRole: 'admin',
@@ -54,19 +58,12 @@ void main() {
         expect(
           AdminModerationPolicy.isAdminRole(
             primaryRole: 'guest',
-            roles: const ['moderator'],
+            roles: const ['guest'],
           ),
           isFalse,
         );
         expect(
-          AdminModerationPolicy.isModeratorOrAdminRole(
-            primaryRole: 'guest',
-            roles: const ['moderator'],
-          ),
-          isTrue,
-        );
-        expect(
-          AdminModerationPolicy.isModeratorOrAdminRole(
+          AdminModerationPolicy.isAdminRole(
             primaryRole: 'host',
             roles: const ['host'],
           ),
@@ -151,7 +148,7 @@ void main() {
             isActorAdmin: true,
             actorId: '1',
             targetUserId: '1',
-            nextRole: 'moderator',
+            nextRole: 'host',
           ),
           'Bạn không thể tự hạ quyền Admin của chính mình.',
         );
@@ -160,9 +157,108 @@ void main() {
             isActorAdmin: true,
             actorId: '1',
             targetUserId: '55',
-            nextRole: 'moderator',
+            nextRole: 'host',
           ),
           isNull,
+        );
+        expect(
+          AdminModerationPolicy.validateRoleMutation(
+            isActorAdmin: true,
+            actorId: '1',
+            targetUserId: '55',
+            nextRole: 'moderator',
+          ),
+          'Vai trò không hợp lệ.',
+        );
+      },
+    );
+
+    test(
+      'sorts admin users strictly by guest -> host -> admin and then Vietnamese alphabetical name order',
+      () {
+        final unsorted = <Map<String, dynamic>>[
+          {
+            'userId': '1',
+            'fullName': 'Quản trị viên The Palm Villa',
+            'email': 'admin@minhthanhvilla.com',
+            'role': 'admin',
+          },
+          {
+            'userId': '11',
+            'fullName': 'Đặng Kim An',
+            'email': 'n23dccn001@student.ptithcm.edu.vn',
+            'role': 'guest',
+          },
+          {
+            'userId': '12',
+            'fullName': 'NGUYỄN VĂN A',
+            'email': 'dangkiman41005@gmail.com',
+            'role': 'host',
+          },
+          {
+            'userId': '4',
+            'fullName': 'ĐẶNG KIM AN',
+            'email': 'guest@gmail.com',
+            'role': 'guest',
+          },
+          {
+            'userId': '2',
+            'fullName': 'Nguyễn Minh Thành',
+            'email': 'host.thanh@minhthanhvilla.com',
+            'roles': ['guest', 'host'],
+          },
+          {
+            'userId': '8',
+            'fullName': 'An Bình',
+            'email': 'anbinh@example.com',
+            'role': 'guest',
+          },
+          {
+            'userId': '9',
+            'fullName': 'Ăn Khang',
+            'email': 'ankhang@example.com',
+            'role': 'guest',
+          },
+          {
+            'userId': '10',
+            'fullName': 'Dũng Lê',
+            'email': 'dungle@example.com',
+            'role': 'guest',
+          },
+          {
+            'userId': '15',
+            'fullName': 'Lê Hoàng Long',
+            'email': 'long@example.com',
+            'role': 'guest',
+          },
+        ];
+
+        final sorted = AdminModerationPolicy.sortAdminUsers(unsorted);
+        expect(
+          sorted.map((u) => '${u['userId']}').toList(),
+          equals([
+            // Guests: An Bình < Ăn Khang < Dũng Lê < ĐẶNG KIM AN (guest@...) < Đặng Kim An (n23...) < Lê Hoàng Long
+            '8',
+            '9',
+            '10',
+            '4',
+            '11',
+            '15',
+            // Hosts: Nguyễn Minh Thành < NGUYỄN VĂN A
+            '2',
+            '12',
+            // Admins: Quản trị viên The Palm Villa
+            '1',
+          ]),
+        );
+
+        // Also handles NFD combining diacritics identically to precomposed NFC
+        expect(
+          AdminModerationPolicy.compareVietnameseNames(
+            'Đa\u0306\u0323ng Kim An',
+            'ĐẶNG KIM AN',
+          ),
+          0,
         );
       },
     );
@@ -311,6 +407,11 @@ void main() {
                   'grossRevenue': 82000000,
                   'platformRevenue': 12300000,
                   'hostRevenue': 69700000,
+                  'pendingStayRevenue': 8300000,
+                  'pendingStayPlatformRevenue': 800000,
+                  'pendingStayHostRevenue': 7500000,
+                  'pendingStayBookingCount': 1,
+                  'refundedAmount': 1500000,
                 },
                 'series': [
                   {
@@ -375,7 +476,12 @@ void main() {
         expect(stats.grossRevenue, 82000000);
         expect(stats.platformRevenue, 12300000);
         expect(stats.hostRevenue, 69700000);
+        expect(stats.pendingStayRevenue, 8300000);
+        expect(stats.pendingStayHostRevenue, 7500000);
+        expect(stats.pendingStayBookingCount, 1);
+        expect(stats.refundedAmount, 1500000);
         expect(stats.bookings, 17);
+        expect(stats.successfulBookings, 14);
         expect(stats.pendingBookings, 2);
         expect(stats.paidBookings, 5);
         expect(stats.completedBookings, 9);

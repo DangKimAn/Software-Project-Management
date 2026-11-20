@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý thực thể tài khoản người dùng cốt lõi: định danh, mật khẩu băm, trạng thái KYC và khóa bảo mật.
+ */
 import {
     CreationOptional,
     DataTypes,
@@ -17,7 +20,7 @@ import {
     SimpleFilter,
 } from "./mysql-helpers";
 
-export const userRoleValues = ["guest", "host", "moderator", "admin"] as const;
+export const userRoleValues = ["guest", "host", "admin"] as const;
 export type UserRole = (typeof userRoleValues)[number];
 
 export const userStatusValues = ["active", "inactive", "blocked", "suspended", "deleted", "locked"] as const;

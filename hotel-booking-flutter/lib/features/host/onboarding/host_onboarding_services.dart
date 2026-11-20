@@ -3,21 +3,31 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../app/di/providers.dart';
+import '../../../app/theme/app_colors.dart';
+import '../../../app/theme/app_radii.dart';
+import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/app_typography.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/security/secure_storage_service.dart';
+import '../../auth/presentation/view_models/auth_notifier.dart';
 import '../domain/host_models.dart';
 
 // =============================================================================
 // 1. PII-SAFE LOG SANITIZER FOR HOST ONBOARDING & KYC
 // =============================================================================
 
-/// Sanitizes any log message in the Host Onboarding & KYC flow so that PII
-/// (names, emails, phone numbers, CCCD/CMND/Passport numbers, addresses,
-/// file paths, or tokens) is never written to logs.
+/// Bộ lọc làm sạch dữ liệu định danh cá nhân (PII) trên toàn bộ dòng nhật ký của quy trình đăng ký Chủ nhà (Host KYC).
+///
+/// Giải thuật khử nhạy cảm đa biểu thức chính quy (Multi-Pass PII Redaction):
+/// Kết hợp `AppLogger.sanitize` với 5 lớp lọc tuần tự nhằm che giấu các trường JSON nhạy cảm,
+/// địa chỉ email, số điện thoại Việt Nam, số CCCD/CMND/Hộ chiếu và đường dẫn tệp nội bộ trước khi ghi log.
 abstract final class HostOnboardingLogSanitizer {
   static final RegExp _emailPattern = RegExp(
     r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}',
@@ -36,6 +46,7 @@ abstract final class HostOnboardingLogSanitizer {
     r'([A-Za-z]:\\[^\s",]+|/Users/[^\s",]+|/home/[^\s",]+|/storage/[^\s",]+|/data/[^\s",]+)',
   );
 
+  /// Trả về chuỗi đã được che giấu toàn bộ thông tin định danh cá nhân (PII) từ chuỗi gốc `raw`.
   static String sanitize(String raw) {
     final baseSanitized = AppLogger.sanitize(raw);
     return baseSanitized
@@ -49,10 +60,12 @@ abstract final class HostOnboardingLogSanitizer {
         .replaceAll(_filePathPattern, '[REDACTED_PATH]');
   }
 
+  /// Ghi nhật ký mức thông tin (`INFO`) sau khi đã lọc sạch PII.
   static void logInfo(String message) {
     AppLogger.i(sanitize(message), tag: 'HostOnboarding');
   }
 
+  /// Ghi nhật ký mức lỗi (`ERROR`) sau khi đã lọc sạch PII trên cả `message` và `error`.
   static void logError(String message, {Object? error}) {
     final safeMsg = sanitize(message);
     final safeErr = error != null ? sanitize(error.toString()) : null;
@@ -64,12 +77,14 @@ abstract final class HostOnboardingLogSanitizer {
 // 2. PERMISSION SERVICE FOR KYC DOCUMENT / CAMERA / MEDIA ACCESS
 // =============================================================================
 
+/// Nguồn truy cập tệp chứng từ KYC trên thiết bị của người dùng.
 enum HostKycFileSource {
   deviceFile,
   photoLibrary,
   cameraScan,
 }
 
+/// Trạng thái cấp quyền truy cập thiết bị phục vụ tải chứng từ KYC.
 enum HostKycPermissionStatus {
   granted,
   denied,
@@ -77,36 +92,149 @@ enum HostKycPermissionStatus {
   restricted,
 }
 
+/// Kết quả kiểm tra hoặc xin quyền truy cập tệp/máy ảnh cho quy trình KYC Chủ nhà.
 class HostKycPermissionResult {
   final HostKycPermissionStatus status;
   final String? messageVi;
 
+  /// Khởi tạo kết quả kiểm tra quyền truy cập thiết bị.
   const HostKycPermissionResult({
     required this.status,
     this.messageVi,
   });
 
+  /// Cho biết quyền truy cập đã được người dùng chấp thuận hay chưa.
   bool get isGranted => status == HostKycPermissionStatus.granted;
 }
 
+/// Hợp đồng dịch vụ xin quyền truy cập máy ảnh và thư viện tệp trong quy trình đăng ký Chủ nhà.
 abstract class HostOnboardingPermissionService {
-  Future<HostKycPermissionResult> requestPermission(HostKycFileSource source);
+  // CONFLICT-RESOLVED: Giữ tham số đặt tên tùy chọn `context` từ `origin/develop` để tương thích cả lời gọi truyền `BuildContext` lẫn lời gọi không truyền tham số phụ.
+  /// Yêu cầu cấp quyền truy cập tương ứng với nguồn chọn tệp `source`.
+  Future<HostKycPermissionResult> requestPermission(
+    HostKycFileSource source, {
+    BuildContext? context,
+  });
 }
 
+/// Triển khai mặc định của `HostOnboardingPermissionService` ủy quyền hộp thoại quyền cho trình chọn tệp hệ thống.
 class DefaultHostOnboardingPermissionService
     implements HostOnboardingPermissionService {
+  /// Khởi tạo dịch vụ kiểm quyền mặc định.
   const DefaultHostOnboardingPermissionService();
+
+  static const String kCameraPermissionPrefKey =
+      'kyc_camera_permission_granted';
 
   @override
   Future<HostKycPermissionResult> requestPermission(
-    HostKycFileSource source,
-  ) async {
+    HostKycFileSource source, {
+    BuildContext? context,
+  }) async {
+    if (source == HostKycFileSource.cameraScan) {
+      final prefs = await SharedPreferences.getInstance();
+      final alreadyGranted = prefs.getBool(kCameraPermissionPrefKey) ?? false;
+      if (alreadyGranted) {
+        return const HostKycPermissionResult(
+          status: HostKycPermissionStatus.granted,
+        );
+      }
+
+      if (context != null && context.mounted) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              backgroundColor: AppColors.surfaceBase,
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.s8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      LucideIcons.camera,
+                      size: 24,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s12),
+                  const Expanded(
+                    child: Text(
+                      'Yêu cầu mở Máy ảnh',
+                      style: AppTypography.cardTitle,
+                    ),
+                  ),
+                ],
+              ),
+              content: const Text(
+                'The Palm cần sử dụng Máy ảnh của bạn để chụp / quét mặt giấy tờ xác minh (CCCD / Hộ chiếu) rõ nét phục vụ xác minh tài khoản Chủ nhà.\n\nBạn có muốn mở máy ảnh ngay bây giờ không?',
+                style: AppTypography.body,
+              ),
+              actionsPadding: const EdgeInsets.only(
+                right: AppSpacing.s16,
+                bottom: AppSpacing.s16,
+              ),
+              actions: [
+                TextButton(
+                  key: const Key('kyc_camera_permission_deny_btn'),
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: Text(
+                    'Để sau',
+                    style: AppTypography.buttonText.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  key: const Key('kyc_camera_permission_grant_btn'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.surfaceBase,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadii.pill),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.s20,
+                      vertical: 10,
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Mở Máy ảnh'),
+                ),
+              ],
+            );
+          },
+        );
+
+        if (confirmed == true) {
+          await prefs.setBool(kCameraPermissionPrefKey, true);
+          return const HostKycPermissionResult(
+            status: HostKycPermissionStatus.granted,
+          );
+        } else {
+          return const HostKycPermissionResult(
+            status: HostKycPermissionStatus.denied,
+            messageVi:
+                'Ứng dụng cần quyền mở Máy ảnh để chụp trực tiếp giấy tờ xác minh. Vui lòng thử lại và nhấn "Mở Máy ảnh".',
+          );
+        }
+      }
+    }
+
     return const HostKycPermissionResult(
       status: HostKycPermissionStatus.granted,
     );
   }
 }
 
+/// Provider cung cấp `HostOnboardingPermissionService` cho quy trình KYC.
 final hostOnboardingPermissionProvider =
     Provider<HostOnboardingPermissionService>((ref) {
   return const DefaultHostOnboardingPermissionService();
@@ -116,21 +244,25 @@ final hostOnboardingPermissionProvider =
 // 3. STRICT BACKEND-PARITY VALIDATOR FOR KYC & DOCUMENTS
 // =============================================================================
 
+/// Kết quả kiểm định tổng thể hồ sơ KYC bao gồm lỗi tóm tắt, lỗi từng trường nhập và lỗi từng ô tải tệp.
 class HostKycValidationResult {
   final String? summaryError;
   final Map<String, String> fieldErrors;
   final Map<String, String> slotErrors;
 
+  /// Khởi tạo kết quả kiểm định biểu mẫu KYC.
   const HostKycValidationResult({
     this.summaryError,
     this.fieldErrors = const {},
     this.slotErrors = const {},
   });
 
+  /// Cho biết toàn bộ trường thông tin và các ô tệp đính kèm đều hợp lệ hay không.
   bool get isValid =>
       summaryError == null && fieldErrors.isEmpty && slotErrors.isEmpty;
 }
 
+/// Bộ kiểm định dữ liệu biểu mẫu và chữ ký tệp nhị phân KYC đồng bộ nghiêm ngặt với Backend.
 abstract final class HostOnboardingValidator {
   static final RegExp _vnPhoneRegex = RegExp(r'^(0|\+84)[0-9]{9}$');
   static final RegExp _emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
@@ -153,9 +285,60 @@ abstract final class HostOnboardingValidator {
     return null;
   }
 
+  /// Chuẩn hóa họ tên tiếng Việt bằng cách khử dấu thanh, quy đổi `đ`/`Đ` sang `d`, chuyển chữ thường và gộp khoảng trắng thừa để đối chiếu OCR.
+  static String normalizeVietnameseName(String text) {
+    if (text.isEmpty) return '';
+    var result = text.trim().toLowerCase();
+    result = result.replaceAll('đ', 'd').replaceAll('Đ', 'd');
+
+    const aChars = 'àáạảãâầấậẩẫăằắặẳẵ';
+    const eChars = 'èéẹẻẽêềếệểễ';
+    const iChars = 'ìíịỉĩ';
+    const oChars = 'òóọỏõôồốộổỗơờớợởỡ';
+    const uChars = 'ùúụủũưừứựửữ';
+    const yChars = 'ỳýỵỷỹ';
+
+    for (final c in aChars.split('')) {
+      result = result.replaceAll(c, 'a');
+    }
+    for (final c in eChars.split('')) {
+      result = result.replaceAll(c, 'e');
+    }
+    for (final c in iChars.split('')) {
+      result = result.replaceAll(c, 'i');
+    }
+    for (final c in oChars.split('')) {
+      result = result.replaceAll(c, 'o');
+    }
+    for (final c in uChars.split('')) {
+      result = result.replaceAll(c, 'u');
+    }
+    for (final c in yChars.split('')) {
+      result = result.replaceAll(c, 'y');
+    }
+
+    return result.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  /// Đối sánh họ tên người dùng nhập `enteredName` với họ tên trích xuất từ AI OCR `aiExtractedName` (không phân biệt hoa thường và dấu tiếng Việt).
+  static bool isNameMatching({
+    required String enteredName,
+    required String? aiExtractedName,
+  }) {
+    if (aiExtractedName == null || aiExtractedName.trim().isEmpty) {
+      return true;
+    }
+    final normEntered = normalizeVietnameseName(enteredName);
+    if (normEntered.isEmpty) {
+      return true;
+    }
+    final normAi = normalizeVietnameseName(aiExtractedName);
+    return normEntered == normAi;
+  }
+
   static String? validateContactEmail(String? raw) {
     final trimmed = (raw ?? '').trim();
-    if (trimmed.isEmpty) return null;
+    if (trimmed.isEmpty) return 'Vui lòng nhập email liên hệ.';
     if (trimmed.length > 255 || !_emailRegex.hasMatch(trimmed)) {
       return 'Email liên hệ không đúng định dạng (ví dụ: host@example.com).';
     }
@@ -192,21 +375,10 @@ abstract final class HostOnboardingValidator {
     return null;
   }
 
-  /// Checks whether a non-zero buffer matches one of the allowed KYC magic headers
-  /// (`JPEG`, `PNG`, `WebP`, `PDF`) or is a synthetic zero-filled test buffer.
+  /// Checks whether a buffer matches one of the allowed KYC magic headers
+  /// (`JPEG`, `PNG`, `WebP`, `PDF`). Zero-filled or spoofed files are rejected.
   static bool _hasValidOrSyntheticMagicBytes(Uint8List bytes) {
     if (bytes.isEmpty) return false;
-
-    // Allow synthetic all-zero buffers used in unit tests
-    bool allZero = true;
-    final sampleLen = bytes.length < 32 ? bytes.length : 32;
-    for (int i = 0; i < sampleLen; i++) {
-      if (bytes[i] != 0) {
-        allZero = false;
-        break;
-      }
-    }
-    if (allZero) return true;
 
     // JPEG: FF D8 FF
     if (bytes.length >= 3 &&
@@ -250,12 +422,44 @@ abstract final class HostOnboardingValidator {
     return false;
   }
 
-  /// Validates a picked KYC document file against backend multer & R2 rules:
-  /// - Filename valid, <= 255 chars, no path traversal or control chars
-  /// - Extension in `.jpg`, `.jpeg`, `.png`, `.webp`, `.pdf`
-  /// - MIME type in `image/jpeg`, `image/png`, `image/webp`, `application/pdf`
-  /// - Size > 0 and <= 5MB (`5 * 1024 * 1024` bytes)
-  /// - Magic bytes check against spoofed executables/scripts
+  static const Set<String> _allowedIdentityExtensions = {
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.webp',
+  };
+
+  // Giải thuật kiểm tra chữ ký byte ảnh thật (JPEG/PNG/WebP) cho giấy tờ định danh, loại trừ tệp PDF:
+  static bool _hasValidImageMagicBytes(Uint8List bytes) {
+    if (bytes.isEmpty) return false;
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF) {
+      return true;
+    }
+    if (bytes.length >= 4 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return true;
+    }
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Kiểm tra tệp chứng từ KYC tổng quát `file` theo quy tắc tên tệp an toàn (chống path traversal), phần mở rộng, dung lượng 5MB và chữ ký byte thật.
   static String? validatePickedFile(HostPickedFile file) {
     final baseError = validateKycPickedFile(file);
     if (baseError != null) return baseError;
@@ -283,7 +487,40 @@ abstract final class HostOnboardingValidator {
     return null;
   }
 
-  /// Validates the entire KYC form and returns field-level, slot-level, and summary errors.
+  // Giải thuật kiểm tra tệp ảnh giấy tờ định danh KYC (CCCD mặt trước/sau, Hộ chiếu, GPLX):
+  // CONFLICT-RESOLVED: Chỉ chấp nhận ảnh JPG, PNG, WebP <= 5MB; từ chối PDF khớp hoàn toàn với bộ lọc image/* của Backend.
+  /// Kiểm tra tệp ảnh giấy tờ định danh cá nhân `file` đảm bảo chữ ký byte là ảnh thật (`JPG`, `PNG`, `WebP`) và không vượt 5MB.
+  static String? validateIdentityPickedFile(HostPickedFile file) {
+    final baseError = validateIdentityKycPickedFile(file);
+    if (baseError != null) return baseError;
+
+    final cleanName = file.name.trim().split(RegExp(r'[/\\]')).last;
+    if (cleanName.isEmpty ||
+        cleanName.length > 255 ||
+        cleanName.contains('..') ||
+        RegExp(r'[\x00\r\n]').hasMatch(cleanName)) {
+      return 'Tên tệp không hợp lệ hoặc vượt quá 255 ký tự.';
+    }
+
+    final dotIndex = cleanName.lastIndexOf('.');
+    if (dotIndex > 0) {
+      final ext = cleanName.substring(dotIndex).toLowerCase();
+      if (ext == '.pdf') {
+        return 'Giấy tờ định danh "${file.name}" không hỗ trợ tệp PDF. Vui lòng chọn ảnh chụp JPG, PNG hoặc WebP rõ nét.';
+      }
+      if (!_allowedIdentityExtensions.contains(ext)) {
+        return 'Phần mở rộng tệp "$ext" không được hỗ trợ cho giấy tờ định danh. Chỉ chấp nhận .jpg, .jpeg, .png hoặc .webp.';
+      }
+    }
+
+    if (!_hasValidImageMagicBytes(file.bytes)) {
+      return 'Nội dung tệp "${file.name}" không phải ảnh JPG, PNG hoặc WebP hợp lệ.';
+    }
+
+    return null;
+  }
+
+  /// Kiểm định toàn diện biểu mẫu nộp KYC và trả về chi tiết lỗi từng trường, từng ô chứng từ cùng thông báo tóm tắt.
   static HostKycValidationResult validateSubmission({
     required String contactName,
     required String contactEmail,
@@ -335,7 +572,7 @@ abstract final class HostOnboardingValidator {
       case HostDocumentType.passport:
         if (identitySingle == null) {
           slotErrors['identitySingle'] =
-              'Vui lòng tải lên ảnh hoặc PDF Hộ chiếu (Passport).';
+              'Vui lòng tải lên ảnh Hộ chiếu (Passport) định dạng JPG, PNG hoặc WebP.';
         }
         if (identityFront != null || identityBack != null) {
           slotErrors['identityFront'] =
@@ -374,7 +611,10 @@ abstract final class HostOnboardingValidator {
     for (final entry in slotFiles.entries) {
       final file = entry.value;
       if (file != null) {
-        final fileErr = validatePickedFile(file);
+        final isIdentity = entry.key != 'businessLicense';
+        final fileErr = isIdentity
+            ? validateIdentityPickedFile(file)
+            : validatePickedFile(file);
         if (fileErr != null) {
           slotErrors[entry.key] = fileErr;
         }
@@ -400,6 +640,7 @@ abstract final class HostOnboardingValidator {
 // 4. ERROR CLASSIFIER & STRICT API STATUS GUARD
 // =============================================================================
 
+/// Phân loại nguyên nhân lỗi trong quy trình đăng ký Chủ nhà và tải chứng từ KYC.
 enum HostOnboardingErrorKind {
   offline,
   timeout,
@@ -410,6 +651,7 @@ enum HostOnboardingErrorKind {
   server, // 5xx or other API errors
 }
 
+/// Kết quả phân loại lỗi đăng ký Chủ nhà kèm thông điệp tiếng Việt và bản đồ lỗi theo trường/ô tệp.
 class HostOnboardingClassifiedError {
   final HostOnboardingErrorKind kind;
   final int? statusCode;
@@ -417,6 +659,7 @@ class HostOnboardingClassifiedError {
   final Map<String, String> fieldErrors;
   final Map<String, String> slotErrors;
 
+  /// Khởi tạo đối tượng lỗi đã phân loại của quy trình đăng ký Host.
   const HostOnboardingClassifiedError({
     required this.kind,
     required this.messageVi,
@@ -425,13 +668,23 @@ class HostOnboardingClassifiedError {
     this.slotErrors = const {},
   });
 
+  /// Cho biết thiết bị đang mất kết nối mạng thực sự (`SocketException` hoặc `connectionError`).
   bool get isOffline => kind == HostOnboardingErrorKind.offline;
+
+  /// Cho biết yêu cầu vượt quá thời gian chờ phản hồi (`timeout`).
   bool get isTimeout => kind == HostOnboardingErrorKind.timeout;
+
+  /// Cho biết tệp tải lên vượt ngưỡng giới hạn dung lượng 5MB của máy chủ (`HTTP 413`).
   bool get isPayloadTooLarge => kind == HostOnboardingErrorKind.payloadTooLarge;
+
+  /// Cho biết dữ liệu biểu mẫu hoặc tệp chứng từ không hợp lệ (`HTTP 400`/`422`).
   bool get isValidation => kind == HostOnboardingErrorKind.validation;
+
+  /// Cho biết phiên xác thực đã hết hạn hoặc tài khoản không đủ quyền (`HTTP 401`/`403`).
   bool get isUnauthorized => kind == HostOnboardingErrorKind.unauthorized;
 }
 
+/// Bộ phân loại lỗi chuyên biệt cho luồng KYC Chủ nhà và chốt chặn chống tự thăng cấp trạng thái duyệt.
 abstract final class HostOnboardingErrorClassifier {
   static const Set<String> _knownSlotKeys = {
     'identityFront',
@@ -514,8 +767,7 @@ abstract final class HostOnboardingErrorClassifier {
     return rawMsg.trim();
   }
 
-  /// Classifies any error without swallowing it and without mislabeling server
-  /// errors as device offline errors.
+  /// Phân loại ngoại lệ `error` sang `HostOnboardingClassifiedError`, tách biệt rõ lỗi ngoại tuyến thiết bị khỏi lỗi máy chủ và ánh xạ chi tiết lỗi từng ô chứng từ.
   static HostOnboardingClassifiedError classify(
     Object error, {
     String fallbackMessage = 'Đã xảy ra lỗi khi xử lý yêu cầu trên máy chủ.',
@@ -667,16 +919,26 @@ abstract final class HostOnboardingErrorClassifier {
     }
 
     final rawText = error.toString().replaceFirst('Exception: ', '').trim();
+    final lower = rawText.toLowerCase();
+    if (lower.contains('camera_access_denied') ||
+        lower.contains('camera access denied') ||
+        (lower.contains('camera') && lower.contains('denied')) ||
+        lower.contains('permission denied')) {
+      return const HostOnboardingClassifiedError(
+        kind: HostOnboardingErrorKind.validation,
+        messageVi:
+            'Quyền truy cập Máy ảnh đã bị từ chối. Vui lòng cấp quyền trong Cài đặt thiết bị để tiếp tục.',
+      );
+    }
     return HostOnboardingClassifiedError(
       kind: HostOnboardingErrorKind.server,
       messageVi: rawText.isNotEmpty ? rawText : fallbackMessage,
     );
   }
 
-  /// Ensures form submission NEVER self-promotes status to `approved`.
-  /// When a user submits a KYC form (`POST /api/host/applications`), the resulting
-  /// status must reflect a pending review state (`pending`, `supplement_required`,
-  /// or `rejected`), never `approved` unless verified via `GET /api/host/applications/me`.
+  /// Đảm bảo phản hồi sau khi nộp đơn KYC không bao giờ tự thăng cấp trạng thái lên `approved`.
+  ///
+  /// Khi người dùng gửi biểu mẫu `POST /api/host/applications`, trạng thái trả về phải luôn là trạng thái chờ xét duyệt (`pending`, `supplementRequired` hoặc `rejected`), trừ khi được xác nhận chính thức qua `GET /api/host/applications/me`.
   static HostApplicationStatus resolvePostSubmitStatus(
     HostApplicationRecord? submittedRecord,
   ) {
@@ -696,11 +958,10 @@ abstract final class HostOnboardingErrorClassifier {
 // 5. CONSENT-GATED DRAFT STORAGE (NO UNCONSENTED PII / NO LONG-TERM PLAINTEXT)
 // =============================================================================
 
-/// Represents a restored draft for `DangKyHostScreen`.
-/// By design, identity document files/bytes/paths and ID numbers are NEVER stored.
-/// Contact PII (`contactName`, `contactEmail`, `phone`, `businessAddress`) is
-/// ONLY stored and restored when `consentToSaveContactPii == true` AND within
-/// the short TTL window (24 hours).
+/// Dữ liệu bản nháp khôi phục cho màn hình đăng ký Host (`DangKyHostScreen`).
+///
+/// Theo thiết kế bảo mật: tệp giấy tờ định danh, mảng byte, đường dẫn tệp và số CCCD/Hộ chiếu không bao giờ được lưu cục bộ.
+/// Thông tin liên hệ nhạy cảm (`contactName`, `contactEmail`, `phone`, `businessAddress`) chỉ được lưu và khôi phục khi người dùng đồng ý rõ ràng (`consentToSaveContactPii == true`) và còn trong thời hạn hiệu lực ngắn (24 giờ).
 class HostOnboardingDraftData {
   final HostProfileType profileType;
   final HostDocumentType documentType;
@@ -713,6 +974,7 @@ class HostOnboardingDraftData {
   final String note;
   final DateTime? updatedAt;
 
+  /// Khởi tạo đối tượng dữ liệu bản nháp đăng ký Host.
   const HostOnboardingDraftData({
     this.profileType = HostProfileType.individual,
     this.documentType = HostDocumentType.cccd,
@@ -726,6 +988,7 @@ class HostOnboardingDraftData {
     this.updatedAt,
   });
 
+  /// Kiểm tra xem bản nháp có chứa dữ liệu khác mặc định cần khôi phục hay không.
   bool get hasAnyRestorableData =>
       profileType != HostProfileType.individual ||
       documentType != HostDocumentType.cccd ||
@@ -736,9 +999,12 @@ class HostOnboardingDraftData {
       note.isNotEmpty;
 }
 
+/// Giao diện dịch vụ lưu trữ bản nháp biểu mẫu đăng ký Host có kiểm soát đồng thuận PII.
 abstract class HostOnboardingDraftService {
+  /// Tải bản nháp hiện có nếu còn trong thời hạn hiệu lực tính tới mốc `now`.
   Future<HostOnboardingDraftData?> loadDraft({DateTime? now});
 
+  /// Lưu bản nháp biểu mẫu đăng ký Host tuân thủ cờ đồng thuận `consentToSaveContactPii`.
   Future<void> saveDraft({
     required HostProfileType profileType,
     required HostDocumentType documentType,
@@ -752,19 +1018,19 @@ abstract class HostOnboardingDraftService {
     DateTime? now,
   });
 
+  /// Xóa vĩnh viễn bản nháp đăng ký Host khỏi bộ nhớ cục bộ.
   Future<void> clearDraft();
 }
 
-/// Implementation backed by an in-memory map or `SharedPreferences` that strictly
-/// enforces:
-/// 1. Never persists identity documents, file paths, or ID numbers.
-/// 2. Never persists or restores sensitive contact PII (`contactName`,
-///    `contactEmail`, `phone`, `businessAddress`, or PII-bearing `note`) when
-///    `consentToSaveContactPii == false`.
-/// 3. Automatically expires and purges drafts older than [maxDraftAge] (24h)
-///    so plaintext data is never kept long-term.
+/// Triển khai lưu trữ bản nháp dựa trên `SharedPreferences` hoặc bộ nhớ tạm với 3 chốt bảo mật:
+/// 1. Tuyệt đối không lưu tệp giấy tờ định danh, đường dẫn tệp hoặc số giấy tờ tùy thân.
+/// 2. Tuyệt đối không lưu hay khôi phục thông tin liên hệ PII (`contactName`, `contactEmail`, `phone`, `businessAddress` hoặc chuỗi PII trong `note`) khi `consentToSaveContactPii == false`.
+/// 3. Tự động hết hạn và dọn sạch bản nháp quá thời hạn `maxDraftAge` (24 giờ) để không lưu trữ văn bản thuần dài hạn.
 class DefaultHostOnboardingDraftService implements HostOnboardingDraftService {
+  /// Khóa lưu trữ cơ sở cho bản nháp KYC phiên bản v2.
   static const String storageKey = 'host_onboarding_kyc_draft_v2';
+
+  /// Thời gian sống tối đa của bản nháp cục bộ (24 giờ).
   static const Duration maxDraftAge = Duration(hours: 24);
 
   static final RegExp _piiInNotePattern = RegExp(
@@ -773,49 +1039,62 @@ class DefaultHostOnboardingDraftService implements HostOnboardingDraftService {
 
   final SharedPreferences? _prefs;
   final Map<String, String> _fallbackMemoryStore;
+  final String? _userId;
 
+  /// Khởi tạo dịch vụ lưu trữ bản nháp phân tách theo `userId`.
   DefaultHostOnboardingDraftService({
     SharedPreferences? prefs,
     Map<String, String>? memoryStore,
+    String? userId,
   })  : _prefs = prefs,
-        _fallbackMemoryStore = memoryStore ?? <String, String>{};
+        _fallbackMemoryStore = memoryStore ?? <String, String>{},
+        _userId = userId?.trim();
 
-  /// Pre-populates raw JSON into the draft store (useful for testing tampered
-  /// or legacy unconsented plaintext drafts).
+  /// Khóa lưu trữ thực tế được cô lập theo định danh tài khoản hiện tại.
+  String get effectiveStorageKey {
+    final uid = _userId;
+    if (uid != null && uid.isNotEmpty) {
+      return '${storageKey}_$uid';
+    }
+    return storageKey;
+  }
+
+  /// Ghi trực tiếp dữ liệu JSON thô `rawMap` vào kho lưu trữ để phục vụ kiểm thử bảo mật bản nháp.
   Future<void> writeRawJsonForTest(Map<String, dynamic> rawMap) async {
     final encoded = jsonEncode(rawMap);
     final prefs = _prefs;
     if (prefs != null) {
-      await prefs.setString(storageKey, encoded);
+      await prefs.setString(effectiveStorageKey, encoded);
     } else {
-      _fallbackMemoryStore[storageKey] = encoded;
+      _fallbackMemoryStore[effectiveStorageKey] = encoded;
     }
   }
 
   String? _readRawString() {
     final prefs = _prefs;
     if (prefs != null) {
-      return prefs.getString(storageKey);
+      return prefs.getString(effectiveStorageKey);
     }
-    return _fallbackMemoryStore[storageKey];
+    return _fallbackMemoryStore[effectiveStorageKey];
   }
 
   Future<void> _writeRawString(String value) async {
     final prefs = _prefs;
     if (prefs != null) {
-      await prefs.setString(storageKey, value);
+      await prefs.setString(effectiveStorageKey, value);
     } else {
-      _fallbackMemoryStore[storageKey] = value;
+      _fallbackMemoryStore[effectiveStorageKey] = value;
     }
   }
 
+  /// Xóa bản nháp hiện tại khỏi `SharedPreferences` hoặc bộ nhớ dự phòng.
   @override
   Future<void> clearDraft() async {
     final prefs = _prefs;
     if (prefs != null) {
-      await prefs.remove(storageKey);
+      await prefs.remove(effectiveStorageKey);
     } else {
-      _fallbackMemoryStore.remove(storageKey);
+      _fallbackMemoryStore.remove(effectiveStorageKey);
     }
   }
 
@@ -825,6 +1104,11 @@ class DefaultHostOnboardingDraftService implements HostOnboardingDraftService {
     return trimmed.replaceAll(_piiInNotePattern, '').trim();
   }
 
+  // Giải thuật khôi phục bản nháp có kiểm soát TTL 24 giờ và đồng thuận PII:
+  // Bước 1: Giải mã JSON; nếu cấu trúc hỏng hoặc vượt quá 24 giờ kể từ updatedAt thì xóa trắng bản nháp ngay lập tức.
+  // Bước 2: Nếu cờ consentToSaveContactPii == false, lọc bỏ chuỗi PII trong ghi chú và nếu phát hiện các khóa nhạy cảm bị chèn trái phép thì ghi đè lại bản nháp sạch.
+  // Bước 3: Chỉ trả về họ tên, email, số điện thoại và địa chỉ kinh doanh khi người dùng đã cấp quyền đồng thuận hợp lệ.
+  /// Tải và kiểm duyệt an toàn bản nháp đăng ký Host từ bộ nhớ cục bộ.
   @override
   Future<HostOnboardingDraftData?> loadDraft({DateTime? now}) async {
     final raw = _readRawString();
@@ -921,6 +1205,7 @@ class DefaultHostOnboardingDraftService implements HostOnboardingDraftService {
     }
   }
 
+  /// Lưu trạng thái bước hiện tại và các trường thông tin được phép lưu theo cờ `consentToSaveContactPii`.
   @override
   Future<void> saveDraft({
     required HostProfileType profileType,
@@ -955,32 +1240,40 @@ class DefaultHostOnboardingDraftService implements HostOnboardingDraftService {
   }
 }
 
+/// Riverpod provider cung cấp `HostOnboardingDraftService` gắn với tài khoản đang đăng nhập.
 final hostOnboardingDraftServiceProvider =
     Provider<HostOnboardingDraftService>((ref) {
-  return DefaultHostOnboardingDraftService();
+  String? userId;
+  try {
+    userId = ref.watch(authNotifierProvider.select((s) => s.valueOrNull?.id));
+  } catch (_) {}
+  return DefaultHostOnboardingDraftService(userId: userId);
 });
 
-/// Holds the latest submitted application record in memory during the current
-/// session so that navigating from `/tro-thanh-host/dang-ky` to
-/// `/tro-thanh-host/trang-thai` can immediately reflect the non-approved status
-/// while re-fetching the canonical state from `GET /api/host/applications/me`.
+/// Lưu tạm bản ghi hồ sơ vừa nộp trong phiên làm việc hiện tại để màn hình `/tro-thanh-host/trang-thai` hiển thị tức thời trạng thái chờ duyệt trong lúc tải lại dữ liệu chuẩn từ `GET /api/host/applications/me`.
 final hostLastSubmittedApplicationProvider =
-    StateProvider<HostApplicationRecord?>((ref) => null);
+    StateProvider<HostApplicationRecord?>((ref) {
+  try {
+    ref.watch(authNotifierProvider.select((s) => s.valueOrNull?.id));
+  } catch (_) {}
+  return null;
+});
 
 // =============================================================================
 // 6. DEDICATED HOST ONBOARDING API SERVICE (`/api/host/applications`)
 // =============================================================================
 
-/// Dedicated API client for the Host Onboarding & KYC flow (`/tro-thanh-host`,
-/// `/tro-thanh-host/dang-ky`, `/tro-thanh-host/trang-thai`) backed by `Dio` and
-/// `SecureStorageService`.
+/// Dịch vụ HTTP chuyên biệt cho luồng đăng ký và xét duyệt KYC Chủ nhà (`/tro-thanh-host`, `/tro-thanh-host/dang-ky`, `/tro-thanh-host/trang-thai`).
 class HostOnboardingApiService {
   final Dio _dio;
 
+  /// Khởi tạo `HostOnboardingApiService` với thực thể `dio` tùy chọn.
   HostOnboardingApiService({Dio? dio}) : _dio = dio ?? createDefaultDio();
 
+  /// Thực thể `Dio` đang được sử dụng để gửi yêu cầu mạng.
   Dio get dio => _dio;
 
+  /// Khởi tạo `Dio` mặc định tự động đính kèm Bearer token từ `SecureStorageService`.
   static Dio createDefaultDio({SecureStorageService? secureStorage}) {
     final storage = secureStorage ?? const SecureStorageService();
     final dio = Dio(
@@ -1029,7 +1322,7 @@ class HostOnboardingApiService {
     return <String, dynamic>{};
   }
 
-  /// `GET /api/host/applications/me`
+  /// Truy vấn dữ liệu thô hồ sơ KYC hiện tại của người dùng qua `GET /api/host/applications/me` (trả về `null` nếu HTTP 404).
   Future<Map<String, dynamic>?> getMyApplication() async {
     try {
       final response = await _dio.get<dynamic>('/api/host/applications/me');
@@ -1042,15 +1335,14 @@ class HostOnboardingApiService {
     }
   }
 
-  /// Typed wrapper for `GET /api/host/applications/me`.
+  /// Truy vấn hồ sơ KYC đã định kiểu `HostApplicationRecord` qua `GET /api/host/applications/me`.
   Future<HostApplicationRecord?> getMyApplicationRecord() async {
     final map = await getMyApplication();
     if (map == null) return null;
     return HostApplicationRecord.fromApiResponse(map);
   }
 
-  /// `POST /api/host/applications` using `multipart/form-data`.
-  /// Never auto-promotes status to `approved` upon form submission.
+  /// Gửi hồ sơ đăng ký KYC dạng `multipart/form-data` lên `POST /api/host/applications`, đồng thời chặn tự thăng cấp trạng thái sang `approved`.
   Future<HostApplicationRecord> submitKycApplication(
     HostKycSubmissionDto dto, {
     void Function(int sent, int total)? onSendProgress,
@@ -1083,8 +1375,16 @@ class HostOnboardingApiService {
       documents: parsed.documents,
     );
   }
+
+  /// Hủy đơn đăng ký Host đang chờ duyệt và xóa chứng từ đã tải lên qua `POST /api/host/applications/cancel`.
+  Future<bool> cancelApplication() async {
+    final response = await _dio.post<dynamic>('/api/host/applications/cancel');
+    return response.statusCode == 200;
+  }
 }
 
+/// Riverpod provider cung cấp `HostOnboardingApiService` dùng chung `DioClient` của ứng dụng.
 final hostOnboardingApiProvider = Provider<HostOnboardingApiService>((ref) {
-  return HostOnboardingApiService();
+  final dioClient = ref.watch(dioClientProvider);
+  return HostOnboardingApiService(dio: dioClient.dio);
 });

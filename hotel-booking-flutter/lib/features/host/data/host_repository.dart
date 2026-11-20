@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http_parser/http_parser.dart';
+import '../../../app/di/providers.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/security/secure_storage_service.dart';
@@ -7,6 +9,7 @@ import '../../auth/presentation/view_models/auth_notifier.dart';
 import '../domain/host_models.dart';
 import '../services/host_file_picker_service.dart';
 
+/// Provider đọc vai trò hiện tại của người dùng đã xác thực phục vụ kiểm soát quyền thao tác Host.
 final hostCurrentUserRoleProvider = Provider<String?>((ref) {
   try {
     final authState = ref.watch(authNotifierProvider);
@@ -17,12 +20,14 @@ final hostCurrentUserRoleProvider = Provider<String?>((ref) {
   } catch (_) {
     // Fallback when authNotifierProvider is not initialized in isolated widget tests
   }
-  return 'host';
+  return null;
 });
 
+/// Provider cung cấp kho lưu trữ `HostRepository` gắn kèm bộ kiểm tra vai trò thời gian thực.
 final hostRepositoryProvider = Provider<HostRepository>((ref) {
+  final dioClient = ref.watch(dioClientProvider);
   return HostRepository(
-    HostRepository.createDefaultDio(),
+    dioClient.dio,
     roleResolver: () => ref.read(hostCurrentUserRoleProvider),
   );
 });
@@ -32,11 +37,18 @@ class _HostDioHolder {
   const _HostDioHolder(this.dio);
 }
 
+/// Kho lưu trữ trung tâm điều phối toàn bộ giao tiếp REST API của phân hệ Chủ nhà (Host Portal & Onboarding).
+///
+/// Chịu trách nhiệm xác thực quyền Chủ nhà trước khi ghi dữ liệu, tải tệp trực tiếp lên Cloudflare R2,
+/// phân tích ảnh AI Vision, thẩm định dải ngày lịch hàng loạt (`validateCalendarBulkDates`),
+/// tự động gom trang dữ liệu lớn (`getMyListings`, `getAllHostBookings`, `getMyPayouts`),
+/// đồng bộ Google Sheets và phân loại lỗi thông qua `classifyHostError`.
 class HostRepository {
   final _HostDioHolder _client;
   final HostR2DirectUploader _r2Uploader;
   final String? Function()? _roleResolver;
 
+  /// Khởi tạo `HostRepository` từ `Dio` hoặc `DioClient`, bộ tải R2 `r2Uploader` và hàm giải mã vai trò `roleResolver`.
   HostRepository(
     dynamic clientOrDio, {
     HostR2DirectUploader? r2Uploader,
@@ -45,6 +57,7 @@ class HostRepository {
         _r2Uploader = r2Uploader ?? HostR2DirectUploader(),
         _roleResolver = roleResolver;
 
+  /// Thể hiện `Dio` dùng để thực thi các yêu cầu HTTP tới máy chủ ứng dụng.
   Dio get dio => _client.dio;
 
   static Dio _extractDio(dynamic clientOrDio) {
@@ -61,6 +74,7 @@ class HostRepository {
     return createDefaultDio();
   }
 
+  /// Tạo thể hiện `Dio` mặc định có interceptor tự động đính kèm JWT Bearer token từ `SecureStorageService`.
   static Dio createDefaultDio({SecureStorageService? secureStorage}) {
     final storage = secureStorage ?? const SecureStorageService();
     final dio = Dio(
@@ -147,10 +161,17 @@ class HostRepository {
     return <Map<String, dynamic>>[];
   }
 
+  /// Phân loại ngoại lệ `error` sang `HostErrorInfo` bằng cách ủy quyền cho giải thuật `classifyHostError`.
   HostErrorInfo classifyError(Object error, [String? fallback]) {
     return classifyHostError(error, fallback);
   }
 
+  /// Trích xuất thông điệp lỗi tiếng Việt thân thiện để hiển thị trực tiếp trên thanh thông báo hoặc biểu mẫu Host.
+  ///
+  /// Giải thuật rút trích thông báo lỗi ưu tiên (`extractErrorMessage`):
+  /// 1. Trả về trực tiếp thông báo kiểm định cục bộ từ `ArgumentError`, `FormatException` và `HostAuthorizationException`.
+  /// 2. Với `DioException`, gọi `classifyHostError` để giải mã mã HTTP (`401/403/404/409/422/5xx`) và danh sách `errors` của từng trường.
+  /// 3. Loại bỏ các tiền tố kỹ thuật thô (`Exception: `, `Bad state: `) trước khi fallback về chuỗi `fallback`.
   String extractErrorMessage(
     Object error, [
     String fallback = 'Đã xảy ra lỗi khi xử lý yêu cầu.',
@@ -184,11 +205,19 @@ class HostRepository {
     return text.isNotEmpty ? text : fallback;
   }
 
-  /// Ensures only authorized roles (`host` or `admin`) can execute Host Portal
-  /// mutations when user role metadata is provided.
+  /// Đảm bảo chỉ vai trò hợp lệ (`host` hoặc `admin`) mới được thực thi các thao tác ghi dữ liệu trên Host Portal.
+  ///
+  /// Áp dụng cơ chế đóng an toàn (Fail-Closed): ném `HostAuthorizationException` mã `401` khi chưa có phiên đăng nhập
+  /// hoặc mã `403` khi tài khoản hiện hành không mang quyền Chủ nhà.
   void assertHostRoleAuthorized([String? userRole]) {
+    if (userRole == null && _roleResolver == null) return;
     final effectiveRole = userRole ?? _roleResolver?.call();
-    if (effectiveRole == null) return;
+    if (effectiveRole == null || effectiveRole.trim().isEmpty) {
+      throw HostAuthorizationException(
+        'Vui lòng đăng nhập bằng tài khoản Chủ nhà (Host) để thực hiện thao tác này.',
+        statusCode: 401,
+      );
+    }
     if (!isApprovedHostRole(effectiveRole)) {
       throw HostAuthorizationException(
         'Tài khoản "$effectiveRole" không có quyền thực hiện thao tác dành riêng cho Chủ nhà (Host).',
@@ -202,7 +231,7 @@ class HostRepository {
   // BUG-10: Host Applications & KYC (`/api/host/applications`)
   // ===========================================================================
 
-  /// `GET /api/host/applications/me`
+  /// Truy xuất hồ sơ đăng ký Chủ nhà hiện tại qua `GET /api/host/applications/me` (trả về `null` nếu nhận mã `404`).
   Future<Map<String, dynamic>?> getMyApplication() async {
     try {
       final response = await _client.dio.get<dynamic>(
@@ -217,14 +246,14 @@ class HostRepository {
     }
   }
 
-  /// Typed wrapper for `GET /api/host/applications/me`.
+  /// Truy xuất bản ghi hồ sơ đăng ký Chủ nhà định kiểu mạnh `HostApplicationRecord` từ `GET /api/host/applications/me`.
   Future<HostApplicationRecord?> getMyApplicationRecord() async {
     final map = await getMyApplication();
     if (map == null) return null;
     return HostApplicationRecord.fromApiResponse(map);
   }
 
-  /// `POST /api/host/applications` using `multipart/form-data`.
+  /// Nộp bộ hồ sơ KYC `dto` theo chuẩn `multipart/form-data` lên `POST /api/host/applications`.
   Future<HostApplicationRecord> submitKycApplication(
     HostKycSubmissionDto dto, {
     void Function(int sent, int total)? onSendProgress,
@@ -240,8 +269,7 @@ class HostRepository {
     return HostApplicationRecord.fromApiResponse(map);
   }
 
-  /// Submits a Host Application via `POST /api/host/applications`.
-  /// Requires real `FormData` (`multipart/form-data`) or a valid [HostKycSubmissionDto].
+  /// Gửi hồ sơ đăng ký Chủ nhà qua `POST /api/host/applications` từ bản đồ `data` hoặc `formData` dựng sẵn.
   Future<Map<String, dynamic>> submitApplication(
     Map<String, dynamic> data, {
     FormData? formData,
@@ -257,7 +285,7 @@ class HostRepository {
     return _unwrapMap(response.data);
   }
 
-  /// `GET /api/host/applications/me` (with fallback to `GET /api/host/verifications/me`).
+  /// Kiểm tra trạng thái xác minh Chủ nhà qua `GET /api/host/applications/me` (dự phòng sang `GET /api/host/verifications/me`).
   Future<Map<String, dynamic>?> getMyVerificationStatus() async {
     try {
       final app = await getMyApplication();
@@ -272,12 +300,19 @@ class HostRepository {
     }
   }
 
+  /// Hủy hồ sơ đăng ký Chủ nhà đang chờ duyệt và xóa chứng từ đã tải lên qua `POST /api/host/applications/cancel`.
+  Future<bool> cancelApplication() async {
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/applications/cancel',
+    );
+    return response.statusCode == 200;
+  }
+
   // ===========================================================================
   // BUG-11: Host Listings (`GET /api/host/listings/mine`)
   // ===========================================================================
 
-  /// `GET /api/host/listings/mine`
-  /// Supported statuses: `draft`, `pending_approval`, `published`, `hidden`, `rejected`.
+  /// Truy xuất một trang danh sách chỗ nghỉ của Chủ nhà qua `GET /api/host/listings/mine` (hỗ trợ lọc `draft`, `pending_approval`, `published`, `hidden`, `rejected`).
   Future<List<Map<String, dynamic>>> getHostListings({
     String? status,
     int page = 1,
@@ -303,16 +338,92 @@ class HostRepository {
     return items.map(_normalizeListingMap).toList();
   }
 
+  // Giải thuật phân trang toàn bộ danh sách chỗ nghỉ của Host (page = 1..totalPages, limit = 50, khử trùng theo listingId):
+  // CONFLICT-RESOLVED: Đảm bảo chủ nhà có trên 50 chỗ nghỉ không bị cắt dữ liệu KPI hoặc thiếu lựa chọn ở Lịch/Đánh giá/Báo cáo.
+  /// Tải trọn vẹn tất cả các trang chỗ nghỉ của Chủ nhà từ `/api/host/listings/mine` và khử trùng lặp theo `listingId`.
+  Future<List<Map<String, dynamic>>> getMyListings({
+    String? status,
+    int limit = 50,
+    int maxPages = 20,
+  }) async {
+    final safeLimit = limit.clamp(1, 50);
+    final safeMaxPages = maxPages.clamp(1, 50);
+    final normalizedStatus =
+        (status != null && status.isNotEmpty && status != 'all')
+            ? HostListingStatus.fromApi(status).value
+            : null;
+
+    final firstResponse = await _client.dio.get<dynamic>(
+      '/api/host/listings/mine',
+      queryParameters: {
+        if (normalizedStatus != null) 'status': normalizedStatus,
+        'page': 1,
+        'limit': safeLimit,
+      },
+    );
+
+    final firstItems = _extractList(
+      firstResponse.data,
+      const ['items', 'listings', 'data'],
+    ).map(_normalizeListingMap).toList();
+
+    final unwrapped = _unwrapMap(firstResponse.data);
+    final paginationRaw = unwrapped['pagination'];
+    final pagination = paginationRaw is Map<Object?, Object?>
+        ? Map<String, dynamic>.from(paginationRaw)
+        : null;
+    final totalPages = int.tryParse(
+          '${pagination?['totalPages'] ?? unwrapped['totalPages'] ?? 1}',
+        ) ??
+        1;
+
+    if (totalPages <= 1 || firstItems.isEmpty) {
+      return firstItems;
+    }
+
+    final merged = <Map<String, dynamic>>[];
+    final seenIds = <String>{};
+
+    void appendUnique(List<Map<String, dynamic>> pageItems) {
+      for (final item in pageItems) {
+        final rawId = '${item['listingId'] ?? item['id'] ?? ''}'.trim();
+        if (rawId.isNotEmpty && !seenIds.add(rawId)) {
+          continue;
+        }
+        merged.add(item);
+      }
+    }
+
+    appendUnique(firstItems);
+
+    final targetPages = totalPages > safeMaxPages ? safeMaxPages : totalPages;
+    for (var currentPage = 2; currentPage <= targetPages; currentPage++) {
+      final pageItems = await getHostListings(
+        status: normalizedStatus,
+        page: currentPage,
+        limit: safeLimit,
+      );
+      if (pageItems.isEmpty) break;
+      appendUnique(pageItems);
+    }
+
+    return merged;
+  }
+
   Map<String, dynamic> _normalizeListingMap(Map<String, dynamic> raw) {
     final copy = Map<String, dynamic>.from(raw);
-    final statusEnum = HostListingStatus.fromApi(copy['status']);
+    final statusEnum = HostListingStatus.fromListingMap(copy);
     copy['status'] = statusEnum.value;
+    final rawReason =
+        (copy['rejectionReason'] ?? copy['rejectReason'])?.toString().trim();
+    copy['rejectionReason'] =
+        (rawReason != null && rawReason.isNotEmpty) ? rawReason : null;
     copy['id'] = copy['listingId'] ?? copy['id'];
     copy['listingId'] = copy['listingId'] ?? copy['id'];
     return copy;
   }
 
-  /// `GET /api/host/listings/:listingId`
+  /// Truy xuất chi tiết một chỗ nghỉ của Chủ nhà qua `GET /api/host/listings/:id`.
   Future<Map<String, dynamic>> getHostListingById(String id) async {
     final response = await _client.dio.get<dynamic>('/api/host/listings/$id');
     final map = _unwrapMap(response.data);
@@ -322,7 +433,7 @@ class HostRepository {
     return _normalizeListingMap(listing);
   }
 
-  /// `POST /api/host/listings`
+  /// Tạo mới chỗ nghỉ cho Chủ nhà qua `POST /api/host/listings` sau khi xác thực quyền và chuẩn hóa payload.
   Future<Map<String, dynamic>> createHostListing(
     Map<String, dynamic> data, {
     String? userRole,
@@ -340,7 +451,7 @@ class HostRepository {
     return _normalizeListingMap(listing);
   }
 
-  /// `PATCH /api/host/listings/:listingId`
+  /// Cập nhật thông tin hoặc trạng thái chỗ nghỉ qua `PATCH /api/host/listings/:id`.
   Future<Map<String, dynamic>> updateHostListing(
     String id,
     Map<String, dynamic> data, {
@@ -359,22 +470,22 @@ class HostRepository {
     return _normalizeListingMap(listing);
   }
 
-  /// `PATCH /api/host/listings/:listingId` -> `{ status: 'pending_approval' }`
+  /// Chuyển trạng thái chỗ nghỉ `listingId` sang chờ quản trị viên phê duyệt (`pending_approval`).
   Future<Map<String, dynamic>> submitListingForApproval(String listingId) {
     return updateHostListing(listingId, const {'status': 'pending_approval'});
   }
 
-  /// `PATCH /api/host/listings/:listingId` -> `{ status: 'hidden' }`
+  /// Tạm ẩn chỗ nghỉ `listingId` khỏi trang tìm kiếm công khai (`hidden`).
   Future<Map<String, dynamic>> hideHostListing(String listingId) {
     return updateHostListing(listingId, const {'status': 'hidden'});
   }
 
-  /// `PATCH /api/host/listings/:listingId` -> `{ status: 'published' }`
+  /// Mở hiển thị công khai lại cho chỗ nghỉ `listingId` đã được duyệt (`published`).
   Future<Map<String, dynamic>> publishHostListing(String listingId) {
     return updateHostListing(listingId, const {'status': 'published'});
   }
 
-  /// `DELETE /api/host/listings/:listingId`
+  /// Xóa mềm chỗ nghỉ `id` của Chủ nhà qua `DELETE /api/host/listings/:id`.
   Future<void> deleteHostListing(String id, {String? userRole}) async {
     assertHostRoleAuthorized(userRole);
     await _client.dio.delete<dynamic>('/api/host/listings/$id');
@@ -534,10 +645,11 @@ class HostRepository {
   // R2 Presigned Upload & Listing Images
   // ===========================================================================
 
-  /// `POST /api/uploads/presign`
+  /// Xin cấp phát liên kết tải lên trực tiếp Cloudflare R2 qua `POST /api/uploads/presign`.
   Future<HostR2UploadResult> presignUpload({
     required String filename,
     required String contentType,
+    int? size,
     String folder = 'listings',
     String? listingId,
   }) async {
@@ -545,6 +657,7 @@ class HostRepository {
       'folder': folder,
       'filename': filename,
       'contentType': contentType,
+      if (size != null) 'size': size,
       if (listingId != null && listingId.trim().isNotEmpty)
         'listingId': int.tryParse(listingId) ?? listingId,
     };
@@ -558,8 +671,7 @@ class HostRepository {
     return HostR2UploadResult.fromPresignJson(map);
   }
 
-  /// Validates [file], requests presigned URL from backend, and uploads raw bytes
-  /// directly to R2 via `PUT` without leaking the API Bearer token.
+  /// Thẩm định tệp `file`, xin cấp presigned URL và tải thẳng luồng byte lên Cloudflare R2 qua `PUT` mà không rò rỉ Bearer token.
   Future<HostR2UploadResult> uploadFileToR2(
     HostPickedFile file, {
     String folder = 'listings',
@@ -575,6 +687,7 @@ class HostRepository {
     final presigned = await presignUpload(
       filename: file.name,
       contentType: file.mimeType,
+      size: file.sizeBytes,
       folder: folder,
       listingId: listingId,
     );
@@ -766,7 +879,7 @@ class HostRepository {
   // BUG-13: Calendar (`GET` & `PATCH /api/host/listings/:id/calendar`)
   // ===========================================================================
 
-  /// `GET /api/host/listings/:listingId/calendar?month=M&year=Y`
+  /// Truy xuất danh sách ngày lịch vận hành định kiểu `HostCalendarDay` theo `month` và `year` qua `GET /api/host/listings/:listingId/calendar`.
   Future<List<HostCalendarDay>> getListingCalendarDays(
     String listingId, {
     required int month,
@@ -792,7 +905,7 @@ class HostRepository {
     return rawDays.map(HostCalendarDay.fromJson).toList();
   }
 
-  /// Map-based calendar getter for `GET /api/host/listings/:listingId/calendar`.
+  /// Truy xuất dữ liệu lịch dạng bản đồ thô từ `GET /api/host/listings/:listingId/calendar` (tự động suy diễn tháng/năm từ `startDate` nếu cần).
   Future<List<Map<String, dynamic>>> getListingCalendar(
     String listingId, {
     int? month,
@@ -827,7 +940,13 @@ class HostRepository {
     );
   }
 
-  /// `PATCH /api/host/listings/:listingId/calendar/bulk`
+  // Giải thuật cập nhật hàng loạt lịch lưu trú và giá theo dải ngày (`bulkUpdateListingCalendar`):
+  // 1. Kiểm tra quyền Chủ nhà qua `assertHostRoleAuthorized`.
+  // 2. Chuẩn hóa danh sách chuỗi ngày đầu vào về `YYYY-MM-DD` (loại bỏ hậu tố giờ ISO `T...`) và gọi `validateCalendarBulkDates`
+  //    để chặn mọi ngày sai định dạng, ngày quá khứ hoặc ngày đang có khách đặt phòng thực.
+  // 3. Đóng gói các ràng buộc giá ghi đè (`priceOverride`), đóng/mở phòng (`isAvailable`, `isBlockedByHost`) và số đêm tối thiểu
+  //    (`minNightsOverride`), bao gồm cờ xóa ghi đè về `null`, rồi gửi `PATCH /api/host/listings/:listingId/calendar/bulk`.
+  /// Cập nhật hàng loạt trạng thái khóa phòng, giá theo đêm và số đêm tối thiểu cho tập `dates` trên lịch chỗ nghỉ `listingId`.
   Future<Map<String, dynamic>> bulkUpdateListingCalendar(
     String listingId, {
     required List<String> dates,
@@ -923,17 +1042,80 @@ class HostRepository {
     int page = 1,
     int limit = 50,
   }) async {
-    final safeLimit = limit.clamp(1, 50);
+    final safeLimit = limit.clamp(1, 100);
     final response = await _client.dio.get<dynamic>(
       '/api/host/bookings',
       queryParameters: {
         if (status != null && status.isNotEmpty && status != 'all')
           'status': status,
-        'page': page,
+        'page': page < 1 ? 1 : page,
         'limit': safeLimit,
       },
     );
     return _extractList(response.data, const ['items', 'bookings', 'data']);
+  }
+
+  // Thuật toán tải trọn vẹn các trang đặt phòng của Host từ `/api/host/bookings` (khử trùng theo `bookingId`) để không bỏ sót các đơn Đã nhận phòng, Hoàn tất hoặc Đã hủy ở trang sau.
+  /// Tải toàn bộ danh sách đơn đặt phòng của Chủ nhà qua các trang `/api/host/bookings` và khử trùng theo `bookingId`.
+  Future<List<Map<String, dynamic>>> getAllHostBookings({
+    String? status,
+    int pageSize = 100,
+    int maxPages = 10,
+  }) async {
+    final safePageSize = pageSize.clamp(1, 100);
+    final safeMaxPages = maxPages.clamp(1, 25);
+    final firstResponse = await _client.dio.get<dynamic>(
+      '/api/host/bookings',
+      queryParameters: {
+        if (status != null && status.isNotEmpty && status != 'all')
+          'status': status,
+        'page': 1,
+        'limit': safePageSize,
+      },
+    );
+
+    final firstItems = _extractList(
+      firstResponse.data,
+      const ['items', 'bookings', 'data'],
+    );
+    final unwrapped = _unwrapMap(firstResponse.data);
+    final paginationRaw = unwrapped['pagination'];
+    final pagination = paginationRaw is Map<Object?, Object?>
+        ? Map<String, dynamic>.from(paginationRaw)
+        : null;
+    final totalPages = int.tryParse('${pagination?['totalPages'] ?? 1}') ?? 1;
+
+    if (totalPages <= 1 || firstItems.isEmpty) {
+      return firstItems;
+    }
+
+    final merged = <Map<String, dynamic>>[];
+    final seenIds = <String>{};
+
+    void appendUnique(List<Map<String, dynamic>> items) {
+      for (final item in items) {
+        final rawId = '${item['bookingId'] ?? item['id'] ?? ''}'.trim();
+        if (rawId.isNotEmpty && !seenIds.add(rawId)) {
+          continue;
+        }
+        merged.add(item);
+      }
+    }
+
+    appendUnique(firstItems);
+
+    final targetPages = totalPages > safeMaxPages ? safeMaxPages : totalPages;
+    for (var currentPage = 2; currentPage <= targetPages; currentPage++) {
+      final pageItems = await getHostBookings(
+        status: status,
+        page: currentPage,
+        limit: safePageSize,
+      );
+      if (pageItems.isEmpty) break;
+      appendUnique(pageItems);
+    }
+
+    return merged;
   }
 
   /// `GET /api/host/bookings/:bookingId`
@@ -1116,6 +1298,127 @@ class HostRepository {
     return raw.map(maskSensitivePayoutMap).toList();
   }
 
+  // CONFLICT-RESOLVED: Giữ cả phương thức phân trang toàn bộ lịch sử chi trả `getMyPayouts` của nhánh refactor và phương thức tạo yêu cầu rút tiền `requestPayout` từ `origin/develop`.
+  // Giải thuật phân trang toàn bộ lịch sử đối soát chi trả của Host (page = 1..totalPages, limit = 50, che số tài khoản nhạy cảm):
+  /// Tải toàn bộ các trang lịch sử chi trả của Chủ nhà từ `/api/host/payouts`, khử trùng lặp và che giấu số tài khoản nhạy cảm.
+  Future<List<Map<String, dynamic>>> getMyPayouts({
+    String? status,
+    String? from,
+    String? to,
+    int limit = 50,
+    int maxPages = 20,
+  }) async {
+    final safeLimit = limit.clamp(1, 50);
+    final safeMaxPages = maxPages.clamp(1, 50);
+    final effectiveStatus =
+        (status != null && status.isNotEmpty && status != 'all')
+            ? status
+            : null;
+
+    final firstResponse = await _client.dio.get<dynamic>(
+      '/api/host/payouts',
+      queryParameters: {
+        if (effectiveStatus != null) 'status': effectiveStatus,
+        if (from != null && from.isNotEmpty) 'from': from,
+        if (to != null && to.isNotEmpty) 'to': to,
+        'page': 1,
+        'limit': safeLimit,
+      },
+    );
+
+    final firstItems = _extractList(
+      firstResponse.data,
+      const ['items', 'payouts', 'data'],
+    ).map(maskSensitivePayoutMap).toList();
+
+    final unwrapped = _unwrapMap(firstResponse.data);
+    final paginationRaw = unwrapped['pagination'];
+    final pagination = paginationRaw is Map<Object?, Object?>
+        ? Map<String, dynamic>.from(paginationRaw)
+        : null;
+    final totalPages = int.tryParse(
+          '${pagination?['totalPages'] ?? unwrapped['totalPages'] ?? 1}',
+        ) ??
+        1;
+
+    if (totalPages <= 1 || firstItems.isEmpty) {
+      return firstItems;
+    }
+
+    final merged = <Map<String, dynamic>>[];
+    final seenIds = <String>{};
+
+    void appendUnique(List<Map<String, dynamic>> pageItems) {
+      for (final item in pageItems) {
+        final rawId = '${item['payoutId'] ?? item['id'] ?? ''}'.trim();
+        if (rawId.isNotEmpty && !seenIds.add(rawId)) {
+          continue;
+        }
+        merged.add(item);
+      }
+    }
+
+    appendUnique(firstItems);
+
+    final targetPages = totalPages > safeMaxPages ? safeMaxPages : totalPages;
+    for (var currentPage = 2; currentPage <= targetPages; currentPage++) {
+      final pageItems = await getPayouts(
+        status: effectiveStatus,
+        from: from,
+        to: to,
+        page: currentPage,
+        limit: safeLimit,
+      );
+      if (pageItems.isEmpty) break;
+      appendUnique(pageItems);
+    }
+
+    return merged;
+  }
+
+  /// Gửi yêu cầu rút doanh thu khả dụng của Chủ nhà (`POST /api/host/payouts/request`).
+  Future<Map<String, dynamic>> requestPayout({
+    required double amount,
+    int? payoutAccountId,
+    String? notes,
+  }) async {
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/payouts/request',
+      data: {
+        'amount': amount,
+        if (payoutAccountId != null) 'payoutAccountId': payoutAccountId,
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+      },
+    );
+    if (response.data is Map<String, dynamic>) {
+      final resMap = response.data as Map<String, dynamic>;
+      if (resMap['data'] is Map<String, dynamic>) {
+        return maskSensitivePayoutMap(
+          resMap['data'] as Map<String, dynamic>,
+        );
+      }
+      return maskSensitivePayoutMap(resMap);
+    }
+    return <String, dynamic>{};
+  }
+
+  /// Hủy yêu cầu rút tiền đang chờ duyệt (`POST /api/host/payouts/:payoutId/cancel`).
+  Future<Map<String, dynamic>> cancelPayout(int payoutId) async {
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/payouts/$payoutId/cancel',
+    );
+    if (response.data is Map<String, dynamic>) {
+      final resMap = response.data as Map<String, dynamic>;
+      if (resMap['data'] is Map<String, dynamic>) {
+        return maskSensitivePayoutMap(
+          resMap['data'] as Map<String, dynamic>,
+        );
+      }
+      return maskSensitivePayoutMap(resMap);
+    }
+    return <String, dynamic>{};
+  }
+
   // ===========================================================================
   // BUG-13: Revenue Reports (`GET /api/host/reports/revenue`)
   // ===========================================================================
@@ -1145,8 +1448,7 @@ class HostRepository {
     return _unwrapMap(response.data);
   }
 
-  /// Computes date range (`30d`, `90d`, `year`) matching `BaoCao/index.tsx`
-  /// and fetches `HostRevenueReport`.
+  /// Tính toán khoảng thời gian chuẩn (`30d`, `90d`, `year`) theo giờ Việt Nam và tải báo cáo doanh thu `HostRevenueReport`.
   Future<HostRevenueReport> getTypedRevenueReport({
     String rangeKey = '30d',
     String? groupOverride,
@@ -1198,20 +1500,34 @@ class HostRepository {
   // BUG-38: Reviews, Vietnam Banks (`items` key), Host Bank Account & Profile
   // ===========================================================================
 
-  /// `GET /api/listings/:listingId/reviews`
+  // Giải thuật tải đánh giá chỗ nghỉ dành cho Host với cơ chế dự phòng an toàn:
+  // CONFLICT-RESOLVED: Ưu tiên gọi route xác thực /api/host/listings/:listingId/reviews để chỗ nghỉ draft/pending_approval/hidden/rejected không bị lỗi 404; chỉ fallback sang /api/listings/:listingId/reviews khi gặp 404.
+  /// Truy xuất danh sách đánh giá khách hàng của chỗ nghỉ `listingId` (ưu tiên đường dẫn nội bộ của Host, dự phòng sang đường dẫn công khai).
   Future<List<Map<String, dynamic>>> getListingReviews(
     String listingId, {
     int page = 1,
     int limit = 50,
   }) async {
-    final response = await _client.dio.get<dynamic>(
-      '/api/listings/$listingId/reviews',
-      queryParameters: {
-        'page': page,
-        'limit': limit.clamp(1, 50),
-      },
-    );
-    return _extractList(response.data, const ['items', 'reviews', 'data']);
+    final queryParams = <String, dynamic>{
+      'page': page,
+      'limit': limit.clamp(1, 50),
+    };
+    try {
+      final response = await _client.dio.get<dynamic>(
+        '/api/host/listings/$listingId/reviews',
+        queryParameters: queryParams,
+      );
+      return _extractList(response.data, const ['items', 'reviews', 'data']);
+    } on DioException catch (e) {
+      if (e.response?.statusCode != 404) {
+        rethrow;
+      }
+      final fallback = await _client.dio.get<dynamic>(
+        '/api/listings/$listingId/reviews',
+        queryParameters: queryParams,
+      );
+      return _extractList(fallback.data, const ['items', 'reviews', 'data']);
+    }
   }
 
   /// `POST /api/reviews/:reviewId/reply` with `{ reply }`
@@ -1396,19 +1712,329 @@ class HostRepository {
     return _extractList(response.data, const ['items', 'messages', 'data']);
   }
 
+  // Giải thuật mở hoặc tái sử dụng hội thoại hỗ trợ thực với Quản trị viên:
+  // CONFLICT-RESOLVED: Tạo conversation ID số thực qua POST /api/conversations thay vì gửi tới khóa giả lập 'admin_support'.
+  /// Mở mới hoặc truy xuất hội thoại hỗ trợ trực tiếp với Quản trị viên qua `POST /api/conversations` (`{"support": true}`).
+  Future<Map<String, dynamic>> openSupportConversation({
+    String? firstMessage,
+  }) async {
+    final trimmedMessage = firstMessage?.trim();
+    final response = await _client.dio.post<dynamic>(
+      '/api/conversations',
+      data: <String, dynamic>{
+        'support': true,
+        if (trimmedMessage != null && trimmedMessage.isNotEmpty)
+          'firstMessage': trimmedMessage,
+      },
+    );
+    final map = _unwrapMap(response.data);
+    if (map['conversation'] is Map<Object?, Object?>) {
+      return Map<String, dynamic>.from(
+        map['conversation'] as Map<Object?, Object?>,
+      );
+    }
+    return map;
+  }
+
+  /// `PATCH /api/conversations/:conversationId/read`
+  Future<void> markConversationRead(String conversationId) async {
+    final trimmed = conversationId.trim();
+    if (!isNumericHostConversationId(trimmed)) {
+      return;
+    }
+    await _client.dio.patch<dynamic>('/api/conversations/$trimmed/read');
+  }
+
   /// `POST /api/conversations/:conversationId/messages`
   Future<Map<String, dynamic>> sendConversationMessage(
     String conversationId,
-    String content,
-  ) async {
+    String content, {
+    String messageType = 'text',
+    List<Map<String, dynamic>>? attachments,
+  }) async {
     final trimmed = content.trim();
-    if (trimmed.isEmpty) {
+    if (trimmed.isEmpty && (attachments == null || attachments.isEmpty)) {
       throw ArgumentError('Nội dung tin nhắn không được để trống.');
     }
     final response = await _client.dio.post<dynamic>(
       '/api/conversations/$conversationId/messages',
-      data: {'content': trimmed},
+      data: {
+        'content': trimmed,
+        'messageType': messageType,
+        if (attachments != null && attachments.isNotEmpty)
+          'attachments': attachments,
+      },
     );
     return _unwrapMap(response.data);
+  }
+
+  /// Tải luồng byte ảnh giấy tờ tùy thân lên `POST /api/ai/id-card-vision/extract` để trích xuất thông tin OCR tự động.
+  Future<HostIdentityAiResult> analyzeIdentityCard({
+    required List<int> bytes,
+    required String filename,
+    required String mimeType,
+  }) async {
+    final formData = FormData.fromMap({
+      'image': MultipartFile.fromBytes(
+        bytes,
+        filename: filename,
+        contentType: MediaType.parse(
+          mimeType.isNotEmpty ? mimeType : 'image/jpeg',
+        ),
+      ),
+    });
+
+    final response = await _client.dio.post<dynamic>(
+      '/api/ai/id-card-vision/extract',
+      data: formData,
+    );
+
+    final map = response.data is Map<String, dynamic>
+        ? response.data as Map<String, dynamic>
+        : Map<String, dynamic>.from(response.data as Map<Object?, Object?>);
+
+    final data = map['data'] is Map<String, dynamic>
+        ? map['data'] as Map<String, dynamic>
+        : Map<String, dynamic>.from(
+            (map['data'] as Map<Object?, Object?>?) ?? <String, dynamic>{},
+          );
+
+    return HostIdentityAiResult.fromJson(data);
+  }
+
+  // ===========================================================================
+  // Google Sheets Agency Mode (`/api/host/sheet-sync/*` & Listing Restore)
+  // ===========================================================================
+
+  /// Áp đặt kiểm tra vai trò Chủ nhà độc quyền (`role == 'host'`), từ chối cả khách vãng lai (`401`) lẫn vai trò khác (`403`) khớp `requireHostOnly` của Backend.
+  void assertStrictHostOnlyRoleAuthorized([String? userRole]) {
+    if (userRole == null && _roleResolver == null) return;
+    final effectiveRole = userRole ?? _roleResolver?.call();
+    if (effectiveRole == null || effectiveRole.trim().isEmpty) {
+      throw HostAuthorizationException(
+        'Vui lòng đăng nhập bằng tài khoản Chủ nhà (Host) để quản lý đồng bộ Google Sheets.',
+        statusCode: 401,
+      );
+    }
+    if (effectiveRole.trim().toLowerCase() != 'host') {
+      throw HostAuthorizationException(
+        'Tài khoản "$effectiveRole" không có quyền truy cập cấu hình Google Sheets của Chủ nhà.',
+        statusCode: 403,
+        userRole: effectiveRole,
+      );
+    }
+  }
+
+  /// Khôi phục chỗ nghỉ đã xóa mềm qua `POST /api/host/listings/:listingId/restore` và giữ nguyên mã `listingId` gốc bất biến.
+  Future<Map<String, dynamic>> restoreHostListing(
+    String listingId, {
+    String? userRole,
+  }) async {
+    assertHostRoleAuthorized(userRole);
+    final trimmed = listingId.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('Mã căn cần khôi phục không hợp lệ.');
+    }
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/listings/$trimmed/restore',
+    );
+    final map = _unwrapMap(response.data);
+    final listing = map['listing'] is Map<Object?, Object?>
+        ? Map<String, dynamic>.from(map['listing'] as Map<Object?, Object?>)
+        : map;
+    return _normalizeListingMap(listing);
+  }
+
+  /// `GET /api/host/sheet-sync/status`
+  Future<HostSheetSyncStatusPayload> getHostSheetSyncStatus({
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final response = await _client.dio.get<dynamic>(
+      '/api/host/sheet-sync/status',
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `POST /api/host/sheet-sync/connect`
+  Future<HostSheetSyncStatusPayload> connectHostSheet({
+    required String spreadsheetUrlOrId,
+    String? hostEditorEmail,
+    bool autoSyncEnabled = true,
+    bool strictBookingPrecheck = true,
+    bool initializeImmediately = true,
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final urlValidationError = validateGoogleSheetInput(spreadsheetUrlOrId);
+    if (urlValidationError != null) {
+      throw ArgumentError(urlValidationError);
+    }
+    final emailValidationError = validateOptionalEditorEmail(hostEditorEmail);
+    if (emailValidationError != null) {
+      throw ArgumentError(emailValidationError);
+    }
+
+    final trimmedEmail = hostEditorEmail?.trim();
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/sheet-sync/connect',
+      data: <String, dynamic>{
+        'spreadsheetUrlOrId': spreadsheetUrlOrId.trim(),
+        if (trimmedEmail != null && trimmedEmail.isNotEmpty)
+          'hostEditorEmail': trimmedEmail,
+        'autoSyncEnabled': autoSyncEnabled,
+        'strictBookingPrecheck': strictBookingPrecheck,
+        'initializeImmediately': initializeImmediately,
+      },
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `POST /api/host/sheet-sync/verify-permissions`
+  Future<HostSheetSyncStatusPayload> verifyHostSheetPermissions({
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/sheet-sync/verify-permissions',
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `POST /api/host/sheet-sync/init-calendar`
+  Future<HostSheetSyncStatusPayload> initializeHostSheetCalendar({
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/sheet-sync/init-calendar',
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `POST /api/host/sheet-sync/sync-now`
+  Future<HostSheetSyncStatusPayload> syncHostSheetNow({
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/sheet-sync/sync-now',
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `PATCH /api/host/sheet-sync/settings`
+  Future<HostSheetSyncStatusPayload> updateHostSheetSettings({
+    String? hostEditorEmail,
+    bool? autoSyncEnabled,
+    bool? strictBookingPrecheck,
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    if (hostEditorEmail != null) {
+      final emailErr = validateOptionalEditorEmail(hostEditorEmail);
+      if (emailErr != null) {
+        throw ArgumentError(emailErr);
+      }
+    }
+    final response = await _client.dio.patch<dynamic>(
+      '/api/host/sheet-sync/settings',
+      data: <String, dynamic>{
+        if (hostEditorEmail != null) 'hostEditorEmail': hostEditorEmail.trim(),
+        if (autoSyncEnabled != null) 'autoSyncEnabled': autoSyncEnabled,
+        if (strictBookingPrecheck != null)
+          'strictBookingPrecheck': strictBookingPrecheck,
+      },
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `DELETE /api/host/sheet-sync/disconnect`
+  Future<HostSheetSyncStatusPayload> disconnectHostSheet({
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final response = await _client.dio.delete<dynamic>(
+      '/api/host/sheet-sync/disconnect',
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `GET /api/host/sheet-sync/conflicts`
+  Future<List<HostSheetWarningItem>> getHostSheetConflicts({
+    String? status,
+    int? listingId,
+    int page = 1,
+    int limit = 20,
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final response = await _client.dio.get<dynamic>(
+      '/api/host/sheet-sync/conflicts',
+      queryParameters: <String, dynamic>{
+        if (status != null && status.isNotEmpty) 'status': status,
+        if (listingId != null) 'listingId': listingId,
+        'page': page < 1 ? 1 : page,
+        'limit': limit.clamp(1, 50),
+      },
+    );
+    final rawItems = _extractList(
+      response.data,
+      const ['items', 'conflicts', 'data'],
+    );
+    return rawItems.map(HostSheetWarningItem.fromJson).toList();
+  }
+
+  /// `POST /api/host/sheet-sync/conflicts/:conflictId/resolve`
+  Future<HostSheetSyncStatusPayload> resolveHostSheetConflict({
+    required int conflictId,
+    required String action,
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    const allowedActions = <String>{
+      'keep_locked',
+      'unlock_if_safe',
+      'undo_bulk_change',
+      'repair_structure',
+    };
+    if (conflictId <= 0) {
+      throw ArgumentError('Mã cảnh báo xung đột không hợp lệ.');
+    }
+    if (!allowedActions.contains(action)) {
+      throw ArgumentError('Thao tác xử lý xung đột không hợp lệ.');
+    }
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/sheet-sync/conflicts/$conflictId/resolve',
+      data: <String, dynamic>{'action': action},
+    );
+    return HostSheetSyncStatusPayload.fromJson(_unwrapMap(response.data));
+  }
+
+  /// `GET /api/host/sheet-sync/logs`
+  Future<List<HostSheetChangeLogItem>> getHostSheetChangeLogs({
+    int? listingId,
+    String? search,
+    int page = 1,
+    int limit = 20,
+    String? userRole,
+  }) async {
+    assertStrictHostOnlyRoleAuthorized(userRole);
+    final trimmedSearch = search?.trim();
+    final response = await _client.dio.get<dynamic>(
+      '/api/host/sheet-sync/logs',
+      queryParameters: <String, dynamic>{
+        if (listingId != null) 'listingId': listingId,
+        if (trimmedSearch != null && trimmedSearch.isNotEmpty)
+          'search': trimmedSearch,
+        'page': page < 1 ? 1 : page,
+        'limit': limit.clamp(1, 50),
+      },
+    );
+    final rawItems = _extractList(
+      response.data,
+      const ['items', 'logs', 'data'],
+    );
+    return rawItems.map(HostSheetChangeLogItem.fromJson).toList();
   }
 }

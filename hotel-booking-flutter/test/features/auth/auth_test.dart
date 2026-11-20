@@ -248,8 +248,8 @@ void main() {
           await tester.ensureVisible(find.text('Gửi mã xác thực'));
           await tester.tap(find.text('Gửi mã xác thực'));
           await tester.pumpAndSettle();
-          // Resend must work before password/OTP fields have been filled.
-          await tester.pump(const Duration(seconds: 24));
+          // Resend must work before password/OTP fields have been filled (60s cooldown per TC-017).
+          await tester.pump(const Duration(seconds: 61));
           await tester.ensureVisible(find.text('Gửi lại mã OTP'));
           await tester.tap(find.text('Gửi lại mã OTP'));
           await tester.pumpAndSettle();
@@ -294,9 +294,11 @@ void main() {
       expect(AuthValidation.password('Abc12345'), isNull);
       expect(AuthValidation.password('a1' * 65), isNotNull);
     });
-    test('moderator and null roles cannot grant admin or host', () {
-      final user = User.fromJson({'id': 1, 'role': 'moderator', 'roles': null});
-      expect(user.role, 'moderator');
+    test(
+        'unknown and null roles fall back to guest and cannot grant admin or host',
+        () {
+      final user = User.fromJson({'id': 1, 'role': 'staff', 'roles': null});
+      expect(user.role, 'guest');
       expect(user.isAdmin, isFalse);
       expect(user.isHost, isFalse);
       expect(User.fromJson({}).role, 'guest');
@@ -341,7 +343,11 @@ void main() {
         expect(await storage.getAuthToken(), 'test-access');
         final notifier = AuthNotifier(repo);
         addTearDown(notifier.dispose);
-        await Future<void>.delayed(const Duration(milliseconds: 20));
+        // Giải thuật chờ xác định trạng thái bất đồng bộ của AuthNotifier:
+        // Lặp kiểm tra cho đến khi checkCurrentUser() thoát trạng thái isLoading để tránh phụ thuộc mù quáng vào độ trễ 20ms khi chạy song song toàn bộ test suite.
+        for (var i = 0; i < 25 && notifier.state.isLoading; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
         expect(notifier.state.hasError, isTrue);
       });
     }
@@ -925,6 +931,12 @@ void main() {
       await tester.enterText(
           find.byType(TextFormField).at(2), 'existing@example.com');
       await tester.enterText(find.byType(TextFormField).at(3), 'Password123');
+      await tester.enterText(find.byType(TextFormField).at(4), 'Password123');
+      await tester.pumpAndSettle();
+
+      final termsCheckbox = find.byKey(const Key('register_terms_checkbox'));
+      await tester.ensureVisible(termsCheckbox);
+      await tester.tap(termsCheckbox);
       await tester.pumpAndSettle();
 
       await tester.ensureVisible(find.widgetWithText(AppButton, 'Đăng ký'));
@@ -991,6 +1003,71 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Tài khoản không tồn tại.'), findsOneWidget);
+    });
+
+    test(
+        'TC-010: AuthValidation.loginIdentifier enforces Email or strict VN mobile',
+        () {
+      expect(AuthValidation.loginIdentifier('guest@example.com'), isNull);
+      expect(AuthValidation.loginIdentifier('0912345678'), isNull);
+      expect(AuthValidation.loginIdentifier('+84912345678'), isNull);
+      expect(AuthValidation.loginIdentifier('0123456789'), isNotNull);
+      expect(AuthValidation.loginIdentifier('user.name'), isNotNull);
+      expect(AuthValidation.loginIdentifier(''), isNotNull);
+    });
+
+    testWidgets(
+        'TC-014: RegisterScreen blocks submit when confirm password mismatches or terms unchecked',
+        (tester) async {
+      var registerCalls = 0;
+      final storage = _TestSecureStorage();
+      final client = DioClient(
+        secureStorage: storage,
+        httpClientAdapter: _FakeAdapter((o) async {
+          if (o.path == '/api/auth/register') {
+            registerCalls++;
+          }
+          return _json({}, statusCode: 400);
+        }),
+      );
+      final repo = AuthRepositoryImpl(client, storage);
+      final notifier = AuthNotifier(repo, dioClient: client);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith((_) => notifier),
+          ],
+          child: const MaterialApp(
+            home: RegisterScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byType(TextFormField).at(0), 'Đặng Minh Thành');
+      await tester.enterText(find.byType(TextFormField).at(1), '0912345678');
+      await tester.enterText(
+          find.byType(TextFormField).at(2), 'thanh@example.com');
+      await tester.enterText(find.byType(TextFormField).at(3), 'Password123');
+      await tester.enterText(find.byType(TextFormField).at(4), 'Mismatch999');
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.widgetWithText(AppButton, 'Đăng ký'));
+      await tester.tap(find.widgetWithText(AppButton, 'Đăng ký'));
+      await tester.pumpAndSettle();
+
+      // Blocked because confirm password mismatches and terms unchecked
+      expect(registerCalls, 0);
+
+      // Fix confirm password, keep terms unchecked -> still blocked
+      await tester.enterText(find.byType(TextFormField).at(4), 'Password123');
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.widgetWithText(AppButton, 'Đăng ký'));
+      await tester.tap(find.widgetWithText(AppButton, 'Đăng ký'));
+      await tester.pumpAndSettle();
+      expect(registerCalls, 0);
     });
   });
 }

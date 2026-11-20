@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý hình ảnh thư viện của chỗ nghỉ kèm thứ tự hiển thị, cờ ảnh bìa và trạng thái phân tích AI.
+ */
 import {
     CreationOptional,
     DataTypes,

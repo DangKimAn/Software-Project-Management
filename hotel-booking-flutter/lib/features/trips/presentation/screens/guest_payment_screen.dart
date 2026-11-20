@@ -4,20 +4,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../core/utils/currency_formatter.dart';
+import '../../../../core/security/url_security_validator.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_loading.dart';
 import '../../domain/entities/booking.dart';
 import '../view_models/trips_view_model.dart';
 
-/// Complete port of `Source goc/frontend/src/views/pages/GuestPayment/index.tsx` (`/thanh-toan/:bookingId`).
+/// Màn hình xác nhận chi tiết đơn đặt phòng và thanh toán trực tuyến (`/thanh-toan/:bookingId`).
+///
+/// Chịu trách nhiệm:
+/// - Hiển thị đồng hồ đếm ngược thời gian giữ chỗ trực tiếp (`computeRemainingPaymentSeconds`) và khóa nút thanh toán ngay khi hết hạn.
+/// - Đóng băng tỷ giá tham chiếu ngoại tệ trong suốt phiên thanh toán (`_frozenCheckoutSnapshot`) nhưng luôn chốt thu bằng VND.
+/// - Tái sử dụng phiên thanh toán đang chờ (`_activePaymentSession`) cho cùng phương thức để tránh tạo trùng giao dịch,
+///   thẩm định bảo mật URL cổng thanh toán bằng `UrlSecurityValidator.isValidPaymentGatewayUrl` trước khi mở trình duyệt ngoài.
+/// - Không bao giờ gán cứng `status=paid` sau khi mở cổng thanh toán; tự động đối soát lại khi ứng dụng trở về tiền cảnh (`resumed`).
 class GuestPaymentScreen extends ConsumerStatefulWidget {
+  /// Mã định danh đơn đặt phòng cần thực hiện thanh toán.
   final String bookingId;
+
+  /// Hàm mở đường dẫn cổng thanh toán bên ngoài (cho phép tiêm giả lập khi kiểm thử đơn vị).
   final Future<bool> Function(Uri uri)? externalUrlLauncher;
 
+  /// Khởi tạo `GuestPaymentScreen`.
   const GuestPaymentScreen({
     super.key,
     required this.bookingId,
@@ -38,12 +50,9 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
   bool _isVerifyingResume = false;
   String? _errorMessage;
   PaymentSessionResult? _activePaymentSession;
+  ExchangeRateSnapshot? _frozenCheckoutSnapshot;
 
-  // Coupon validation state (if guest validates a coupon code before payment)
-  final TextEditingController _couponController = TextEditingController();
-  bool _isValidatingCoupon = false;
-  CouponValidationResult? _couponResult;
-  String? _couponError;
+  // CONFLICT-RESOLVED: Loại bỏ trạng thái nhập coupon chỉ hiển thị giả ở client sau khi tạo booking vì backend đã khóa cứng booking.totalAmount & booking.discountAmount lúc POST /api/bookings.
 
   static const List<PaymentMethodAvailability> _defaultMethodAvailability = [
     PaymentMethodAvailability(
@@ -70,7 +79,6 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _countdownTimer?.cancel();
-    _couponController.dispose();
     super.dispose();
   }
 
@@ -81,6 +89,9 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
     }
   }
 
+  // Giải thuật đối soát phiên thanh toán khi người dùng quay lại ứng dụng từ trình duyệt cổng thanh toán (`resumed`):
+  // Truy vấn song song bản ghi `payment` và `booking` mới nhất, phân giải trạng thái qua `deriveAuthoritativePaymentStatus`
+  // rồi chuyển hướng sang màn hình biên lai `/thanh-toan/ket-qua` để hiển thị kết quả xác thực.
   Future<void> _verifyActivePaymentOnResume() async {
     final session = _activePaymentSession;
     if (session == null || _isVerifyingResume || !mounted) return;
@@ -91,9 +102,9 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
     });
 
     try {
-      final repo = ref.read(bookingRepositoryProvider);
-      final verifiedPayment = await repo.getPaymentById(session.paymentId);
-      final verifiedBooking = await repo.getBookingById(widget.bookingId);
+      final actions = ref.read(tripsActionsViewModelProvider);
+      final verifiedPayment = await actions.getPaymentById(session.paymentId);
+      final verifiedBooking = await actions.getBookingById(widget.bookingId);
 
       if (!mounted) return;
       setState(() => _isVerifyingResume = false);
@@ -123,24 +134,17 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
     PaymentSessionResult? payment,
     Booking? booking,
   }) {
-    if (payment != null) {
-      if (payment.isRefundPending) return 'refund_pending';
-      if (payment.isRefunded) return 'refunded';
-      if (payment.isPaid) return 'paid';
-      if (payment.isExpired) return 'expired';
-      if (payment.isCancelled) return 'cancelled';
-      if (payment.isFailed) return 'failed';
-    }
-    if (booking != null) {
-      if (booking.effectiveStatus == 'refund_pending') return 'refund_pending';
-      if (booking.effectiveStatus == 'refunded') return 'refunded';
-      if (booking.isPaid) return 'paid';
-      if (booking.isExpired) return 'expired';
-      if (booking.isCancelled) return 'cancelled';
-    }
-    return 'pending';
+    final resolved = deriveAuthoritativePaymentStatus(
+      payment: payment,
+      booking: booking,
+      initialStatusHint: 'pending',
+    );
+    return resolved == 'unverified' ? 'pending' : resolved;
   }
 
+  // Giải thuật đồng bộ bộ đếm ngược giữ chỗ trên màn hình thanh toán (`_syncCountdown`):
+  // Khởi chạy `Timer.periodic` mỗi giây cập nhật số giây còn lại từ `booking.computeRemainingPaymentSeconds()`;
+  // khi chạm mốc `0` sẽ dừng đồng hồ ngay để vô hiệu hóa thao tác gửi thanh toán muộn.
   void _syncCountdown(Booking booking) {
     final bookingKey =
         '${booking.id}_${booking.status}_${booking.paymentStatus}_${booking.paymentDeadline?.toIso8601String()}_${booking.remainingPaymentSeconds}';
@@ -186,52 +190,21 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
     return '$m:$s';
   }
 
-  Future<void> _handleValidateCoupon(Booking booking) async {
-    final code = _couponController.text.trim().toUpperCase();
-    if (code.isEmpty) {
-      setState(() {
-        _couponResult = null;
-        _couponError = 'Vui lòng nhập mã giảm giá.';
-      });
-      return;
+  String _formatDisplayDate(String raw) {
+    final trimmed = raw.trim();
+    final parts = trimmed.split('-');
+    if (parts.length == 3 && parts[0].length == 4) {
+      return '${parts[2]}/${parts[1]}/${parts[0]}';
     }
-
-    setState(() {
-      _isValidatingCoupon = true;
-      _couponError = null;
-    });
-
-    try {
-      final result = await ref.read(bookingRepositoryProvider).validateCoupon(
-            code: code,
-            bookingAmount: booking.subtotalAmount > 0
-                ? booking.subtotalAmount
-                : booking.totalAmount,
-            listingId: booking.listingId,
-          );
-      if (!mounted) return;
-      setState(() {
-        _isValidatingCoupon = false;
-        if (result.valid && result.discountAmount > 0) {
-          _couponResult = result;
-          _couponError = null;
-        } else {
-          _couponResult = null;
-          _couponError = result.message ??
-              CouponValidationResult.localizeRejectionReason(result.reason) ??
-              'Mã giảm giá không hợp lệ.';
-        }
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isValidatingCoupon = false;
-        _couponResult = null;
-        _couponError = e.toString().replaceFirst('Exception: ', '');
-      });
-    }
+    return trimmed;
   }
 
+  // Giải thuật kiểm tra điều kiện, khởi tạo phiên thanh toán cổng trực tuyến và chuyển hướng an toàn (`_submitPayment`):
+  // Bước 1: Chặn gửi nếu đơn đã thanh toán, đã hủy, quá hạn giữ chỗ (`_remainingSeconds <= 0`) hoặc cổng chưa cấu hình.
+  // Bước 2: Tái sử dụng `_activePaymentSession` nếu cùng `bookingId` và `method` đang chờ để chống nhân bản phiên giao dịch;
+  //         ngược lại gọi `createPayment` tạo phiên mới.
+  // Bước 3: Xác thực tên miền URL cổng thanh toán bằng `UrlSecurityValidator.isValidPaymentGatewayUrl`, mở trình duyệt ngoài,
+  //         và chuyển sang `/thanh-toan/ket-qua` với trạng thái khởi điểm `'pending'` để chờ máy chủ đối soát thực tế.
   Future<void> _submitPayment(
     Booking booking,
     List<PaymentMethodAvailability> methods,
@@ -295,7 +268,7 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
         paymentSession = _activePaymentSession!;
       } else {
         paymentSession =
-            await ref.read(bookingRepositoryProvider).createPayment(
+            await ref.read(tripsActionsViewModelProvider).createPayment(
                   bookingId: booking.id,
                   method: _selectedMethod,
                 );
@@ -306,9 +279,8 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
 
       final rawUrl = paymentSession.paymentUrl?.trim() ?? '';
       final uri = Uri.tryParse(rawUrl);
-      final isValidGatewayUrl = uri != null &&
-          (uri.scheme == 'http' || uri.scheme == 'https') &&
-          uri.host.isNotEmpty;
+      final isValidGatewayUrl =
+          uri != null && UrlSecurityValidator.isValidPaymentGatewayUrl(rawUrl);
 
       if (!isValidGatewayUrl) {
         setState(() {
@@ -365,6 +337,23 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
   Widget build(BuildContext context) {
     final bookingAsync = ref.watch(bookingDetailProvider(widget.bookingId));
     final methodsAsync = ref.watch(paymentMethodsProvider);
+    final liveFormatter = ref.watch(moneyFormatterProvider);
+    // Giải thuật cố định tỷ giá phiên thanh toán (FX Session Freeze):
+    // Giữ nguyên bản chụp tỷ giá hợp lệ đầu tiên trong suốt phiên checkout để số tiền tham khảo không nhảy loạn,
+    // nhưng tự động khôi phục nếu lúc mở màn hình bản chụp chưa kịp tải hoặc đã hết hạn hoàn toàn.
+    if ((_frozenCheckoutSnapshot == null ||
+            liveFormatter
+                .withFrozenSnapshot(_frozenCheckoutSnapshot)
+                .isFallingBackToVnd) &&
+        liveFormatter.snapshot != null) {
+      _frozenCheckoutSnapshot = liveFormatter.snapshot;
+    }
+    final checkoutFormatter = liveFormatter.withFrozenSnapshot(
+      _frozenCheckoutSnapshot,
+    );
+    final l10n = checkoutFormatter.l10n;
+    final showForeignSection = checkoutFormatter.featureEnabled &&
+        checkoutFormatter.effectiveCurrency.isForeign;
     final methods =
         methodsAsync.valueOrNull != null && methodsAsync.valueOrNull!.isNotEmpty
             ? methodsAsync.valueOrNull!
@@ -391,11 +380,14 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
       body: SafeArea(
         child: Column(
           children: [
-            const AppTopHeader(currentPath: '/account/trips'),
+            const AppTopHeader(
+              currentPath: '/thanh-toan',
+              hidePendingBanner: true,
+            ),
             Expanded(
               child: bookingAsync.when(
-                loading: () => const AppLoading(
-                  message: 'Đang tải thông tin thanh toán đặt phòng...',
+                loading: () => AppLoading(
+                  message: l10n.loadingPaymentInfo,
                 ),
                 error: (err, _) => AppErrorView(
                   message: err.toString().replaceFirst('Exception: ', ''),
@@ -404,9 +396,9 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                 ),
                 data: (booking) {
                   if (booking == null) {
-                    return const AppErrorView(
-                      title: 'Không tìm thấy đơn đặt phòng',
-                      message: 'Đơn đặt phòng không tồn tại hoặc đã hết hạn.',
+                    return AppErrorView(
+                      title: l10n.guestPaymentBookingNotFoundTitle,
+                      message: l10n.guestPaymentBookingNotFoundMessage,
                     );
                   }
 
@@ -440,9 +432,25 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   // Countdown Lock / Status Banner (Neutral icon, no decorative circle)
-                                  Padding(
-                                    padding:
-                                        const EdgeInsets.symmetric(vertical: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceBase,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: booking.isPaid
+                                            ? AppColors.success
+                                                .withValues(alpha: 0.35)
+                                            : (isHoldExpired ||
+                                                    booking.isCancelled
+                                                ? AppColors.error
+                                                    .withValues(alpha: 0.35)
+                                                : AppColors.borderSoft),
+                                      ),
+                                    ),
                                     child: Row(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.center,
@@ -466,45 +474,72 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                                         !booking.isExpired
                                                     ? 'Đơn đặt phòng đã bị hủy (${booking.statusDisplay}).'
                                                     : (!isHoldExpired
-                                                        ? 'Hệ thống đang giữ lịch phòng cho bạn. Vui lòng hoàn tất thanh toán trong:'
+                                                        ? 'Hệ thống đang giữ lịch phòng cho bạn. Hoàn tất thanh toán trong:'
                                                         : 'Thời gian giữ chỗ đã hết hạn.')),
                                             style: const TextStyle(
                                               fontSize: 13,
+                                              height: 1.35,
                                               fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary,
                                             ),
                                           ),
                                         ),
                                         if (!booking.isPaid &&
                                             (!booking.isCancelled ||
                                                 booking.isExpired)) ...[
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            _formatCountdown(_remainingSeconds),
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w800,
-                                              color: AppColors.primary,
+                                          const SizedBox(width: 10),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 6,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                              border: Border.all(
+                                                color: AppColors.primary
+                                                    .withValues(alpha: 0.25),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              _formatCountdown(
+                                                _remainingSeconds,
+                                              ),
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w800,
+                                                color: AppColors.primary,
+                                              ),
                                             ),
                                           ),
                                         ],
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(height: 16),
+                                  const SizedBox(height: 18),
 
                                   const Text(
                                     'Xác nhận & Thanh toán kỳ nghỉ',
                                     style: TextStyle(
-                                      fontSize: 22,
+                                      fontSize: 20,
                                       fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.3,
+                                      color: AppColors.textPrimary,
                                     ),
                                   ),
-                                  const SizedBox(height: 16),
+                                  const SizedBox(height: 14),
 
-                                  // Booking Summary
-                                  Padding(
-                                    padding:
-                                        const EdgeInsets.symmetric(vertical: 4),
+                                  // Booking Summary Card
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: AppColors.borderSoft,
+                                      ),
+                                    ),
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
@@ -517,8 +552,8 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                               borderRadius:
                                                   BorderRadius.circular(12),
                                               child: SizedBox(
-                                                width: 88,
-                                                height: 68,
+                                                width: 96,
+                                                height: 76,
                                                 child: AppImage(
                                                   url: booking.coverImageUrl ??
                                                       'assets/images/NDT05929-HDR1.jpg',
@@ -534,28 +569,49 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                                 children: [
                                                   Text(
                                                     booking.propertyName,
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                     style: const TextStyle(
-                                                      fontSize: 16,
+                                                      fontSize: 15,
+                                                      height: 1.3,
                                                       fontWeight:
                                                           FontWeight.w700,
+                                                      color:
+                                                          AppColors.textPrimary,
                                                     ),
                                                   ),
-                                                  const SizedBox(height: 4),
+                                                  const SizedBox(height: 6),
                                                   Text(
                                                     'Mã đơn: #${booking.id} • ${booking.statusDisplay}',
                                                     style: const TextStyle(
                                                       fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w500,
                                                       color: AppColors
                                                           .textSecondary,
                                                     ),
                                                   ),
-                                                  const SizedBox(height: 4),
+                                                  const SizedBox(height: 6),
                                                   Text(
-                                                    '${booking.checkInDate} → ${booking.checkOutDate} (${booking.nights} đêm • ${booking.guestCount} khách)',
+                                                    '${_formatDisplayDate(booking.checkInDate)} → ${_formatDisplayDate(booking.checkOutDate)}',
                                                     style: const TextStyle(
                                                       fontSize: 13,
                                                       fontWeight:
-                                                          FontWeight.w600,
+                                                          FontWeight.w700,
+                                                      color:
+                                                          AppColors.textPrimary,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    '${booking.nights} đêm • ${booking.guestCount} khách',
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      color: AppColors
+                                                          .textSecondary,
                                                     ),
                                                   ),
                                                 ],
@@ -563,31 +619,34 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                             ),
                                           ],
                                         ),
-                                        const Divider(
-                                          height: 28,
-                                          color: AppColors.divider,
+                                        const Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 14,
+                                          ),
+                                          child: Divider(
+                                            height: 1,
+                                            color: AppColors.divider,
+                                          ),
                                         ),
                                         if (pb != null) ...[
                                           _PaymentDetailRow(
                                             label:
                                                 'Tiền phòng (${booking.nights} đêm)',
-                                            value: CurrencyFormatter.formatVnd(
+                                            value: MoneyFormatter.formatVnd(
                                               pb.baseNightsAmount,
                                             ),
                                           ),
                                           if (pb.weekendSurchargeAmount > 0)
                                             _PaymentDetailRow(
                                               label: 'Phụ thu cuối tuần',
-                                              value:
-                                                  CurrencyFormatter.formatVnd(
+                                              value: MoneyFormatter.formatVnd(
                                                 pb.weekendSurchargeAmount,
                                               ),
                                             ),
                                           if (pb.surchargeAmount > 0)
                                             _PaymentDetailRow(
                                               label: 'Phụ thu vượt tiêu chuẩn',
-                                              value:
-                                                  CurrencyFormatter.formatVnd(
+                                              value: MoneyFormatter.formatVnd(
                                                 pb.surchargeAmount,
                                               ),
                                             ),
@@ -595,139 +654,344 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                             _PaymentDetailRow(
                                               label:
                                                   'Phụ thu khách vượt tiêu chuẩn',
-                                              value:
-                                                  CurrencyFormatter.formatVnd(
+                                              value: MoneyFormatter.formatVnd(
                                                 pb.extraGuestFeeAmount,
                                               ),
                                             ),
                                           if (pb.cleaningFee > 0)
                                             _PaymentDetailRow(
                                               label: 'Phí vệ sinh',
-                                              value:
-                                                  CurrencyFormatter.formatVnd(
+                                              value: MoneyFormatter.formatVnd(
                                                 pb.cleaningFee,
                                               ),
                                             ),
                                           if (pb.serviceFee > 0)
                                             _PaymentDetailRow(
                                               label: 'Phí dịch vụ',
-                                              value:
-                                                  CurrencyFormatter.formatVnd(
+                                              value: MoneyFormatter.formatVnd(
                                                 pb.serviceFee,
                                               ),
                                             ),
-                                          if (pb.discountAmount > 0)
+                                          if (pb.discountAmount > 0 ||
+                                              booking.discountAmount > 0)
                                             _PaymentDetailRow(
-                                              label: booking.couponCode !=
+                                              label: (booking.couponCode ??
+                                                              pb.couponCode) !=
                                                           null &&
-                                                      booking.couponCode!
+                                                      (booking.couponCode ??
+                                                              pb.couponCode)!
+                                                          .trim()
                                                           .isNotEmpty
-                                                  ? 'Giảm giá (${booking.couponCode})'
+                                                  ? 'Giảm giá (${(booking.couponCode ?? pb.couponCode)!.trim()})'
                                                   : 'Giảm giá ưu đãi',
                                               value:
-                                                  '-${CurrencyFormatter.formatVnd(pb.discountAmount)}',
+                                                  '-${MoneyFormatter.formatVnd(pb.discountAmount > 0 ? pb.discountAmount : booking.discountAmount)}',
                                             ),
-                                          const Divider(
-                                            height: 20,
-                                            color: AppColors.divider,
+                                          const Padding(
+                                            padding: EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                            child: Divider(
+                                              height: 1,
+                                              color: AppColors.divider,
+                                            ),
+                                          ),
+                                        ] else if (booking.discountAmount >
+                                            0) ...[
+                                          _PaymentDetailRow(
+                                            label: booking.couponCode != null &&
+                                                    booking.couponCode!
+                                                        .trim()
+                                                        .isNotEmpty
+                                                ? 'Giảm giá (${booking.couponCode!.trim()})'
+                                                : 'Giảm giá ưu đãi',
+                                            value:
+                                                '-${MoneyFormatter.formatVnd(booking.discountAmount)}',
+                                          ),
+                                          const Padding(
+                                            padding: EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                            child: Divider(
+                                              height: 1,
+                                              color: AppColors.divider,
+                                            ),
                                           ),
                                         ],
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            const Flexible(
-                                              child: Text(
-                                                'Tổng cộng thanh toán (chốt bởi máy chủ)',
-                                                style: TextStyle(
-                                                  fontSize: 15,
-                                                  fontWeight: FontWeight.w800,
-                                                ),
+                                        // Section B — Estimated Foreign Currency Reference (Display-only, frozen during checkout session FX-24)
+                                        if (showForeignSection) ...[
+                                          Container(
+                                            key: const Key(
+                                              'checkout_fx_reference_box',
+                                            ),
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(12),
+                                            margin: const EdgeInsets.only(
+                                              bottom: 12,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.surfaceBase,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: AppColors.borderSoft,
                                               ),
                                             ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              CurrencyFormatter.formatVnd(
-                                                booking.totalAmount,
-                                              ),
-                                              style: const TextStyle(
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.w800,
-                                                color: AppColors.primary,
-                                              ),
+                                            child: Builder(
+                                              builder: (context) {
+                                                if (checkoutFormatter
+                                                    .isFallingBackToVnd) {
+                                                  return Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      const Padding(
+                                                        padding:
+                                                            EdgeInsets.only(
+                                                          top: 2,
+                                                        ),
+                                                        child: Icon(
+                                                          LucideIcons.info,
+                                                          size: 16,
+                                                          color: AppColors
+                                                              .iconMuted,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        child: Text(
+                                                          l10n.fxRateUnavailableFallback,
+                                                          key: const Key(
+                                                            'checkout_fx_fallback_notice',
+                                                          ),
+                                                          style:
+                                                              const TextStyle(
+                                                            fontSize: 13,
+                                                            height: 1.35,
+                                                            color: AppColors
+                                                                .textSecondary,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  );
+                                                }
+
+                                                final refTotal =
+                                                    checkoutFormatter.format(
+                                                  booking.totalAmount,
+                                                  context: MoneyDisplayContext
+                                                      .checkoutReference,
+                                                  includeApproximatePrefix:
+                                                      false,
+                                                );
+                                                final snap =
+                                                    checkoutFormatter.snapshot;
+                                                String? unitRateLine;
+                                                if (snap != null) {
+                                                  final usdPerVnd =
+                                                      double.tryParse(
+                                                            snap.usdRateDecimal,
+                                                          ) ??
+                                                          0;
+                                                  final krwPerVnd =
+                                                      double.tryParse(
+                                                            snap.krwRateDecimal,
+                                                          ) ??
+                                                          0;
+                                                  final updatedVn = snap
+                                                      .sourceUpdatedAt
+                                                      .toUtc()
+                                                      .add(
+                                                        const Duration(
+                                                          hours: 7,
+                                                        ),
+                                                      );
+                                                  final updatedDate =
+                                                      '${updatedVn.day.toString().padLeft(2, '0')}/${updatedVn.month.toString().padLeft(2, '0')}/${updatedVn.year}';
+                                                  if (checkoutFormatter
+                                                              .effectiveCurrency ==
+                                                          AppCurrency.usd &&
+                                                      usdPerVnd > 0) {
+                                                    final vndPerUsd =
+                                                        (1.0 / usdPerVnd)
+                                                            .round();
+                                                    unitRateLine =
+                                                        '1 USD ≈ ${MoneyFormatter.formatVnd(vndPerUsd)} • $updatedDate';
+                                                  } else if (checkoutFormatter
+                                                              .effectiveCurrency ==
+                                                          AppCurrency.krw &&
+                                                      krwPerVnd > 0) {
+                                                    final vndPer1000Krw =
+                                                        (1000.0 / krwPerVnd)
+                                                            .round();
+                                                    unitRateLine =
+                                                        '1,000 KRW ≈ ${MoneyFormatter.formatVnd(vndPer1000Krw)} • $updatedDate';
+                                                  }
+                                                }
+
+                                                return Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      l10n.fxEstimatedPrice(
+                                                        refTotal.formatted,
+                                                      ),
+                                                      key: const Key(
+                                                        'checkout_fx_estimated_amount',
+                                                      ),
+                                                      style: const TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: AppColors
+                                                            .textPrimary,
+                                                      ),
+                                                    ),
+                                                    if (unitRateLine !=
+                                                        null) ...[
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        unitRateLine,
+                                                        key: const Key(
+                                                          'checkout_fx_unit_rate',
+                                                        ),
+                                                        style: const TextStyle(
+                                                          fontSize: 12,
+                                                          color: AppColors
+                                                              .textSecondary,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ],
+                                                );
+                                              },
                                             ),
-                                          ],
+                                          ),
+                                        ],
+
+                                        // Section C — Official Payable Total in VND (Authoritative gateway charge)
+                                        Container(
+                                          key: const Key(
+                                            'checkout_payable_vnd_box',
+                                          ),
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.surfaceBase,
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: AppColors.primary
+                                                  .withValues(alpha: 0.28),
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Wrap(
+                                                spacing: 8,
+                                                runSpacing: 4,
+                                                alignment:
+                                                    WrapAlignment.spaceBetween,
+                                                crossAxisAlignment:
+                                                    WrapCrossAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    l10n.fxTotalPayableVnd(
+                                                      MoneyFormatter
+                                                          .formatExactVndStatic(
+                                                        booking.totalAmount,
+                                                        withCode: true,
+                                                      ),
+                                                    ),
+                                                    key: const Key(
+                                                      'checkout_payable_vnd_label',
+                                                    ),
+                                                    style: const TextStyle(
+                                                      fontSize: 15,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      color:
+                                                          AppColors.textPrimary,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    MoneyFormatter.formatVnd(
+                                                      booking.totalAmount,
+                                                    ),
+                                                    style: const TextStyle(
+                                                      fontSize: 19,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      color: AppColors.primary,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(height: 20),
+                                  const SizedBox(height: 16),
 
-                                  // Coupon check section (if guest wants to verify a coupon eligibility)
+                                  // Giải thuật hiển thị minh bạch ưu đãi sau khi khóa đơn đặt phòng:
+                                  // Backend cố định `booking.totalAmount` và `booking.discountAmount` ngay khi `POST /api/bookings`,
+                                  // đồng thời `POST /api/payments` luôn thu đúng `booking.totalAmount`.
+                                  // CONFLICT-RESOLVED: Loại bỏ ô nhập coupon giả sau bước tạo đơn để số tiền hiển thị luôn khớp 100% với số tiền cổng VNPay/MoMo thu.
                                   if (booking.canPayNow && !isHoldExpired) ...[
-                                    const Text(
-                                      'Kiểm tra mã ưu đãi',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
+                                    Container(
+                                      key: const Key(
+                                        'checkout_coupon_locked_info_box',
                                       ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Expanded(
-                                          child: TextField(
-                                            controller: _couponController,
-                                            textCapitalization:
-                                                TextCapitalization.characters,
-                                            decoration: const InputDecoration(
-                                              hintText: 'Nhập mã coupon...',
-                                              isDense: true,
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: AppColors.borderSoft,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Icon(
+                                            (pb != null &&
+                                                        pb.discountAmount >
+                                                            0) ||
+                                                    booking.discountAmount > 0
+                                                ? LucideIcons.ticketCheck
+                                                : LucideIcons.info,
+                                            size: 18,
+                                            color: AppColors.iconStrong,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(
+                                              ((pb != null &&
+                                                          pb.discountAmount >
+                                                              0) ||
+                                                      booking.discountAmount >
+                                                          0)
+                                                  ? 'Đơn đặt phòng đã áp dụng ưu đãi${(booking.couponCode ?? pb?.couponCode)?.trim().isNotEmpty == true ? " (${(booking.couponCode ?? pb?.couponCode)!.trim()})" : ""} giảm ${MoneyFormatter.formatVnd(pb != null && pb.discountAmount > 0 ? pb.discountAmount : booking.discountAmount)}. Tổng thanh toán ${MoneyFormatter.formatVnd(booking.totalAmount)} đã được cố định cho cổng thanh toán.'
+                                                  : 'Mã giảm giá được áp dụng tại bước tạo đặt phòng. Tổng thanh toán gửi sang cổng VNPay/MoMo được cố định theo đơn đã tạo (${MoneyFormatter.formatVnd(booking.totalAmount)}).',
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                height: 1.4,
+                                                color: AppColors.textSecondary,
+                                                fontWeight: FontWeight.w500,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        OutlinedButton(
-                                          style: OutlinedButton.styleFrom(
-                                            minimumSize: const Size(88, 48),
-                                          ),
-                                          onPressed: _isValidatingCoupon
-                                              ? null
-                                              : () => _handleValidateCoupon(
-                                                  booking),
-                                          child: Text(
-                                            _isValidatingCoupon
-                                                ? 'Đang kiểm tra...'
-                                                : 'Kiểm tra',
-                                          ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
-                                    if (_couponError != null) ...[
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        _couponError!,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.error,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                    if (_couponResult != null &&
-                                        _couponResult!.valid) ...[
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        'Mã ${_couponResult!.code} hợp lệ: giảm ${CurrencyFormatter.formatVnd(_couponResult!.discountAmount)}${_couponResult!.description != null ? " (${_couponResult!.description})" : ""}.',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.textPrimary,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
                                     const SizedBox(height: 20),
                                   ],
 
@@ -735,32 +999,36 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                   const Text(
                                     'Chọn phương thức thanh toán',
                                     style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w700,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.textPrimary,
                                     ),
                                   ),
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 10),
                                   for (final methodMeta in methods) ...[
                                     _GatewayOptionTile(
+                                      key: Key(
+                                        'gateway_option_${methodMeta.method}',
+                                      ),
                                       value: methodMeta.method,
                                       groupValue: _selectedMethod,
                                       available: methodMeta.available,
                                       title: methodMeta.method == 'vnpay'
-                                          ? 'VNPay (QR Pay / Thẻ ATM nội địa / Visa / Master)'
-                                          : 'Ví điện tử MoMo',
+                                          ? l10n.vnpayGatewayTitle
+                                          : l10n.momoGatewayTitle,
                                       subtitle: methodMeta.available
                                           ? (methodMeta.method == 'vnpay'
-                                              ? 'Xác nhận qua cổng thanh toán VNPay chuẩn bảo mật ngân hàng'
-                                              : 'Thanh toán qua ứng dụng MoMo hoặc quét mã QR MoMo')
+                                              ? l10n.vnpayGatewaySubtitle
+                                              : l10n.momoGatewaySubtitle)
                                           : (methodMeta.unavailableReason ??
-                                              '${methodMeta.label} chưa được cấu hình trên máy chủ.'),
+                                              l10n.fxPaymentMethodUnsupported),
                                       onSelected: methodMeta.available
                                           ? (v) => setState(
                                                 () => _selectedMethod = v,
                                               )
                                           : null,
                                     ),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: 10),
                                   ],
 
                                   if (_activePaymentSession != null) ...[
@@ -824,7 +1092,7 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                     ),
                                   ],
 
-                                  const SizedBox(height: 24),
+                                  const SizedBox(height: 20),
                                   if (booking.isPaid)
                                     SizedBox(
                                       width: double.infinity,
@@ -838,13 +1106,21 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                         ),
                                         label: const Text(
                                           'Xem chuyến đi của tôi',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                         ),
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor:
-                                              AppColors.textPrimary,
+                                          elevation: 0,
+                                          backgroundColor: AppColors.primary,
                                           foregroundColor: Colors.white,
                                           minimumSize:
-                                              const Size.fromHeight(48),
+                                              const Size.fromHeight(52),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                          ),
                                           padding: const EdgeInsets.symmetric(
                                             vertical: 14,
                                           ),
@@ -855,6 +1131,9 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                     SizedBox(
                                       width: double.infinity,
                                       child: ElevatedButton.icon(
+                                        key: const Key(
+                                          'checkout_pay_cta_button',
+                                        ),
                                         onPressed: canSubmit
                                             ? () => _submitPayment(
                                                   booking,
@@ -868,16 +1147,33 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                                         ),
                                         label: Text(
                                           _isProcessing
-                                              ? 'Đang kết nối cổng thanh toán...'
+                                              ? l10n
+                                                  .guestPaymentConnectingGateway
                                               : (isHoldExpired
                                                   ? 'Đã hết thời gian giữ chỗ'
-                                                  : 'Thanh toán ${CurrencyFormatter.formatVnd(booking.totalAmount)} qua ${_selectedMethod.toUpperCase()}'),
+                                                  : l10n.fxPayButtonVnd(
+                                                      MoneyFormatter.formatVnd(
+                                                        booking.totalAmount,
+                                                      ),
+                                                      _selectedMethod
+                                                          .toUpperCase(),
+                                                    )),
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                         ),
                                         style: ElevatedButton.styleFrom(
+                                          elevation: 0,
                                           backgroundColor: AppColors.primary,
                                           foregroundColor: Colors.white,
                                           minimumSize:
-                                              const Size.fromHeight(48),
+                                              const Size.fromHeight(52),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                          ),
                                           padding: const EdgeInsets.symmetric(
                                             vertical: 14,
                                           ),
@@ -889,7 +1185,6 @@ class _GuestPaymentScreenState extends ConsumerState<GuestPaymentScreen>
                             ),
                           ),
                         ),
-                        const AppFooter(),
                       ],
                     ),
                   );
@@ -911,30 +1206,58 @@ class _PaymentDetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Flexible(
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-              ),
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: textScale >= 1.6
+          ? Wrap(
+              spacing: 8,
+              runSpacing: 2,
+              alignment: WrapAlignment.spaceBetween,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    value,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -948,6 +1271,7 @@ class _GatewayOptionTile extends StatelessWidget {
   final ValueChanged<String>? onSelected;
 
   const _GatewayOptionTile({
+    super.key,
     required this.value,
     required this.groupValue,
     this.available = true,
@@ -961,58 +1285,64 @@ class _GatewayOptionTile extends StatelessWidget {
     final isSelected = available && value == groupValue;
     return InkWell(
       onTap: available && onSelected != null ? () => onSelected!(value) : null,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 48),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Icon(
-                  !available
-                      ? LucideIcons.circleOff
-                      : (isSelected
-                          ? LucideIcons.circleCheck
-                          : LucideIcons.circle),
-                  size: 20,
-                  color: !available
-                      ? AppColors.iconMuted
-                      : (isSelected
-                          ? AppColors.iconStrong
-                          : AppColors.iconMuted),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w600,
-                        color: !available
-                            ? AppColors.textMuted
-                            : AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 56),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.borderSoft,
+            width: isSelected ? 1.5 : 1.0,
           ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                !available
+                    ? LucideIcons.circleOff
+                    : (isSelected
+                        ? LucideIcons.circleCheck
+                        : LucideIcons.circle),
+                size: 20,
+                color: !available
+                    ? AppColors.iconMuted
+                    : (isSelected ? AppColors.iconStrong : AppColors.iconMuted),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w600,
+                      color: !available
+                          ? AppColors.textMuted
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.35,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

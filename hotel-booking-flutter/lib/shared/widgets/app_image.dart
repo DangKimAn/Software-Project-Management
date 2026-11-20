@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../app/theme/app_colors.dart';
 import '../../core/config/app_config.dart';
+import '../../core/security/url_security_validator.dart';
 
 /// Unified image loader supporting:
 /// - Full HTTP/HTTPS URLs
@@ -15,6 +16,7 @@ class AppImage extends StatelessWidget {
   final double? height;
   final Alignment alignment;
   final BorderRadius? borderRadius;
+  final Widget? errorWidget;
 
   const AppImage({
     super.key,
@@ -25,6 +27,7 @@ class AppImage extends StatelessWidget {
     this.height,
     this.alignment = Alignment.center,
     this.borderRadius,
+    this.errorWidget,
   });
 
   static const List<String> _bundledAssetFiles = [
@@ -57,6 +60,15 @@ class AppImage extends StatelessWidget {
   static String? resolveLocalAsset(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
     final trimmed = raw.trim().replaceAll('\\', '/');
+    final lowerTrimmed = trimmed.toLowerCase();
+    if (lowerTrimmed.contains('images.unsplash.com') ||
+        lowerTrimmed.contains('plus.unsplash.com') ||
+        lowerTrimmed.contains('source.unsplash.com')) {
+      final hash = trimmed.hashCode.abs();
+      final mapped = _bundledAssetFiles[hash % _bundledAssetFiles.length];
+      return 'assets/images/$mapped';
+    }
+
     final lastSlash = trimmed.lastIndexOf('/');
     final basename =
         lastSlash >= 0 ? trimmed.substring(lastSlash + 1) : trimmed;
@@ -103,9 +115,14 @@ class AppImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final raw = (imageUrl ?? url)?.trim() ?? '';
     Widget content;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final int? targetCacheWidth =
+        (width != null && width!.isFinite && width! > 0)
+            ? (width! * dpr).round().clamp(1, 2048)
+            : null;
 
     if (raw.isEmpty) {
-      content = _buildPlaceholder();
+      content = errorWidget ?? _buildPlaceholder();
     } else {
       final assetPath = resolveLocalAsset(raw);
       if (assetPath != null) {
@@ -113,28 +130,34 @@ class AppImage extends StatelessWidget {
           assetPath,
           width: width,
           height: height,
+          cacheWidth: targetCacheWidth,
           fit: fit,
           alignment: alignment,
-          errorBuilder: (_, __, ___) => _buildPlaceholder(),
+          errorBuilder: (_, __, ___) => errorWidget ?? _buildPlaceholder(),
         );
       } else {
         final resolvedUrl = resolveNetworkUrl(raw);
-        content = Image.network(
-          resolvedUrl,
-          width: width,
-          height: height,
-          fit: fit,
-          alignment: alignment,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Container(
-              width: width,
-              height: height,
-              color: AppColors.surfaceMuted,
-            );
-          },
-          errorBuilder: (_, __, ___) => _buildPlaceholder(),
-        );
+        if (!UrlSecurityValidator.isSafeUploadOrMediaUrl(resolvedUrl)) {
+          content = errorWidget ?? _buildPlaceholder();
+        } else {
+          content = Image.network(
+            resolvedUrl,
+            width: width,
+            height: height,
+            cacheWidth: targetCacheWidth,
+            fit: fit,
+            alignment: alignment,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                width: width,
+                height: height,
+                color: AppColors.surfaceMuted,
+              );
+            },
+            errorBuilder: (_, __, ___) => errorWidget ?? _buildPlaceholder(),
+          );
+        }
       }
     }
 

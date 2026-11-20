@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP hội thoại và tin nhắn (`/api/conversations`):
+ * - Yêu cầu xác thực người dùng (`authenticate`), giới hạn tốc độ gửi tin nhắn chống spam (`Limiter`) và kiểm chứng tham số cuộc trò chuyện.
+ */
+
 import express from "express";
 import { body, param, query } from "express-validator";
 
@@ -50,6 +55,7 @@ router.post(
             .isInt({ min: 1 })
             .withMessage("hostUserId must be a positive integer")
             .toInt(),
+        body("support").optional().isBoolean().withMessage("support must be boolean").toBoolean(),
         body("firstMessage")
             .optional()
             .isString()

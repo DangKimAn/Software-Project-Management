@@ -1,29 +1,44 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/di/providers.dart';
+import '../../../../core/errors/app_failure.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/socket_service.dart';
+import '../../../../core/notifications/push_notification_service.dart';
 import '../../../../core/storage/preferences_service.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../data/services/google_auth_service.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
+export '../../data/services/google_auth_service.dart'
+    show GoogleSignInCancelledException;
 
+/// Provider khởi tạo kho lưu trữ xác thực `AuthRepository` kết nối mạng và kho khóa bảo mật.
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   final client = ref.watch(dioClientProvider);
   final storage = ref.watch(secureStorageProvider);
   return AuthRepositoryImpl(client, storage);
 });
 
+/// Provider cung cấp dịch vụ đăng nhập Google OAuth `GoogleAuthService`.
 final googleAuthServiceProvider = Provider<GoogleAuthService>((ref) {
   return GoogleAuthService();
 });
 
+/// Bộ quản lý trạng thái xác thực trung tâm của ứng dụng (`AsyncValue<User?>`).
+///
+/// Điều phối toàn bộ vòng đời phiên người dùng:
+/// - Kiểm tra phiên đăng nhập hiện hành khi mở ứng dụng và xác minh ngầm khi ứng dụng quay lại tiền cảnh (`onAppResumed`).
+/// - Sử dụng bộ đếm kỷ nguyên `_authOpEpoch` chống ghi đè trạng thái lệch nhịp khi nhiều tác vụ đăng nhập/đăng xuất chạy chồng lấn.
+/// - Tự động kết nối / ngắt kết nối kênh Socket.IO thời gian thực, hủy đăng ký thiết bị nhận thông báo đẩy khi đăng xuất,
+///   và thẩm định chống lỗ hổng chuyển hướng mở (`isSafeRedirectPath`, `resolvePostAuthRedirectPath`).
 class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   final AuthRepository _repository;
   final PreferencesService? _prefs;
   final SocketService? _socket;
   final GoogleAuthService _googleAuthService;
   final DioClient? _dioClient;
+  final PushNotificationService? _pushNotifications;
 
   int _authOpEpoch = 0;
   bool _isCheckingResume = false;
@@ -39,16 +54,19 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     '/reset-password',
   };
 
+  /// Khởi tạo `AuthNotifier`, đăng ký lắng nghe sự kiện hết hạn hoặc làm mới phiên từ `DioClient` và kiểm tra người dùng hiện tại.
   AuthNotifier(
     this._repository, {
     PreferencesService? prefs,
     SocketService? socket,
     GoogleAuthService? googleAuthService,
     DioClient? dioClient,
+    PushNotificationService? pushNotifications,
   })  : _prefs = prefs,
         _socket = socket,
         _googleAuthService = googleAuthService ?? GoogleAuthService(),
         _dioClient = dioClient,
+        _pushNotifications = pushNotifications,
         super(const AsyncValue.loading()) {
     _dioClient?.addSessionExpiredListener(_onClientSessionExpired);
     _dioClient?.addSessionRefreshedListener(_onClientSessionRefreshed);
@@ -74,7 +92,9 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     super.dispose();
   }
 
+  /// Truy vấn và khôi phục trạng thái người dùng hiện tại từ kho lưu trữ, đồng thời kích hoạt kết nối Socket.IO nếu hợp lệ.
   Future<void> checkCurrentUser() async {
+    // Giải thuật kiểm tra phiên khởi tạo bảo vệ bằng kỷ nguyên `_authOpEpoch` để bỏ qua phản hồi trễ lỗi thời.
     final epoch = ++_authOpEpoch;
     state = const AsyncValue.loading();
     try {
@@ -93,8 +113,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  /// Silently re-verifies the active session when the app resumes from background
-  /// without flashing the global loading screen.
+  /// Xác minh ngầm phiên đăng nhập khi ứng dụng trở lại tiền cảnh mà không bật màn hình chờ toàn cục.
   Future<void> onAppResumed() async {
     if (!mounted || state.isLoading || _isCheckingResume) return;
     final current = state.valueOrNull;
@@ -121,8 +140,9 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  /// Invoked when `DioClient` detects an unrecoverable 401/403 during token refresh.
+  /// Xử lý dọn dẹp toàn diện trạng thái cục bộ, Socket.IO và phiên Google khi `DioClient` phát hiện lỗi `401`/`403` không thể gia hạn.
   Future<void> handleSessionExpired() async {
+    _pushNotifications?.clearLocalSyncState();
     final epoch = ++_authOpEpoch;
     _socket?.disconnect();
     if (mounted) {
@@ -137,7 +157,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  /// Invoked when `DioClient` refreshes the access token and receives updated user claims.
+  /// Hợp nhất thông tin vai trò và hồ sơ mới nhận được từ phản hồi gia hạn Access Token vào trạng thái người dùng trên bộ nhớ.
   void handleSessionRefreshed(Map<String, dynamic>? userJson) {
     if (!mounted || userJson == null || userJson.isEmpty) return;
     final refreshed = User.fromJson(userJson);
@@ -153,6 +173,9 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
               ? refreshed.lastName
               : existing.lastName,
           phone: refreshed.phone ?? existing.phone,
+          avatarUrl: userJson.containsKey('avatarUrl')
+              ? refreshed.avatarUrl
+              : existing.avatarUrl,
           role: userJson.containsKey('role') || userJson.containsKey('roles')
               ? refreshed.role
               : existing.role,
@@ -176,6 +199,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
+  /// Đăng nhập bằng định danh `identifier` và mật khẩu `password`, cập nhật trạng thái phiên và kết nối Socket.IO.
   Future<User> login(String identifier, String password) async {
     final epoch = ++_authOpEpoch;
     final previousUser = state.valueOrNull;
@@ -191,20 +215,51 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       await _socket?.connect();
       return session.user;
     } catch (e) {
-      if (mounted && epoch == _authOpEpoch) {
+      if (mounted && epoch != _authOpEpoch) {
         state = AsyncValue.data(previousUser);
       }
       rethrow;
     }
   }
 
-  /// Authenticates with Google using the official Google Sign-In SDK, then
-  /// exchanges the verified `idToken` with `POST /api/auth/google`.
+  /// Mở hộp thoại đăng nhập Google qua `GoogleAuthService` rồi trao đổi `idToken` (hoặc `accessToken` dự phòng trên Web) với `POST /api/auth/google`.
   Future<User> signInWithGoogle() async {
-    final idToken = await _googleAuthService.obtainIdToken();
-    return loginWithGoogle(idToken);
+    try {
+      final idToken = await _googleAuthService.obtainIdToken();
+      return await loginWithGoogle(idToken);
+    } on AuthFailure catch (e) {
+      if (e.code == 'GOOGLE_WEB_ACCESS_TOKEN_FALLBACK') {
+        final fallbackAccessToken =
+            _googleAuthService.consumePendingWebAccessToken();
+        final repo = _repository;
+        if (fallbackAccessToken != null &&
+            fallbackAccessToken.isNotEmpty &&
+            repo is AuthRepositoryImpl) {
+          final epoch = ++_authOpEpoch;
+          final previousUser = state.valueOrNull;
+          try {
+            final session = await repo.loginWithGoogleAccessToken(
+              accessToken: fallbackAccessToken,
+            );
+            if (!mounted || epoch != _authOpEpoch) {
+              return session.user;
+            }
+            state = AsyncValue.data(session.user);
+            await _socket?.connect();
+            return session.user;
+          } catch (innerErr) {
+            if (mounted && epoch != _authOpEpoch) {
+              state = AsyncValue.data(previousUser);
+            }
+            rethrow;
+          }
+        }
+      }
+      rethrow;
+    }
   }
 
+  /// Trao đổi trực tiếp chuỗi `idToken` của Google với máy chủ để mở phiên đăng nhập hệ thống.
   Future<User> loginWithGoogle(String idToken) async {
     final epoch = ++_authOpEpoch;
     final previousUser = state.valueOrNull;
@@ -217,13 +272,14 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       await _socket?.connect();
       return session.user;
     } catch (e) {
-      if (mounted && epoch == _authOpEpoch) {
+      if (mounted && epoch != _authOpEpoch) {
         state = AsyncValue.data(previousUser);
       }
       rethrow;
     }
   }
 
+  /// Đăng ký tài khoản mới và tự động chuyển sang trạng thái đã đăng nhập ngay khi hoàn tất.
   Future<User> register({
     required String email,
     required String password,
@@ -248,13 +304,14 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       await _socket?.connect();
       return session.user;
     } catch (e) {
-      if (mounted && epoch == _authOpEpoch) {
+      if (mounted && epoch != _authOpEpoch) {
         state = AsyncValue.data(previousUser);
       }
       rethrow;
     }
   }
 
+  /// Gửi cập nhật thông tin hồ sơ cá nhân lên máy chủ và đồng bộ ngay vào trạng thái `state`.
   Future<User> updateProfile({
     String? fullName,
     String? phone,
@@ -283,6 +340,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     return updated;
   }
 
+  /// Lưu đường dẫn ảnh đại diện mới lên máy chủ và cập nhật thực thể người dùng hiện hành.
   Future<User> updateAvatar({required String url, String? key}) async {
     final updated = await _repository.updateAvatar(url: url, key: key);
     if (mounted) {
@@ -291,7 +349,19 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     return updated;
   }
 
+  /// Đồng bộ tức thì đường dẫn ảnh đại diện `url` đã lưu thành công vào bộ nhớ phiên hiện hành.
+  void syncLocalAvatarUrl(String url) {
+    final trimmed = url.trim();
+    if (!mounted || trimmed.isEmpty) return;
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncValue.data(current.copyWith(avatarUrl: trimmed));
+  }
+
+  /// Đăng xuất toàn diện: hủy đăng ký thông báo đẩy, ngắt Socket.IO, xóa dữ liệu phiên cục bộ,
+  /// thoát Google SDK và thu hồi khóa phiên trên máy chủ.
   Future<void> logout() async {
+    await _pushNotifications?.unregisterCurrentDevice();
     final epoch = ++_authOpEpoch;
     _socket?.disconnect();
     // Immediately clear authenticated user state so protected screens stop
@@ -313,12 +383,18 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
+  /// Cho biết hiện tại có phiên người dùng đã đăng nhập hợp lệ hay không.
   bool get isAuthenticated => state.valueOrNull != null;
+
+  /// Thực thể người dùng đang đăng nhập hiện tại (hoặc `null` nếu là khách vãng lai).
   User? get currentUser => state.valueOrNull;
 
-  /// Validates that [redirectTo] is a trusted internal application path and
-  /// cannot be abused for open redirects or auth-screen loops.
+  /// Kiểm tra đường dẫn chuyển hướng `redirectTo` là đường dẫn nội bộ an toàn,
+  /// chặn triệt để lỗ hổng Open Redirect (`//`, tên miền ngoài, ký tự điều khiển) và vòng lặp về trang đăng nhập.
   static bool isSafeRedirectPath(String? redirectTo) {
+    // Giải thuật thẩm định đường dẫn nội bộ chống Open Redirect:
+    // Bắt buộc bắt đầu bằng một dấu `/` duy nhất, không chứa scheme/host/authority hay ký tự xuống dòng,
+    // và không trỏ ngược về các tuyến màn hình xác thực (`_authEntryPaths`).
     if (redirectTo == null) return false;
     final candidate = redirectTo.trim();
     if (candidate.isEmpty) return false;
@@ -346,6 +422,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     return true;
   }
 
+  /// Trả về tuyến điều hướng mặc định sau khi đăng nhập tương ứng với vai trò của `user`.
   static String defaultRouteForUser(User user) {
     if (user.isAdmin) return '/admin';
     if (user.isHost) return '/chu-nha/cho-nghi';
@@ -353,8 +430,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     return '/account/profile';
   }
 
-  /// Resolves post-login redirect route matching `resolvePostAuthRoute` and
-  /// role guards in `ProtectedRoute.tsx` / `HostRoute.tsx`.
+  /// Phân giải đường dẫn đích sau khi xác thực thành công dựa trên `redirectTo` và quyền vai trò của `user`.
+  ///
+  /// Nếu `redirectTo` không an toàn hoặc vượt thẩm quyền vai trò (ví dụ khách thường đòi vào `/admin` hay `/chu-nha`),
+  /// hệ thống tự động lùi về `defaultRouteForUser(user)`.
   static String resolvePostAuthRedirectPath(User user, {String? redirectTo}) {
     final candidate = redirectTo?.trim() ?? '';
     if (!isSafeRedirectPath(candidate)) {
@@ -375,11 +454,15 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     if (isHostTarget && (!user.isHost || user.isAdmin)) {
       return defaultRouteForUser(user);
     }
+    if (pathOnly == '/' && (user.isAdmin || user.isHost || user.isNewHost)) {
+      return defaultRouteForUser(user);
+    }
 
     return candidate;
   }
 }
 
+/// Provider toàn cục quản lý trạng thái phiên đăng nhập `AuthNotifier`.
 final authNotifierProvider =
     StateNotifierProvider<AuthNotifier, AsyncValue<User?>>((ref) {
   final client = ref.watch(dioClientProvider);
@@ -392,11 +475,13 @@ final authNotifierProvider =
     prefs = null;
   }
   final socket = ref.watch(socketServiceProvider);
+  final pushNotifications = ref.watch(pushNotificationServiceProvider);
   return AuthNotifier(
     repository,
     prefs: prefs,
     socket: socket,
     googleAuthService: googleAuthService,
     dioClient: client,
+    pushNotifications: pushNotifications,
   );
 });

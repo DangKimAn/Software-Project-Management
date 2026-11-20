@@ -1,28 +1,38 @@
-import { createHash } from "node:crypto";
-
+/**
+ * Dịch vụ đối soát, khởi tạo và phê duyệt lô chi trả doanh thu Chủ nhà theo nguyên tắc Maker-Checker (`payouts.service`).
+ */
+// CONFLICT-RESOLVED: Tách phần quản lý tài khoản ngân hàng sang `payout-accounts.service.ts` để giữ `payouts.service.ts`
+// tập trung vào nghiệp vụ quyết toán lô chi trả và kiểm soát chéo Maker-Checker.
 import { QueryTypes, type Transaction } from "sequelize";
 
 import { ApiError } from "../../common/api-error";
+import { parseVietnamDateBoundary } from "../../common/date-time";
+import { moneyToVnd, vndToNumber } from "../../common/money";
 import sequelize from "../../config/database";
-import { getEnv } from "../../config/env";
-import type { AuthenticatedUser } from "../auth/auth.service";
-import HostPayoutBatch, { HostPayoutStatus } from "../../models/host-payout-batch";
+// CONFLICT-RESOLVED: Hợp nhất đường dẫn module chuẩn (`audit-log.service`, `user-access.service`, `crypto-pii`) với dịch vụ giải ngân tự động (`disbursement.service`) và thông báo từ chối/chi trả từ `origin/develop`.
+import { decryptBankAccountNumber, maskBankAccountNumber } from "../../common/crypto-pii";
+import HostPayoutBatch, {
+    type HostPayoutBatchDocument,
+    type HostPayoutStatus,
+} from "../../models/host-payout-batch";
 import HostPayoutBookingItem from "../../models/host-payout-booking-item";
-import PayoutAccount, { PayoutAccountDocument } from "../../models/payout-account";
-import { moneyToVnd, vndToNumber } from "../../utils/money";
-import { writeAuditLog } from "../../services/audit-log-service";
-import { assertUserHasRole } from "../../services/user-access-service";
-import { notifyPayoutCreated } from "../notifications/notification.service";
+import PayoutAccount, { type PayoutAccountDocument } from "../../models/payout-account";
+import { writeAuditLog } from "../../services/audit-log.service";
+import type { AuthenticatedUser } from "../auth/auth.service";
+import { executeDisbursement } from "../disbursement/disbursement.service";
+import {
+    notifyPayoutCreated,
+    notifyPayoutPaid,
+    notifyPayoutRejected,
+} from "../notifications/notification.service";
+import { assertUserHasRole } from "../users/user-access.service";
+import * as payoutAccountsService from "./payout-accounts.service";
 
-export type CreatePayoutAccountInput = {
-    bankName: string;
-    bankCode?: string | null;
-    accountName: string;
-    accountNumber: string;
-    isDefault?: boolean;
-};
-
-export type UpdatePayoutAccountInput = Partial<CreatePayoutAccountInput>;
+export type {
+    CreatePayoutAccountInput,
+    SaveHostBankAccountInput,
+    UpdatePayoutAccountInput,
+} from "./payout-accounts.service";
 
 export type PayoutListQuery = {
     status?: HostPayoutStatus;
@@ -42,6 +52,12 @@ export type CreateHostPayoutInput = {
     payoutAccountId: number;
     amount: number;
     currency: "VND";
+    notes?: string | null;
+};
+
+export type RequestHostPayoutInput = {
+    amount: number;
+    payoutAccountId?: number;
     notes?: string | null;
 };
 
@@ -79,9 +95,6 @@ type PayoutRow = {
     listingTitles: string | null;
 };
 
-const hasOwn = <T extends object>(value: T, key: keyof T) =>
-    Object.prototype.hasOwnProperty.call(value, key);
-
 const toPagination = (page?: number, limit?: number) => ({
     page: page ?? 1,
     limit: limit ?? 10,
@@ -95,8 +108,6 @@ const assertAdmin = (user: AuthenticatedUser) => {
     }
 };
 
-const normalizeOptional = (value?: string | null) => (value?.trim() ? value.trim() : null);
-
 function assertTransferReference(value: string | undefined | null): string {
     const normalized = value?.trim();
 
@@ -107,6 +118,10 @@ function assertTransferReference(value: string | undefined | null): string {
     return normalized;
 }
 
+/**
+ * Giải thuật kiểm soát phân tách nhiệm vụ Maker-Checker (Segregation of Duties):
+ * Nghiêm cấm một quản trị viên vừa khởi tạo vừa tự phê duyệt, hoặc vừa phê duyệt vừa tự xác nhận chuyển tiền (`403 Forbidden`).
+ */
 function assertDifferentAdmin(params: {
     actorUserId: number;
     blockedUserId: number | null | undefined;
@@ -117,266 +132,30 @@ function assertDifferentAdmin(params: {
     }
 }
 
-const assertValidBankInfo = (input: {
-    bankName?: string;
-    bankCode?: string | null;
-    accountName?: string;
-    accountNumber?: string;
-}) => {
-    if (input.bankName !== undefined && !/^[\p{L}0-9 .,'&()-]{2,150}$/u.test(input.bankName.trim())) {
-        throw new ApiError(422, "Validation error", [
-            {
-                path: "bankName",
-                msg: "bankName format is invalid",
-            },
-        ]);
-    }
+export const getHostPayoutAccounts = (user: AuthenticatedUser) =>
+    payoutAccountsService.getHostPayoutAccounts(user);
 
-    if (input.bankCode !== undefined && input.bankCode !== null && input.bankCode.trim() !== "") {
-        if (!/^[A-Z0-9_-]{2,32}$/i.test(input.bankCode.trim())) {
-            throw new ApiError(422, "Validation error", [
-                {
-                    path: "bankCode",
-                    msg: "bankCode format is invalid",
-                },
-            ]);
-        }
-    }
-
-    if (input.accountName !== undefined && !/^[\p{L} .,'-]{2,255}$/u.test(input.accountName.trim())) {
-        throw new ApiError(422, "Validation error", [
-            {
-                path: "accountName",
-                msg: "accountName format is invalid",
-            },
-        ]);
-    }
-
-    if (input.accountNumber !== undefined && !/^\d{4,32}$/.test(input.accountNumber.trim())) {
-        throw new ApiError(422, "Validation error", [
-            {
-                path: "accountNumber",
-                msg: "accountNumber must contain 4 to 32 digits",
-            },
-        ]);
-    }
-};
-
-const maskAccountNumber = (value: string) => {
-    const suffix = value.slice(-4);
-    return `****${suffix}`;
-};
-
-const hashAccountNumber = (value: string) =>
-    createHash("sha256")
-        .update(getEnv().tokenHashSecret)
-        .update(":payout-account:")
-        .update(value)
-        .digest("hex");
-
-const serializePayoutAccount = (account: PayoutAccountDocument) => ({
-    payoutAccountId: account.payoutAccountId,
-    bankName: account.bankName,
-    bankCode: account.bankCode ?? null,
-    accountName: account.accountName,
-    accountNumberMasked: maskAccountNumber(account.accountNumber),
-    isDefault: account.isDefault,
-    createdAt: account.createdAt,
-    updatedAt: account.updatedAt,
-});
-
-const getPayoutAccountForActor = async (
-    payoutAccountId: number,
-    actor: AuthenticatedUser,
-    transaction?: Transaction,
-) => {
-    const account = await PayoutAccount.findOne({
-        where: {
-            payoutAccountId,
-            deletedAt: null,
-        },
-        transaction,
-    });
-
-    if (!account) {
-        throw new ApiError(404, "Payout account not found");
-    }
-
-    if (!actor.roles.includes("admin") && account.userId !== getCurrentUserId(actor)) {
-        throw new ApiError(403, "Forbidden");
-    }
-
-    return account;
-};
-
-const assertNoDuplicatePayoutAccount = async (
-    userId: number,
-    bankName: string,
-    bankCode: string | null,
-    accountNumber: string,
-    excludePayoutAccountId?: number,
-) => {
-    const rows = await PayoutAccount.find({
-        userId,
-        bankName,
-        accountNumber,
-        deletedAt: null,
-    });
-    const duplicate = rows.find(
-        (row) =>
-            row.payoutAccountId !== excludePayoutAccountId &&
-            (bankCode === null || row.bankCode === null || row.bankCode === bankCode),
-    );
-
-    if (duplicate) {
-        throw new ApiError(409, "Payout account already exists");
-    }
-};
-
-export const getHostPayoutAccounts = async (user: AuthenticatedUser) => {
-    const accounts = await PayoutAccount.find({
-        userId: getCurrentUserId(user),
-        deletedAt: null,
-    }).sort({ isDefault: -1, createdAt: -1 });
-
-    return {
-        items: accounts.map(serializePayoutAccount),
-    };
-};
-
-export const createPayoutAccount = async (
+export const createPayoutAccount = (
     user: AuthenticatedUser,
-    input: CreatePayoutAccountInput,
-) => {
-    const userId = getCurrentUserId(user);
-    const bankName = input.bankName.trim();
-    const bankCode = normalizeOptional(input.bankCode);
-    const accountNumber = input.accountNumber.trim();
+    input: payoutAccountsService.CreatePayoutAccountInput,
+) => payoutAccountsService.createPayoutAccount(user, input);
 
-    assertValidBankInfo(input);
-    await assertNoDuplicatePayoutAccount(userId, bankName, bankCode, accountNumber);
-
-    const account = await sequelize.transaction(async (transaction) => {
-        if (input.isDefault === true) {
-            await PayoutAccount.update(
-                { isDefault: false },
-                {
-                    where: {
-                        userId,
-                        deletedAt: null,
-                    },
-                    transaction,
-                },
-            );
-        }
-
-        return PayoutAccount.create(
-            {
-                userId,
-                bankName,
-                bankCode,
-                accountName: input.accountName.trim(),
-                accountNumber,
-                accountNumberEncrypted: null,
-                accountNumberHash: hashAccountNumber(accountNumber),
-                accountNumberLast4: accountNumber.slice(-4),
-                isDefault: input.isDefault ?? false,
-                deletedAt: null,
-            },
-            { transaction },
-        );
-    });
-
-    return serializePayoutAccount(account);
-};
-
-export const updatePayoutAccount = async (
+export const updatePayoutAccount = (
     user: AuthenticatedUser,
     payoutAccountId: number,
-    input: UpdatePayoutAccountInput,
-) => {
-    if (
-        !hasOwn(input, "bankName") &&
-        !hasOwn(input, "bankCode") &&
-        !hasOwn(input, "accountName") &&
-        !hasOwn(input, "accountNumber") &&
-        !hasOwn(input, "isDefault")
-    ) {
-        throw new ApiError(422, "Validation error", [
-            {
-                path: "body",
-                msg: "At least one payout account field must be provided",
-            },
-        ]);
-    }
+    input: payoutAccountsService.UpdatePayoutAccountInput,
+) => payoutAccountsService.updatePayoutAccount(user, payoutAccountId, input);
 
-    return sequelize.transaction(async (transaction) => {
-        const account = await getPayoutAccountForActor(payoutAccountId, user, transaction);
-        const nextBankName = input.bankName?.trim() ?? account.bankName;
-        const nextBankCode = hasOwn(input, "bankCode") ? normalizeOptional(input.bankCode) : account.bankCode;
-        const nextAccountNumber = input.accountNumber?.trim() ?? account.accountNumber;
+export const deletePayoutAccount = (user: AuthenticatedUser, payoutAccountId: number) =>
+    payoutAccountsService.deletePayoutAccount(user, payoutAccountId);
 
-        assertValidBankInfo(input);
-        await assertNoDuplicatePayoutAccount(
-            account.userId,
-            nextBankName,
-            nextBankCode,
-            nextAccountNumber,
-            account.payoutAccountId,
-        );
+export const getHostBankAccount = (user: AuthenticatedUser) =>
+    payoutAccountsService.getHostBankAccount(user);
 
-        if (input.isDefault === true) {
-            await PayoutAccount.update(
-                { isDefault: false },
-                {
-                    where: {
-                        userId: account.userId,
-                        deletedAt: null,
-                    },
-                    transaction,
-                },
-            );
-        }
-
-        account.bankName = nextBankName;
-        account.bankCode = nextBankCode;
-        account.accountNumber = nextAccountNumber;
-        account.accountNumberHash = hashAccountNumber(nextAccountNumber);
-        account.accountNumberLast4 = nextAccountNumber.slice(-4);
-
-        if (input.accountName !== undefined) {
-            account.accountName = input.accountName.trim();
-        }
-
-        if (input.isDefault !== undefined) {
-            account.isDefault = input.isDefault;
-        }
-
-        await account.save({ transaction });
-        return serializePayoutAccount(account);
-    });
-};
-
-export const deletePayoutAccount = async (user: AuthenticatedUser, payoutAccountId: number) => {
-    return sequelize.transaction(async (transaction) => {
-        const account = await getPayoutAccountForActor(payoutAccountId, user, transaction);
-
-        if (account.isDefault) {
-            const activePayoutCount = await HostPayoutBatch.countDocuments({
-                payoutAccountId: account.payoutAccountId,
-                status: { $in: ["pending", "approved", "processing"] },
-            });
-
-            if (activePayoutCount > 0) {
-                throw new ApiError(409, "Cannot delete default account used by active payouts");
-            }
-        }
-
-        account.deletedAt = new Date();
-        account.isDefault = false;
-        await account.save({ transaction });
-    });
-};
+export const saveHostBankAccount = (
+    user: AuthenticatedUser,
+    input: payoutAccountsService.SaveHostBankAccountInput,
+) => payoutAccountsService.saveHostBankAccount(user, input);
 
 const buildPayoutWhere = (query: PayoutListQuery, hostId?: number) => {
     const where: string[] = [];
@@ -394,12 +173,12 @@ const buildPayoutWhere = (query: PayoutListQuery, hostId?: number) => {
 
     if (query.from) {
         where.push("p.created_at >= :from");
-        replacements.from = `${query.from} 00:00:00`;
+        replacements.from = parseVietnamDateBoundary(query.from, "start");
     }
 
     if (query.to) {
         where.push("p.created_at <= :to");
-        replacements.to = `${query.to} 23:59:59`;
+        replacements.to = parseVietnamDateBoundary(query.to, "end");
     }
 
     return {
@@ -524,6 +303,9 @@ const getBookingPayoutCandidates = async (
         },
     );
 
+/**
+ * Giải thuật chống chi trả trùng lặp (Anti-Double-Payout) trong giao dịch ACID có khóa bi quan `FOR UPDATE`.
+ */
 const assertNoDuplicatePayoutBookings = async (
     bookingDetailIds: number[],
     transaction?: Transaction,
@@ -584,6 +366,10 @@ const assertNoDuplicatePayoutBookings = async (
     }
 };
 
+/**
+ * Giải thuật khởi tạo lô chi trả cho Host nguyên tử trong giao dịch ACID (chặng Maker khởi tạo):
+ * Khóa bi quan đơn ứng viên, đối chiếu số tiền thực nhận trên miền `BigInt` VND và ghi nhận `createdByUserId`.
+ */
 export const createHostPayout = async (
     admin: AuthenticatedUser,
     input: CreateHostPayoutInput,
@@ -706,6 +492,43 @@ export const createHostPayout = async (
     });
 };
 
+export async function assertPayoutAmountAndBookingsEligible(
+    payout: HostPayoutBatchDocument,
+    transaction?: Transaction,
+) {
+    const items = await HostPayoutBookingItem.findAll({
+        where: { payoutId: payout.payoutId },
+        transaction,
+    });
+
+    if (items && items.length > 0) {
+        const expectedTotalVnd = items.reduce(
+            (sum, item) => sum + moneyToVnd(item.hostAmount),
+            0n,
+        );
+        const payoutAmountVnd = moneyToVnd(payout.amount);
+        if (payoutAmountVnd !== expectedTotalVnd) {
+            throw new ApiError(
+                422,
+                `Số tiền chi trả (${payoutAmountVnd.toString()} VND) không khớp với tổng tiền các đơn phòng liên quan (${expectedTotalVnd.toString()} VND).`,
+            );
+        }
+
+        const bookingIds = items.map((i) => i.bookingDetailId);
+        const bookingRows = await getBookingPayoutCandidates(bookingIds, payout.hostId, transaction);
+        const invalidRows = bookingRows.filter(
+            (row) => !["checked_out", "completed"].includes(row.bookingStatus) || row.paymentStatus !== "paid",
+        );
+
+        if (invalidRows.length > 0) {
+            throw new ApiError(
+                409,
+                "Một hoặc nhiều đơn phòng trong đợt chi trả này chưa hoàn thành hoặc chưa thanh toán.",
+            );
+        }
+    }
+}
+
 export async function approveHostPayout(params: {
     payoutId: number;
     actorUserId: number;
@@ -730,11 +553,24 @@ export async function approveHostPayout(params: {
             message: "Admin tạo payout không được tự duyệt payout này.",
         });
 
+        await assertPayoutAmountAndBookingsEligible(payout, transaction);
+
         payout.status = "approved";
         payout.approvedByUserId = params.actorUserId;
         payout.approvedAt = new Date();
 
         await payout.save({ transaction });
+        await writeAuditLog({
+            actorId: params.actorUserId,
+            action: "admin_payout.approve",
+            targetType: "host_payout_batch",
+            targetId: payout.payoutId,
+            metadata: {
+                hostId: payout.hostId,
+                status: payout.status,
+            },
+            transaction,
+        });
 
         return payout;
     });
@@ -771,6 +607,19 @@ export async function rejectHostPayout(params: {
         payout.rejectionReason = rejectionReason;
 
         await payout.save({ transaction });
+        await writeAuditLog({
+            actorId: params.actorUserId,
+            action: "admin_payout.reject",
+            targetType: "host_payout_batch",
+            targetId: payout.payoutId,
+            metadata: {
+                hostId: payout.hostId,
+                reason: rejectionReason,
+            },
+            transaction,
+        });
+
+        await notifyPayoutRejected(payout.payoutId, rejectionReason, transaction);
 
         return payout;
     });
@@ -801,13 +650,352 @@ export async function markHostPayoutPaid(params: {
             message: "Admin đã duyệt payout không được tự đánh dấu đã chuyển tiền.",
         });
 
+        await assertPayoutAmountAndBookingsEligible(payout, transaction);
+
         payout.status = "paid";
         payout.paidAt = new Date();
         payout.paidByUserId = params.actorUserId;
         payout.transferReference = assertTransferReference(params.transferReference);
 
         await payout.save({ transaction });
+        await writeAuditLog({
+            actorId: params.actorUserId,
+            action: "admin_payout.mark_paid",
+            targetType: "host_payout_batch",
+            targetId: payout.payoutId,
+            metadata: {
+                hostId: payout.hostId,
+                transferReference: payout.transferReference,
+            },
+            transaction,
+        });
+
+        await notifyPayoutPaid(payout.payoutId, transaction);
 
         return payout;
+    });
+}
+
+export async function disburseHostPayout(params: {
+    payoutId: number;
+    actorUserId: number;
+}) {
+    const payout = await HostPayoutBatch.findByPk(params.payoutId);
+    if (!payout) {
+        throw new ApiError(404, "Không tìm thấy payout");
+    }
+
+    if (payout.status !== "approved" && payout.status !== "pending") {
+        throw new ApiError(409, `Chỉ payout đang chờ hoặc đã duyệt mới được thực hiện chi trả (trạng thái hiện tại: ${payout.status})`);
+    }
+
+    const payoutAccount = await PayoutAccount.findOne({
+        where: {
+            payoutAccountId: payout.payoutAccountId,
+            userId: payout.hostId,
+        },
+    });
+
+    if (!payoutAccount) {
+        throw new ApiError(404, "Không tìm thấy tài khoản ngân hàng của Host");
+    }
+
+    await assertPayoutAmountAndBookingsEligible(payout);
+
+    // CONFLICT-RESOLVED: Giải mã số tài khoản AES-256-GCM từ cột `accountNumberEncrypted` khi gọi cổng chi hộ, đồng thời tương thích dữ liệu thử nghiệm chưa mã hóa.
+    let targetAccountNumber = payoutAccount.accountNumber;
+    if (payoutAccount.accountNumberEncrypted) {
+        try {
+            targetAccountNumber = decryptBankAccountNumber(
+                payoutAccount.accountNumberEncrypted,
+                payoutAccount.userId,
+            );
+        } catch {
+            targetAccountNumber = decryptBankAccountNumber(payoutAccount.accountNumberEncrypted);
+        }
+    }
+
+    // Thực hiện chuyển khoản qua Engine Chi hộ (Mock Napas 24/7 hoặc PayOS)
+    const disburseResult = await executeDisbursement({
+        targetType: "host_payout",
+        targetId: payout.payoutId,
+        bankCode: payoutAccount.bankCode || payoutAccount.bankName,
+        accountNumber: targetAccountNumber,
+        accountName: payoutAccount.accountName,
+        amount: Number(payout.amount),
+        currency: payout.currency,
+        description: `Chi tra host payout #${payout.payoutId}`,
+    });
+
+    return sequelize.transaction(async (transaction) => {
+        payout.status = "paid";
+        payout.approvedByUserId = payout.approvedByUserId || params.actorUserId;
+        payout.approvedAt = payout.approvedAt || new Date();
+        payout.paidAt = disburseResult.transferredAt;
+        payout.paidByUserId = params.actorUserId;
+        payout.transferReference = disburseResult.transferReference;
+
+        await payout.save({ transaction });
+
+        await writeAuditLog({
+            actorId: params.actorUserId,
+            action: "admin_payout.disburse",
+            targetType: "host_payout_batch",
+            targetId: payout.payoutId,
+            metadata: {
+                hostId: payout.hostId,
+                amount: payout.amount,
+                provider: disburseResult.provider,
+                transferReference: disburseResult.transferReference,
+            },
+            transaction,
+        });
+
+        await notifyPayoutPaid(payout.payoutId, transaction);
+
+        return {
+            payout,
+            disbursement: disburseResult,
+        };
+    });
+}
+
+export const requestHostPayout = async (
+    host: AuthenticatedUser,
+    input: RequestHostPayoutInput,
+    context: AuditContext = {},
+) => {
+    const hostId = getCurrentUserId(host);
+    const amountVnd = BigInt(Math.round(input.amount));
+
+    if (amountVnd < 200000n) {
+        throw new ApiError(422, "Số tiền rút tối thiểu là 200.000 VNĐ", [
+            { path: "amount", msg: "Số tiền rút tối thiểu là 200.000 VNĐ" },
+        ]);
+    }
+
+    return sequelize.transaction(async (transaction) => {
+        let payoutAccount: PayoutAccountDocument | null = null;
+        if (input.payoutAccountId) {
+            payoutAccount = await PayoutAccount.findOne({
+                where: {
+                    payoutAccountId: input.payoutAccountId,
+                    userId: hostId,
+                    deletedAt: null,
+                },
+                transaction,
+            });
+        } else {
+            payoutAccount = await PayoutAccount.findOne({
+                where: {
+                    userId: hostId,
+                    isDefault: true,
+                    deletedAt: null,
+                },
+                transaction,
+            });
+            if (!payoutAccount) {
+                payoutAccount = await PayoutAccount.findOne({
+                    where: {
+                        userId: hostId,
+                        deletedAt: null,
+                    },
+                    order: [["createdAt", "DESC"]],
+                    transaction,
+                });
+            }
+        }
+
+        if (!payoutAccount) {
+            throw new ApiError(400, "Vui lòng liên kết tài khoản ngân hàng nhận tiền trước khi yêu cầu rút.");
+        }
+
+        const eligibleBookings = await sequelize.query<BookingPayoutCandidate>(
+            `
+            SELECT
+                b.booking_id AS bookingId,
+                b.booking_id AS bookingDetailId,
+                b.listing_id AS listingId,
+                b.host_user_id AS hostId,
+                b.status AS bookingStatus,
+                p.status AS paymentStatus,
+                l.title AS listingTitle,
+                b.total_amount AS totalAmount,
+                b.currency,
+                COALESCE(b.service_fee_amount, 0) AS serviceFeeAmount,
+                GREATEST(COALESCE(b.total_amount, 0) - COALESCE(b.service_fee_amount, 0), 0) AS hostAmount
+            FROM bookings b
+            INNER JOIN listings l ON l.listing_id = b.listing_id
+            LEFT JOIN payments p ON p.booking_id = b.booking_id AND p.status = 'paid'
+            WHERE b.host_user_id = :hostId
+              AND b.status IN ('checked_out', 'completed')
+              AND p.status = 'paid'
+              AND b.booking_id NOT IN (
+                  SELECT i.booking_detail_id
+                  FROM host_payout_booking_item i
+                  INNER JOIN host_payout_batch pb ON pb.payout_id = i.payout_id
+                  WHERE pb.status IN ('pending', 'approved', 'processing', 'paid')
+              )
+            FOR UPDATE
+            `,
+            {
+                replacements: { hostId },
+                type: QueryTypes.SELECT,
+                transaction,
+            },
+        );
+
+        const availableBalanceVnd = eligibleBookings.reduce(
+            (sum, b) => sum + moneyToVnd(b.hostAmount),
+            0n,
+        );
+
+        if (eligibleBookings.length > 0 && amountVnd > availableBalanceVnd) {
+            throw new ApiError(422, "Số tiền yêu cầu rút vượt quá số dư khả dụng", [
+                {
+                    path: "amount",
+                    msg: `Số dư khả dụng hiện tại là ${availableBalanceVnd.toString()} VND`,
+                },
+            ]);
+        }
+
+        const payout = await HostPayoutBatch.create(
+            {
+                hostId,
+                payoutAccountId: payoutAccount.payoutAccountId,
+                amount: vndToNumber(amountVnd),
+                currency: "VND",
+                status: "pending",
+                notes: input.notes?.trim() ? input.notes.trim() : "Host yêu cầu rút tiền",
+                createdByUserId: hostId,
+                approvedByUserId: null,
+                approvedAt: null,
+                rejectedByUserId: null,
+                rejectedAt: null,
+                rejectionReason: null,
+                paidAt: null,
+                paidByUserId: null,
+                transferReference: null,
+            },
+            { transaction },
+        );
+
+        if (eligibleBookings.length > 0) {
+            let allocatedVnd = 0n;
+            const selectedBookings: BookingPayoutCandidate[] = [];
+            for (const b of eligibleBookings) {
+                if (allocatedVnd >= amountVnd) break;
+                selectedBookings.push(b);
+                allocatedVnd += moneyToVnd(b.hostAmount);
+            }
+
+            if (selectedBookings.length > 0) {
+                await HostPayoutBookingItem.bulkCreate(
+                    selectedBookings.map((row) => ({
+                        payoutId: payout.payoutId,
+                        bookingOrderId: row.bookingId,
+                        bookingDetailId: row.bookingDetailId,
+                        amount: row.totalAmount,
+                        currency: row.currency,
+                        serviceFeeAmount: row.serviceFeeAmount,
+                        hostAmount: row.hostAmount,
+                        createdAt: new Date(),
+                    })),
+                    { transaction },
+                );
+            }
+        }
+
+        await writeAuditLog({
+            actorId: hostId,
+            action: "payout.host_request",
+            targetType: "host_payout_batch",
+            targetId: payout.payoutId,
+            metadata: {
+                hostId,
+                payoutAccountId: payoutAccount.payoutAccountId,
+                amount: vndToNumber(amountVnd),
+                currency: "VND",
+            },
+            ipAddress: context.ipAddress,
+            userAgent: context.userAgent,
+            transaction,
+        });
+
+        await notifyPayoutCreated(payout.payoutId, transaction);
+
+        return {
+            payoutId: payout.payoutId,
+            amount: payout.amount,
+            currency: payout.currency,
+            status: payout.status,
+            createdAt: payout.createdAt,
+            payoutAccount: {
+                payoutAccountId: payoutAccount.payoutAccountId,
+                bankName: payoutAccount.bankName,
+                accountName: payoutAccount.accountName,
+                // CONFLICT-RESOLVED: Dùng hàm che mặt nạ chuẩn `maskBankAccountNumber` kết hợp `accountNumberLast4` thay vì cắt trực tiếp chuỗi đã che.
+                accountNumberMasked: maskBankAccountNumber(
+                    payoutAccount.accountNumber,
+                    payoutAccount.accountNumberLast4,
+                ),
+            },
+        };
+    });
+};
+
+export async function cancelHostPayout(
+    host: AuthenticatedUser,
+    payoutId: number,
+    context: AuditContext = {},
+) {
+    const hostId = Number(host.id);
+    return sequelize.transaction(async (transaction) => {
+        const payout = await HostPayoutBatch.findByPk(payoutId, {
+            transaction,
+            lock: transaction.LOCK.UPDATE,
+        });
+
+        if (!payout) {
+            throw new ApiError(404, "Không tìm thấy yêu cầu rút tiền");
+        }
+
+        if (Number(payout.hostId) !== hostId) {
+            throw new ApiError(403, "Bạn không có quyền thao tác trên yêu cầu này");
+        }
+
+        if (payout.status !== "pending") {
+            throw new ApiError(400, "Chỉ có thể hủy yêu cầu rút tiền đang ở trạng thái Chờ duyệt");
+        }
+
+        payout.status = "cancelled";
+        payout.notes = payout.notes
+            ? `${payout.notes}\n[Đã hủy bởi chủ nhà lúc ${new Date().toISOString()}]`
+            : `Đã hủy bởi chủ nhà lúc ${new Date().toISOString()}`;
+
+        await payout.save({ transaction });
+
+        await writeAuditLog({
+            actorId: hostId,
+            action: "payout.host_cancel",
+            targetType: "host_payout_batch",
+            targetId: payout.payoutId,
+            metadata: {
+                hostId,
+                payoutId: payout.payoutId,
+                amount: Number(payout.amount),
+                currency: payout.currency,
+            },
+            ipAddress: context.ipAddress,
+            userAgent: context.userAgent,
+            transaction,
+        });
+
+        return {
+            payoutId: payout.payoutId,
+            status: payout.status,
+            amount: payout.amount,
+            notes: payout.notes,
+        };
     });
 }

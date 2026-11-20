@@ -1,11 +1,11 @@
 {
-    "name": "Minh Thanh Villa",
-    "short_name": "Minh Thanh Villa",
+    "name": "The Palm",
+    "short_name": "The Palm",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFFFFF",
     "theme_color": "#FF385C",
-    "description": "Minh Thanh Villa — Khám phá, tra cứu lịch trống và đặt biệt thự nghỉ dưỡng cao cấp tại Vũng Tàu.",
+    "description": "The Palm — Khám phá, tra cứu lịch trống và đặt biệt thự nghỉ dưỡng cao cấp tại Vũng Tàu.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize liên kết từng hạng mục đơn đặt phòng vào lô chi trả doanh thu (ràng buộc duy nhất chống chi trả kép).
+ */
 import {
     CreationOptional,
     DataTypes,

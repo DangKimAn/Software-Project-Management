@@ -1,9 +1,11 @@
+// @dart=3.3
+// CONFLICT-RESOLVED: Hợp nhất bản tools/quality/secret_and_rule_audit.dart ở root và bản trùng trong hotel-booking-flutter/tools/quality/ về một nguồn duy nhất tại root; cố định @dart=3.3 để dart format đồng nhất trên mọi phiên bản SDK và CI.
 import 'dart:io';
 
 /// Minh Thanh Villa — Automated Secret, Mock-Ban & FLUTTER_RULES Audit Tool
 ///
 /// Usage:
-///   dart run tools/quality/secret_and_rule_audit.dart [--strict-design]
+///   dart run ../tools/quality/secret_and_rule_audit.dart [--strict-design]
 void main(List<String> args) {
   final strictDesign = args.contains('--strict-design');
   final rootDir = _resolveFlutterProjectRoot();
@@ -14,7 +16,9 @@ void main(List<String> args) {
   stdout.writeln(
     ' MINH THANH VILLA — SECURITY, ZERO-MOCK & FLUTTER_RULES AUDIT GATE',
   );
-  stdout.writeln(' Project Root: ${rootDir.path}');
+  stdout.writeln(
+    ' Project Root: ${rootDir.path}',
+  );
   stdout.writeln(
     '====================================================================',
   );
@@ -22,11 +26,12 @@ void main(List<String> args) {
   final criticalViolations = <String>[];
   final designWarnings = <String>[];
 
-  // 1. Secret & Credential Leak Scan across lib/, test/, integration_test/, config/, .github/
+  // Giải thuật quét đệ quy phát hiện rò rỉ khóa bí mật (Recursive Regex Secret Detection):
+  // Duyệt toàn bộ tệp mã nguồn và cấu hình (.dart, .json, .yml, .yaml) trong cây thư mục dự án,
+  // đối sánh với tập biểu thức chính quy nhận diện Private Key, API Key, JWT, VNPay/MoMo Secret.
   final secretPatterns = <String, RegExp>{
-    'Private Key Block': RegExp(
-      r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----',
-    ),
+    'Private Key Block':
+        RegExp(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'),
     'Google API Key': RegExp(r'AIza[0-9A-Za-z\-_]{35}'),
     'GitHub Personal Access Token': RegExp(r'ghp_[0-9A-Za-z]{36}'),
     'Hardcoded JWT Token': RegExp(
@@ -77,12 +82,10 @@ void main(List<String> args) {
   final libDir = Directory('${rootDir.path}/lib');
   if (libDir.existsSync()) {
     final bannedProdPatterns = <String, RegExp>{
-      'StandaloneBackendInterceptor in production lib/': RegExp(
-        r'\bStandaloneBackendInterceptor\b',
-      ),
-      'badCertificateCallback TLS bypass in production lib/': RegExp(
-        r'\bbadCertificateCallback\b',
-      ),
+      'StandaloneBackendInterceptor in production lib/':
+          RegExp(r'\bStandaloneBackendInterceptor\b'),
+      'badCertificateCallback TLS bypass in production lib/':
+          RegExp(r'\bbadCertificateCallback\b'),
       'seed_villas mock import in production lib/': RegExp(r'\bseed_villas\b'),
     };
 
@@ -116,10 +119,8 @@ void main(List<String> args) {
   final pubspecFile = File('${rootDir.path}/pubspec.yaml');
   if (pubspecFile.existsSync()) {
     final pubspecContent = pubspecFile.readAsStringSync();
-    if (!RegExp(
-      r'family:\s*SF Pro Display',
-      caseSensitive: false,
-    ).hasMatch(pubspecContent)) {
+    if (!RegExp(r'family:\s*SF Pro Display', caseSensitive: false)
+        .hasMatch(pubspecContent)) {
       designWarnings.add(
         '[FONT-RULE-4] pubspec.yaml is missing SF Pro Display font family declaration',
       );
@@ -129,8 +130,7 @@ void main(List<String> args) {
   // 4. Report results
   if (criticalViolations.isEmpty) {
     stdout.writeln(
-      '[PASS] Zero hardcoded secrets, tokens, or production mocks found.',
-    );
+        '[PASS] Zero hardcoded secrets, tokens, or production mocks found.');
   } else {
     for (final v in criticalViolations) {
       stderr.writeln('  ERROR: $v');

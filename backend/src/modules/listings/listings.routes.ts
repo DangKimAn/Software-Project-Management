@@ -1,8 +1,13 @@
+/**
+ * Định tuyến HTTP công khai tra cứu chỗ ở (`/api/listings`):
+ * - Tích hợp kiểm chứng tham số truy vấn tìm kiếm, bộ lọc ngày/giá/vị trí/sức chứa và định danh `listingId` trước khi truy xuất dữ liệu.
+ */
+
 import express from "express";
 import { param, query } from "express-validator";
 
 import { isValidIsoDate } from "../../common/validation";
-import { isValidLocationGroup } from "../../common/vung-tau-location-groups";
+import { isValidLocationGroup } from "./vung-tau-location-groups";
 import {
     getPublicListingAvailabilityById,
     getPublicListingDetailById,
@@ -16,6 +21,14 @@ import {
 } from "./listings.service";
 
 const router = express.Router();
+
+const MAX_STAY_NIGHTS = 365;
+const isDateSpanWithinMaxNights = (checkIn: string, checkOut: string) => {
+    const startMs = Date.parse(`${checkIn}T00:00:00.000Z`);
+    const endMs = Date.parse(`${checkOut}T00:00:00.000Z`);
+    const diffDays = Math.round((endMs - startMs) / 86_400_000);
+    return Number.isFinite(diffDays) && diffDays >= 1 && diffDays <= MAX_STAY_NIGHTS;
+};
 
 const listingIdParamValidator = param("listingId")
     .isInt({ min: 1 })
@@ -56,8 +69,19 @@ router.get(
             .custom((value) => isValidIsoDate(String(value)))
             .withMessage("checkOut must use YYYY-MM-DD format")
             .custom((value, { req }) => !req.query?.checkIn || String(req.query.checkIn) < String(value))
-            .withMessage("checkOut must be after checkIn"),
+            .withMessage("checkOut must be after checkIn")
+            .custom(
+                (value, { req }) =>
+                    !req.query?.checkIn ||
+                    !isValidIsoDate(String(req.query.checkIn)) ||
+                    isDateSpanWithinMaxNights(String(req.query.checkIn), String(value)),
+            )
+            .withMessage(`Date range cannot exceed ${MAX_STAY_NIGHTS} nights`),
         query("guests").optional().isInt({ min: 1 }).withMessage("guests must be at least 1").toInt(),
+        query("bedrooms").optional().isInt({ min: 0 }).withMessage("bedrooms must be 0 or more").toInt(),
+        query("beds").optional().isInt({ min: 1 }).withMessage("beds must be at least 1").toInt(),
+        query("bathrooms").optional().isFloat({ min: 0.5 }).withMessage("bathrooms must be at least 0.5").toFloat(),
+        query("pets").optional().isBoolean().withMessage("pets must be boolean").toBoolean(),
         query("propertyType")
             .optional()
             .isIn(["apartment", "villa", "hotel", "homestay"])

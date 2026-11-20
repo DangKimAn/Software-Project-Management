@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu danh sách chỗ nghỉ yêu thích được người dùng đánh dấu cá nhân.
+ */
 import {
     CreationOptional,
     DataTypes,

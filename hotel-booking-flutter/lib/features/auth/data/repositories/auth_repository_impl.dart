@@ -7,12 +7,21 @@ import '../../domain/entities/auth_session.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
 
+/// Triển khai cụ thể của `AuthRepository` kết hợp `DioClient` và bộ nhớ an toàn `SecureStorageService`.
+///
+/// Quản lý toàn bộ vòng đời lưu trữ khóa phiên (Access Token, Refresh Token và Refresh Cookie),
+/// khôi phục phiên tự động khi khởi động ứng dụng, xác thực Google OAuth và hủy phiên an toàn khi đăng xuất.
 class AuthRepositoryImpl implements AuthRepository {
   final DioClient _client;
   final SecureStorageService _storage;
 
+  /// Khởi tạo `AuthRepositoryImpl` với khách mạng `_client` và dịch vụ lưu trữ bảo mật `_storage`.
   const AuthRepositoryImpl(this._client, this._storage);
 
+  // Giải thuật bóc tách và lưu trữ bền vững phiên đăng nhập mới (`_parseAndPersistSession`):
+  // Bước 1: Mở khung bao phản hồi API, giải mã `AuthSession` và kiểm tra tính toàn vẹn của `token` cùng `user.id`.
+  // Bước 2: Xóa sạch phiên cũ (`clearAuthSession`) để tuyệt đối không kế thừa nhầm Refresh Token của tài khoản trước.
+  // Bước 3: Lưu `token` mới, lưu `refreshToken` (nếu có) và đồng bộ header `Set-Cookie` vào kho lưu trữ bảo mật.
   Future<AuthSession> _parseAndPersistSession(
     Response<Map<String, dynamic>> response,
   ) async {
@@ -85,6 +94,32 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
+  /// Đăng nhập Google dự phòng trên trình duyệt Web bằng `accessToken` OAuth2 khi GIS Popup không trả về `idToken` (`TC-018`).
+  Future<AuthSession> loginWithGoogleAccessToken({
+    required String accessToken,
+  }) async {
+    final trimmedToken = accessToken.trim();
+    if (trimmedToken.isEmpty) {
+      throw const ValidationFailure(
+        'Google Access Token không được để trống.',
+        code: 'EMPTY_GOOGLE_ACCESS_TOKEN',
+      );
+    }
+    try {
+      final response = await _client.dio.post<Map<String, dynamic>>(
+        '/api/auth/google',
+        data: {
+          'accessToken': trimmedToken,
+        },
+        options:
+            Options(extra: const <String, dynamic>{'skipAuthRefresh': true}),
+      );
+      return await _parseAndPersistSession(response);
+    } catch (e) {
+      throw DioClient.handleError(e);
+    }
+  }
+
   @override
   Future<AuthSession> register({
     required String email,
@@ -114,6 +149,11 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> forgotPassword({required String identifier}) async {
+    await forgotPasswordWithCooldown(identifier: identifier);
+  }
+
+  /// Yêu cầu gửi mã OTP khôi phục mật khẩu và trả về số giây chờ gửi lại từ máy chủ (mặc định `60` giây theo `TC-017`).
+  Future<int> forgotPasswordWithCooldown({required String identifier}) async {
     try {
       final response = await _client.dio.post<Map<String, dynamic>>(
         '/api/auth/forgot-password',
@@ -124,6 +164,14 @@ class AuthRepositoryImpl implements AuthRepository {
             Options(extra: const <String, dynamic>{'skipAuthRefresh': true}),
       );
       DioClient.unwrapEnvelope(response.data);
+      final data = response.data?['data'];
+      if (data is Map) {
+        final cooldown = int.tryParse('${data['resendCooldownSeconds'] ?? ''}');
+        if (cooldown != null && cooldown > 0) {
+          return cooldown;
+        }
+      }
+      return 60;
     } catch (e) {
       throw DioClient.handleError(e);
     }
@@ -152,12 +200,20 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
+  /// Làm mới Access Token thông qua cơ chế xoay vòng khóa phiên của `DioClient`.
   Future<String?> refreshSession() {
     return _client.refreshAccessToken();
   }
 
+  /// Khôi phục người dùng hiện hành từ kho khóa bảo mật kết hợp hợp nhất dữ liệu `/api/auth/me` và `/api/users/me`.
   @override
   Future<User?> getCurrentUser() async {
+    // Giải thuật khôi phục phiên đăng nhập hiện hành (`getCurrentUser`):
+    // Bước 1: Kiểm tra `authToken` trong `SecureStorageService`; nếu trống nhưng còn Refresh Cookie / Refresh Token (hoặc trên Web),
+    //         chủ động gọi `refreshAccessToken()` để xin cấp lại Access Token mới trước khi bỏ cuộc.
+    // Bước 2: Truy vấn `/api/auth/me` lấy thông tin định danh & vai trò cốt lõi, sau đó gọi bổ sung `/api/users/me`
+    //         để hợp nhất đầy đủ các trường hồ sơ mở rộng (`bio`, `location`, `school`, `languages`).
+    // Bước 3: Nếu máy chủ trả về lỗi `401` không thể phục hồi, dọn sạch phiên cục bộ và trả về `null`.
     try {
       var token = await _storage.getAuthToken();
       if (token == null || token.trim().isEmpty) {

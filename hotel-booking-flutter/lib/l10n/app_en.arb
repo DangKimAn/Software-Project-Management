@@ -1,5 +1,6 @@
 {
   "@@locale": "en",
+  "@@x-conflict-resolved": "CONFLICT-RESOLVED: Gop toan bo khoa da ngon ngu tu nhanh refactor (Support, Footer, 404) va origin/develop (i18n toan he thong), loai bo 3 khoa aiSearch da xoa.",
   "appTitle": "The Palm Villa",
   "appTagline": "Luxury Vacation Villas in Vung Tau",
   "greetingMorning": "Good morning!",
@@ -29,7 +30,9 @@
   "searchPlusMinusDays": "± {days} days",
   "@searchPlusMinusDays": {
     "placeholders": {
-      "days": { "type": "int" }
+      "days": {
+        "type": "int"
+      }
     }
   },
   "searchAdults": "Adults",
@@ -45,9 +48,6 @@
   "searchSortPriceAsc": "Price: low to high",
   "searchSortPriceDesc": "Price: high to low",
   "searchSortRatingDesc": "Highest rated",
-  "aiSearchTitle": "AI Semantic Search",
-  "aiSearchPlaceholder": "Describe your ideal stay (e.g. Beachfront villa in Back Beach for 15 guests with saltwater pool and BBQ)...",
-  "aiSearchAction": "Search with AI",
   "navDiscover": "Discover",
   "navZalo": "Zalo",
   "navHotline": "Hotline",
@@ -67,92 +67,122 @@
   "bedroomsCount": "{count, plural, =1{1 bedroom} other{{count} bedrooms}}",
   "@bedroomsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "bedsCount": "{count, plural, =1{1 bed} other{{count} beds}}",
   "@bedsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "guestsCapacity": "{count, plural, =1{1 guest} other{{count} guests}}",
   "@guestsCapacity": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "guestsCount": "{count, plural, =1{1 guest} other{{count} guests}}",
   "@guestsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "adultsCount": "{count, plural, =1{1 adult} other{{count} adults}}",
   "@adultsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "childrenCount": "{count, plural, =1{1 child} other{{count} children}}",
   "@childrenCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "infantsCount": "{count, plural, =1{1 infant} other{{count} infants}}",
   "@infantsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "petsCount": "{count, plural, =1{1 pet} other{{count} pets}}",
   "@petsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "bathroomsCount": "{count, plural, =1{1 bath} other{{count} baths}}",
   "@bathroomsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "nightsCount": "{count, plural, =1{1 night} other{{count} nights}}",
   "@nightsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "reviewsCount": "{count, plural, =0{No reviews yet} =1{1 review} other{{count} reviews}}",
   "@reviewsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "beachDistance": "{distance}m to beach",
   "@beachDistance": {
     "placeholders": {
-      "distance": { "type": "int" }
+      "distance": {
+        "type": "int"
+      }
     }
   },
   "priceFrom": "From {price} / night",
   "@priceFrom": {
     "placeholders": {
-      "price": { "type": "String" }
+      "price": {
+        "type": "String"
+      }
     }
   },
   "pricePerNightUnit": "/ night",
   "saturdayPrice": "Sat: {price}",
   "@saturdayPrice": {
     "placeholders": {
-      "price": { "type": "String" }
+      "price": {
+        "type": "String"
+      }
     }
   },
   "totalNightsWithFee": "{nights, plural, =1{Total for 1 night • Fees included} other{Total for {nights} nights • Fees included}}",
   "@totalNightsWithFee": {
     "placeholders": {
-      "nights": { "type": "int" }
+      "nights": {
+        "type": "int"
+      }
     }
   },
   "contactForPrice": "Contact for pricing",
@@ -186,14 +216,23 @@
   "paginationPageOf": "Page {page} of {totalPages}",
   "@paginationPageOf": {
     "placeholders": {
-      "page": { "type": "int" },
-      "totalPages": { "type": "int" }
+      "page": {
+        "type": "int"
+      },
+      "totalPages": {
+        "type": "int"
+      }
     }
   },
   "loadingText": "Loading data...",
   "loadingVillas": "Loading properties...",
   "loadingVillaDetail": "Loading villa details...",
   "loadingFavorites": "Loading your wishlist...",
+  "loadingTrips": "Loading trips...",
+  "loadingPaymentInfo": "Loading booking payment details...",
+  "guestPaymentConnectingGateway": "Connecting to payment gateway...",
+  "guestPaymentBookingNotFoundTitle": "Booking not found",
+  "guestPaymentBookingNotFoundMessage": "This booking does not exist or has expired.",
   "emptyList": "No matching villas found",
   "emptyListDesc": "Try adjusting your search filters or stay dates.",
   "errorOccurred": "Something went wrong",
@@ -210,6 +249,11 @@
   "errorVillaNotFoundMessage": "The villa you are looking for does not exist or is no longer available.",
   "errorRateLimitMessage": "Too many requests. Please wait a moment and try again.",
   "errorValidationMessage": "The submitted information is invalid. Please check and try again.",
+  "calendarPrevMonth": "Previous month",
+  "calendarNextMonth": "Next month",
+  "calendarDay": "Day {day}",
+  "calendarDayBooked": "Day {day} is booked",
+  "calendarDayCheckOutOnly": "Day {day} check-out only",
   "dateBooked": "This date is booked",
   "checkInDate": "Check-in",
   "checkOutDate": "Check-out",
@@ -272,7 +316,7 @@
   "authLogout": "Sign out",
   "profileVerified": "Verified",
   "profileUnverified": "Unverified",
-  "hostOnboardingTitle": "Become a Host at Minh Thanh Villa",
+  "hostOnboardingTitle": "Become a Host at The Palm",
   "hostKycTitle": "Host Registration & KYC Verification",
   "hostKycStatusTitle": "Host Application Status",
   "hostTabOverview": "Overview",
@@ -299,5 +343,853 @@
   "adminTabRoles": "Role management",
   "adminUserStatusActive": "Active",
   "adminUserStatusSuspended": "Suspended",
-  "adminUserStatusInactive": "Inactive"
+  "adminUserStatusInactive": "Inactive",
+  "settingsCurrency": "Display currency",
+  "currencyFollowLanguage": "Follow language",
+  "currencyFollowLanguageDesc": "Automatically switch currency with interface language",
+  "currencyNameVnd": "Vietnamese Dong (VND - ₫)",
+  "currencyNameUsd": "US Dollar (USD - $)",
+  "currencyNameKrw": "South Korean Won (KRW - ₩)",
+  "fxEstimatedPrice": "Estimated price: ≈ {amount}",
+  "@fxEstimatedPrice": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "fxTotalPayableVnd": "Total payable: {amountVnd}",
+  "@fxTotalPayableVnd": {
+    "placeholders": {
+      "amountVnd": {
+        "type": "String"
+      }
+    }
+  },
+  "fxChargedInVndNotice": "You will be charged in VND. Your bank may apply exchange rates and fees.",
+  "fxReferenceRateLabel": "Reference rate ({source})",
+  "@fxReferenceRateLabel": {
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "fxRateUpdatedAt": "Exchange rate as of {time}",
+  "@fxRateUpdatedAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "fxRateUnavailableFallback": "Exchange rates unavailable. Displaying official prices in VND.",
+  "fxRateStaleNotice": "Using last verified exchange rate ({time}).",
+  "@fxRateStaleNotice": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "fxBankConversionFeeNotice": "Conversion fees and bank exchange rates may apply.",
+  "fxPaymentMethodUnsupported": "This payment method is not currently supported.",
+  "fxRefundInVndNotice": "Actual refunds are processed in VND. Your card statement amount may differ based on bank exchange rates at refund time.",
+  "fxHistoricalReferenceNote": "Converted foreign amount is for reference only, not the actual statement charge.",
+  "fxPayButtonVnd": "Pay {amountVnd} via {method}",
+  "@fxPayButtonVnd": {
+    "placeholders": {
+      "amountVnd": {
+        "type": "String"
+      },
+      "method": {
+        "type": "String"
+      }
+    }
+  },
+  "fxPriceRangePerNight": "Nightly price range",
+  "vnpayGatewayTitle": "VNPay (QR Pay / Domestic Bank Card)",
+  "vnpayGatewaySubtitle": "Secure VND settlement via VNPay payment gateway",
+  "momoGatewayTitle": "MoMo E-Wallet",
+  "momoGatewaySubtitle": "Pay in VND via MoMo app or MoMo QR code",
+  "footerSupport": "Support",
+  "footerBookingGuide": "Booking Guide",
+  "footerCancellationPolicy": "Cancellation Policy",
+  "footerFeedback": "Complaints & Feedback",
+  "footerFaq": "Frequently Asked Questions (FAQ)",
+  "footerDiscover": "Explore Vung Tau",
+  "footerAboutUs": "About Us",
+  "footerTravelGuide": "Travel Guide",
+  "footerAddonServices": "Add-on Services",
+  "footerMemberOffers": "Member Offers",
+  "footerContact": "Contact",
+  "footerOnlineConsultation": "Online Consultation",
+  "footerHotline": "Hotline: {phone}",
+  "@footerHotline": {
+    "placeholders": {
+      "phone": {
+        "type": "String"
+      }
+    }
+  },
+  "footerAddress": "Address: 28 Thi Sach",
+  "footerEmail": "Email: {email}",
+  "@footerEmail": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "footerSocial": "Social",
+  "footerCopyright": "© 2026 The Palm Villa Vung Tau. All rights reserved.",
+  "settingsAvatarUpdateTitle": "Update profile photo",
+  "settingsAvatarUpdateHint": "Select a JPG, PNG, WebP, or GIF image from your device (maximum 5MB).",
+  "settingsAvatarPickFromDevice": "Choose photo from device (Max 5MB)",
+  "settingsAvatarUploading": "Uploading photo...",
+  "settingsAvatarSelected": "Selected: {fileName} ({sizeKb} KB)",
+  "@settingsAvatarSelected": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      },
+      "sizeKb": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAvatarPickError": "Unable to choose photo from device. Please try again.",
+  "settingsAvatarUpdateSuccess": "Profile photo updated successfully.",
+  "settingsChangeAvatarTooltip": "Change photo",
+  "settingsEditProfileTooltip": "Edit profile",
+  "settingsEditProfileTitle": "Edit personal profile",
+  "settingsAvatarSectionTitle": "Profile photo",
+  "settingsAvatarPickFromDeviceShort": "Choose from device",
+  "settingsAvatarUploadingShort": "Uploading...",
+  "settingsAvatarPickHint": "Choose photo from device (max 5MB)",
+  "settingsAvatarSelectedShort": "Selected: {fileName}",
+  "@settingsAvatarSelectedShort": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsFullNameLabel": "Full name *",
+  "settingsFullNameHint": "Enter your full name",
+  "settingsPhoneLabel": "Phone number",
+  "settingsPhoneHint": "0912345678 or +84912345678",
+  "settingsLocationLabel": "Location",
+  "settingsLocationHint": "e.g. Vung Tau, Vietnam",
+  "settingsDreamDestinationLabel": "Dream destination",
+  "settingsDreamDestinationHint": "Enter your favorite destination",
+  "settingsJobLabel": "Profession / Occupation",
+  "settingsJobHint": "Enter your current profession",
+  "settingsSchoolLabel": "School / University",
+  "settingsSchoolHint": "Where you studied",
+  "settingsLanguagesLabel": "Languages spoken",
+  "settingsLanguagesHint": "English, Vietnamese (comma-separated)",
+  "settingsBioLabel": "About me",
+  "settingsBioHint": "Tell us a bit about yourself...",
+  "settingsSaving": "Saving...",
+  "settingsProfileUpdateSuccess": "Profile updated successfully.",
+  "settingsUnsavedDraftBanner": "You have unsaved profile changes.",
+  "settingsResumeEditing": "Continue editing",
+  "settingsConfirmPhoneTitle": "Confirm phone number change",
+  "settingsConfirmPhoneRemove": "You are about to remove saved phone number ({oldPhone}). Are you sure you want to proceed?",
+  "@settingsConfirmPhoneRemove": {
+    "placeholders": {
+      "oldPhone": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsConfirmPhoneChange": "You are about to change phone number from {oldPhone} to {newPhone}. Are you sure you want to save this change?",
+  "@settingsConfirmPhoneChange": {
+    "placeholders": {
+      "oldPhone": {
+        "type": "String"
+      },
+      "newPhone": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsConfirmPhoneReview": "Review",
+  "settingsConfirmPhoneSave": "Confirm save",
+  "settingsConfirmLogoutTitle": "Confirm sign out",
+  "settingsConfirmLogoutDraft": "You have unsaved profile edits. Signing out will discard temporary draft data on this session. Are you sure you want to sign out?",
+  "settingsConfirmLogout": "Are you sure you want to sign out of this account?",
+  "settingsRoleAdmin": "Administrator (Admin)",
+  "settingsRoleHost": "Host",
+  "settingsRoleHostPending": "Host application pending approval",
+  "settingsRoleGuest": "Guest",
+  "settingsLoadingAccount": "Loading account information...",
+  "settingsNotLoggedIn": "Not signed in",
+  "settingsLoginPrompt": "Sign in to view your trips, messages, and synced wishlists",
+  "settingsSignInSignUp": "Sign In / Register",
+  "settingsReLogin": "Sign in again",
+  "settingsContactSupportCenter": "Contact & Support Center",
+  "settingsCallHotline": "Call hotline support",
+  "settingsZaloSupport": "Message via Zalo OA",
+  "settingsZaloInquiryDefaultMessage": "Hello The Palm, I need assistance with the app.",
+  "settingsManageProperties": "Manage listings",
+  "settingsMyTrips": "My trips",
+  "settingsMyFavorites": "My wishlist",
+  "settingsMessagesWithHost": "Messages with hosts",
+  "settingsStatusOfflineTitle": "Device is offline",
+  "settingsStatusUnauthorizedTitle": "Session expired or access denied",
+  "settingsStatusServerErrorTitle": "Unable to sync server data",
+  "settingsStatusOfflineMessage": "Unable to connect to the server. Please check your network connection and try again.",
+  "settingsStatusUnauthorizedMessage": "Invalid session or you do not have permission to access (401/403).",
+  "settingsStatusServerErrorMessage": "The server is experiencing temporary issues. Please try again later.",
+  "villaDetailViewAllPhotos": "See all {count} photos",
+  "villaDetailShareCopied": "Link copied to clipboard",
+  "villaDetailAboutTitle": "About this villa",
+  "villaDetailTranslatedBadge": "Translated to English",
+  "villaDetailShowOriginal": "Show original",
+  "villaDetailShowTranslation": "Show translation",
+  "villaDetailOriginalBadge": "Original (Vietnamese)",
+  "villaDetailAmenitiesTitle": "Amenities",
+  "villaDetailBookingCalendarTitle": "Select stay dates & Book",
+  "villaDetailStayNightsRange": "Minimum {min} nights • Maximum {max} nights",
+  "villaDetailGuestCapacityInfo": "Standard {included} · Up to {max} guests",
+  "villaDetailGuestCapacityMax": "Up to {max} guests",
+  "villaDetailPromoCodeHint": "Promo code",
+  "villaDetailPromoApply": "Apply",
+  "villaDetailPromoChecking": "Checking...",
+  "villaDetailSpecialRequestsHint": "Note for the host (optional)",
+  "villaDetailRoomSubtotal": "Room rate ({nights} nights)",
+  "villaDetailWeekendNights": ", {count} weekend nights",
+  "villaDetailExtraGuestFee": "Extra guest fee",
+  "villaDetailCleaningFee": "Cleaning fee",
+  "villaDetailServiceFee": "Service fee",
+  "villaDetailDiscountLabel": "Discount ({code})",
+  "villaDetailEstimatedTotal": "Estimated total",
+  "villaDetailPoliciesTitle": "House rules & Cancellation policy",
+  "villaDetailCheckInTime": "Check-in: {from} – {until}",
+  "villaDetailCheckOutTime": "Check-out: Before {time}",
+  "villaDetailQuietHours": "Quiet hours: {hours}",
+  "villaDetailPetsAllowed": "Pets allowed",
+  "villaDetailPetsNotAllowed": "No pets allowed",
+  "villaDetailPolicyFlexible": "Flexible — 100% refund up to 24 hours before check-in",
+  "villaDetailPolicyModerate": "Moderate — 100% refund up to 5 days before check-in",
+  "villaDetailPolicyStrict": "Strict — 50% refund up to 7 days before check-in",
+  "villaDetailSimilarTitle": "Similar stays nearby",
+  "villaDetailMessageHostTooltip": "Message Host",
+  "villaDetailHostPrefix": "Host: {name}",
+  "villaDetailMinNightsRequired": "This stay requires a minimum of {min} nights.",
+  "villaDetailMaxNightsExceeded": "This stay limits reservations to a maximum of {max} nights.",
+  "villaDetailLoginToBook": "Please log in to complete your reservation.",
+  "villaDetailBookingSuccess": "Booking request sent! You can pay now or track it in Trips.",
+  "specSaltwaterPool": "Saltwater pool",
+  "specBeachDistance": "{meters}m to beach",
+  "specBeachfront": "Beachfront",
+  "specGuestsCount": "{count} guests",
+  "specBedroomsCount": "{count} bedrooms",
+  "specBedsCount": "{count} beds",
+  "specBathsCount": "{count} baths",
+  "reviewsTranslate": "Translate review",
+  "reviewsShowOriginal": "Show original",
+  "reviewsTranslating": "Translating...",
+  "reviewsTranslatedBadge": "Automatically translated",
+  "reviewsFilterAll": "All",
+  "reviewsFilterStar": "{star} stars",
+  "reviewsHostReply": "Host response",
+  "reviewsLoadMore": "Show more reviews",
+  "reviewsLoadError": "Unable to load reviews right now.",
+  "reviewsEmpty": "No reviews for this villa yet. Be the first guest to share your experience!",
+  "reviewsEmptyRating": "No {rating}-star reviews for this property yet.",
+  "chatBackToList": "Back to list",
+  "chatShowTimestamps": "Show timestamps",
+  "chatHideTimestamps": "Hide timestamps",
+  "chatViewListing": "View listing",
+  "chatAboutListing": "About listing",
+  "chatSelectConversationPrompt": "Select a conversation to view messages",
+  "chatInputPlaceholder": "Message",
+  "chatMoreOptions": "More options",
+  "chatCamera": "Take photo",
+  "chatGallery": "Send photo",
+  "chatGalleryLabel": "Photo gallery",
+  "chatVoiceMessage": "Voice message",
+  "chatStopRecording": "Stop recording",
+  "chatEmojiTooltip": "Emoji",
+  "chatSendMessage": "Send message",
+  "chatSendQuickEmoji": "Send quick emoji",
+  "chatSendQuickEmojiHint": "Send quick emoji (press and hold to change)",
+  "chatSending": "Sending...",
+  "chatSent": "Sent",
+  "chatSeen": " • Seen",
+  "chatFailed": "Failed to send",
+  "chatRetry": "Retry",
+  "chatDeleteFailedMessage": "Delete failed message",
+  "chatEmptyPrompt": "Send a message to start the conversation.",
+  "chatLoadMoreHistory": "Load older messages",
+  "chatLoadingHistory": "Loading history...",
+  "chatNewMessagesCount": "New messages ({count})",
+  "chatUserTyping": "{user} is typing...",
+  "chatDraftPrefix": "Draft",
+  "chatNoMessagesYet": "No messages yet.",
+  "chatSearchConversationsPlaceholder": "Search conversations...",
+  "chatLoginTitle": "Sign in to view messages",
+  "chatLoginDescription": "Chat directly with Vung Tau hosts about availability, amenities, and offers.",
+  "chatLoginAction": "Sign in now",
+  "chatEmptyAdminTitle": "No support conversations yet",
+  "chatEmptyAdminDesc": "Direct support conversations with hosts and guests will appear here.",
+  "chatEmptyAdminAction": "User management",
+  "chatEmptyHostTitle": "No conversations yet",
+  "chatEmptyHostDesc": "When guests inquire or book, conversations will appear here.",
+  "chatEmptyGuestTitle": "No conversations yet",
+  "chatEmptyGuestDesc": "Choose a villa and click \"Contact host\" to start a chat.",
+  "chatEmptyGuestAction": "Explore villas",
+  "chatExtensionsAndTemplatesTitle": "Extensions & Quick templates",
+  "chatSelectEmojiTitle": "Choose emoji",
+  "chatSelectQuickEmojiTitle": "Choose quick emoji",
+  "chatQuickReplyGuest1": "Is this villa available for these dates?",
+  "chatQuickReplyGuest2": "What are the check-in and check-out times?",
+  "chatQuickReplyGuest3": "Does the villa have a private pool and BBQ kitchen?",
+  "chatQuickReplyGuest4": "Thank you very much, host!",
+  "chatQuickReplyHost1": "Yes, we have received your information!",
+  "chatQuickReplyHost2": "What time will you be checking in?",
+  "chatQuickReplyHost3": "The Palm Villa welcomes you! 🌴",
+  "chatQuickReplyHost4": "Villa location has been updated on the system.",
+  "chatQuickReplyAdmin1": "Hello! How can system administration assist you?",
+  "chatQuickReplyAdmin2": "The system has received the request and is reviewing it.",
+  "chatQuickReplyAdmin3": "Your profile/listing status has been updated.",
+  "chatQuickReplyAdmin4": "Thank you for your feedback to the administration!",
+  "chatTplAdminDocsTitle": "Request document supplement",
+  "chatTplAdminDocsSubtitle": "Remind host or guest to update verification details",
+  "chatTplAdminDocsContent": "📋 The administration requests that you check and submit clear verification documents for review.",
+  "chatTplHostLocationTitle": "Send property location",
+  "chatTplHostLocationSubtitle": "Detailed address and directions",
+  "chatTplHostLocationContent": "📍 Location of {villaTitle}: Thuy Van St., Vung Tau City (near Back Beach).",
+  "chatTplGuestInquiryTitle": "Check availability & rate",
+  "chatTplGuestInquirySubtitle": "Check room status and weekend surcharge",
+  "chatTplGuestInquiryContent": "📅 Hello host, is this villa available this weekend and what is the total package rate for our group?",
+  "chatTplAdminReviewTitle": "Review result notification",
+  "chatTplAdminReviewSubtitle": "Update listing or account status",
+  "chatTplAdminReviewContent": "✅ Administrators have reviewed and updated your listing/profile status on the system.",
+  "chatTplHostCheckinTitle": "Check-in & Check-out times",
+  "chatTplHostCheckinSubtitle": "Check-in: 14:00 • Check-out: 12:00",
+  "chatTplHostCheckinContent": "⏰ Check-in time: from 14:00 | Check-out time: before 12:00 the next day.",
+  "chatTplGuestCheckinTitle": "Early check-in / late check-out request",
+  "chatTplGuestCheckinSubtitle": "Inquire about flexible check-in / check-out",
+  "chatTplGuestCheckinContent": "⏰ We expect to arrive a bit earlier than 14:00, could you support early check-in or luggage storage?",
+  "chatTplAdminPolicyTitle": "Platform policy guidance",
+  "chatTplAdminPolicySubtitle": "Explain booking policies and service fees",
+  "chatTplAdminPolicyContent": "ℹ️ All transactions on the system are protected under the transparent booking and cancellation policy of The Palm Villa.",
+  "chatTplHostHouseRulesTitle": "Send house rules",
+  "chatTplHostHouseRulesSubtitle": "Keep clean, quiet hours after 22:00",
+  "chatTplHostHouseRulesContent": "📋 House rules: Please respect common property and keep noise down after 22:00. Wish you a wonderful stay!",
+  "chatTplGuestAmenitiesTitle": "Inquire about BBQ & pool amenities",
+  "chatTplGuestAmenitiesSubtitle": "Grill, charcoal, floats, and parking",
+  "chatTplGuestAmenitiesContent": "🔥 Does the villa come with a BBQ grill, kitchen utensils, private pool, and on-site parking?",
+  "chatToastUploadingPhoto": "Uploading photo to Cloudflare R2...",
+  "chatToastUploadPhotoFailed": "Photo upload failed",
+  "chatToastUploadingVoice": "Uploading voice message to Cloudflare R2...",
+  "chatToastUploadVoiceFailed": "Voice message upload failed",
+  "chatToastMicNoAudio": "No microphone audio detected. Please grant microphone permission or speak louder.",
+  "chatToastMicAccessError": "Cannot access microphone. Please grant microphone permission in your browser / device.",
+  "chatErrorNetwork": "No network connection",
+  "chatErrorForbidden": "Access denied",
+  "chatErrorUnauthorized": "Session expired",
+  "chatErrorNotFound": "Conversation not found",
+  "chatErrorRateLimit": "Too many requests",
+  "chatErrorServer": "Server error",
+  "chatErrorValidation": "Invalid data",
+  "chatErrorGeneric": "An error occurred",
+  "hostMsgBackToVilla": "Back to villa details",
+  "hostMsgContactTitle": "Contact Host",
+  "hostMsgHostLabel": "Host: {name}",
+  "hostMsgDefaultHost": "The Palm Villa Host",
+  "hostMsgFaqTitle": "Frequently asked questions for Host:",
+  "hostMsgInputLabel": "Message to Host ",
+  "hostMsgInputPlaceholder": "Ask about availability, amenities, or special requests...",
+  "hostMsgSendAction": "Send message & Open chat",
+  "hostMsgSendingAction": "Sending message...",
+  "hostMsgQuestion1": "Hello host, is the villa available this weekend?",
+  "hostMsgQuestion2": "Is the pool freshwater or saltwater, and are there floats available?",
+  "hostMsgQuestion3": "Does the villa have a BBQ grill, charcoal, and complete cookware?",
+  "hostMsgQuestion4": "Can our group be accommodated for check-in before 14:00?",
+  "galleryPhotoCount": "{count, plural, =1{1 photo} other{{count} photos}}",
+  "@galleryPhotoCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "galleryViewAllPhotosSemantic": "View all photos",
+  "gallerySpacePrefix": "Space: {type}",
+  "@gallerySpacePrefix": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceBedroom": "Bedroom",
+  "spaceLivingRoom": "Living room",
+  "spaceKitchen": "Kitchen",
+  "spaceBathroom": "Bathroom",
+  "spacePool": "Swimming pool",
+  "spaceExterior": "Exterior",
+  "spaceView": "View",
+  "spaceDining": "Dining room",
+  "spaceOther": "Other space",
+  "blogAllArticles": "All articles",
+  "blogShareTooltip": "Share article",
+  "blogShareInvalidLink": "Invalid article link to share.",
+  "blogShareSuccess": "Article link copied to clipboard",
+  "blogShareFailure": "Unable to copy article link on this device.",
+  "blogNotFoundTitle": "Article not found",
+  "blogNotFoundDescription": "This article may have been removed or the link is incorrect.",
+  "blogBackToBlog": "Back to Travel Guides",
+  "blogLoadingArticle": "Loading article...",
+  "blogRelatedArticlesBadge": "RELATED ARTICLES",
+  "blogRelatedArticlesTitle": "Recommended reading",
+  "blogViewAllArticles": "View all articles",
+  "blogReadMinutes": "{minutes, plural, =1{1 min read} other{{minutes} mins read}}",
+  "@blogReadMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "blogDefaultAuthor": "The Palm Editorial Team",
+  "blogListBadge": "VUNG TAU TRAVEL GUIDE",
+  "blogListHeroTitle": "Stay guides, itineraries & secrets to booking Vung Tau beach villas",
+  "blogSearchHint": "Search Vung Tau travel guides...",
+  "blogClearSearchTooltip": "Clear search query",
+  "blogCategoryAll": "All",
+  "blogCategoryTravelGuide": "Travel Guide",
+  "blogCategoryReviews": "Villa & Homestay Reviews",
+  "blogCategoryTripGuide": "Trip Guide",
+  "blogCategoryBookingTips": "Booking Tips",
+  "blogCategoryLocalDiscovery": "Local Discovery",
+  "blogCategoryStayTips": "Stay Tips",
+  "blogCategoryNearBeach": "Near Beach Villas",
+  "blogCategoryBookingChecklist": "Booking Checklist",
+  "blogEmptyTitle": "No articles found",
+  "blogEmptyDescription": "Try choosing another category or keyword.",
+  "blogClearFilters": "Reset filters",
+  "blogLoadingList": "Loading articles...",
+  "blogPaginationPrev": "Previous page",
+  "blogPaginationNext": "Next page",
+  "blogPaginationPage": "Page {page}",
+  "@blogPaginationPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "footerSupportTitle": "Support",
+  "footerLinkBookingGuide": "Booking guide",
+  "footerLinkCancellationPolicy": "Cancellation policy",
+  "footerLinkComplaintsFeedback": "Complaints & Feedback",
+  "footerLinkFaq": "Frequently asked questions (FAQ)",
+  "footerExploreTitle": "Explore & Services",
+  "footerLinkAboutUs": "About us",
+  "footerLinkExploreVungTau": "Explore Vung Tau",
+  "footerLinkTravelGuide": "Travel guide",
+  "footerLinkAddonServices": "Add-on services",
+  "footerLinkMemberOffers": "Member offers",
+  "footerContactTitle": "Contact",
+  "footerHotlineLabel": "Hotline: {phone}",
+  "@footerHotlineLabel": {
+    "placeholders": {
+      "phone": {
+        "type": "String"
+      }
+    }
+  },
+  "footerOnlineConsultLink": "Online consultation",
+  "footerAddressLabel": "Address: {address}",
+  "@footerAddressLabel": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "footerEmailLabel": "Email: {email}",
+  "@footerEmailLabel": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "footerEmailSubject": "Booking inquiry - The Palm Villa Vung Tau",
+  "footerSocialTitle": "Social",
+  "supportGuideStep1Title": "Search by coastal zone & live availability",
+  "supportGuideStep1Desc": "Select a Vung Tau beach zone (Back Beach, Front Beach, Chi Linh, Long Cung), stay dates [Check-in, Check-out), and group size to filter available private villas.",
+  "supportGuideStep2Title": "Review nightly rates & apply promo codes",
+  "supportGuideStep2Desc": "Inspect villa specifications (bedrooms, beds, baths, beach distance), weekday/weekend nightly rates, extra-guest surcharges (if any), and apply valid coupon codes.",
+  "supportGuideStep3Title": "15-minute temporary calendar hold",
+  "supportGuideStep3Desc": "As soon as a booking is created, the system locks your stay dates for 15 minutes (Pending Payment) to prevent double-booking by other groups.",
+  "supportGuideStep4Title": "Complete online payment & receive stay confirmation",
+  "supportGuideStep4Desc": "Complete payment via supported gateways (VNPay, MoMo, or VietQR) within the hold window. Track booking status and message the Host directly in Trips.",
+  "supportCancelFlexName": "Flexible Policy",
+  "supportCancelFlexBadge": "100% refund 24h+ before check-in",
+  "supportCancelFlexRule1": "Cancel at least 24 hours before check-in: 100% refund of the total paid amount.",
+  "supportCancelFlexRule2": "Cancel less than 24 hours before check-in: non-refundable.",
+  "supportCancelModName": "Moderate Policy",
+  "supportCancelModBadge": "100% refund 5+ days before check-in",
+  "supportCancelModRule1": "Cancel at least 5 days (120 hours) before check-in: 100% refund of the total paid amount.",
+  "supportCancelModRule2": "Cancel between 24 hours and 5 days (120 hours) before check-in: 50% refund of the total paid amount.",
+  "supportCancelModRule3": "Cancel less than 24 hours before check-in: non-refundable.",
+  "supportCancelStrictName": "Strict Policy",
+  "supportCancelStrictBadge": "50% refund 7+ days before check-in",
+  "supportCancelStrictRule1": "Cancel at least 7 days (168 hours) before check-in: 50% refund of the total paid amount.",
+  "supportCancelStrictRule2": "Cancel less than 7 days (168 hours) before check-in: non-refundable.",
+  "supportComplaintStep1Title": "Submit report with Booking ID or Listing ID",
+  "supportComplaintStep1Desc": "Sign in and submit an online report with your Booking ID or Listing ID, describing the factual issue that needs verification.",
+  "supportComplaintStep2Title": "Audit stay logs & payment records",
+  "supportComplaintStep2Desc": "Our Trust & Safety team independently audits booking state logs, in-app message history, and verified payment records.",
+  "supportComplaintStep3Title": "Transparent resolution & guest protection",
+  "supportComplaintStep3Desc": "Resolution outcomes are updated transparently on your report (Resolved / Rejected with reason) and trigger refunds if the Host breached commitments.",
+  "supportFaqCatAll": "All",
+  "supportFaqCatBooking": "Booking & Availability",
+  "supportFaqCatPayment": "Payments & Refunds",
+  "supportFaqCatAmenities": "Amenities & House Rules",
+  "supportFaqCatHost": "Host Partners",
+  "supportFaq1Q": "How does the system calculate stay nights?",
+  "supportFaq1A": "We use the half-open stay interval [Check-in, Check-out) in Vietnam timezone (Asia/Ho_Chi_Minh). Checking in on the 15th and checking out on the 17th equals 2 nights (the 15th and 16th).",
+  "supportFaq2Q": "Why does a reservation have a 15-minute hold window?",
+  "supportFaq2A": "Each whole-villa listing is a unique property. Creating a reservation locks those dates for 15 minutes so no one else can book them while you pay. Unpaid holds release automatically after 15 minutes.",
+  "supportFaq3Q": "How are weekend rates and extra-guest surcharges calculated?",
+  "supportFaq3A": "Weekday/weekend nightly rates, cleaning fees, and extra-guest surcharges come directly from each villa’s verified pricing configuration and are shown transparently before booking.",
+  "supportFaq4Q": "Which payment methods are supported?",
+  "supportFaq4A": "We support online payments via VNPay, MoMo e-wallet, and VietQR bank transfer. Transactions are reconciled automatically and updated in real time under Trips.",
+  "supportFaq5Q": "How do refunds work when I cancel within policy or a Host declines?",
+  "supportFaq5A": "When a paid booking is cancelled within the villa’s refund window (or cancelled/declined by the Host for a 100% refund), the system automatically creates a refund record for finance reconciliation back to your payment channel.",
+  "supportFaq6Q": "Can I chat directly with the Host before booking?",
+  "supportFaq6A": "Yes. On any villa detail page, tap Message Host or reach our Zalo OA / Hotline on the Contact page to confirm pool details, BBQ setup, or group bus parking.",
+  "supportFaq7Q": "How do I list my villa on The Palm Villa?",
+  "supportFaq7A": "Open Become a Host from the navigation menu, complete identity verification (KYC) and property details. Once approved by Admin, you can manage 30-day availability and two-way Google Sheets sync.",
+  "supportZoneBaiSauName": "Back Beach Zone (Thuy Van – Thi Sach)",
+  "supportZoneBaiSauHint": "Long vibrant coastline within walking distance to the beach",
+  "supportZoneBaiSauHighlight": "Features spacious private-pool villas ideal for families and friend groups near Thuy Van, Thi Sach, and Vo Thi Sau streets.",
+  "supportZoneBaiTruocName": "Front Beach Zone (Tran Phu – Quang Trung)",
+  "supportZoneBaiTruocHint": "Direct ocean sunset views near downtown dining spots",
+  "supportZoneBaiTruocHighlight": "Tranquil ocean-facing villas along Tran Phu coastal road with open sunset views and easy access to Front Beach Park.",
+  "supportZoneChiLinhName": "Chi Linh Coastal Zone",
+  "supportZoneChiLinhHint": "Gated, peaceful resort enclave near quieter beaches",
+  "supportZoneChiLinhHighlight": "Well-suited for multi-generational families and corporate retreats seeking greenery, quiet surroundings, and clean beaches.",
+  "supportZoneLongCungName": "Long Cung – Thuy Tien Zone",
+  "supportZoneLongCungHint": "Beachside villa compounds built for large groups",
+  "supportZoneLongCungHighlight": "Known for wide garden villas, private pools, and outdoor BBQ party spaces steps from Long Cung Beach.",
+  "supportAddonPoolTitle": "Private in-villa swimming pool",
+  "supportAddonPoolDesc": "Enjoy a private swimming pool right inside your villa compound for families and groups.",
+  "supportAddonPoolNote": "Included according to each villa’s published specifications.",
+  "supportAddonBbqTitle": "Garden BBQ grilling station",
+  "supportAddonBbqDesc": "Equipped with outdoor grill area, garden seating, and essential utensils for evening gatherings.",
+  "supportAddonBbqNote": "Coordinate charcoal or optional cleaning support with your Host in advance.",
+  "supportAddonKitchenTitle": "Full family-style kitchen",
+  "supportAddonKitchenDesc": "Includes refrigerator, stove, cookware, and tableware so your group can cook fresh local seafood.",
+  "supportAddonKitchenNote": "Please keep kitchenware tidy per each property’s house rules.",
+  "supportAddonKaraokeTitle": "Entertainment room & Karaoke audio",
+  "supportAddonKaraokeDesc": "Audio entertainment or dedicated lounge rooms available at villas tagged with Karaoke amenities.",
+  "supportAddonKaraokeNote": "Follow residential quiet hours (outdoor audio off by 22:00).",
+  "supportAddonParkingTitle": "Secure car & group van parking",
+  "supportAddonParkingDesc": "On-site courtyard or wide internal road parking suitable for personal cars and 7–29-seat tour vans.",
+  "supportAddonParkingNote": "Check exact vehicle capacity in the villa description before arrival.",
+  "supportAddonBeachTitle": "Walkable proximity to the beach",
+  "supportAddonBeachDesc": "Actual walking distance to the nearest beach is stated clearly in meters on every listing card.",
+  "supportAddonBeachNote": "Filter beach-close villas with a single tap below.",
+  "supportExploreZoneAction": "View villas in this zone",
+  "supportServiceNotePrefix": "Note: {note}",
+  "@supportServiceNotePrefix": {
+    "placeholders": {
+      "note": {
+        "type": "String"
+      }
+    }
+  },
+  "supportFilterByAmenityAction": "Filter villas with this amenity",
+  "supportFaqSearchHint": "Search questions by keyword (e.g., hold, refund)...",
+  "supportFaqClearSearchTooltip": "Clear search query",
+  "supportFaqEmptyResult": "No matching questions found for this keyword. Try another term or contact our support team directly.",
+  "supportBookingGuideEyebrow": "Booking Support",
+  "supportBookingGuideTitle": "How to book a private villa",
+  "supportBookingGuideSubtitle": "Transparent 4-step reservation flow with a 15-minute anti-double-booking hold and instant online payment verification.",
+  "supportBookingGuideNoteTitle": "Check-in & check-out reminder",
+  "supportBookingGuideNoteBody": "All reservations follow the [Check-in, Check-out) night model in Vietnam time. Before arrival, message your Host in Messages to coordinate arrival time and vehicle plates.",
+  "supportBookingGuideCtaTitle": "Ready to find the right villa for your group?",
+  "supportBookingGuideCtaDesc": "Browse verified Vung Tau villas with open dates and published nightly rates.",
+  "supportBookingGuidePrimaryAction": "Find villas now",
+  "supportBookingGuideSecondaryAction": "Contact support",
+  "supportCancelEyebrow": "Stay & Refund Policies",
+  "supportCancelTitle": "Cancellation & Refund Policy",
+  "supportCancelSubtitle": "Refund percentages are calculated automatically from each villa’s published policy tier and hours remaining before check-in.",
+  "supportCancelHostProtectTitle": "100% guest protection if a Host cancels",
+  "supportCancelHostProtectBody": "If a paid booking is declined or cancelled by the Host, the system automatically issues a 100% refund regardless of policy tier. Unpaid holds expire free of charge after 15 minutes.",
+  "supportCancelCtaTitle": "Check booking status or request cancellation",
+  "supportCancelCtaDesc": "Open Trips to view the policy attached to your reservation or reach out to support.",
+  "supportCancelPrimaryAction": "View my Trips",
+  "supportCancelSecondaryAction": "Read FAQ",
+  "supportComplaintsEyebrow": "Trust & Transparency",
+  "supportComplaintsTitle": "Complaints, Reports & Service Feedback",
+  "supportComplaintsSubtitle": "Every report regarding villa quality, listing accuracy, or host service is logged and independently reviewed.",
+  "supportComplaintsCtaTitle": "Need urgent help during an active stay?",
+  "supportComplaintsCtaDesc": "Connect directly via Hotline or Zalo OA at our Vung Tau office (08:00 – 22:00) for immediate assistance.",
+  "supportComplaintsPrimaryAction": "Open Contact page",
+  "supportComplaintsSecondaryAction": "Messages with Host",
+  "supportFaqEyebrow": "Help Center",
+  "supportFaqPageTitle": "Frequently Asked Questions (FAQ)",
+  "supportFaqSubtitle": "Quick answers about stay-night calculation, 15-minute holds, payment gateways, refunds, and Host onboarding.",
+  "supportFaqCtaTitle": "Still looking for a specific answer?",
+  "supportFaqCtaDesc": "Our advisors at 28 Thi Sach, Vung Tau City are ready to tailor recommendations for your group.",
+  "supportFaqPrimaryAction": "Online consultation",
+  "supportFaqSecondaryAction": "View booking guide",
+  "supportAboutEyebrow": "About The Palm Villa",
+  "supportAboutTitle": "Verified Private Vacation Villa Platform in Vung Tau",
+  "supportAboutSubtitle": "Connecting travelers directly with inspected vacation villas and KYC-verified Hosts across Vung Tau City.",
+  "supportAboutPillar1Title": "Inspected properties & KYC-verified Hosts",
+  "supportAboutPillar1Body": "Every Host partner completes identity verification and listing photo inspection before opening availability to guests.",
+  "supportAboutPillar2Title": "Zero Double-Booking transactional lock",
+  "supportAboutPillar2Body": "Transactional date locking upon booking creation protects your group’s stay dates throughout checkout.",
+  "supportAboutPillar3Title": "Transparent nightly rate breakdown",
+  "supportAboutPillar3Body": "Displays server-verified weekday/weekend prices, cleaning fees, and extra-guest charges upfront before payment.",
+  "supportAboutCtaTitle": "Partner & travel with The Palm Villa",
+  "supportAboutCtaDesc": "Explore open villas for your next trip or register as a Host partner for transparent calendar and payout management.",
+  "supportAboutPrimaryAction": "Explore stays",
+  "supportAboutSecondaryAction": "Become a Host",
+  "supportExploreVtEyebrow": "Coastal Resort Zones",
+  "supportExploreVtTitle": "Explore Vung Tau by coastal neighborhood",
+  "supportExploreVtSubtitle": "Each neighborhood in Vung Tau offers a distinct vibe. Pick a zone matching your itinerary to filter live villas.",
+  "supportExploreVtCtaTitle": "Pair your villa stay with local dining & tips",
+  "supportExploreVtCtaDesc": "Read our local travel guide articles to plan a complete coastal getaway in Vung Tau.",
+  "supportExploreVtPrimaryAction": "Read Travel Guide",
+  "supportExploreVtSecondaryAction": "Open search map",
+  "supportAddonEyebrow": "Amenities & Experiences",
+  "supportAddonTitle": "Villa Amenities & Stay Services",
+  "supportAddonSubtitle": "Overview of signature whole-villa amenities and how to coordinate BBQ setup or group vehicle parking with Hosts.",
+  "supportAddonNoteTitle": "How to request preparation before check-in",
+  "supportAddonNoteBody": "Every villa publishes its exact amenities and group policies. Once you pick a villa, tap Message Host on the detail screen to confirm custom arrangements.",
+  "supportAddonCtaTitle": "Looking for a villa with both private pool & BBQ yard?",
+  "supportAddonCtaDesc": "Use multi-criteria filters on the Search screen to match every amenity your group needs.",
+  "supportAddonPrimaryAction": "Open stay filters",
+  "supportAddonSecondaryAction": "Group consultation",
+  "supportMemberEyebrow": "Member Benefits",
+  "supportMemberTitle": "Member Offers & Booking Promo Codes",
+  "supportMemberSubtitle": "Create a free member account to apply promo codes at checkout, sync your wishlist, and manage trip history.",
+  "supportMemberNote1Title": "Apply Coupon codes directly when booking",
+  "supportMemberNote1Body": "Signed-in members can apply percentage or fixed-amount coupons on the villa detail page. Validity, minimum order value, and per-user limits are verified automatically.",
+  "supportMemberNote2Title": "Sync Wishlist & track Trips in real time",
+  "supportMemberNote2Body": "Save favorite villas across devices, receive instant booking updates, and chat directly with Hosts.",
+  "supportMemberCtaTitle": "Redeem an offer for your upcoming Vung Tau stay",
+  "supportMemberCtaDesc": "Choose your villa, review published nightly rates, and enter your coupon code right at booking confirmation.",
+  "supportMemberPrimaryAction": "Browse open villas",
+  "supportMemberSecondaryAction": "My Wishlist",
+  "supportReportTargetBooking": "Reservation (Booking ID)",
+  "supportReportTargetListing": "Property / Villa (Listing ID)",
+  "supportReportTargetReview": "Stay Review (Review ID)",
+  "supportReportTargetUser": "User Account (User ID)",
+  "supportReportSuccessMessage": "Your report has been recorded. Our Trust & Safety team will review and respond promptly.",
+  "supportReportErrorFallback": "Unable to submit your report right now. Please try again.",
+  "supportReportStatusResolved": "Resolved",
+  "supportReportStatusRejected": "Rejected",
+  "supportReportStatusOpen": "In review",
+  "supportReportGuestCardTitle": "Submit an online report or complaint",
+  "supportReportGuestCardBody": "To verify booking records accurately, please sign in before submitting an online report, or reach us directly via the Contact page.",
+  "supportReportLoginAction": "Sign in to submit report",
+  "supportReportDirectContactAction": "Open direct Contact channels",
+  "supportReportAuthCardTitle": "Submit a report to Trust & Safety",
+  "supportReportAuthCardSubtitle": "Reports are logged directly for Administrator verification and transparent follow-up.",
+  "supportReportTargetGroupLabel": "Report target category",
+  "supportReportTargetIdLabel": "Numeric ID (e.g., Booking 102 or Villa 15)",
+  "supportReportTargetIdError": "Please enter a valid positive numeric ID",
+  "supportReportReasonLabel": "Report / feedback title",
+  "supportReportReasonEmptyError": "Please enter a report title",
+  "supportReportReasonMaxError": "Maximum 255 characters",
+  "supportReportDescLabel": "Detailed description (optional)",
+  "supportReportSubmittingLabel": "Submitting report...",
+  "supportReportSubmitAction": "Submit report",
+  "supportReportRecentTitle": "Your recent reports ({count})",
+  "@supportReportRecentTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "supportCouponEmptyError": "Please enter a coupon code to check.",
+  "supportCouponValidStatus": "Code {code} is valid — estimated {discount} off this subtotal.",
+  "@supportCouponValidStatus": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      },
+      "discount": {
+        "type": "String"
+      }
+    }
+  },
+  "supportCouponInvalidFallback": "This coupon code is ineligible or has expired.",
+  "supportCouponCheckError": "Unable to validate coupon code right now.",
+  "supportCouponCardTitle": "Check Coupon Code Eligibility",
+  "supportCouponGuestHint": "Sign in to your member account to validate coupon codes against an estimated stay subtotal or apply them at checkout.",
+  "supportCouponAuthHint": "Enter your coupon code and estimated booking amount (VND) to verify live eligibility.",
+  "supportCouponLoginAction": "Member sign in",
+  "supportCouponRegisterAction": "Create free account",
+  "supportCouponCodeInputLabel": "Coupon code (e.g., PALM2026)",
+  "supportCouponAmountInputLabel": "Estimated subtotal (VND)",
+  "supportCouponCheckingLabel": "Checking...",
+  "supportCouponCheckAction": "Check coupon code",
+  "homeEmptyApprovedVillas": "No approved villas are available right now.",
+  "homeApprovedVillasCountTitle": "Verified Stays ({count})",
+  "@homeApprovedVillasCountTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "homePrevVillaTooltip": "Previous villa",
+  "homeNextVillaTooltip": "Next villa",
+  "homeFavoriteAdd": "Save to wishlist",
+  "homeFavoriteRemove": "Remove from wishlist",
+  "homeCardSpecsSummary": "{bedrooms} BR · Up to {guests} guests",
+  "@homeCardSpecsSummary": {
+    "placeholders": {
+      "bedrooms": {
+        "type": "int"
+      },
+      "guests": {
+        "type": "int"
+      }
+    }
+  },
+  "searchFilterBtn": "Filters",
+  "searchFilterActiveBtn": "Filters ({count})",
+  "@searchFilterActiveBtn": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchShowMapBtn": "Show map",
+  "searchHideMapBtn": "Hide map",
+  "searchClearAllBtn": "Clear all",
+  "searchFoundStaysCount": "Found {count} stays in Vung Tau",
+  "@searchFoundStaysCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "favoritesSavedCountSubtitle": "{count} saved villas",
+  "@favoritesSavedCountSubtitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "favoritesSyncOfflineNotice": "Unable to sync with server — showing locally saved villas.",
+  "favoritesInvalidCountNotice": "{count} saved stays are no longer accepting bookings.",
+  "@favoritesInvalidCountNotice": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "favoritesExploreAction": "Explore villas",
+  "contactEyebrow": "DIRECT VUNG TAU SUPPORT",
+  "contactBrowseVillas": "Browse Villas",
+  "contactHeroTitle": "Contact our stay advisors & local operations team",
+  "contactHeroSubtitle": "Get help checking live availability, matching villas for your group, and planning your stay in Vung Tau City.",
+  "contactHotlineTitle": "Hotline & Zalo support",
+  "contactVerifiedBadge": "Verified",
+  "contactCallNow": "Call now",
+  "contactCopyHotlineTooltip": "Copy Hotline",
+  "contactCopiedHotline": "Hotline copied to clipboard",
+  "contactOpenZalo": "Chat on Zalo OA",
+  "contactOfficeTitle": "Vung Tau Reception Office",
+  "contactMapAction": "Open directions map",
+  "contactEmailTitle": "Support & billing email",
+  "contactSameDayReply": "Same-day response",
+  "contactSendEmail": "Send support email",
+  "contactCopyEmailTooltip": "Copy Email",
+  "contactCopiedEmail": "Email copied to clipboard",
+  "authWelcomeBack": "Welcome back",
+  "authLoginSubtitle": "Sign in to view your getaways and manage your trips at The Palm Villa.",
+  "authIdentifierLabel": "Email or phone number",
+  "authIdentifierHint": "Enter email or Vietnam phone number",
+  "authPasswordLabel": "Password",
+  "authPasswordHint": "Enter password",
+  "authShowPasswordTooltip": "Show password",
+  "authHidePasswordTooltip": "Hide password",
+  "authRememberMe": "Remember me",
+  "authSigningIn": "Signing in...",
+  "authOrDivider": "OR",
+  "authGoogleLoginBtn": "Sign in with Google",
+  "authNoAccountYet": "Don't have an account?",
+  "authRegisterBtn": "Sign up",
+  "authCreateAccountTitle": "Create a new account",
+  "authRegisterSubtitle": "Book verified private vacation villas and unlock member-only offers.",
+  "authFullNameLabel": "Full name",
+  "authFullNameHint": "Enter your full name",
+  "authPhoneRequiredLabel": "Phone number *",
+  "authPhoneHint": "Enter Vietnam phone number (e.g. 0901234567)",
+  "authEmailRequiredLabel": "Email *",
+  "authEmailHint": "Enter email address",
+  "authPasswordCreateHint": "Create password (min 8 chars, letters & numbers)",
+  "authConfirmPasswordLabel": "Confirm password *",
+  "authConfirmPasswordHint": "Re-enter your password",
+  "authPasswordStrengthLabel": "Password strength: {level}",
+  "@authPasswordStrengthLabel": {
+    "placeholders": {
+      "level": {
+        "type": "String"
+      }
+    }
+  },
+  "authStrengthWeak": "Weak",
+  "authStrengthFair": "Fair",
+  "authStrengthGood": "Good",
+  "authStrengthStrong": "Strong",
+  "authTermsAgreement": "I agree to The Palm Villa Terms of Service and Privacy Policy",
+  "authTermsRequiredError": "Please accept the Terms of Service and Privacy Policy",
+  "authCreatingAccount": "Creating account...",
+  "authAlreadyHaveAccount": "Already have an account?",
+  "authForgotQuestionTitle": "Forgot password?",
+  "authOtpVerifyTitle": "Verify OTP code",
+  "authPasswordChangedTitle": "Password reset complete",
+  "authForgotRequestSubtitle": "Enter your registered email or phone number to receive a 6-digit recovery OTP.",
+  "authForgotOtpSubtitle": "Enter the 6-digit OTP code and set your new password.",
+  "authForgotSuccessSubtitle": "Your password has been updated securely.",
+  "authSendOtpButton": "Send OTP code",
+  "authOtpSentTo": "OTP sent to: {target}",
+  "@authOtpSentTo": {
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "authOtpSixDigitsLabel": "6-digit OTP code",
+  "authNewPasswordLabel": "New password",
+  "authResendOtpCountdown": "Resend in 00:{seconds}",
+  "@authResendOtpCountdown": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "authResendOtpButton": "Resend OTP code",
+  "authConfirmOtpButton": "Verify OTP code",
+  "authOtpSuccessBanner": "OTP verified and your new password is ready to use.",
+  "authBackToLoginButton": "Back to sign in",
+  "adminTabFinance": "Finance & Payouts",
+  "adminTabBlog": "Blog CMS",
+  "adminTabTrustSafety": "Reports & Safety"
 }

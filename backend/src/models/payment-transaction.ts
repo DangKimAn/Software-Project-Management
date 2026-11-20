@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu giao dịch chi tiết mức cổng thanh toán (VNPay/MoMo) phục vụ đối soát và kiểm chứng Idempotency.
+ */
 import {
     CreationOptional,
     DataTypes,

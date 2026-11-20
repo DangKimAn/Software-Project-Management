@@ -1,13 +1,19 @@
 import type { RequestHandler } from "express";
 
+import { ApiError } from "../../common/api-error";
 import { asyncHandler } from "../../common/async-handler";
 import { sendSuccess } from "../../common/http";
 import { assertValidRequest, getValidatedBody } from "../../common/validation";
 import {
     createPresignedUploadUrl as createUploadUrl,
     type PresignUploadInput,
+    uploadBufferToR2,
+    type UploadFolder,
 } from "./uploads.service";
 
+/**
+ * Điểm cuối điều khiển cấp chữ ký tải tệp Presigned URL lên kho công khai Cloudflare R2 sau khi xác thực kích thước và định dạng ảnh.
+ */
 export const createPresignedUploadUrl: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -22,6 +28,27 @@ export const createPresignedUploadUrl: RequestHandler = asyncHandler(async (req,
     );
 
     return sendSuccess(res, {
+        data: result,
+    });
+});
+
+export const uploadDirectFile: RequestHandler = asyncHandler(async (req, res) => {
+    if (!req.file) {
+        throw new ApiError(400, "No file uploaded");
+    }
+
+    const folder = (req.body.folder as UploadFolder) || "chat";
+    const result = await uploadBufferToR2({
+        userId: req.user!.id,
+        buffer: req.file.buffer,
+        filename: req.file.originalname,
+        contentType: req.file.mimetype,
+        folder,
+    });
+
+    return sendSuccess(res, {
+        statusCode: 201,
+        message: "File uploaded successfully to R2",
         data: result,
     });
 });

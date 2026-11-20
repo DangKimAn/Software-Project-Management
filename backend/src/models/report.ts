@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu báo cáo vi phạm hoặc sự cố từ người dùng đối với chỗ nghỉ, đánh giá hoặc tài khoản khác.
+ */
 import {
     CreationOptional,
     DataTypes,
@@ -8,7 +11,7 @@ import {
 
 import sequelize from "../config/database";
 
-export const reportTargetTypeValues = ["listing", "user", "review", "booking"] as const;
+export const reportTargetTypeValues = ["listing", "user", "review", "booking", "message"] as const;
 export type ReportTargetType = (typeof reportTargetTypeValues)[number];
 
 export const reportStatusValues = ["open", "resolved", "rejected"] as const;

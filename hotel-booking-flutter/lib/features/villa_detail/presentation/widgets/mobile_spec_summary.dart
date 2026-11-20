@@ -1,15 +1,21 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../villas/domain/entities/villa_specs.dart';
 
+/// Khối tóm tắt thông số kỹ thuật hai tầng thu gọn / mở rộng dành cho trang Chi tiết biệt thự.
+///
 /// 2-tier specification summary conforming to FLUTTER_RULES.md section 8.1:
 /// - 4 core specs when collapsed: Sức chứa → Phòng ngủ → Giường → WC
 /// - 4 supporting specs when expanded: Hồ bơi riêng → Bếp/BBQ → Đậu xe → Khoảng cách biển
 class MobileSpecSummary extends StatefulWidget {
+  /// Bộ thông số kỹ thuật của căn biệt thự cần trình bày.
   final VillaSpecs specs;
 
+  /// Khởi tạo khối thông số hai tầng `MobileSpecSummary`.
   const MobileSpecSummary({super.key, required this.specs});
 
   @override
@@ -22,16 +28,33 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
   @override
   Widget build(BuildContext context) {
     final specs = widget.specs;
-    final coreItems = <Widget>[
+    // CONFLICT-RESOLVED: Kết hợp dữ liệu đa ngôn ngữ `context.l10n` từ `origin/develop` với cấu trúc `coreEntries` hỗ trợ lưới 2 cột co giãn chống tràn chữ của nhánh refactor.
+    final l10n = context.l10n;
+    final coreEntries = <({IconData icon, String value, String label})>[
       if (specs.maxGuests > 0)
-        _buildCoreItem(
-            LucideIcons.users, '${specs.maxGuests} khách', 'Sức chứa'),
+        (
+          icon: LucideIcons.users,
+          value: l10n.specGuestsCount(specs.maxGuests),
+          label: l10n.specCapacityLabel,
+        ),
       if (specs.bedrooms > 0)
-        _buildCoreItem(LucideIcons.bed, '${specs.bedrooms} phòng', 'Phòng ngủ'),
+        (
+          icon: LucideIcons.bed,
+          value: l10n.specBedroomsCount(specs.bedrooms),
+          label: l10n.specBedroomsLabel,
+        ),
       if (specs.beds > 0)
-        _buildCoreItem(LucideIcons.bedDouble, '${specs.beds} giường', 'Giường'),
+        (
+          icon: LucideIcons.bedDouble,
+          value: l10n.specBedsCount(specs.beds),
+          label: l10n.specBedsLabel,
+        ),
       if (specs.bathrooms > 0)
-        _buildCoreItem(LucideIcons.bath, '${specs.bathrooms} WC', 'Phòng tắm'),
+        (
+          icon: LucideIcons.bath,
+          value: l10n.specBathsCount(specs.bathrooms),
+          label: l10n.specBathroomsLabel,
+        ),
     ];
 
     return Padding(
@@ -39,10 +62,56 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (coreItems.isNotEmpty)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: coreItems,
+          if (coreEntries.isNotEmpty)
+            // Giải thuật bố cục thích ứng 4 thông số cốt lõi theo bề rộng & cỡ chữ (FLUTTER_RULES §8.1):
+            // Khi `maxWidth < 380` hoặc `textScale > 1.25`, chuyển sang lưới `Wrap` 2 cột để xuống dòng an toàn;
+            // ở chế độ 1 hàng tiêu chuẩn, bọc từng cột bằng `Expanded` và nhãn bằng `Flexible` (`maxLines: 1, ellipsis`).
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+                final useTwoColumnGrid =
+                    constraints.maxWidth < 380 || textScale > 1.25;
+                if (useTwoColumnGrid) {
+                  const colSpacing = 12.0;
+                  final itemWidth = math.max(
+                    0.0,
+                    (constraints.maxWidth - colSpacing) / 2,
+                  );
+                  return Wrap(
+                    spacing: colSpacing,
+                    runSpacing: 12.0,
+                    children: [
+                      for (final entry in coreEntries)
+                        SizedBox(
+                          width: itemWidth,
+                          child: _buildCoreItem(
+                            entry.icon,
+                            entry.value,
+                            entry.label,
+                            isSingleRow: false,
+                          ),
+                        ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < coreEntries.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 6),
+                      Expanded(
+                        child: _buildCoreItem(
+                          coreEntries[i].icon,
+                          coreEntries[i].value,
+                          coreEntries[i].label,
+                          isSingleRow: true,
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
 
           // Expandable Supporting Specs
@@ -58,7 +127,7 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                         child: Divider(color: AppColors.borderSoft),
                       ),
                       Text(
-                        'Tiện ích nổi bật & Vị trí',
+                        l10n.specHighlightsTitle,
                         style: AppTypography.cardTitle.copyWith(fontSize: 14),
                       ),
                       const SizedBox(height: 10),
@@ -69,18 +138,18 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                             child: _buildSupportingItem(
                               LucideIcons.waves,
                               specs.hasSaltwaterPool
-                                  ? 'Hồ bơi nước mặn'
+                                  ? l10n.specSaltwaterPool
                                   : (specs.hasPrivatePool
-                                      ? 'Hồ bơi riêng'
-                                      : 'Không có hồ bơi'),
+                                      ? l10n.specPrivatePool
+                                      : l10n.specNoPool),
                             ),
                           ),
                           Expanded(
                             child: _buildSupportingItem(
                               LucideIcons.utensils,
                               specs.hasBbqKitchen
-                                  ? 'Bếp & Lò BBQ đầy đủ'
-                                  : 'Bếp cơ bản',
+                                  ? l10n.specBbqKitchen
+                                  : l10n.specBasicKitchen,
                             ),
                           ),
                         ],
@@ -92,8 +161,8 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                             child: _buildSupportingItem(
                               LucideIcons.car,
                               specs.hasParking
-                                  ? 'Chỗ đậu xe ô tô'
-                                  : 'Đậu xe tự túc',
+                                  ? l10n.specParking
+                                  : l10n.specSelfParking,
                             ),
                           ),
                           Expanded(
@@ -101,8 +170,9 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                               LucideIcons.mapPin,
                               specs.beachDistanceMeters != null &&
                                       specs.beachDistanceMeters! > 0
-                                  ? '${specs.beachDistanceMeters}m ra bãi tắm'
-                                  : 'Gần trung tâm',
+                                  ? l10n.specBeachDistance(
+                                      specs.beachDistanceMeters!)
+                                  : l10n.specNearCenter,
                             ),
                           ),
                         ],
@@ -129,13 +199,19 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        _isExpanded
-                            ? 'Thu gọn thông số'
-                            : 'Xem thêm thông số chi tiết',
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
+                      // CONFLICT-RESOLVED: Bọc nhãn đa ngôn ngữ `l10n.specCollapseAction` / `l10n.specExpandAction` trong `Flexible` để không tràn dòng khi phóng chữ lớn.
+                      Flexible(
+                        child: Text(
+                          _isExpanded
+                              ? l10n.specCollapseAction
+                              : l10n.specExpandAction,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 4),
@@ -157,7 +233,58 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
     );
   }
 
-  Widget _buildCoreItem(IconData icon, String value, String label) {
+  Widget _buildCoreItem(
+    IconData icon,
+    String value,
+    String label, {
+    required bool isSingleRow,
+  }) {
+    if (isSingleRow) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 22, color: AppColors.iconStrong),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.caption.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textStrong,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.caption.copyWith(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -165,6 +292,9 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
         const SizedBox(height: 4),
         Text(
           value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: AppTypography.caption.copyWith(
             fontWeight: FontWeight.w700,
             color: AppColors.textStrong,
@@ -172,6 +302,9 @@ class _MobileSpecSummaryState extends State<MobileSpecSummary> {
         ),
         Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: AppTypography.caption.copyWith(
             fontSize: 11,
             color: AppColors.textMuted,

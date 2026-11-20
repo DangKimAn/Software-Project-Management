@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu hồ sơ công khai của chủ nhà, chỉ số phản hồi, danh hiệu Superhost và trạng thái xác minh.
+ */
 import {
     CreationOptional,
     DataTypes,

@@ -4,18 +4,26 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/errors/app_failure.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
-import '../view_models/auth_notifier.dart';
+import '../view_models/forgot_password_view_model.dart';
 import '../validation/auth_validation.dart';
 
+/// Các bước tuần tự trong luồng khôi phục mật khẩu: nhập định danh (`request`), xác thực OTP (`otp`) và hoàn tất (`success`).
 enum _ForgotStep { request, otp, success }
 
+/// Màn hình khôi phục mật khẩu qua mã xác thực OTP 6 chữ số (`/quen-mat-khau`).
+///
+/// Quản lý máy trạng thái 3 bước kèm đồng hồ đếm ngược chống gửi lại OTP liên tục (`_otpResendSeconds`),
+/// kiểm tra độ mạnh mật khẩu mới và xác nhận khớp mật khẩu nhập lại trước khi cập nhật lên máy chủ.
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
+  /// Khởi tạo `ForgotPasswordScreen`.
   const ForgotPasswordScreen({super.key});
 
   @override
@@ -25,7 +33,7 @@ class ForgotPasswordScreen extends ConsumerStatefulWidget {
 
 class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   static const int _otpLength = 6;
-  static const int _otpResendSeconds = 23;
+  static const int _otpResendSeconds = 60;
 
   final _formKey = GlobalKey<FormState>();
   Map<String, String> _fieldErrors = {};
@@ -37,6 +45,8 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   _ForgotStep _step = _ForgotStep.request;
   int _resendCountdown = _otpResendSeconds;
   Timer? _resendTimer;
+  bool _obscureNewPassword = true;
+  bool _obscureConfirmPassword = true;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -57,10 +67,11 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     return error.toString().replaceFirst('Exception: ', '');
   }
 
-  void _startResendTimer() {
+  void _startResendTimer([int initialSeconds = _otpResendSeconds]) {
     _resendTimer?.cancel();
+    final safeSeconds = initialSeconds > 0 ? initialSeconds : _otpResendSeconds;
     setState(() {
-      _resendCountdown = _otpResendSeconds;
+      _resendCountdown = safeSeconds;
     });
     _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
@@ -79,6 +90,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   String get _currentOtp => _otpController.text.trim();
   bool get _isOtpComplete => RegExp(r'^\d{6}$').hasMatch(_currentOtp);
 
+  // Giải thuật yêu cầu gửi mã OTP và đồng bộ đồng hồ đếm ngược 60s hoặc `retryAfterSeconds` khi gặp 429 (`TC-017`).
   Future<void> _handleSendOtp() async {
     if (_isLoading) return;
     _fieldErrors = {};
@@ -97,23 +109,37 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     });
 
     try {
-      final repo = ref.read(authRepositoryProvider);
-      await repo.forgotPassword(identifier: identifier);
+      final cooldownSeconds = await ref
+          .read(forgotPasswordViewModelProvider)
+          .requestPasswordResetOtp(identifier: identifier);
       if (mounted) {
         setState(() {
           _step = _ForgotStep.otp;
           _isLoading = false;
         });
-        _startResendTimer();
+        _startResendTimer(cooldownSeconds);
       }
     } catch (e) {
       if (mounted) {
         _fieldErrors = AuthValidation.fieldErrors(e);
         _formKey.currentState?.validate();
+        int? retryAfter;
+        if (e is RateLimitFailure &&
+            e.retryAfterSeconds != null &&
+            e.retryAfterSeconds! > 0) {
+          retryAfter = e.retryAfterSeconds;
+        } else if (e is AppFailure && e.details is Map) {
+          final parsed =
+              int.tryParse('${e.details['retryAfterSeconds'] ?? ''}');
+          if (parsed != null && parsed > 0) retryAfter = parsed;
+        }
         setState(() {
           _isLoading = false;
           _errorMessage = _resolveErrorMessage(e);
         });
+        if (retryAfter != null && _step == _ForgotStep.otp) {
+          _startResendTimer(retryAfter);
+        }
       }
     }
   }
@@ -123,6 +149,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     await _handleSendOtp();
   }
 
+  // Giải thuật thẩm định mã OTP 6 chữ số cùng mật khẩu mới và gửi xác nhận đặt lại mật khẩu (`_handleResetPassword`).
   Future<void> _handleResetPassword() async {
     if (_isLoading) return;
     _fieldErrors = {};
@@ -150,12 +177,11 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     });
 
     try {
-      final repo = ref.read(authRepositoryProvider);
-      await repo.resetPassword(
-        identifier: _identifierController.text.trim(),
-        otp: otp,
-        newPassword: newPassword,
-      );
+      await ref.read(forgotPasswordViewModelProvider).confirmPasswordReset(
+            identifier: _identifierController.text.trim(),
+            otp: otp,
+            newPassword: newPassword,
+          );
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -176,13 +202,18 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final activeL10n =
+        lookupAppLocalizations(Locale(ref.watch(localeProvider)));
+    final countdownFormatted =
+        '${(_resendCountdown ~/ 60).toString().padLeft(2, '0')}:${(_resendCountdown % 60).toString().padLeft(2, '0')}';
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          tooltip: 'Quay lại',
+          tooltip: activeL10n.ctaBack,
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           icon: const Icon(LucideIcons.arrowLeft, color: AppColors.iconStrong),
           onPressed: () {
@@ -219,20 +250,20 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                     children: [
                       Text(
                         _step == _ForgotStep.request
-                            ? 'Quên mật khẩu?'
+                            ? activeL10n.authForgotQuestionTitle
                             : (_step == _ForgotStep.otp
-                                ? 'Xác thực mã OTP'
-                                : 'Đổi mật khẩu thành công'),
+                                ? activeL10n.authOtpVerifyTitle
+                                : activeL10n.authPasswordChangedTitle),
                         style: AppTypography.display
                             .copyWith(color: AppColors.textStrong),
                       ),
                       const SizedBox(height: AppSpacing.s8),
                       Text(
                         _step == _ForgotStep.request
-                            ? 'Nhập email hoặc số điện thoại đã đăng ký để nhận mã xác thực khôi phục mật khẩu.'
+                            ? activeL10n.authForgotRequestSubtitle
                             : (_step == _ForgotStep.otp
-                                ? 'Nhập 6 chữ số OTP và thiết lập mật khẩu mới.'
-                                : 'Mật khẩu của bạn đã được cập nhật an toàn.'),
+                                ? activeL10n.authForgotOtpSubtitle
+                                : activeL10n.authForgotSuccessSubtitle),
                         style: AppTypography.body
                             .copyWith(color: AppColors.textMuted),
                       ),
@@ -283,9 +314,9 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                           },
                           validator: (v) =>
                               _fieldErrors['identifier'] ??
-                              AuthValidation.identifier(v),
-                          labelText: 'Email hoặc số điện thoại',
-                          hintText: 'Nhập email hoặc số điện thoại',
+                              AuthValidation.loginIdentifier(v),
+                          labelText: activeL10n.authIdentifierLabel,
+                          hintText: activeL10n.authIdentifierHint,
                           prefixIcon: const Icon(
                             LucideIcons.userRound,
                             size: 20,
@@ -295,7 +326,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                         ),
                         const SizedBox(height: AppSpacing.s24),
                         AppButton(
-                          text: 'Gửi mã xác thực',
+                          text: activeL10n.authSendOtpButton,
                           isLoading: _isLoading,
                           onPressed: _handleSendOtp,
                         ),
@@ -309,7 +340,9 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Text(
-                            'Mã OTP đã gửi tới: ${_identifierController.text.trim()}',
+                            activeL10n.authOtpSentTo(
+                              _identifierController.text.trim(),
+                            ),
                             style: AppTypography.caption.copyWith(
                               color: AppColors.textStrong,
                               fontWeight: FontWeight.w600,
@@ -320,13 +353,16 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                           controller: _otpController,
                           readOnly: _isLoading,
                           keyboardType: TextInputType.number,
+                          enableSuggestions: false,
+                          autocorrect: false,
+                          enableIMEPersonalizedLearning: false,
                           autofillHints: const [AutofillHints.oneTimeCode],
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
                             LengthLimitingTextInputFormatter(_otpLength)
                           ],
                           decoration: InputDecoration(
-                              labelText: 'Mã OTP gồm 6 chữ số',
+                              labelText: activeL10n.authOtpSixDigitsLabel,
                               border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(24)),
                               errorMaxLines: 4),
@@ -361,13 +397,34 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                           validator: (v) =>
                               _fieldErrors['newPassword'] ??
                               AuthValidation.password(v),
-                          labelText: 'Mật khẩu mới',
-                          hintText: 'Tối thiểu 8 ký tự',
-                          obscureText: true,
+                          labelText: activeL10n.authNewPasswordLabel,
+                          hintText: activeL10n.authPasswordCreateHint,
+                          obscureText: _obscureNewPassword,
                           prefixIcon: const Icon(
                             LucideIcons.lock,
                             size: 20,
                             color: AppColors.iconMuted,
+                          ),
+                          suffixIcon: IconButton(
+                            tooltip: _obscureNewPassword
+                                ? activeL10n.authShowPasswordTooltip
+                                : activeL10n.authHidePasswordTooltip,
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
+                            icon: Icon(
+                              _obscureNewPassword
+                                  ? LucideIcons.eyeOff
+                                  : LucideIcons.eye,
+                              size: 20,
+                              color: AppColors.iconStrong,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscureNewPassword = !_obscureNewPassword;
+                              });
+                            },
                           ),
                         ),
                         const SizedBox(height: AppSpacing.s16),
@@ -377,13 +434,35 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                           validator: (v) => v == _newPasswordController.text
                               ? null
                               : 'Mật khẩu xác nhận không khớp',
-                          labelText: 'Xác nhận mật khẩu',
-                          hintText: 'Nhập lại mật khẩu mới',
-                          obscureText: true,
+                          labelText: activeL10n.authConfirmPasswordLabel,
+                          hintText: activeL10n.authConfirmPasswordHint,
+                          obscureText: _obscureConfirmPassword,
                           prefixIcon: const Icon(
                             LucideIcons.lock,
                             size: 20,
                             color: AppColors.iconMuted,
+                          ),
+                          suffixIcon: IconButton(
+                            tooltip: _obscureConfirmPassword
+                                ? activeL10n.authShowPasswordTooltip
+                                : activeL10n.authHidePasswordTooltip,
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
+                            icon: Icon(
+                              _obscureConfirmPassword
+                                  ? LucideIcons.eyeOff
+                                  : LucideIcons.eye,
+                              size: 20,
+                              color: AppColors.iconStrong,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscureConfirmPassword =
+                                    !_obscureConfirmPassword;
+                              });
+                            },
                           ),
                         ),
                         const SizedBox(height: AppSpacing.s16),
@@ -402,8 +481,12 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                             ),
                             label: Text(
                               _resendCountdown > 0
-                                  ? 'Gửi lại sau 00:${_resendCountdown.toString().padLeft(2, '0')}'
-                                  : 'Gửi lại mã OTP',
+                                  ? (ref.watch(localeProvider) == 'vi'
+                                      ? 'Gửi lại sau $countdownFormatted'
+                                      : activeL10n.authResendOtpCountdown(
+                                          _resendCountdown.toString(),
+                                        ))
+                                  : activeL10n.authResendOtpButton,
                               style: AppTypography.caption.copyWith(
                                 color: _resendCountdown > 0
                                     ? AppColors.textMuted
@@ -415,7 +498,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                         ),
                         const SizedBox(height: AppSpacing.s16),
                         AppButton(
-                          text: 'Xác nhận mã OTP',
+                          text: activeL10n.authConfirmOtpButton,
                           isLoading: _isLoading,
                           onPressed:
                               _isOtpComplete ? _handleResetPassword : null,
@@ -442,7 +525,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'Mã OTP đã được xác thực và mật khẩu mới đã sẵn sàng sử dụng.',
+                                  activeL10n.authOtpSuccessBanner,
                                   style: AppTypography.bodyMedium.copyWith(
                                     color: AppColors.textStrong,
                                     fontWeight: FontWeight.w600,
@@ -454,7 +537,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                         ),
                         const SizedBox(height: AppSpacing.s24),
                         AppButton(
-                          text: 'Quay lại đăng nhập',
+                          text: activeL10n.authBackToLoginButton,
                           onPressed: () => context.go('/dang-nhap'),
                         ),
                       ],

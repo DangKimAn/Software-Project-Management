@@ -1,14 +1,28 @@
+/**
+ * Lược đồ kiểm chứng dữ liệu đầu vào bằng Zod cho phân hệ thanh toán (`payments`):
+ * - Kiểm tra yêu cầu tạo giao dịch (`bookingId`, `method`), bộ lọc lịch sử và cấu trúc tham số callback bắt buộc từ VNPay (`vnp_*`) cũng như MoMo.
+ */
+
 import { z } from "zod";
 
+/**
+ * Schema kiểm chứng yêu cầu khởi tạo thanh toán gồm `bookingId` và phương thức `method` (`vnpay` / `momo`).
+ */
 export const createPaymentBodySchema = z.object({
     bookingId: z.coerce.number().int().positive(),
     method: z.enum(["vnpay", "momo"]),
 });
 
+/**
+ * Schema kiểm chứng tham số đường dẫn `paymentId` nguyên dương.
+ */
 export const paymentIdParamSchema = z.object({
     paymentId: z.coerce.number().int().positive(),
 });
 
+/**
+ * Schema kiểm chứng bộ lọc trạng thái và phân trang lịch sử thanh toán.
+ */
 export const paymentsQuerySchema = z.object({
     status: z.enum(["pending", "paid", "failed", "cancelled", "expired", "refunded"]).optional(),
     page: z.coerce.number().int().positive().optional(),
@@ -17,6 +31,9 @@ export const paymentsQuerySchema = z.object({
 
 const vnpayValueSchema = z.string().trim().min(1).max(2048);
 
+/**
+ * Schema kiểm chứng sự hiện diện của các trường đối soát và chữ ký bắt buộc trong callback VNPay.
+ */
 export const vnpayCallbackPayloadSchema = z
     .record(z.string().regex(/^vnp_[A-Za-z0-9_]+$/, "VNPay parameter name is invalid"), vnpayValueSchema)
     .superRefine((payload, context) => {
@@ -43,6 +60,9 @@ export const vnpayCallbackPayloadSchema = z
 
 const momoValueSchema = z.union([z.string().trim().max(2048), z.number(), z.boolean(), z.null()]);
 
+/**
+ * Schema kiểm chứng cấu trúc dữ liệu và chữ ký trong callback Return/IPN của MoMo.
+ */
 export const momoCallbackPayloadSchema = z
     .record(z.string().trim().min(1).max(128), momoValueSchema)
     .superRefine((payload, context) => {

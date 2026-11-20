@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP kiểm tra mã giảm giá của khách và quản trị mã giảm giá (`adminCouponsRoutes`):
+ * - Áp dụng middleware xác thực (`authenticate`), giới hạn tần suất dò mã giảm giá (`Limiter`), phân quyền `admin` cho nhánh quản trị và kiểm chứng `validate`.
+ */
+
 import express from "express";
 
 import {
@@ -7,7 +12,8 @@ import {
     updateAdminCouponRequest,
     validateCoupon,
 } from "./coupons.controller";
-import { authenticate } from "../../middlewares/authenticate.middleware";
+import { authenticate, optionalAuthenticate } from "../../middlewares/authenticate.middleware";
+import { getCouponValidateRateLimiter } from "../../middlewares/rate-limit.middleware";
 import { requireRole } from "../../middlewares/require-role.middleware";
 import { validate } from "../../middlewares/validate";
 import {
@@ -22,7 +28,8 @@ const router = express.Router();
 
 router.get(
     "/validate",
-    authenticate,
+    optionalAuthenticate,
+    getCouponValidateRateLimiter(),
     validate({ query: validateCouponQuerySchema }),
     validateCoupon,
 );

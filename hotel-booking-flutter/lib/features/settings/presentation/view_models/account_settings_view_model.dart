@@ -253,5 +253,14 @@ class AccountSyncNotifier extends StateNotifier<AccountSyncState> {
 
 final accountSyncNotifierProvider =
     StateNotifierProvider<AccountSyncNotifier, AccountSyncState>((ref) {
-  return AccountSyncNotifier(ref);
+  final notifier = AccountSyncNotifier(ref);
+  ref.listen<String?>(
+    authNotifierProvider.select((s) => s.valueOrNull?.id),
+    (previous, next) {
+      if (previous != next) {
+        notifier.clearForUserSwitch();
+      }
+    },
+  );
+  return notifier;
 });

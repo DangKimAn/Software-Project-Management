@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu kết quả kiểm duyệt an toàn và chấm điểm chất lượng hình ảnh chỗ nghỉ từ mô hình thị giác máy tính.
+ */
 import {
     CreationOptional,
     DataTypes,

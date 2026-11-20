@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu mã xác thực một lần (OTP) dạng băm kèm bộ đếm thử sai và hạn dùng theo mục đích xác thực.
+ */
 import {
     CreationOptional,
     DataTypes,

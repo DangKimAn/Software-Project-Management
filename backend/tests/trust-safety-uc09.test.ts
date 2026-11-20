@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { afterEach, describe, it } = require("node:test");
+const { after, afterEach, describe, it } = require("node:test");
 import type { AuditLogRecord, PatchEntry, Rejectable, TransactionCallback } from "./helpers/types";
 
 process.env.NODE_ENV = "test";
@@ -29,6 +29,14 @@ afterEach(() => {
     while (originals.length > 0) {
         const [target, key, value] = originals.pop()!;
         target[key] = value;
+    }
+});
+
+after(async () => {
+    try {
+        await sequelize.close();
+    } catch {
+        // ignore
     }
 });
 
@@ -140,7 +148,7 @@ describe("UC-09 reviews, conversations, and reports rules", () => {
     });
 
     it("strips executable HTML from review and message text", async () => {
-        const { sanitizeAndModerateText } = require("../dist/services/trust-safety-service");
+        const { sanitizeAndModerateText } = require("../dist/common/text-moderation");
         const payloads = [
             "<script>alert(1)</script>Hello",
             "<img src=x onerror=alert(1)>Nice",

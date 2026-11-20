@@ -2,11 +2,16 @@ import '../../../../core/network/dio_client.dart';
 import '../../domain/entities/review_item.dart';
 import '../../domain/repositories/review_repository.dart';
 
+/// Triển khai kho dữ liệu đánh giá kết nối tới REST API `/api/listings/:id/reviews` và `/api/reviews`.
 class ReviewRepositoryImpl implements ReviewRepository {
   final DioClient _client;
 
   const ReviewRepositoryImpl(this._client);
 
+  /// Giải thuật truy vấn và lọc đánh giá của chỗ nghỉ:
+  /// 1. Truyền tham số phân trang và chỉ đính kèm bộ lọc `rating` khi nằm trong đoạn hợp lệ `[1, 5]`.
+  /// 2. Bóc tách mảng phần tử từ cấu trúc phân trang `{ data: { items: [...] } }` hoặc mảng trực tiếp `{ data: [...] }`.
+  /// 3. Lọc xác nhận lần hai ở phía client (`item.rating.round() == rating`) để đảm bảo nhất quán tuyệt đối khi người dùng lọc theo số sao.
   @override
   Future<List<ReviewItem>> getListingReviews(
     String listingId, {

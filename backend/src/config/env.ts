@@ -30,6 +30,10 @@ export type AppEnv = {
     momoRequestType: string;
     momoLang: string;
     momoOrderExpireTimeMinutes?: number;
+    disbursementMode: "mock" | "payos";
+    payosClientId?: string;
+    payosApiKey?: string;
+    payosChecksumKey?: string;
     accessTokenTtlMinutes: number;
     refreshTokenTtlDays: number;
     refreshTokenTtlMs: number;
@@ -82,6 +86,25 @@ export type AppEnv = {
     paymentHoldMinutes: number;
     paymentExpirationSweepIntervalSeconds: number;
     allowDatabaseRootUser: boolean;
+    firebaseServiceAccountPath?: string;
+    firebaseServiceAccountJson?: string;
+    googleSheetsSyncEnabled: boolean;
+    googleServiceAccountEmail?: string;
+    googleServiceAccountPrivateKey?: string;
+    googleSheetsServiceAccountPath?: string;
+    googleSheetsServiceAccountJson?: string;
+    googleSheetsDefaultHostEditorEmail: string;
+    googleSheetsSyncIntervalSeconds: number;
+    googleSheetsRateLimitPerMinute: number;
+    googleSheetsBulkChangeWarnThreshold: number;
+    googleSheetsRequestTimeoutMs: number;
+    exchangeRateEnabled: boolean;
+    exchangeRateProvider: string;
+    exchangeRateCacheTtlMs: number;
+    exchangeRateFreshMaxAgeMs: number;
+    exchangeRateMaxStaleAgeMs: number;
+    exchangeRateTimeoutMs: number;
+    exchangeRateSnapshotPath: string;
 };
 
 const parseNumber = (name: string, value: string | undefined, fallback: number) => {
@@ -254,11 +277,16 @@ const readEnv = (...names: string[]) => {
 };
 
 
+/**
+ * Giải thuật nạp, ép kiểu và kiểm định an ninh toàn bộ biến môi trường hệ thống (`AppEnv`):
+ * - Chặn biến chứa placeholder chưa giải tham chiếu (`${...}`), từ chối khóa bí mật yếu hoặc trùng nhau giữa Access/Refresh/Hash/OTP trên môi trường `production`.
+ * - Cấm kết nối MySQL bằng tài khoản `root` và cấm truyền Refresh Token qua `body`/`header` ngoài môi trường phát triển nội bộ.
+ */
 export const getEnv = (): AppEnv => {
     const nodeEnv = process.env.NODE_ENV ?? "development";
     const jwtSecret = assertProductionValue(
         "JWT_SECRET_KEY or JWT_SECRET",
-        readEnv("JWT_SECRET_KEY", "JWT_SECRET"),
+        readEnv("JWT_SECRET_KEY", "JWT_SECRET") ?? (nodeEnv === "production" ? undefined : "dev_jwt_secret_key_at_least_32_chars_long"),
         nodeEnv,
         { secret: true },
     );
@@ -299,25 +327,25 @@ export const getEnv = (): AppEnv => {
     const dbHost =
         assertProductionValue(
             "MYSQLHOST",
-            readEnv("MYSQLHOST", "MYSQL_HOST") ?? (nodeEnv === "production" ? undefined : "127.0.0.1"),
+            readEnv("MYSQLHOST", "MYSQL_HOST", "DB_HOST") ?? (nodeEnv === "production" ? undefined : "127.0.0.1"),
             nodeEnv,
         ) ?? "127.0.0.1";
     const dbName =
         assertProductionValue(
             "MYSQL_DATABASE",
-            readEnv("MYSQL_DATABASE", "MYSQLDATABASE") ?? (nodeEnv === "production" ? undefined : "booking_room"),
+            readEnv("MYSQL_DATABASE", "MYSQLDATABASE", "DB_DATABASE", "DB_NAME") ?? (nodeEnv === "production" ? undefined : "booking_room"),
             nodeEnv,
         ) ?? "booking_room";
     const dbUser =
         assertProductionValue(
             "MYSQLUSER",
-            readEnv("MYSQLUSER", "MYSQL_USER") ?? (nodeEnv === "production" ? undefined : "booking_app"),
+            readEnv("MYSQLUSER", "MYSQL_USER", "DB_USERNAME", "DB_USER") ?? (nodeEnv === "production" ? undefined : "booking_app"),
             nodeEnv,
         ) ?? "root";
     const dbPassword =
         assertProductionValue(
             "MYSQLPASSWORD",
-            readEnv("MYSQLPASSWORD", "MYSQL_PASSWORD") ?? (nodeEnv === "production" ? undefined : ""),
+            readEnv("MYSQLPASSWORD", "MYSQL_PASSWORD", "DB_PASSWORD") ?? (nodeEnv === "production" ? undefined : ""),
             nodeEnv,
         ) ?? "";
     const allowDatabaseRootUser = parseBoolean(
@@ -365,11 +393,23 @@ export const getEnv = (): AppEnv => {
                 throw new Error(`Missing required production environment variable: ${name}`);
             }
         }
+
+        if (rawAccessSecret === rawRefreshSecret) {
+            throw new Error(
+                "Invalid production security configuration: JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be distinct",
+            );
+        }
+
+        if (rawTokenHashSecret === rawOtpHashSecret) {
+            throw new Error(
+                "Invalid production security configuration: TOKEN_HASH_SECRET and OTP_HASH_SECRET must be distinct",
+            );
+        }
     }
 
     const cookieSecret = assertProductionValue(
         "COOKIE_SECRET",
-        process.env.COOKIE_SECRET,
+        process.env.COOKIE_SECRET ?? (nodeEnv === "production" ? undefined : "dev_cookie_secret_at_least_32_chars_long"),
         nodeEnv,
         { secret: true },
     );
@@ -420,7 +460,7 @@ export const getEnv = (): AppEnv => {
         nodeEnv,
         trustProxy: parseTrustProxy(process.env.TRUST_PROXY ?? (nodeEnv === "production" ? "1" : "false")),
         dbHost,
-        dbPort: parsePositiveInteger("MYSQLPORT", readEnv("MYSQLPORT", "MYSQL_PORT"), 3306),
+        dbPort: parsePositiveInteger("MYSQLPORT", readEnv("MYSQLPORT", "MYSQL_PORT", "DB_PORT"), 3306),
         dbName,
         dbUser,
         dbPassword,
@@ -560,7 +600,94 @@ export const getEnv = (): AppEnv => {
             "MOMO_ORDER_EXPIRE_TIME_MINUTES",
             process.env.MOMO_ORDER_EXPIRE_TIME_MINUTES,
         ),
+        disbursementMode: (process.env.DISBURSEMENT_MODE === "payos" ? "payos" : "mock") as "mock" | "payos",
+        payosClientId: process.env.PAYOS_CLIENT_ID,
+        payosApiKey: process.env.PAYOS_API_KEY,
+        payosChecksumKey: process.env.PAYOS_CHECKSUM_KEY,
         openaiApiKey: assertResolvedEnv("OPENAI_API_KEY", process.env.OPENAI_API_KEY),
         openaiVisionModel: assertResolvedEnv("OPENAI_VISION_MODEL", process.env.OPENAI_VISION_MODEL) ?? "gpt-4.1-mini",
+        firebaseServiceAccountPath: assertResolvedEnv(
+            "FIREBASE_SERVICE_ACCOUNT_PATH",
+            process.env.FIREBASE_SERVICE_ACCOUNT_PATH,
+        ),
+        firebaseServiceAccountJson: assertResolvedEnv(
+            "FIREBASE_SERVICE_ACCOUNT_JSON",
+            process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+        ),
+        googleSheetsSyncEnabled: parseBoolean(
+            "GOOGLE_SHEETS_SYNC_ENABLED",
+            process.env.GOOGLE_SHEETS_SYNC_ENABLED ?? process.env.HOST_SHEET_SYNC_ENABLED,
+            true,
+        ),
+        googleServiceAccountEmail: assertResolvedEnv(
+            "GOOGLE_SERVICE_ACCOUNT_EMAIL",
+            process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+        ),
+        googleServiceAccountPrivateKey: assertResolvedEnv(
+            "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY",
+            process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY,
+        ),
+        googleSheetsServiceAccountPath: assertResolvedEnv(
+            "GOOGLE_SHEETS_SERVICE_ACCOUNT_PATH",
+            process.env.GOOGLE_SHEETS_SERVICE_ACCOUNT_PATH,
+        ),
+        googleSheetsServiceAccountJson: assertResolvedEnv(
+            "GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON",
+            process.env.GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON,
+        ),
+        googleSheetsDefaultHostEditorEmail:
+            (assertResolvedEnv(
+                "GOOGLE_SHEETS_DEFAULT_HOST_EDITOR_EMAIL",
+                process.env.GOOGLE_SHEETS_DEFAULT_HOST_EDITOR_EMAIL,
+            ) ?? "athanhnee@gmail.com").trim(),
+        googleSheetsSyncIntervalSeconds: parsePositiveInteger(
+            "GOOGLE_SHEETS_SYNC_INTERVAL_SECONDS",
+            process.env.GOOGLE_SHEETS_SYNC_INTERVAL_SECONDS,
+            120,
+        ),
+        googleSheetsRateLimitPerMinute: parsePositiveInteger(
+            "GOOGLE_SHEETS_RATE_LIMIT_PER_MINUTE",
+            process.env.GOOGLE_SHEETS_RATE_LIMIT_PER_MINUTE,
+            45,
+        ),
+        googleSheetsBulkChangeWarnThreshold: parsePositiveInteger(
+            "GOOGLE_SHEETS_BULK_CHANGE_WARN_THRESHOLD",
+            process.env.GOOGLE_SHEETS_BULK_CHANGE_WARN_THRESHOLD,
+            14,
+        ),
+        googleSheetsRequestTimeoutMs: parsePositiveInteger(
+            "GOOGLE_SHEETS_REQUEST_TIMEOUT_MS",
+            process.env.GOOGLE_SHEETS_REQUEST_TIMEOUT_MS,
+            15000,
+        ),
+        exchangeRateEnabled: parseBoolean(
+            "EXCHANGE_RATE_ENABLED",
+            process.env.EXCHANGE_RATE_ENABLED,
+            true,
+        ),
+        exchangeRateProvider: (process.env.EXCHANGE_RATE_PROVIDER ?? "frankfurter").trim() || "frankfurter",
+        exchangeRateCacheTtlMs: parsePositiveInteger(
+            "EXCHANGE_RATE_CACHE_TTL_MS",
+            process.env.EXCHANGE_RATE_CACHE_TTL_MS,
+            3 * 60 * 60 * 1000,
+        ),
+        exchangeRateFreshMaxAgeMs: parsePositiveInteger(
+            "EXCHANGE_RATE_FRESH_MAX_AGE_MS",
+            process.env.EXCHANGE_RATE_FRESH_MAX_AGE_MS,
+            48 * 60 * 60 * 1000,
+        ),
+        exchangeRateMaxStaleAgeMs: parsePositiveInteger(
+            "EXCHANGE_RATE_MAX_STALE_AGE_MS",
+            process.env.EXCHANGE_RATE_MAX_STALE_AGE_MS,
+            7 * 24 * 60 * 60 * 1000,
+        ),
+        exchangeRateTimeoutMs: parsePositiveInteger(
+            "EXCHANGE_RATE_TIMEOUT_MS",
+            process.env.EXCHANGE_RATE_TIMEOUT_MS,
+            5000,
+        ),
+        exchangeRateSnapshotPath:
+            (process.env.EXCHANGE_RATE_SNAPSHOT_PATH ?? "data/cache/exchange-rates.snapshot.json").trim() ||
+            "data/cache/exchange-rates.snapshot.json",
     };
 };
