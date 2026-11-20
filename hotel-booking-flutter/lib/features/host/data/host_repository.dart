@@ -1402,6 +1402,23 @@ class HostRepository {
     return <String, dynamic>{};
   }
 
+  /// Hủy yêu cầu rút tiền đang chờ duyệt (`POST /api/host/payouts/:payoutId/cancel`).
+  Future<Map<String, dynamic>> cancelPayout(int payoutId) async {
+    final response = await _client.dio.post<dynamic>(
+      '/api/host/payouts/$payoutId/cancel',
+    );
+    if (response.data is Map<String, dynamic>) {
+      final resMap = response.data as Map<String, dynamic>;
+      if (resMap['data'] is Map<String, dynamic>) {
+        return maskSensitivePayoutMap(
+          resMap['data'] as Map<String, dynamic>,
+        );
+      }
+      return maskSensitivePayoutMap(resMap);
+    }
+    return <String, dynamic>{};
+  }
+
   // ===========================================================================
   // BUG-13: Revenue Reports (`GET /api/host/reports/revenue`)
   // ===========================================================================

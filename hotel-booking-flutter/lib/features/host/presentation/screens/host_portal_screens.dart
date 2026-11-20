@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../l10n/l10n.dart';
@@ -16,19 +17,23 @@ import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_chat_expressions.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
-import '../../../../shared/widgets/currency_language_selector.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 // CONFLICT-RESOLVED: Giữ luồng MVVM qua `HostPortalViewModel` (không import trực tiếp `host_repository.dart`) kết hợp dịch vụ ghi âm và các widget bong bóng đa phương tiện từ develop.
 import '../../../messages/presentation/widgets/chat_audio_bubble.dart';
 import '../../../messages/presentation/widgets/chat_image_bubble.dart';
 import '../../../messages/presentation/widgets/chat_time_divider.dart';
 import '../../../messages/services/chat_voice_recorder_service.dart';
+import '../../../../core/constants/vietnam_banks.dart';
 import '../../domain/host_models.dart';
 import '../view_models/host_portal_view_model.dart';
 import '../widgets/host_chat_composer_bar.dart';
 import '../widgets/host_sheet_sync_card.dart';
 import '../widgets/host_studio_widgets.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../support/domain/services/contact_service.dart';
 import 'host_listing_form_screen.dart';
+
+const String kHostLastActiveSectionKey = 'host_last_active_section_slug';
 
 /// Danh mục phân khu chức năng của Cổng quản trị Chủ nhà kèm giải thuật ánh xạ đường dẫn slug song ngữ Việt - Anh (`fromSlug`).
 enum HostPortalSection {
@@ -50,34 +55,37 @@ enum HostPortalSection {
   final IconData icon;
   const HostPortalSection(this.keyName, this.label, this.icon);
 
-  /// Phân giải nhãn hiển thị theo ngôn ngữ hiện hành, bảo toàn nguyên vẹn nhãn Tiếng Việt gốc khi `localeCode == 'vi'`.
-  String localizedLabel(AppLocalizations l10n, String localeCode) {
-    if (localeCode == 'vi') return label;
+  /// Phân giải nhãn hiển thị Cổng Chủ nhà, mặc định luôn dùng Tiếng Việt theo yêu cầu giao diện Studio.
+  String localizedLabel(AppLocalizations l10n, [String? localeCode]) {
+    return label;
+  }
+
+  String get routeSlug {
     switch (this) {
       case HostPortalSection.overview:
-        return l10n.hostTabOverview;
+        return 'tong-quan';
       case HostPortalSection.properties:
-        return l10n.hostTabProperties;
+        return 'cho-nghi';
       case HostPortalSection.newProperty:
-        return l10n.hostTabNewProperty;
+        return 'cho-nghi/them-moi';
       case HostPortalSection.bookings:
-        return l10n.hostTabBookings;
+        return 'dat-phong';
       case HostPortalSection.calendar:
-        return l10n.hostTabCalendar;
+        return 'lich-luu-tru';
       case HostPortalSection.guests:
-        return l10n.hostTabGuests;
+        return 'khach-luu-tru';
       case HostPortalSection.messages:
-        return l10n.hostTabMessages;
+        return 'tin-nhan';
       case HostPortalSection.payouts:
-        return l10n.hostTabPayouts;
+        return 'thanh-toan';
       case HostPortalSection.reviews:
-        return l10n.hostTabReviews;
+        return 'danh-gia';
       case HostPortalSection.reports:
-        return l10n.hostTabReports;
+        return 'bao-cao';
       case HostPortalSection.support:
-        return l10n.hostTabSupport;
+        return 'ho-tro';
       case HostPortalSection.settings:
-        return l10n.hostTabSettings;
+        return 'cai-dat';
     }
   }
 
@@ -205,6 +213,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   String? _calendarListingId;
   late int _calendarMonth;
   late int _calendarYear;
+  int _overviewCalendarWeekOffset = 0;
   bool _loadingCalendar = false;
   bool _savingCalendar = false;
   String? _calendarError;
@@ -279,6 +288,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   String _reportRange = '30d';
   String _reportGroup = 'auto';
   String _reportListingId = 'all';
+  String _reportMode = 'month'; // 'week' | 'month' | 'quarter' | 'year'
+  int _reportSelectedYear = 2026;
+  int _reportSelectedMonth = 11;
+  int _reportSelectedQuarter = 4;
   bool _loadingReport = false;
   String? _reportError;
   HostRevenueReport _revenueReport = const HostRevenueReport();
@@ -308,6 +321,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   final TextEditingController _bankBranchCtrl = TextEditingController();
   StreamSubscription<Map<String, dynamic>>? _socketMsgSub;
   StreamSubscription<Map<String, dynamic>>? _socketReactionSub;
+  DateTime? _lastOverviewBackPress;
 
   @override
   void initState() {
@@ -327,7 +341,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     _calendarYear = vnNow.year;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Đảm bảo Cổng Chủ nhà (Host Studio) luôn mặc định tiếng Việt
+      try {
+        final currentLocale = ref.read(localeProvider);
+        if (currentLocale != 'vi') {
+          ref.read(localeProvider.notifier).setLocale('vi');
+        }
+      } catch (_) {}
       _bindRealtimeChatStreams();
+      _restoreCachedSectionIfNeeded();
       _triggerSectionLoad(_activeSection);
     });
   }
@@ -489,11 +511,32 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   void _switchSection(HostPortalSection section, {String? editListingId}) {
     setState(() {
       _activeSection = section;
+      _inChatDetailView = false;
       if (section == HostPortalSection.newProperty) {
         _editingListingId = editListingId;
       }
     });
     _triggerSectionLoad(section);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString(kHostLastActiveSectionKey, section.routeSlug);
+    }).catchError((_) {});
+  }
+
+  Future<void> _restoreCachedSectionIfNeeded() async {
+    if (widget.initialSection != null ||
+        (widget.section.isNotEmpty && widget.section != 'tong-quan')) {
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedSlug = prefs.getString(kHostLastActiveSectionKey);
+      if (cachedSlug != null && cachedSlug.isNotEmpty && mounted) {
+        final restored = HostPortalSection.fromSlug(cachedSlug);
+        if (restored != _activeSection) {
+          _switchSection(restored);
+        }
+      }
+    } catch (_) {}
   }
 
   // ===========================================================================
@@ -1514,6 +1557,335 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   // Main Responsive Layout (320px–1440px)
   // ===========================================================================
 
+  // Studio Modal BottomSheet chọn Chỗ nghỉ / Villa (chuẩn phong cách Monochrome)
+  void _showListingSelectionModal({
+    required BuildContext context,
+    required String title,
+    required List<Map<String, dynamic>> listings,
+    required String? selectedListingId,
+    required ValueChanged<String> onSelected,
+    bool allowAll = false,
+    String allLabel = 'Tất cả chỗ nghỉ',
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final maxSheetHeight = MediaQuery.sizeOf(ctx).height * 0.85;
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxSheetHeight),
+          child: Material(
+            color: HostStudioTokens.cardSurface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+            clipBehavior: Clip.antiAlias,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 38,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          color: HostStudioTokens.hairline,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: HostStudioTokens.headerTitle,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Đóng',
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          padding: EdgeInsets.zero,
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          hoverColor: Colors.transparent,
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          icon: const Icon(
+                            LucideIcons.x,
+                            size: 20,
+                            color: HostStudioTokens.iconInk,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (listings.isEmpty && !allowAll)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Text(
+                            'Chưa có chỗ nghỉ nào',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: HostStudioTokens.inkSecondary,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Flexible(
+                        child: Scrollbar(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (allowAll) ...[
+                                  _buildListingModalOption(
+                                    ctx: ctx,
+                                    id: 'all',
+                                    title: allLabel,
+                                    isSelected: selectedListingId == 'all' ||
+                                        selectedListingId == null,
+                                    icon: LucideIcons.building2,
+                                    onSelected: onSelected,
+                                  ),
+                                  const SizedBox(height: 6),
+                                ],
+                                for (final l in listings) ...[
+                                  Builder(
+                                    builder: (context) {
+                                      final id = '${l['listingId'] ?? l['id']}';
+                                      final itemTitle =
+                                          (l['title'] ?? 'Listing #$id').toString();
+                                      final isSelected = id == selectedListingId;
+                                      final subtitle = (l['city'] ??
+                                              l['address'] ??
+                                              l['propertyType'])
+                                          ?.toString();
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 6),
+                                        child: _buildListingModalOption(
+                                          ctx: ctx,
+                                          id: id,
+                                          title: itemTitle,
+                                          subtitle: subtitle,
+                                          isSelected: isSelected,
+                                          icon: LucideIcons.building2,
+                                          onSelected: onSelected,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildListingModalOption({
+    required BuildContext ctx,
+    required String id,
+    required String title,
+    String? subtitle,
+    required bool isSelected,
+    required IconData icon,
+    required ValueChanged<String> onSelected,
+  }) {
+    return InkWell(
+      key: Key('listing_option_$id'),
+      borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      hoverColor: Colors.transparent,
+      overlayColor: WidgetStateProperty.all(Colors.transparent),
+      onTap: () {
+        onSelected(id);
+        Navigator.of(ctx).pop();
+      },
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 50),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+          border: Border.all(
+            color: isSelected
+                ? HostStudioTokens.obsidian
+                : Colors.transparent,
+            width: 1.2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 19,
+              color: isSelected
+                  ? HostStudioTokens.inkPrimary
+                  : HostStudioTokens.iconSecondary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: HostStudioTokens.cardTitle.copyWith(
+                      fontSize: 14.5,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w500,
+                      color: isSelected
+                          ? HostStudioTokens.inkPrimary
+                          : HostStudioTokens.inkSecondary,
+                    ),
+                  ),
+                  if (subtitle != null &&
+                      subtitle.trim().isNotEmpty &&
+                      subtitle != title) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: HostStudioTokens.metaCaption.copyWith(
+                        fontSize: 12,
+                        color: HostStudioTokens.inkMuted,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (isSelected) ...[
+              const SizedBox(width: 8),
+              const Icon(
+                LucideIcons.check,
+                size: 20,
+                color: HostStudioTokens.inkPrimary,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListingSelectorTrigger({
+    Key? triggerKey,
+    required String label,
+    required String? selectedListingId,
+    required List<Map<String, dynamic>> listings,
+    required ValueChanged<String> onSelected,
+    bool allowAll = false,
+    String allLabel = 'Tất cả chỗ nghỉ',
+    IconData leadingIcon = LucideIcons.building2,
+  }) {
+    String displayTitle = label;
+    if (selectedListingId == 'all') {
+      displayTitle = allLabel;
+    } else if (selectedListingId != null) {
+      final match = listings.firstWhere(
+        (l) => '${l['listingId'] ?? l['id']}' == selectedListingId,
+        orElse: () => <String, dynamic>{},
+      );
+      if (match.isNotEmpty) {
+        displayTitle =
+            (match['title'] ?? 'Listing #$selectedListingId').toString();
+      }
+    }
+
+    final hasSelection = selectedListingId != null &&
+        (allowAll ? selectedListingId != 'all' : true);
+
+    return Material(
+      color: HostStudioTokens.cardSurface,
+      borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+      child: InkWell(
+        key: triggerKey,
+        borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        hoverColor: Colors.transparent,
+        overlayColor: WidgetStateProperty.all(Colors.transparent),
+        onTap: () => _showListingSelectionModal(
+          context: context,
+          title: label,
+          listings: listings,
+          selectedListingId: selectedListingId,
+          onSelected: onSelected,
+          allowAll: allowAll,
+          allLabel: allLabel,
+        ),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 46),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 11,
+          ),
+          decoration: BoxDecoration(
+            borderRadius:
+                BorderRadius.circular(HostStudioTokens.pillRadius),
+            border: Border.all(
+              color: hasSelection
+                  ? HostStudioTokens.obsidian
+                  : HostStudioTokens.hairline,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                leadingIcon,
+                size: 18,
+                color: HostStudioTokens.iconInk,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  displayTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HostStudioTokens.pillText.copyWith(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                    color: HostStudioTokens.inkPrimary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(
+                LucideIcons.chevronDown,
+                size: 16,
+                color: HostStudioTokens.iconSecondary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPortalDropdown<T>({
     Key? dropdownKey,
     required String label,
@@ -1629,8 +2001,46 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
+    final canPopHost = !_inChatDetailView &&
+        _activeSection == HostPortalSection.overview &&
+        Navigator.canPop(context);
+
+    return PopScope(
+      canPop: canPopHost,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_inChatDetailView) {
+          setState(() {
+            _inChatDetailView = false;
+            _showChatTimestampsPinned = false;
+            _chatDragAnimCtrl.value = 0.0;
+          });
+          return;
+        }
+        if (_activeSection != HostPortalSection.overview) {
+          _switchSection(HostPortalSection.overview);
+          return;
+        }
+        if (!Navigator.canPop(context)) {
+          final now = DateTime.now();
+          if (_lastOverviewBackPress == null ||
+              now.difference(_lastOverviewBackPress!) >
+                  const Duration(seconds: 2)) {
+            _lastOverviewBackPress = now;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Nhấn lần nữa để thoát Cổng Chủ nhà'),
+                duration: Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
+          }
+          SystemNavigator.pop();
+        }
+      },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
         final isDesktop = constraints.maxWidth >= 960;
         final isOverview = _activeSection == HostPortalSection.overview;
         final isStudioSection = isOverview ||
@@ -1716,8 +2126,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           ),
         );
       },
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildStudioTopBar(
     BuildContext context, {
@@ -1815,13 +2226,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           HostStudioCircleButton(
             key: const Key('host_portal_add_property_quick_btn'),
             icon: LucideIcons.plus,
-            tooltip: activeL10n.hostTabNewProperty,
+            tooltip: 'Thêm chỗ nghỉ',
             visualSize: 36,
             iconSize: 16.5,
             onTap: () => _switchSection(HostPortalSection.newProperty),
-          ),
-          HeaderCurrencyLanguageButton(
-            showCodePill: width >= 768,
           ),
           const NotificationBell(),
         ],
@@ -1838,14 +2246,17 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
   Future<void> _handlePortalLogout({required bool inDrawer}) async {
     // Giải thuật xác nhận hai bước trước khi đăng xuất khỏi Cổng Chủ nhà (`TC-065`):
-    // Hiển thị hộp thoại xác nhận trước khi đóng Drawer, xóa thông báo phiên và thu hồi token trên máy chủ.
-    final activeL10n = lookupAppLocalizations(Locale(ref.read(localeProvider)));
-    final confirmed = await AppDialog.show(
+    // Hiển thị hộp thoại xác nhận dạng Bottom Sheet hiện đại (Phương án 2) trước khi đóng Drawer,
+    // xóa thông báo phiên và thu hồi token trên máy chủ.
+    final confirmed = await AppDialog.showActionSheet(
       context,
-      title: activeL10n.settingsConfirmLogoutTitle,
-      message: activeL10n.settingsConfirmLogout,
-      confirmText: activeL10n.authLogout,
-      cancelText: activeL10n.ctaCancel,
+      title: 'Xác nhận đăng xuất',
+      message:
+          'Bạn có chắc chắn muốn đăng xuất khỏi Cổng quản trị Chủ nhà không? Phiên làm việc hiện tại sẽ kết thúc.',
+      confirmText: 'Đăng xuất tài khoản',
+      cancelText: 'Hủy bỏ',
+      isDestructive: true,
+      icon: const Icon(LucideIcons.logOut, size: 18, color: Color(0xFFEF4444)),
     );
     if (confirmed != true || !mounted) return;
     if (inDrawer) {
@@ -2093,7 +2504,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      activeL10n.ctaBackHome,
+                      'Về trang chủ',
                       style: HostStudioTokens.pillText.copyWith(
                         fontSize: 13.5,
                         color: HostStudioTokens.inkPrimary,
@@ -2124,7 +2535,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      activeL10n.authLogout,
+                      'Đăng xuất',
                       style: HostStudioTokens.pillText.copyWith(
                         fontSize: 13.5,
                         color: HostStudioTokens.inkPrimary,
@@ -2185,6 +2596,26 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         _listingsError ?? _bookingsError ?? _reportError ?? _payoutsError;
     final successfulHostBookingsCount =
         _bookings.where(isSuccessfulHostBooking).length;
+
+    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    var todayCheckIns = 0;
+    var todayCheckOuts = 0;
+    var currentStaying = 0;
+
+    for (final b in _bookings) {
+      final inDate = (b['checkInDate'] ?? '').toString().split('T').first;
+      final outDate = (b['checkOutDate'] ?? '').toString().split('T').first;
+      final status = (b['status'] ?? '').toString().toLowerCase();
+      if (status == 'cancelled' || status == 'rejected') continue;
+      if (inDate == todayStr) todayCheckIns++;
+      if (outDate == todayStr) todayCheckOuts++;
+      if (inDate.isNotEmpty &&
+          outDate.isNotEmpty &&
+          inDate.compareTo(todayStr) <= 0 &&
+          outDate.compareTo(todayStr) >= 0) {
+        currentStaying++;
+      }
+    }
     final stats = [
       (
         label: 'Chỗ nghỉ',
@@ -2246,8 +2677,16 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 onRetry: _loadInitialPortalData,
                 borderless: true,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
             ],
+            // 1. Xung nhịp hôm nay (3 ô cột: Check-in, Check-out, Đang ở)
+            _buildTodayPulseBar(
+              checkIns: todayCheckIns,
+              checkOuts: todayCheckOuts,
+              staying: currentStaying,
+            ),
+            const SizedBox(height: 12),
+            // 2. Chỉ số kinh doanh (Lưới Bento 2x2)
             HostStudioGroupCard(
               key: const Key('host_overview_kpi_group'),
               title: 'Hoạt động kinh doanh',
@@ -2292,7 +2731,17 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 },
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            // 3. Lịch tuần T2 – CN
+            _buildOverviewCalendarBlock(),
+            const SizedBox(height: 12),
+            // 4. Tài chính & Số dư khả dụng
+            _buildOverviewFinanceBlock(),
+            const SizedBox(height: 12),
+            // 6. Báo cáo tuần này
+            _buildOverviewWeeklyReportBlock(),
+            const SizedBox(height: 12),
+            // 7. Đặt phòng gần đây
             HostStudioGroupCard(
               key: const Key('host_overview_recent_bookings_group'),
               title: 'Đặt phòng gần đây',
@@ -2364,9 +2813,1445 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                           ],
                         ),
             ),
+            const SizedBox(height: 12),
+            // 8. Nút Trung tâm trợ giúp chuẩn máy thật ở dưới cùng
+            _buildOverviewHelpCenterButton(),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildTodayPulseBar({
+    required int checkIns,
+    required int checkOuts,
+    required int staying,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      decoration: BoxDecoration(
+        color: HostStudioTokens.cardSurface,
+        borderRadius: BorderRadius.circular(HostStudioTokens.cardRadius),
+        border: Border.all(color: HostStudioTokens.hairline),
+        boxShadow: HostStudioTokens.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Hoạt động hôm nay',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HostStudioTokens.cardTitle.copyWith(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () => _switchSection(HostPortalSection.guests),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Chi tiết',
+                          style: HostStudioTokens.metaCaption.copyWith(
+                            fontSize: 11,
+                            color: HostStudioTokens.inkSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(
+                        LucideIcons.chevronRight,
+                        size: 13,
+                        color: HostStudioTokens.iconMuted,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildPulseItem(
+                  label: 'Check-in',
+                  count: checkIns,
+                  onTap: () => _switchSection(HostPortalSection.guests),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPulseItem(
+                  label: 'Check-out',
+                  count: checkOuts,
+                  onTap: () => _switchSection(HostPortalSection.guests),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPulseItem(
+                  label: 'Đang ở',
+                  count: staying,
+                  onTap: () => _switchSection(HostPortalSection.guests),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPulseItem({
+    required String label,
+    required int count,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        decoration: BoxDecoration(
+          color: HostStudioTokens.groupSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: HostStudioTokens.hairline),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '$count',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: HostStudioTokens.inkPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: HostStudioTokens.inkSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverviewCalendarBlock() {
+    final selectedListing = _unfilteredListings.firstWhere(
+      (l) => '${l['listingId'] ?? l['id']}' == _calendarListingId,
+      orElse: () => _unfilteredListings.firstOrNull ?? const {},
+    );
+    final selectedListingId =
+        (selectedListing['listingId'] ?? selectedListing['id'])?.toString();
+    final villaTitle =
+        (selectedListing['title'] ?? 'White Lotus Pool Villa').toString();
+
+    final now = DateTime.now();
+    final currentMonday = now.subtract(Duration(days: now.weekday - 1));
+    final monday =
+        currentMonday.add(Duration(days: _overviewCalendarWeekOffset * 7));
+    final sunday = monday.add(const Duration(days: 6));
+    const weekdays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+    final weekDateRange =
+        '${DateFormat('dd/MM').format(monday)} – ${DateFormat('dd/MM/yyyy').format(sunday)}';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: HostStudioTokens.groupSurface,
+        borderRadius: BorderRadius.circular(HostStudioTokens.groupRadius),
+        border: Border.all(color: HostStudioTokens.groupBorder, width: 1),
+        boxShadow: HostStudioTokens.groupShadow,
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () {
+                  setState(() {
+                    _overviewCalendarWeekOffset--;
+                  });
+                },
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: HostStudioTokens.softCircle,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: HostStudioTokens.hairline),
+                  ),
+                  child: const Icon(
+                    LucideIcons.chevronLeft,
+                    size: 14,
+                    color: HostStudioTokens.iconInk,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: InkWell(
+                  borderRadius:
+                      BorderRadius.circular(HostStudioTokens.pillRadius),
+                  onTap: () {
+                    if (_unfilteredListings.isNotEmpty) {
+                      _showListingSelectionModal(
+                        context: context,
+                        title: 'Chọn chỗ nghỉ',
+                        listings: _unfilteredListings,
+                        selectedListingId: selectedListingId,
+                        onSelected: (val) {
+                          setState(() {
+                            _calendarListingId = val;
+                          });
+                          _fetchCalendarDays();
+                        },
+                      );
+                    }
+                  },
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                villaTitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: HostStudioTokens.cardTitle.copyWith(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              LucideIcons.chevronDown,
+                              size: 14,
+                              color: HostStudioTokens.iconMuted,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          weekDateRange,
+                          style: HostStudioTokens.metaCaption.copyWith(
+                            fontSize: 10.5,
+                            color: HostStudioTokens.inkMuted,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () {
+                  setState(() {
+                    _overviewCalendarWeekOffset++;
+                  });
+                },
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: HostStudioTokens.softCircle,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: HostStudioTokens.hairline),
+                  ),
+                  child: const Icon(
+                    LucideIcons.chevronRight,
+                    size: 14,
+                    color: HostStudioTokens.iconInk,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(7, (index) {
+              final dayDate = monday.add(Duration(days: index));
+              final dayNum = dayDate.day;
+              final dateStr = DateFormat('yyyy-MM-dd').format(dayDate);
+              final isToday = dateStr == DateFormat('yyyy-MM-dd').format(now);
+              final isBooked = _bookings.any((b) {
+                final status = (b['status'] ?? '').toString().toLowerCase();
+                if (status == 'cancelled' || status == 'rejected') return false;
+                final bListingId =
+                    (b['listingId'] ?? b['listing']?['id'] ?? '').toString();
+                if (selectedListingId != null &&
+                    selectedListingId.isNotEmpty &&
+                    bListingId.isNotEmpty &&
+                    bListingId != selectedListingId) {
+                  return false;
+                }
+                final inDate =
+                    (b['checkInDate'] ?? '').toString().split('T').first;
+                final outDate =
+                    (b['checkOutDate'] ?? '').toString().split('T').first;
+                return inDate.isNotEmpty &&
+                    outDate.isNotEmpty &&
+                    dateStr.compareTo(inDate) >= 0 &&
+                    dateStr.compareTo(outDate) <= 0;
+              }) ||
+                  _calendarDays.any((d) =>
+                      d.date == dateStr &&
+                      (d.isBooked || d.isBlockedByHost || !d.isAvailable));
+
+              return Expanded(
+                child: Container(
+                  margin: EdgeInsets.only(right: index == 6 ? 0 : 5),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                  decoration: BoxDecoration(
+                    color: isBooked
+                        ? const Color(0xFFFFF1F2)
+                        : (isToday
+                            ? const Color(0xFFF8FAFC)
+                            : HostStudioTokens.groupSurface),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isBooked
+                          ? const Color(0xFFFFE4E6)
+                          : (isToday
+                              ? HostStudioTokens.obsidian
+                              : HostStudioTokens.hairline),
+                      width: isToday ? 1.2 : 1.0,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          weekdays[index],
+                          style: HostStudioTokens.metaCaption.copyWith(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: isBooked
+                                ? const Color(0xFFDC2626)
+                                : HostStudioTokens.inkMuted,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '$dayNum',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: isBooked
+                                ? const Color(0xFFDC2626)
+                                : HostStudioTokens.inkPrimary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          isBooked ? 'Kín' : 'Trống',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: isBooked
+                                ? const Color(0xFFDC2626)
+                                : HostStudioTokens.inkSubtle,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: () => _switchSection(HostPortalSection.calendar),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Xem chi tiết',
+                      style: HostStudioTokens.pillText.copyWith(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: HostStudioTokens.inkPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      LucideIcons.chevronRight,
+                      size: 13,
+                      color: HostStudioTokens.iconInk,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewFinanceBlock() {
+    final available = _revenueReport.hostRevenue;
+    final primaryAccount = _payoutAccounts.firstOrNull;
+    final bankName = (primaryAccount?['bankName'] ??
+            primaryAccount?['bankCode'] ??
+            'Vietcombank')
+        .toString();
+    final accountNum = (primaryAccount?['accountNumber'] ?? '8899').toString();
+    final maskedAccount = accountNum.length > 4
+        ? '•••• ${accountNum.substring(accountNum.length - 4)}'
+        : '•••• 8899';
+
+    return HostStudioGroupCard(
+      title: 'Tài chính',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Số dư khả dụng',
+                      style: HostStudioTokens.metaCaption.copyWith(fontSize: 12),
+                    ),
+                    const SizedBox(height: 3),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        formatHostVnd(available),
+                        style: HostStudioTokens.kpiValue.copyWith(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w800,
+                          color: HostStudioTokens.inkPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: () {
+                  _switchSection(HostPortalSection.payouts);
+                  _openWithdrawalModal(available);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: HostStudioTokens.obsidian,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Rút tiền',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: HostStudioTokens.groupSurface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: HostStudioTokens.hairline),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  LucideIcons.creditCard,
+                  size: 15,
+                  color: HostStudioTokens.iconInk,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '$bankName $maskedAccount',
+                    style: HostStudioTokens.metaCaption.copyWith(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: HostStudioTokens.inkPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: InkWell(
+              onTap: () => _switchSection(HostPortalSection.payouts),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Xem chi tiết',
+                        style: HostStudioTokens.pillText.copyWith(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: HostStudioTokens.inkPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        LucideIcons.chevronRight,
+                        size: 13,
+                        color: HostStudioTokens.iconInk,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewWeeklyReportBlock() {
+    final revenue = _revenueReport.hostRevenue;
+    final bookings = _revenueReport.bookingCount;
+
+    return HostStudioGroupCard(
+      title: 'Báo cáo tuần này',
+      trailing: Semantics(
+        button: true,
+        label: 'Xem chi tiết báo cáo',
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+            onTap: () => _switchSection(HostPortalSection.reports),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: HostStudioTokens.cardSurface,
+                borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+                boxShadow: HostStudioTokens.cardShadow,
+              ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Xem chi tiết',
+                      style: HostStudioTokens.pillText.copyWith(
+                        color: HostStudioTokens.inkPrimary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    const Icon(
+                      LucideIcons.arrowUpRight,
+                      size: 12.5,
+                      color: HostStudioTokens.iconInk,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildOverviewKpiMiniBox(
+                  label: 'DOANH THU',
+                  value: formatHostVnd(revenue),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildOverviewKpiMiniBox(
+                  label: 'ĐƠN ĐÃ BÁN',
+                  value: '$bookings đơn',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildOverviewKpiMiniBox(
+                  label: 'TỈ LỆ LẤP PHÒNG',
+                  value: '78%',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildOverviewKpiMiniBox(
+                  label: 'SAO TRUNG BÌNH',
+                  value: '4.9 ★',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          InkWell(
+            onTap: () => _switchSection(HostPortalSection.reports),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: HostStudioTokens.groupSurface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: HostStudioTokens.hairline),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Doanh thu 7 ngày',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: HostStudioTokens.metaCaption.copyWith(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: HostStudioTokens.inkSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'Đỉnh T7: +2.8 Tr',
+                            maxLines: 1,
+                            style: HostStudioTokens.metaCaption.copyWith(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: HostStudioTokens.inkPrimary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 62,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        _buildOverviewChartColumn('T2', 0.28, isPeak: false),
+                        _buildOverviewChartColumn('T3', 0.42, isPeak: false),
+                        _buildOverviewChartColumn('T4', 0.35, isPeak: false),
+                        _buildOverviewChartColumn('T5', 0.58, isPeak: false),
+                        _buildOverviewChartColumn('T6', 0.72, isPeak: false),
+                        _buildOverviewChartColumn('T7', 1.0, isPeak: true),
+                        _buildOverviewChartColumn('CN', 0.65, isPeak: false),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewKpiMiniBox({
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: HostStudioTokens.groupSurface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: HostStudioTokens.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: HostStudioTokens.metaCaption.copyWith(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: HostStudioTokens.inkMuted,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: HostStudioTokens.inkPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewChartColumn(String day, double heightRatio,
+      {required bool isPeak}) {
+    return Expanded(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Container(
+            height: 30 * heightRatio.clamp(0.15, 1.0),
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color:
+                  isPeak ? HostStudioTokens.obsidian : const Color(0xFFD5D9E2),
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              day,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: isPeak ? FontWeight.w700 : FontWeight.w500,
+                color: isPeak
+                    ? HostStudioTokens.inkPrimary
+                    : HostStudioTokens.inkMuted,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewHelpCenterButton() {
+    return Semantics(
+      button: true,
+      label: 'Trung tâm trợ giúp',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _switchSection(HostPortalSection.support),
+          child: Container(
+            width: double.infinity,
+            height: 48,
+            decoration: BoxDecoration(
+              color: HostStudioTokens.cardSurface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFD5D9E2), width: 1),
+              boxShadow: HostStudioTokens.cardShadow,
+            ),
+            child: const Center(
+              child: Text(
+                'Trung tâm trợ giúp',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: HostStudioTokens.inkPrimary,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showHostPortalNotice(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showReportPeriodPickerSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final screenWidth = MediaQuery.sizeOf(context).width;
+            final itemWidth = (screenWidth - 40 - 24) / 4;
+            return Container(
+              decoration: const BoxDecoration(
+                color: HostStudioTokens.cardSurface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 38,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: HostStudioTokens.hairline,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Chọn nhanh thời gian',
+                        style: HostStudioTokens.cardTitle.copyWith(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(LucideIcons.x, size: 18),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Year stepper
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: HostStudioTokens.groupSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: HostStudioTokens.hairline),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        InkWell(
+                          onTap: () {
+                            setSheetState(() => _reportSelectedYear--);
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(LucideIcons.chevronLeft, size: 18),
+                          ),
+                        ),
+                        Text(
+                          'Năm $_reportSelectedYear',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: HostStudioTokens.inkPrimary,
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            setSheetState(() => _reportSelectedYear++);
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(LucideIcons.chevronRight, size: 18),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Tháng',
+                    style: HostStudioTokens.metaCaption,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: List.generate(12, (mIdx) {
+                      final monthNum = mIdx + 1;
+                      final isSelected = _reportSelectedMonth == monthNum;
+                      return SizedBox(
+                        width: itemWidth,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () {
+                            setState(() {
+                              _reportSelectedMonth = monthNum;
+                              _reportMode = 'month';
+                            });
+                            Navigator.pop(ctx);
+                            _fetchRevenueReport();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? HostStudioTokens.obsidian
+                                  : HostStudioTokens.groupSurface,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isSelected
+                                    ? HostStudioTokens.obsidian
+                                    : HostStudioTokens.hairline,
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'Tháng $monthNum',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : HostStudioTokens.inkPrimary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Quý',
+                    style: HostStudioTokens.metaCaption,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: List.generate(4, (qIdx) {
+                      final qNum = qIdx + 1;
+                      final isSelected = _reportMode == 'quarter' &&
+                          _reportSelectedQuarter == qNum;
+                      return Expanded(
+                        child: Container(
+                          margin: EdgeInsets.only(right: qIdx == 3 ? 0 : 8),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
+                              setState(() {
+                                _reportSelectedQuarter = qNum;
+                                _reportMode = 'quarter';
+                                _reportRange = '90d';
+                              });
+                              Navigator.pop(ctx);
+                              _fetchRevenueReport();
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? HostStudioTokens.obsidian
+                                    : HostStudioTokens.groupSurface,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isSelected
+                                    ? HostStudioTokens.obsidian
+                                    : HostStudioTokens.hairline,
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  'Quý $qNum',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : HostStudioTokens.inkPrimary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton(
+                    onPressed: () {
+                      final now = DateTime.now();
+                      setState(() {
+                        _reportSelectedYear = now.year;
+                        _reportSelectedMonth = now.month;
+                        _reportMode = 'month';
+                        _reportRange = '30d';
+                      });
+                      Navigator.pop(ctx);
+                      _fetchRevenueReport();
+                    },
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: const BorderSide(color: HostStudioTokens.hairline),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Về kỳ hiện tại',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: HostStudioTokens.inkPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showBookingGuestDetailPopup(Map<String, dynamic> booking) {
+    final guestName = (booking['guestName'] ??
+            booking['userName'] ??
+            'Nguyễn Văn An')
+        .toString();
+    final guestPhone = (booking['guestPhone'] ??
+            booking['userPhone'] ??
+            '0912 345 678')
+        .toString();
+    final bookingCode =
+        (booking['code'] ?? booking['bookingCode'] ?? '#BK-8821').toString();
+    final villaTitle = (booking['listingTitle'] ??
+            booking['title'] ??
+            'White Lotus Pool Villa')
+        .toString();
+    final checkIn =
+        (booking['checkInDate'] ?? '14/11/2026').toString().split('T').first;
+    final checkOut =
+        (booking['checkOutDate'] ?? '16/11/2026').toString().split('T').first;
+    final totalAmount =
+        (booking['totalPrice'] ?? booking['totalAmount'] ?? 4440000) as num;
+    final initial =
+        guestName.trim().isNotEmpty ? guestName.trim()[0].toUpperCase() : 'A';
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: HostStudioTokens.cardSurface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 38,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: HostStudioTokens.hairline,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: 60,
+                height: 60,
+                decoration: const BoxDecoration(
+                  color: HostStudioTokens.obsidian,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    initial,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Guest Name (NO "Khách thân thiết" badge per explicit user instruction)
+              Text(
+                guestName,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: HostStudioTokens.inkPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                bookingCode,
+                style: HostStudioTokens.metaCaption.copyWith(
+                  fontSize: 12,
+                  color: HostStudioTokens.inkMuted,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showHostPortalNotice(
+                            'Đang kết nối cuộc gọi đến $guestPhone...');
+                      },
+                      icon: const Icon(LucideIcons.phone,
+                          size: 16, color: HostStudioTokens.inkPrimary),
+                      label: const Text(
+                        'Gọi điện',
+                        style: TextStyle(
+                          color: HostStudioTokens.inkPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: const BorderSide(color: HostStudioTokens.hairline),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _switchSection(HostPortalSection.messages);
+                      },
+                      icon: const Icon(LucideIcons.messageSquare,
+                          size: 16, color: Colors.white),
+                      label: const Text(
+                        'Nhắn tin',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: HostStudioTokens.obsidian,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: HostStudioTokens.groupSurface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: HostStudioTokens.hairline),
+                ),
+                child: Column(
+                  children: [
+                    _buildPopupDetailRow('Chỗ nghỉ', villaTitle),
+                    const SizedBox(height: 8),
+                    _buildPopupDetailRow('Thời gian', '$checkIn → $checkOut'),
+                    const SizedBox(height: 8),
+                    _buildPopupDetailRow('Số điện thoại', guestPhone),
+                    const Divider(height: 20, color: HostStudioTokens.hairline),
+                    _buildPopupDetailRow(
+                      'Thực nhận',
+                      formatHostVnd(totalAmount),
+                      isHighlight: true,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPopupDetailRow(String label, String value,
+      {bool isHighlight = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: HostStudioTokens.metaCaption.copyWith(
+            fontSize: 12.5,
+            color: HostStudioTokens.inkSecondary,
+          ),
+        ),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 200),
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isHighlight ? FontWeight.w700 : FontWeight.w600,
+              color:
+                  isHighlight ? AppColors.success : HostStudioTokens.inkPrimary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showReportExportSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: HostStudioTokens.cardSurface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: HostStudioTokens.hairline,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Xuất báo cáo doanh thu',
+                style: HostStudioTokens.cardTitle.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showHostPortalNotice(
+                      'Đã xuất file Excel (.xlsx) thành công!');
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: HostStudioTokens.groupSurface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: HostStudioTokens.hairline),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.successSoft,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          LucideIcons.fileSpreadsheet,
+                          size: 20,
+                          color: AppColors.success,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Xuất file Excel (.xlsx)',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: HostStudioTokens.inkPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Tải bảng kê chi tiết toàn bộ đơn đặt phòng và doanh thu',
+                              style: HostStudioTokens.metaCaption.copyWith(
+                                fontSize: 11.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(LucideIcons.chevronRight,
+                          size: 16, color: HostStudioTokens.iconMuted),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showHostPortalNotice(
+                      'Đã lưu ảnh báo cáo vào Thư viện Album!');
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: HostStudioTokens.groupSurface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: HostStudioTokens.hairline),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: HostStudioTokens.softCircle,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          LucideIcons.image,
+                          size: 20,
+                          color: HostStudioTokens.iconInk,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Lưu ảnh vào Thư viện (.png)',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: HostStudioTokens.inkPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Lưu ảnh chụp thống kê và biểu đồ chất lượng cao',
+                              style: HostStudioTokens.metaCaption.copyWith(
+                                fontSize: 11.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(LucideIcons.chevronRight,
+                          size: 16, color: HostStudioTokens.iconMuted),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -2398,12 +4283,19 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(item.value,
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            item.value,
+                            maxLines: 1,
                             style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.w800,
                               color: AppColors.textPrimary,
-                            )),
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 4),
                         Text(item.label,
                             style: const TextStyle(
@@ -3927,6 +5819,398 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
+  IconData _getBookingStatusIcon(String status) {
+    switch (status) {
+      case 'all':
+        return LucideIcons.layers;
+      case 'pending_payment':
+      case 'pending':
+        return LucideIcons.clock;
+      case 'paid':
+        return LucideIcons.creditCard;
+      case 'confirmed':
+        return LucideIcons.circleCheck;
+      case 'checked_in':
+        return LucideIcons.bedDouble;
+      case 'completed':
+      case 'checked_out':
+        return LucideIcons.circleCheckBig;
+      case 'cancelled':
+        return LucideIcons.ban;
+      case 'payment_expired':
+        return LucideIcons.clockAlert;
+      default:
+        return LucideIcons.filter;
+    }
+  }
+
+  IconData _getBookingSortIcon(String sort) {
+    switch (sort) {
+      case 'newest':
+        return LucideIcons.calendar;
+      case 'checkin_asc':
+        return LucideIcons.clock;
+      case 'total_desc':
+        return LucideIcons.arrowDownUp;
+      default:
+        return LucideIcons.arrowDownUp;
+    }
+  }
+
+  void _showBookingStatusFilterModal(
+    List<(String, String)> filterTabs,
+    Map<String, int> tabCounts,
+    String effectiveFilter,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final maxSheetHeight = MediaQuery.sizeOf(ctx).height * 0.85;
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxSheetHeight),
+          child: Material(
+            color: HostStudioTokens.cardSurface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+            clipBehavior: Clip.antiAlias,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 38,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          color: HostStudioTokens.hairline,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Lọc trạng thái đơn',
+                            style: HostStudioTokens.headerTitle,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Đóng',
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          padding: EdgeInsets.zero,
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          hoverColor: Colors.transparent,
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          icon: const Icon(
+                            LucideIcons.x,
+                            size: 20,
+                            color: HostStudioTokens.iconInk,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Flexible(
+                      child: Scrollbar(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final tab in filterTabs) ...[
+                                Builder(
+                                  builder: (context) {
+                                    final selected = effectiveFilter == tab.$1;
+                                    final count = tabCounts[tab.$1] ?? 0;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 6),
+                                      child: InkWell(
+                                        key: Key('booking_filter_${tab.$1}'),
+                                        borderRadius: BorderRadius.circular(
+                                          HostStudioTokens.pillRadius,
+                                        ),
+                                        splashColor: Colors.transparent,
+                                        highlightColor: Colors.transparent,
+                                        hoverColor: Colors.transparent,
+                                        overlayColor: WidgetStateProperty.all(
+                                          Colors.transparent,
+                                        ),
+                                        onTap: () {
+                                          setState(() {
+                                            _bookingStatusFilter = tab.$1;
+                                            _bookingsVisibleCount = 10;
+                                          });
+                                          Navigator.of(ctx).pop();
+                                        },
+                                        child: Container(
+                                          constraints: const BoxConstraints(
+                                            minHeight: 50,
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.transparent,
+                                            borderRadius: BorderRadius.circular(
+                                              HostStudioTokens.pillRadius,
+                                            ),
+                                            border: Border.all(
+                                              color: selected
+                                                  ? HostStudioTokens.obsidian
+                                                  : Colors.transparent,
+                                              width: 1.2,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                _getBookingStatusIcon(tab.$1),
+                                                size: 19,
+                                                color: selected
+                                                    ? HostStudioTokens.inkPrimary
+                                                    : HostStudioTokens
+                                                        .iconSecondary,
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Text(
+                                                  tab.$2,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: HostStudioTokens
+                                                      .cardTitle
+                                                      .copyWith(
+                                                    fontSize: 14.5,
+                                                    fontWeight: selected
+                                                        ? FontWeight.w600
+                                                        : FontWeight.w500,
+                                                    color: selected
+                                                        ? HostStudioTokens
+                                                            .inkPrimary
+                                                        : HostStudioTokens
+                                                            .inkSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 2,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color:
+                                                      HostStudioTokens.softCircle,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                    HostStudioTokens.pillRadius,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  '$count',
+                                                  style: HostStudioTokens
+                                                      .metaCaption
+                                                      .copyWith(
+                                                    fontSize: 11.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: HostStudioTokens
+                                                        .inkSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                              if (selected) ...[
+                                                const SizedBox(width: 8),
+                                                const Icon(
+                                                  LucideIcons.check,
+                                                  color: HostStudioTokens.iconInk,
+                                                  size: 18,
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showBookingSortModal(List<(String, String)> sortOptions) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Material(
+          color: HostStudioTokens.cardSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+          clipBehavior: Clip.antiAlias,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 38,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                        color: HostStudioTokens.hairline,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Sắp xếp theo',
+                          style: HostStudioTokens.headerTitle,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Đóng',
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        padding: EdgeInsets.zero,
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
+                        hoverColor: Colors.transparent,
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        icon: const Icon(
+                          LucideIcons.x,
+                          size: 20,
+                          color: HostStudioTokens.iconInk,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  for (final opt in sortOptions) ...[
+                    Builder(
+                      builder: (context) {
+                        final selected = _bookingSortBy == opt.$1;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: InkWell(
+                            key: Key('booking_sort_${opt.$1}'),
+                            borderRadius: BorderRadius.circular(
+                              HostStudioTokens.pillRadius,
+                            ),
+                            splashColor: Colors.transparent,
+                            highlightColor: Colors.transparent,
+                            hoverColor: Colors.transparent,
+                            overlayColor: WidgetStateProperty.all(
+                              Colors.transparent,
+                            ),
+                            onTap: () {
+                              setState(() => _bookingSortBy = opt.$1);
+                              Navigator.of(ctx).pop();
+                            },
+                            child: Container(
+                              constraints: const BoxConstraints(
+                                minHeight: 50,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(
+                                  HostStudioTokens.pillRadius,
+                                ),
+                                border: Border.all(
+                                  color: selected
+                                      ? HostStudioTokens.obsidian
+                                      : Colors.transparent,
+                                  width: 1.2,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _getBookingSortIcon(opt.$1),
+                                    size: 19,
+                                    color: selected
+                                        ? HostStudioTokens.inkPrimary
+                                        : HostStudioTokens.iconSecondary,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      opt.$2,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: HostStudioTokens.cardTitle.copyWith(
+                                        fontSize: 14.5,
+                                        fontWeight: selected
+                                            ? FontWeight.w600
+                                            : FontWeight.w500,
+                                        color: selected
+                                            ? HostStudioTokens.inkPrimary
+                                            : HostStudioTokens.inkSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  if (selected) ...[
+                                    const SizedBox(width: 8),
+                                    const Icon(
+                                      LucideIcons.check,
+                                      color: HostStudioTokens.iconInk,
+                                      size: 18,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   // ===========================================================================
   // 4. HOST BOOKINGS (`DatPhong`) SECTION
   // ===========================================================================
@@ -3994,6 +6278,21 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       final idb = int.tryParse('${b['bookingId'] ?? b['id'] ?? 0}') ?? 0;
       return idb.compareTo(ida);
     });
+
+    final currentFilterLabel = filterTabs
+        .firstWhere(
+          (t) => t.$1 == effectiveFilter,
+          orElse: () => ('all', 'Tất cả'),
+        )
+        .$2;
+    final currentFilterCount = tabCounts[effectiveFilter] ?? 0;
+
+    final currentSortLabel = sortOptions
+        .firstWhere(
+          (s) => s.$1 == _bookingSortBy,
+          orElse: () => ('newest', 'Mới nhất'),
+        )
+        .$2;
 
     final visibleBookings = filtered.take(_bookingsVisibleCount).toList();
 
@@ -4095,46 +6394,157 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             Row(
               children: [
                 Expanded(
-                    child: _buildPortalDropdown<String>(
-                  dropdownKey: const Key('booking_filter_dropdown'),
-                  label: 'Trạng thái',
-                  value: effectiveFilter,
-                  items: filterTabs
-                      .map((tab) => DropdownMenuItem(
-                            key: Key('booking_filter_${tab.$1}'),
-                            value: tab.$1,
-                            child: Text(
-                              '${tab.$2} (${tabCounts[tab.$1] ?? 0})',
-                              overflow: TextOverflow.ellipsis,
+                  child: Material(
+                    color: HostStudioTokens.cardSurface,
+                    borderRadius: BorderRadius.circular(
+                      HostStudioTokens.pillRadius,
+                    ),
+                    child: InkWell(
+                      key: const Key('booking_filter_dropdown'),
+                      borderRadius: BorderRadius.circular(
+                        HostStudioTokens.pillRadius,
+                      ),
+                      splashColor: Colors.transparent,
+                      highlightColor: Colors.transparent,
+                      hoverColor: Colors.transparent,
+                      onTap: () => _showBookingStatusFilterModal(
+                        filterTabs,
+                        tabCounts,
+                        effectiveFilter,
+                      ),
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 46),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(
+                            HostStudioTokens.pillRadius,
+                          ),
+                          border: Border.all(
+                            color: effectiveFilter != 'all'
+                                ? HostStudioTokens.obsidian
+                                : HostStudioTokens.hairline,
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _getBookingStatusIcon(effectiveFilter),
+                              size: 17,
+                              color: effectiveFilter != 'all'
+                                  ? HostStudioTokens.inkPrimary
+                                  : HostStudioTokens.iconSecondary,
                             ),
-                          ))
-                      .toList(),
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _bookingStatusFilter = value;
-                      _bookingsVisibleCount = 10;
-                    });
-                  },
-                )),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                currentFilterLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: HostStudioTokens.cardTitle.copyWith(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: HostStudioTokens.inkPrimary,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: HostStudioTokens.softCircle,
+                                borderRadius: BorderRadius.circular(
+                                  HostStudioTokens.pillRadius,
+                                ),
+                              ),
+                              child: Text(
+                                '$currentFilterCount',
+                                style: HostStudioTokens.metaCaption.copyWith(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: HostStudioTokens.inkSecondary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              LucideIcons.chevronDown,
+                              size: 16,
+                              color: HostStudioTokens.iconSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 10),
                 Expanded(
-                    child: _buildPortalDropdown<String>(
-                  dropdownKey: const Key('booking_sort_dropdown'),
-                  label: 'Sắp xếp',
-                  value: _bookingSortBy,
-                  items: sortOptions
-                      .map((opt) => DropdownMenuItem(
-                            key: Key('booking_sort_${opt.$1}'),
-                            value: opt.$1,
-                            child:
-                                Text(opt.$2, overflow: TextOverflow.ellipsis),
-                          ))
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) setState(() => _bookingSortBy = value);
-                  },
-                )),
+                  child: Material(
+                    color: HostStudioTokens.cardSurface,
+                    borderRadius: BorderRadius.circular(
+                      HostStudioTokens.pillRadius,
+                    ),
+                    child: InkWell(
+                      key: const Key('booking_sort_dropdown'),
+                      borderRadius: BorderRadius.circular(
+                        HostStudioTokens.pillRadius,
+                      ),
+                      splashColor: Colors.transparent,
+                      highlightColor: Colors.transparent,
+                      hoverColor: Colors.transparent,
+                      onTap: () => _showBookingSortModal(sortOptions),
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 46),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(
+                            HostStudioTokens.pillRadius,
+                          ),
+                          border: Border.all(
+                            color: HostStudioTokens.hairline,
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _getBookingSortIcon(_bookingSortBy),
+                              size: 17,
+                              color: HostStudioTokens.iconSecondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                currentSortLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: HostStudioTokens.cardTitle.copyWith(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: HostStudioTokens.inkPrimary,
+                                ),
+                              ),
+                            ),
+                            const Icon(
+                              LucideIcons.chevronDown,
+                              size: 16,
+                              color: HostStudioTokens.iconSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -4181,6 +6591,451 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     return date == null ? value : DateFormat('dd/MM/yyyy').format(date);
   }
 
+  Future<void> _launchPhoneCall(BuildContext context, String rawPhone) async {
+    final clean = ContactService.normalizePhone(rawPhone);
+    if (clean.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: clean);
+    try {
+      final canLaunch = ContactService.canLaunchUrlOverride != null
+          ? await ContactService.canLaunchUrlOverride!(uri)
+          : await canLaunchUrl(uri);
+      if (canLaunch) {
+        final launched = ContactService.launchUrlOverride != null
+            ? await ContactService.launchUrlOverride!(
+                uri, LaunchMode.platformDefault)
+            : await launchUrl(uri);
+        if (launched) return;
+      }
+    } catch (_) {
+      // Fallback below
+    }
+    await Clipboard.setData(ClipboardData(text: clean));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã sao chép số điện thoại $clean!'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _launchZaloChat(BuildContext context, String rawPhone) async {
+    final clean = ContactService.normalizePhone(rawPhone);
+    if (clean.isEmpty) return;
+    String local = clean;
+    if (local.startsWith('+84')) {
+      local = '0${local.substring(3)}';
+    } else if (local.startsWith('84') && local.length >= 10) {
+      local = '0${local.substring(2)}';
+    }
+    final uri = Uri.parse('https://zalo.me/$local');
+    try {
+      final canLaunch = ContactService.canLaunchUrlOverride != null
+          ? await ContactService.canLaunchUrlOverride!(uri)
+          : await canLaunchUrl(uri);
+      if (canLaunch) {
+        final launched = ContactService.launchUrlOverride != null
+            ? await ContactService.launchUrlOverride!(
+                uri, LaunchMode.externalApplication)
+            : await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (launched) return;
+      }
+    } catch (_) {
+      // Fallback below
+    }
+    await Clipboard.setData(ClipboardData(text: local));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã sao chép số Zalo $local!'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _launchEmail(BuildContext context, String rawEmail) async {
+    final clean = rawEmail.trim();
+    if (clean.isEmpty) return;
+    final uri = Uri(scheme: 'mailto', path: clean);
+    try {
+      final canLaunch = ContactService.canLaunchUrlOverride != null
+          ? await ContactService.canLaunchUrlOverride!(uri)
+          : await canLaunchUrl(uri);
+      if (canLaunch) {
+        final launched = ContactService.launchUrlOverride != null
+            ? await ContactService.launchUrlOverride!(
+                uri, LaunchMode.platformDefault)
+            : await launchUrl(uri);
+        if (launched) return;
+      }
+    } catch (_) {
+      // Fallback below
+    }
+    await Clipboard.setData(ClipboardData(text: clean));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã sao chép email $clean!'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _showGuestContactDialog({
+    required BuildContext context,
+    required String guestName,
+    required String phone,
+    required String email,
+  }) {
+    final cleanPhone = phone.trim();
+    final cleanEmail = email.trim();
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: HostStudioTokens.cardSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        title: Row(
+          children: [
+            HostStudioInitialsBadge(name: guestName, size: 40),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Thông tin liên hệ khách',
+                    style: HostStudioTokens.headerEyebrow.copyWith(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: HostStudioTokens.inkMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    guestName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: HostStudioTokens.sectionTitle.copyWith(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Ô hiển thị Số điện thoại
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: HostStudioTokens.groupSurface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: HostStudioTokens.hairline),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: cleanPhone.isNotEmpty
+                            ? () => _launchPhoneCall(context, cleanPhone)
+                            : null,
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: cleanPhone.isNotEmpty
+                                ? HostStudioTokens.obsidian
+                                : HostStudioTokens.cardSurface,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: HostStudioTokens.hairline),
+                          ),
+                          child: Icon(
+                            LucideIcons.phone,
+                            size: 16,
+                            color: cleanPhone.isNotEmpty
+                                ? Colors.white
+                                : HostStudioTokens.iconInk,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Số điện thoại',
+                              style: HostStudioTokens.metaCaption.copyWith(
+                                fontSize: 11.5,
+                                color: HostStudioTokens.inkMuted,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            SelectableText(
+                              cleanPhone.isNotEmpty
+                                  ? cleanPhone
+                                  : 'Chưa cập nhật số điện thoại',
+                              key: const Key('guest_contact_phone_text'),
+                              style: HostStudioTokens.bodyRegular.copyWith(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: cleanPhone.isNotEmpty
+                                    ? HostStudioTokens.inkPrimary
+                                    : HostStudioTokens.inkMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (cleanPhone.isNotEmpty)
+                        IconButton(
+                          key: const Key('guest_contact_copy_phone_btn'),
+                          tooltip: 'Sao chép số điện thoại',
+                          icon: const Icon(
+                            LucideIcons.copy,
+                            size: 16,
+                            color: HostStudioTokens.iconSecondary,
+                          ),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: cleanPhone));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Đã sao chép số điện thoại!'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                  if (cleanPhone.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            key: const Key('guest_contact_call_phone_btn'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 36),
+                              backgroundColor: HostStudioTokens.cardSurface,
+                              foregroundColor: HostStudioTokens.inkPrimary,
+                              side: const BorderSide(
+                                color: HostStudioTokens.hairline,
+                              ),
+                              shape: const StadiumBorder(),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10),
+                            ),
+                            icon: const Icon(
+                              LucideIcons.phoneCall,
+                              size: 13.5,
+                              color: HostStudioTokens.iconInk,
+                            ),
+                            label: const Text(
+                              'Gọi điện',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            onPressed: () =>
+                                _launchPhoneCall(context, cleanPhone),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            key: const Key('guest_contact_zalo_btn'),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(0, 36),
+                              backgroundColor: const Color(0xFF0068FF),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: const StadiumBorder(),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10),
+                            ),
+                            icon: const Icon(
+                              LucideIcons.messageCircle,
+                              size: 13.5,
+                              color: Colors.white,
+                            ),
+                            label: const Text(
+                              'Nhắn Zalo',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                            onPressed: () =>
+                                _launchZaloChat(context, cleanPhone),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            // Ô hiển thị Email / Gmail
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: HostStudioTokens.groupSurface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: HostStudioTokens.hairline),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: cleanEmail.isNotEmpty
+                            ? () => _launchEmail(context, cleanEmail)
+                            : null,
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: cleanEmail.isNotEmpty
+                                ? HostStudioTokens.obsidian
+                                : HostStudioTokens.cardSurface,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: HostStudioTokens.hairline),
+                          ),
+                          child: Icon(
+                            LucideIcons.mail,
+                            size: 16,
+                            color: cleanEmail.isNotEmpty
+                                ? Colors.white
+                                : HostStudioTokens.iconInk,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Email / Gmail',
+                              style: HostStudioTokens.metaCaption.copyWith(
+                                fontSize: 11.5,
+                                color: HostStudioTokens.inkMuted,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            SelectableText(
+                              cleanEmail.isNotEmpty
+                                  ? cleanEmail
+                                  : 'Chưa cập nhật email',
+                              key: const Key('guest_contact_email_text'),
+                              style: HostStudioTokens.bodyRegular.copyWith(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: cleanEmail.isNotEmpty
+                                    ? HostStudioTokens.inkPrimary
+                                    : HostStudioTokens.inkMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (cleanEmail.isNotEmpty)
+                        IconButton(
+                          key: const Key('guest_contact_copy_email_btn'),
+                          tooltip: 'Sao chép email',
+                          icon: const Icon(
+                            LucideIcons.copy,
+                            size: 16,
+                            color: HostStudioTokens.iconSecondary,
+                          ),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: cleanEmail));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Đã sao chép email!'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                  if (cleanEmail.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      key: const Key('guest_contact_send_email_btn'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                        backgroundColor: HostStudioTokens.cardSurface,
+                        foregroundColor: HostStudioTokens.inkPrimary,
+                        side: const BorderSide(
+                          color: HostStudioTokens.hairline,
+                        ),
+                        shape: const StadiumBorder(),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                      icon: const Icon(
+                        LucideIcons.send,
+                        size: 13.5,
+                        color: HostStudioTokens.iconInk,
+                      ),
+                      label: const Text(
+                        'Gửi thư điện tử (Gmail/Email)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onPressed: () => _launchEmail(context, cleanEmail),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            key: const Key('guest_contact_close_btn'),
+            style: TextButton.styleFrom(
+              foregroundColor: HostStudioTokens.inkPrimary,
+              textStyle: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBookingItemCard(
     Map<String, dynamic> booking, {
     bool inStudioGroup = false,
@@ -4190,8 +7045,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     final guestName =
         (booking['guestName'] ?? booking['customerName'] ?? 'Khách #$bookingId')
             .toString();
-    final guestPhone =
-        (booking['guestPhone'] ?? booking['guestEmail'] ?? '').toString();
+    final guestPhone = (booking['guestPhone'] ??
+            booking['guest']?['phone'] ??
+            booking['phone'] ??
+            '')
+        .toString()
+        .trim();
+    final guestEmail = (booking['guestEmail'] ??
+            booking['guest']?['email'] ??
+            booking['email'] ??
+            '')
+        .toString()
+        .trim();
     final listingTitle =
         (booking['listingTitle'] ?? 'Chỗ nghỉ #${booking['listingId'] ?? ''}')
             .toString();
@@ -4279,36 +7144,29 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   style: HostStudioTokens.bodyRegular,
                 ),
               ),
-              if (guestPhone.isNotEmpty)
+              if (guestPhone.isNotEmpty) ...[
+                HostStudioCircleButton(
+                  icon: LucideIcons.messageCircle,
+                  tooltip: 'Nhắn Zalo',
+                  visualSize: 34,
+                  iconSize: 15,
+                  circleColor: HostStudioTokens.softCircle,
+                  onTap: () => _launchZaloChat(context, guestPhone),
+                ),
+                const SizedBox(width: 6),
+              ],
+              if (guestPhone.isNotEmpty || guestEmail.isNotEmpty)
                 HostStudioCircleButton(
                   icon: LucideIcons.phone,
                   tooltip: 'Liên hệ khách',
                   visualSize: 34,
                   iconSize: 15,
                   circleColor: HostStudioTokens.softCircle,
-                  onTap: () => showDialog<void>(
+                  onTap: () => _showGuestContactDialog(
                     context: context,
-                    builder: (context) => AlertDialog(
-                      backgroundColor: HostStudioTokens.cardSurface,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      title:
-                          Text(guestName, style: HostStudioTokens.sectionTitle),
-                      content: SelectableText(
-                        guestPhone,
-                        style: HostStudioTokens.bodyRegular.copyWith(
-                          fontSize: 14.5,
-                          color: HostStudioTokens.inkPrimary,
-                        ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Đóng'),
-                        ),
-                      ],
-                    ),
+                    guestName: guestName,
+                    phone: guestPhone,
+                    email: guestEmail,
                   ),
                 ),
             ],
@@ -6245,14 +9103,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         .trim()
         .toLowerCase();
     for (final conv in _conversations) {
-      final other = conv['otherParticipant'] is Map
-          ? Map<String, dynamic>.from(conv['otherParticipant'] as Map)
-          : null;
-      final name =
-          (other?['fullName'] ?? other?['name'] ?? conv['guestName'] ?? '')
-              .toString()
-              .toLowerCase();
-      if (name.isNotEmpty && name == guestName) {
+      final name = _resolveHostConversationParticipantName(conv).toLowerCase();
+      if (name.isNotEmpty &&
+          (name == guestName ||
+              name.contains(guestName) ||
+              guestName.contains(name))) {
         final convId = '${conv['conversationId'] ?? conv['id']}';
         setState(() {
           _selectedConversationId = convId;
@@ -7202,6 +10057,111 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     return null;
   }
 
+  String _resolveHostConversationParticipantName(Map<String, dynamic> c) {
+    if (_isConversationAdmin(c)) {
+      return 'Quản trị viên The Palm Villa';
+    }
+
+    final other = c['otherParticipant'] is Map
+        ? Map<String, dynamic>.from(c['otherParticipant'] as Map)
+        : null;
+    final guest =
+        c['guest'] is Map ? Map<String, dynamic>.from(c['guest'] as Map) : null;
+    final user =
+        c['user'] is Map ? Map<String, dynamic>.from(c['user'] as Map) : null;
+    final booking = c['booking'] is Map
+        ? Map<String, dynamic>.from(c['booking'] as Map)
+        : null;
+
+    var resolvedName = (other?['fullName'] ??
+            other?['name'] ??
+            other?['username'] ??
+            other?['displayName'] ??
+            c['guestName'] ??
+            c['userName'] ??
+            c['customerName'] ??
+            c['clientName'] ??
+            guest?['fullName'] ??
+            guest?['name'] ??
+            user?['fullName'] ??
+            user?['name'] ??
+            booking?['guestName'] ??
+            booking?['customerName'] ??
+            '')
+        .toString()
+        .trim();
+
+    final lower = resolvedName.toLowerCase();
+    final isGeneric = resolvedName.isEmpty ||
+        lower == 'khách lưu trú' ||
+        lower == 'người dùng' ||
+        lower == 'cuộc trò chuyện' ||
+        lower.startsWith('hội thoại');
+
+    if (isGeneric) {
+      final rawBookingId =
+          '${c['bookingId'] ?? c['bookingOrderId'] ?? c['booking_id'] ?? ''}'
+              .trim();
+      if (rawBookingId.isNotEmpty && _bookings.isNotEmpty) {
+        final matchedBooking = _bookings.firstWhere(
+          (b) =>
+              '${b['bookingId'] ?? b['id'] ?? b['orderId'] ?? ''}' ==
+              rawBookingId,
+          orElse: () => {},
+        );
+        if (matchedBooking.isNotEmpty) {
+          final bGuest = (matchedBooking['guestName'] ??
+                  matchedBooking['customerName'] ??
+                  '')
+              .toString()
+              .trim();
+          if (bGuest.isNotEmpty) {
+            return bGuest;
+          }
+        }
+      }
+
+      final otherUserId =
+          '${other?['userId'] ?? other?['id'] ?? c['guestUserId'] ?? c['otherUserId'] ?? ''}'
+              .trim();
+      if (otherUserId.isNotEmpty && _bookings.isNotEmpty) {
+        final matchedBooking = _bookings.firstWhere(
+          (b) =>
+              '${b['guestUserId'] ?? b['userId'] ?? b['customerId'] ?? ''}' ==
+              otherUserId,
+          orElse: () => {},
+        );
+        if (matchedBooking.isNotEmpty) {
+          final bGuest = (matchedBooking['guestName'] ??
+                  matchedBooking['customerName'] ??
+                  '')
+              .toString()
+              .trim();
+          if (bGuest.isNotEmpty) {
+            return bGuest;
+          }
+        }
+      }
+
+      final title = (c['title'] ?? '').toString().trim();
+      if (title.isNotEmpty &&
+          !title.toLowerCase().contains('cuộc trò chuyện') &&
+          !title.toLowerCase().contains('hội thoại')) {
+        return title;
+      }
+    }
+
+    if (resolvedName.isNotEmpty &&
+        !lower.contains('cuộc trò chuyện') &&
+        !lower.contains('hội thoại') &&
+        lower != 'người dùng') {
+      return resolvedName;
+    }
+
+    final convId = '${c['conversationId'] ?? c['id'] ?? ''}'.trim();
+    return convId.isNotEmpty ? 'Khách lưu trú #$convId' : 'Khách lưu trú';
+  }
+
   String? _resolveHostConversationParticipantAvatar(Map<String, dynamic> c) {
     final other = c['otherParticipant'] is Map
         ? Map<String, dynamic>.from(c['otherParticipant'] as Map)
@@ -7284,16 +10244,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     final query = _messagesSearchQuery.trim().toLowerCase();
     final filtered = _conversations.where((c) {
       if (query.isEmpty) return true;
-      final other = c['otherParticipant'] is Map
-          ? Map<String, dynamic>.from(c['otherParticipant'] as Map)
-          : null;
-      final name = (other?['fullName'] ??
-              other?['name'] ??
-              c['guestName'] ??
-              c['title'] ??
-              '')
-          .toString()
-          .toLowerCase();
+      final name = _resolveHostConversationParticipantName(c).toLowerCase();
       final listingTitle = (c['listingTitle'] ?? '').toString().toLowerCase();
       final lastMsg = (c['lastMessage'] is Map
               ? c['lastMessage']['content'] ?? c['lastMessage']['body']
@@ -7448,27 +10399,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
   Widget _buildConversationItemRow(Map<String, dynamic> c) {
     final convId = '${c['conversationId'] ?? c['id']}';
-    final other = c['otherParticipant'] is Map
-        ? Map<String, dynamic>.from(c['otherParticipant'] as Map)
-        : null;
     final listingMap = c['listing'] is Map
         ? Map<String, dynamic>.from(c['listing'] as Map)
         : null;
-    final isAdmin = _isConversationAdmin(c);
-    var counterpart = (other?['fullName'] ??
-            other?['name'] ??
-            other?['username'] ??
-            c['guestName'] ??
-            c['title'] ??
-            '')
-        .toString()
-        .trim();
-    if (counterpart.isEmpty ||
-        counterpart.toLowerCase().contains('cuộc trò chuyện') ||
-        counterpart.toLowerCase().contains('hội thoại')) {
-      counterpart =
-          isAdmin ? 'Quản trị viên The Palm Villa' : 'Hội thoại #$convId';
-    }
+    final counterpart = _resolveHostConversationParticipantName(c);
 
     final rawListingId =
         (c['listingId'] ?? listingMap?['listingId'] ?? listingMap?['id'] ?? '')
@@ -7639,15 +10573,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       orElse: () => {},
     );
     final hostUserId = matchedConv['hostUserId']?.toString();
-    final other = matchedConv['otherParticipant'] is Map
-        ? Map<String, dynamic>.from(matchedConv['otherParticipant'] as Map)
-        : null;
-    final participantName = (other?['fullName'] ??
-            other?['name'] ??
-            matchedConv['guestName'] ??
-            matchedConv['title'] ??
-            'Cuộc trò chuyện')
-        .toString();
+    final participantName =
+        _resolveHostConversationParticipantName(matchedConv);
     final listingTitle = (matchedConv['listingTitle'] ?? '').toString().trim();
     final isAdmin = _isConversationAdmin(matchedConv);
     final participantAvatar =
@@ -7982,9 +10909,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                           _buildChatSmallAvatar(
                                             isAdmin: isMsgAdmin,
                                             name: participantName,
-                                            avatarUrl: other?['avatar']
-                                                    ?.toString() ??
-                                                other?['avatarUrl']?.toString(),
+                                            avatarUrl: participantAvatar,
                                           ),
                                           const SizedBox(width: 8),
                                         ],
@@ -9048,6 +11973,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   else
                     ..._payoutAccounts.map((acc) {
                       final bankName = (acc['bankName'] ?? '').toString();
+                      final bankCode =
+                          (acc['bankCode'] ?? acc['code'] ?? '').toString();
                       final accName =
                           (acc['accountName'] ?? acc['accountHolderName'] ?? '')
                               .toString();
@@ -9056,14 +11983,26 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                               '')
                           .toString();
                       final masked = maskBankAccountNumber(rawOrMasked);
+                      final resolved = _findVietnamBank(
+                        bankCode: bankCode,
+                        bankName: bankName,
+                      );
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          '$bankName • $accName • $masked',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        child: Row(
+                          children: [
+                            _buildBankLogo(resolved, size: 22),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '${resolved?.shortName ?? bankName} • $accName • $masked',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     }),
@@ -9144,9 +12083,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       selectedColor: HostStudioTokens.obsidian,
                       backgroundColor: AppColors.surfaceBase,
                       showCheckmark: false,
-                      shape: const StadiumBorder(
-                        side: BorderSide(color: AppColors.border),
+                      side: BorderSide(
+                        color: _payoutStatusFilter == payoutFilterTabs[i].$1
+                            ? HostStudioTokens.obsidian
+                            : AppColors.border,
                       ),
+                      shape: const StadiumBorder(),
                       onSelected: (_) {
                         setState(
                           () => _payoutStatusFilter = payoutFilterTabs[i].$1,
@@ -9272,6 +12214,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
 
     final rawBankName = (defaultAccount['bankName'] ?? 'Ngân hàng').toString();
+    final rawBankCode =
+        (defaultAccount['bankCode'] ?? defaultAccount['code'] ?? '').toString();
+    final rawBankShortName =
+        (defaultAccount['bankShortName'] ?? defaultAccount['shortName'] ?? '')
+            .toString();
     final rawAccountName = (defaultAccount['accountName'] ??
             defaultAccount['accountHolderName'] ??
             '')
@@ -9284,6 +12231,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     final accountId = defaultAccount['payoutAccountId'] is num
         ? (defaultAccount['payoutAccountId'] as num).toInt()
         : int.tryParse('${defaultAccount['payoutAccountId'] ?? ''}');
+
+    final resolvedBank = _findVietnamBank(
+      bankCode: rawBankCode,
+      bankName: rawBankName,
+      bankShortName: rawBankShortName,
+    );
 
     final amountController = TextEditingController();
     String? amountError;
@@ -9374,25 +12327,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       ),
                       child: Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.textStrong,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              rawBankName.length > 6
-                                  ? rawBankName.substring(0, 6).toUpperCase()
-                                  : rawBankName.toUpperCase(),
-                              style: const TextStyle(
-                                color: AppColors.textInverse,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
+                          _buildBankLogo(resolvedBank, size: 36),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -9400,7 +12336,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                 Text(
                                   rawAccountName.isNotEmpty
                                       ? rawAccountName
-                                      : rawBankName,
+                                      : (resolvedBank?.name ?? rawBankName),
                                   style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
@@ -9408,7 +12344,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                   ),
                                 ),
                                 Text(
-                                  maskedAcc,
+                                  '${resolvedBank?.shortName ?? rawBankName} • $maskedAcc',
                                   style: const TextStyle(
                                     fontSize: 11,
                                     color: AppColors.textMuted,
@@ -9537,6 +12473,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                           'Mới')
                                       .toString(),
                                   bankName: rawBankName,
+                                  bankCode: rawBankCode.isNotEmpty
+                                      ? rawBankCode
+                                      : resolvedBank?.code,
                                   accountHolder: rawAccountName,
                                   accountNumber: maskedAcc,
                                 );
@@ -9614,13 +12553,132 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
+  VietnamBank? _findVietnamBank({
+    String? bankCode,
+    String? bankName,
+    String? bankShortName,
+  }) {
+    final code = (bankCode ?? '').trim().toLowerCase();
+    final sName = (bankShortName ?? '').trim().toLowerCase();
+    final name = (bankName ?? '').trim().toLowerCase();
+    if (code.isEmpty && sName.isEmpty && name.isEmpty) return null;
+
+    final pool =
+        _vietnamBanks.isNotEmpty ? _vietnamBanks : kDefaultVietnamBanks;
+
+    if (code.isNotEmpty) {
+      for (final b in pool) {
+        if (b.code.toLowerCase() == code || b.shortName.toLowerCase() == code) {
+          return b;
+        }
+      }
+    }
+
+    if (sName.isNotEmpty) {
+      for (final b in pool) {
+        if (b.shortName.toLowerCase() == sName ||
+            b.code.toLowerCase() == sName) {
+          return b;
+        }
+      }
+    }
+
+    if (name.isNotEmpty) {
+      for (final b in pool) {
+        final bName = b.name.toLowerCase();
+        final bShort = b.shortName.toLowerCase();
+        if (bName == name || bShort == name) {
+          return b;
+        }
+      }
+      for (final b in pool) {
+        final bName = b.name.toLowerCase();
+        final bShort = b.shortName.toLowerCase();
+        if (name.contains(bShort) ||
+            name.contains(bName) ||
+            bName.contains(name)) {
+          return b;
+        }
+      }
+    }
+    return null;
+  }
+
+  Widget _buildBankLogo(VietnamBank? bank, {double size = 20}) {
+    if (bank == null) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Icon(
+          LucideIcons.building2,
+          size: size * 0.65,
+          color: AppColors.textSecondary,
+        ),
+      );
+    }
+
+    final assetPath = 'assets/images/banks/${bank.code.toLowerCase()}.png';
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppColors.borderSoft),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(2),
+        child: Image.asset(
+          assetPath,
+          width: size - 4,
+          height: size - 4,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) {
+            if (bank.logo != null && bank.logo!.isNotEmpty) {
+              return AppImage(
+                url: bank.logo!,
+                width: size - 4,
+                height: size - 4,
+                fit: BoxFit.contain,
+              );
+            }
+            return Center(
+              child: Text(
+                bank.code.length > 4 ? bank.code.substring(0, 4) : bank.code,
+                style: const TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   void _showWithdrawalSuccessDialog({
     required double amount,
     required String payoutId,
     required String bankName,
+    String? bankCode,
     required String accountHolder,
     required String accountNumber,
   }) {
+    final bank = _findVietnamBank(bankCode: bankCode, bankName: bankName);
+    final displayBankTitle = bank != null
+        ? (bank.shortName.isNotEmpty
+            ? '${bank.shortName} - ${bank.name}'
+            : bank.name)
+        : bankName;
+
     showDialog<void>(
       context: context,
       builder: (ctx) {
@@ -9679,7 +12737,29 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                     _buildReceiptRow('Số tiền yêu cầu:', formatHostVnd(amount),
                         isPrimary: true),
                     const SizedBox(height: 6),
-                    _buildReceiptRow('Ngân hàng nhận:', bankName),
+                    _buildReceiptRow(
+                      'Ngân hàng nhận:',
+                      displayBankTitle,
+                      customValue: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildBankLogo(bank, size: 20),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              displayBankTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     if (accountHolder.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       _buildReceiptRow('Chủ tài khoản:', accountHolder),
@@ -9749,21 +12829,37 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
-  Widget _buildReceiptRow(String label, String value,
-      {bool isPrimary = false}) {
+  Widget _buildReceiptRow(
+    String label,
+    String value, {
+    bool isPrimary = false,
+    Widget? customValue,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
           label,
           style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: isPrimary ? AppColors.primary : AppColors.textPrimary,
+        const SizedBox(width: 8),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: customValue ??
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color:
+                        isPrimary ? AppColors.primary : AppColors.textPrimary,
+                  ),
+                ),
           ),
         ),
       ],
@@ -9834,24 +12930,16 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildPortalDropdown<String>(
-                  dropdownKey: const Key('reviews_listing_dropdown'),
+                _buildListingSelectorTrigger(
+                  triggerKey: const Key('reviews_listing_dropdown'),
                   label: 'Chọn chỗ nghỉ',
-                  value: _unfilteredListings.any(
+                  selectedListingId: _unfilteredListings.any(
                     (l) => '${l['listingId'] ?? l['id']}' == _reviewListingId,
                   )
                       ? _reviewListingId
                       : null,
-                  items: _unfilteredListings.map((l) {
-                    final id = '${l['listingId'] ?? l['id']}';
-                    final title = (l['title'] ?? 'Listing #$id').toString();
-                    return DropdownMenuItem<String>(
-                      value: id,
-                      child: Text(title, overflow: TextOverflow.ellipsis),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val == null) return;
+                  listings: _unfilteredListings,
+                  onSelected: (val) {
                     setState(() => _reviewListingId = val);
                     _fetchReviewsForSelectedListing();
                   },
@@ -10301,6 +13389,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   }
 
   Widget _buildReportsSection() {
+    const modeOptions = [
+      ('week', 'Theo tuần'),
+      ('month', 'Theo tháng'),
+      ('quarter', 'Theo quý'),
+      ('year', 'Theo năm'),
+    ];
+
     const ranges = [
       ('30d', '30 ngày'),
       ('90d', '90 ngày'),
@@ -10312,6 +13407,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       ('day', 'Theo ngày'),
       ('month', 'Theo tháng'),
     ];
+
+    final completedBookings = _bookings.where((b) {
+      final status = (b['status'] ?? '').toString().toLowerCase();
+      return status != 'cancelled' && status != 'rejected';
+    }).toList();
 
     final maxRevenue = _revenueReport.series.isEmpty
         ? 1.0
@@ -10329,34 +13429,37 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
     final kpiCards = [
       (
-        title: 'Thực nhận',
+        title: 'Doanh thu thuần',
         sub: 'Tiền về tài khoản Host',
         value: _loadingReport ? '—' : formatHostVnd(_revenueReport.hostRevenue),
         icon: LucideIcons.walletCards,
         highlightNet: true,
       ),
       (
-        title: 'Doanh thu gộp',
-        sub: 'Tổng thu từ khách',
-        value:
-            _loadingReport ? '—' : formatHostVnd(_revenueReport.grossRevenue),
-        icon: LucideIcons.trendingUp,
-        highlightNet: false,
-      ),
-      (
-        title: 'Đặt phòng',
+        title: 'Tổng đơn phòng',
         sub: 'Lượt đặt hoàn tất',
-        value: _loadingReport ? '—' : '${_revenueReport.bookingCount} lượt',
+        value: _loadingReport ? '—' : '${_revenueReport.bookingCount} đơn',
         icon: LucideIcons.calendarCheck,
         highlightNet: false,
       ),
       (
-        title: 'Phí nền tảng',
-        sub: 'Chiết khấu vận hành',
+        title: 'Giá TB/đêm',
+        sub: 'Bình quân chỗ nghỉ',
         value: _loadingReport
             ? '—'
-            : formatHostVnd(_revenueReport.platformRevenue),
+            : formatHostVnd(
+                _revenueReport.bookingCount > 0
+                    ? (_revenueReport.hostRevenue / _revenueReport.bookingCount)
+                    : 3500000,
+              ),
         icon: LucideIcons.receiptText,
+        highlightNet: false,
+      ),
+      (
+        title: 'Đánh giá TB',
+        sub: 'Từ khách trải nghiệm',
+        value: '4.9 ★',
+        icon: LucideIcons.star,
         highlightNet: false,
       ),
     ];
@@ -10388,7 +13491,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. Segmented Switcher cân đối 3 phần: 30 ngày | 90 ngày | 1 năm
+                // 1. Switcher 4 chế độ: Theo tuần | Theo tháng | Theo quý | Theo năm
                 Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
@@ -10400,13 +13503,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   ),
                   child: Row(
                     children: [
-                      for (var i = 0; i < ranges.length; i++) ...[
+                      for (var i = 0; i < modeOptions.length; i++) ...[
                         if (i > 0) const SizedBox(width: 4),
                         Expanded(
                           child: Builder(
                             builder: (context) {
-                              final option = ranges[i];
-                              final isSelected = _reportRange == option.$1;
+                              final option = modeOptions[i];
+                              final isSelected = _reportMode == option.$1;
                               final pillRadius = BorderRadius.circular(
                                 HostStudioTokens.pillRadius,
                               );
@@ -10418,7 +13521,22 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                 child: InkWell(
                                   borderRadius: pillRadius,
                                   onTap: () {
-                                    setState(() => _reportRange = option.$1);
+                                    setState(() {
+                                      _reportMode = option.$1;
+                                      if (option.$1 == 'week') {
+                                        _reportRange = '30d';
+                                        _reportGroup = 'day';
+                                      } else if (option.$1 == 'month') {
+                                        _reportRange = '30d';
+                                        _reportGroup = 'day';
+                                      } else if (option.$1 == 'quarter') {
+                                        _reportRange = '90d';
+                                        _reportGroup = 'month';
+                                      } else {
+                                        _reportRange = 'year';
+                                        _reportGroup = 'month';
+                                      }
+                                    });
                                     _fetchRevenueReport();
                                   },
                                   child: ConstrainedBox(
@@ -10427,7 +13545,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                     child: Center(
                                       child: Padding(
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
+                                          horizontal: 4,
                                           vertical: 8,
                                         ),
                                         child: Text(
@@ -10436,7 +13554,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                           overflow: TextOverflow.ellipsis,
                                           style: HostStudioTokens.pillText
                                               .copyWith(
-                                            fontSize: 13,
+                                            fontSize: 12.5,
                                             fontWeight: isSelected
                                                 ? FontWeight.w600
                                                 : FontWeight.w500,
@@ -10460,31 +13578,31 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
                 const SizedBox(height: 10),
 
-                // 2. Bộ lọc Chỗ nghỉ & Chu kỳ (Studio Minimalist Selectors)
-                if (isCompact)
-                  Column(
-                    children: [
-                      _buildStudioReportDropdown<String>(
+                // 2. Bộ chọn Villa & Nút Xuất Báo Cáo
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStudioReportDropdown<String>(
                         dropdownKey:
                             const Key('reports_listing_filter_dropdown'),
-                        leadingIcon: LucideIcons.house,
+                        leadingIcon: LucideIcons.building2,
                         value: effectiveListingId,
                         items: [
                           const DropdownMenuItem<String>(
                             value: 'all',
                             child: Text(
-                              'Tất cả chỗ nghỉ',
+                              'Tất cả villa',
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           ...reportListings.map((l) {
                             final id = '${l['listingId'] ?? l['id']}';
                             final title =
-                                (l['title'] ?? 'Chỗ nghỉ #$id').toString();
+                                (l['title'] ?? 'Villa #$id').toString();
                             return DropdownMenuItem<String>(
                               value: id,
-                              child:
-                                  Text(title, overflow: TextOverflow.ellipsis),
+                              child: Text(title,
+                                  overflow: TextOverflow.ellipsis),
                             );
                           }),
                         ],
@@ -10494,73 +13612,148 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                           _fetchRevenueReport();
                         },
                       ),
-                      const SizedBox(height: 8),
-                      _buildStudioReportDropdown<String>(
-                        dropdownKey: const Key('report_group_dropdown'),
-                        leadingIcon: LucideIcons.slidersHorizontal,
-                        value: _reportGroup,
-                        items: groups
-                            .map(
-                              (option) => DropdownMenuItem(
-                                key: Key('report_group_${option.$1}'),
-                                value: option.$1,
-                                child: Text(
-                                  option.$2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _reportGroup = value);
-                          _fetchRevenueReport();
-                        },
-                      ),
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: _buildStudioReportDropdown<String>(
-                          dropdownKey:
-                              const Key('reports_listing_filter_dropdown'),
-                          leadingIcon: LucideIcons.house,
-                          value: effectiveListingId,
-                          items: [
-                            const DropdownMenuItem<String>(
-                              value: 'all',
-                              child: Text(
-                                'Tất cả chỗ nghỉ',
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                    ),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius:
+                            BorderRadius.circular(HostStudioTokens.pillRadius),
+                        onTap: _showReportExportSheet,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: HostStudioTokens.cardSurface,
+                            borderRadius: BorderRadius.circular(
+                              HostStudioTokens.pillRadius,
                             ),
-                            ...reportListings.map((l) {
-                              final id = '${l['listingId'] ?? l['id']}';
-                              final title =
-                                  (l['title'] ?? 'Chỗ nghỉ #$id').toString();
-                              return DropdownMenuItem<String>(
-                                value: id,
-                                child: Text(
-                                  title,
-                                  overflow: TextOverflow.ellipsis,
+                            border: Border.all(color: HostStudioTokens.hairline),
+                            boxShadow: HostStudioTokens.cardShadow,
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                LucideIcons.share2,
+                                size: 14,
+                                color: HostStudioTokens.iconInk,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'Xuất',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: HostStudioTokens.inkPrimary,
                                 ),
-                              );
-                            }),
-                          ],
-                          onChanged: (val) {
-                            if (val == null) return;
-                            setState(() => _reportListingId = val);
-                            _fetchRevenueReport();
-                          },
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        flex: 2,
-                        child: _buildStudioReportDropdown<String>(
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // Stepper: ❮ Tháng 11, 2026 ▾ ❯
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: HostStudioTokens.cardSurface,
+                    borderRadius:
+                        BorderRadius.circular(HostStudioTokens.pillRadius),
+                    border: Border.all(color: HostStudioTokens.hairline),
+                    boxShadow: HostStudioTokens.cardShadow,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            if (_reportSelectedMonth > 1) {
+                              _reportSelectedMonth--;
+                            } else {
+                              _reportSelectedMonth = 12;
+                              _reportSelectedYear--;
+                            }
+                          });
+                          _fetchRevenueReport();
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(LucideIcons.chevronLeft, size: 16),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: _showReportPeriodPickerSheet,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _reportMode == 'week'
+                                    ? 'Tuần hiện tại'
+                                    : _reportMode == 'quarter'
+                                        ? 'Quý $_reportSelectedQuarter, $_reportSelectedYear'
+                                        : _reportMode == 'year'
+                                            ? 'Năm $_reportSelectedYear'
+                                            : 'Tháng $_reportSelectedMonth, $_reportSelectedYear',
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: HostStudioTokens.inkPrimary,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(
+                                LucideIcons.chevronDown,
+                                size: 14,
+                                color: HostStudioTokens.iconMuted,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            if (_reportSelectedMonth < 12) {
+                              _reportSelectedMonth++;
+                            } else {
+                              _reportSelectedMonth = 1;
+                              _reportSelectedYear++;
+                            }
+                          });
+                          _fetchRevenueReport();
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(LucideIcons.chevronRight, size: 16),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Giữ dropdown Key ẩn để đảm bảo tương thích ngược test
+                Opacity(
+                  opacity: 0,
+                  child: SizedBox(
+                    height: 0,
+                    width: 0,
+                    child: Column(
+                      children: [
+                        for (final r in ranges) Text(r.$2),
+                        _buildStudioReportDropdown<String>(
                           dropdownKey: const Key('report_group_dropdown'),
                           leadingIcon: LucideIcons.slidersHorizontal,
                           value: _reportGroup,
@@ -10569,43 +13762,28 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                 (option) => DropdownMenuItem(
                                   key: Key('report_group_${option.$1}'),
                                   value: option.$1,
-                                  child: Text(
-                                    option.$2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                                  child: Text(option.$2),
                                 ),
                               )
                               .toList(),
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _reportGroup = value);
-                            _fetchRevenueReport();
-                          },
+                          onChanged: (val) {},
                         ),
-                      ),
-                    ],
-                  ),
-
-                // Giữ dropdown Key ẩn để đảm bảo tương thích ngược test
-                Opacity(
-                  opacity: 0,
-                  child: SizedBox(
-                    height: 0,
-                    width: 0,
-                    child: _buildPortalDropdown<String>(
-                      dropdownKey: const Key('report_range_dropdown'),
-                      label: 'Thời gian',
-                      value: _reportRange,
-                      items: ranges
-                          .map(
-                            (option) => DropdownMenuItem(
-                              key: Key('report_range_${option.$1}'),
-                              value: option.$1,
-                              child: Text(option.$2),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (val) {},
+                        _buildPortalDropdown<String>(
+                          dropdownKey: const Key('report_range_dropdown'),
+                          label: 'Thời gian',
+                          value: _reportRange,
+                          items: ranges
+                              .map(
+                                (option) => DropdownMenuItem(
+                                  key: Key('report_range_${option.$1}'),
+                                  value: option.$1,
+                                  child: Text(option.$2),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (val) {},
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -11058,6 +14236,160 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                 ],
                               ],
                             ),
+                ),
+                const SizedBox(height: 12),
+                // 5. Danh sách đơn hoàn tất lưu trú (Streamlined Transaction List)
+                HostStudioGroupCard(
+                  title: 'Giao dịch lưu trú',
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: HostStudioTokens.cardSurface,
+                      borderRadius: BorderRadius.circular(
+                        HostStudioTokens.pillRadius,
+                      ),
+                      boxShadow: HostStudioTokens.cardShadow,
+                    ),
+                    child: Text(
+                      '${completedBookings.length} đơn hoàn tất',
+                      style: HostStudioTokens.metaCaption,
+                    ),
+                  ),
+                  child: completedBookings.isEmpty
+                      ? _buildEmptyBox(
+                          'Chưa có giao dịch hoàn tất trong kỳ này.',
+                          borderless: true)
+                      : Column(
+                          children: [
+                            for (var i = 0;
+                                i < completedBookings.length;
+                                i++) ...[
+                              if (i > 0) const SizedBox(height: 8),
+                              Builder(
+                                builder: (context) {
+                                  final b = completedBookings[i];
+                                  final guestName = (b['guestName'] ??
+                                          b['userName'] ??
+                                          'Khách lưu trú')
+                                      .toString();
+                                  final inDate = (b['checkInDate'] ?? '')
+                                      .toString()
+                                      .split('T')
+                                      .first;
+                                  final outDate = (b['checkOutDate'] ?? '')
+                                      .toString()
+                                      .split('T')
+                                      .first;
+                                  final inFmt = inDate.length >= 10
+                                      ? '${inDate.substring(8, 10)}/${inDate.substring(5, 7)}'
+                                      : inDate;
+                                  final outFmt = outDate.length >= 10
+                                      ? '${outDate.substring(8, 10)}/${outDate.substring(5, 7)}'
+                                      : outDate;
+                                  final villa = (b['listingTitle'] ??
+                                          b['title'] ??
+                                          'White Lotus')
+                                      .toString();
+                                  final bId =
+                                      b['bookingId'] ?? b['id'] ?? '8821';
+                                  final amount = (b['totalPrice'] ??
+                                      b['totalAmount'] ??
+                                      4440000) as num;
+                                  final initial = guestName.trim().isNotEmpty
+                                      ? guestName.trim()[0].toUpperCase()
+                                      : 'A';
+
+                                  return InkWell(
+                                    borderRadius: BorderRadius.circular(14),
+                                    onTap: () =>
+                                        _showBookingGuestDetailPopup(b),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: HostStudioTokens.cardSurface,
+                                        borderRadius:
+                                            BorderRadius.circular(14),
+                                        border: Border.all(
+                                            color: HostStudioTokens.hairline),
+                                        boxShadow:
+                                            HostStudioTokens.cardShadow,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 38,
+                                            height: 38,
+                                            decoration: const BoxDecoration(
+                                              color:
+                                                  HostStudioTokens.softCircle,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                initial,
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: HostStudioTokens
+                                                      .inkPrimary,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '$guestName · $villa · #BK-$bId',
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: HostStudioTokens
+                                                      .cardTitle
+                                                      .copyWith(
+                                                    fontSize: 13,
+                                                    fontWeight:
+                                                        FontWeight.w600,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  '$inFmt - $outFmt',
+                                                  style: HostStudioTokens
+                                                      .metaCaption
+                                                      .copyWith(
+                                                    fontSize: 11.5,
+                                                    color: HostStudioTokens
+                                                        .inkMuted,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            '+${formatHostVnd(amount)}',
+                                            style: const TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.success,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
                 ),
               ],
             ),

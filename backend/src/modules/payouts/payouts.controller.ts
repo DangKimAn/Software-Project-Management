@@ -211,3 +211,19 @@ export const requestHostPayoutHandler: RequestHandler = asyncHandler(async (req,
         data: result,
     });
 });
+
+export const cancelHostPayoutHandler: RequestHandler = asyncHandler(async (req, res) => {
+    assertValidRequest(req);
+
+    const params = getValidatedParams<{ payoutId: number }>(req);
+    const result = await payoutsService.cancelHostPayout(
+        req.user!,
+        params.payoutId,
+        auditContextFromRequest(req),
+    );
+
+    return sendSuccess(res, {
+        message: "Hủy yêu cầu rút tiền thành công",
+        data: result,
+    });
+});

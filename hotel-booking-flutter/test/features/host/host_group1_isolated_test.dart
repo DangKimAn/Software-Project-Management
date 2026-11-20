@@ -2,10 +2,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hotel_booking_flutter/app/router/app_router.dart';
 import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
-
+import 'package:hotel_booking_flutter/core/network/dio_client.dart';
+import 'package:hotel_booking_flutter/features/host/data/host_repository.dart';
 import 'package:hotel_booking_flutter/features/host/domain/host_models.dart';
+import 'package:hotel_booking_flutter/features/host/presentation/screens/host_portal_screens.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/widgets/host_chat_composer_bar.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/widgets/host_studio_widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -375,6 +379,541 @@ void main() {
         expect(captured[0].path, '/api/conversations');
         expect((captured[0].data as Map)['support'], isTrue);
         expect(captured[1].path, '/api/conversations/777/read');
+      },
+    );
+
+    test(
+      'Item 7d (Dio Contract): POST /api/host/payouts/:payoutId/cancel cancels pending host payout',
+      () async {
+        final captured = <RequestOptions>[];
+        final dio = Dio(BaseOptions(baseUrl: 'http://localhost:4000'));
+        dio.httpClientAdapter = _SimpleAdapter((opts) async {
+          captured.add(opts);
+          return ResponseBody.fromString(
+            jsonEncode({
+              'data': {
+                'payoutId': 30001,
+                'status': 'cancelled',
+                'amount': 10000000,
+              }
+            }),
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        });
+
+        final dioClient = DioClient(dio: dio);
+        final repo = HostRepository(dioClient);
+        final res = await repo.cancelPayout(30001);
+
+        expect(captured.length, 1);
+        expect(captured[0].path, '/api/host/payouts/30001/cancel');
+        expect(captured[0].method, 'POST');
+        expect(res['payoutId'], 30001);
+        expect(res['status'], 'cancelled');
+      },
+    );
+
+    test(
+      'Item 7e: Host Messages conversation filter matches guest name, listing title, or last message case-insensitively',
+      () {
+        final conversations = [
+          {
+            'id': 1,
+            'otherParticipant': {'fullName': 'Lê Hoàng Long'},
+            'listingTitle': 'Seaside Sunset Homestay & Studio Hạ Long',
+            'lastMessage': {'content': 'Voice message (00:07)'},
+          },
+          {
+            'id': 2,
+            'otherParticipant': {'fullName': 'Quản trị viên The Palm Villa'},
+            'listingTitle': 'Seaside Sunset Homestay & Studio Hạ Long',
+            'lastMessage': {'content': 'Photo'},
+          },
+          {
+            'id': 3,
+            'otherParticipant': {'fullName': 'dangkiman User'},
+            'listingTitle': 'Seaside Sunset Homestay & Studio Hạ Long',
+            'lastMessage': {'content': 'Hồ bơi của biệt thự là nước ngọt hay nước mặn...'},
+          },
+        ];
+
+        bool matches(Map<String, dynamic> c, String rawQuery) {
+          final query = rawQuery.trim().toLowerCase();
+          if (query.isEmpty) return true;
+          final other = c['otherParticipant'] is Map
+              ? Map<String, dynamic>.from(c['otherParticipant'] as Map)
+              : null;
+          final name = (other?['fullName'] ?? other?['name'] ?? '').toString().toLowerCase();
+          final listingTitle = (c['listingTitle'] ?? '').toString().toLowerCase();
+          final lastMsg = (c['lastMessage'] is Map
+                  ? c['lastMessage']['content'] ?? c['lastMessage']['body']
+                  : c['lastMessage']) ??
+              '';
+          return name.contains(query) ||
+              listingTitle.contains(query) ||
+              '$lastMsg'.toLowerCase().contains(query);
+        }
+
+        expect(conversations.where((c) => matches(c, 'Hoàng Long')).length, 1);
+        expect(conversations.where((c) => matches(c, 'nước mặn')).length, 1);
+        expect(conversations.where((c) => matches(c, 'Hạ Long')).length, 3);
+        expect(conversations.where((c) => matches(c, 'nonexistent')).length, 0);
+      },
+    );
+
+    test(
+      'Item 7f: ScaffoldWithBottomNavBar.resolveActiveTabIndex accurately maps paths to tab indices',
+      () {
+        // Tab 0: Discover
+        expect(
+          ScaffoldWithBottomNavBar.resolveActiveTabIndex(
+            path: '/',
+            fallbackIndex: 3,
+          ),
+          0,
+        );
+        expect(
+          ScaffoldWithBottomNavBar.resolveActiveTabIndex(
+            path: '',
+            fallbackIndex: 3,
+          ),
+          0,
+        );
+
+        // Tab 1: Messages / Tin nhắn
+        expect(
+          ScaffoldWithBottomNavBar.resolveActiveTabIndex(
+            path: '/messages',
+            fallbackIndex: 3,
+          ),
+          1,
+        );
+        expect(
+          ScaffoldWithBottomNavBar.resolveActiveTabIndex(
+            path: '/messages?conversationId=123',
+            fallbackIndex: 3,
+          ),
+          1,
+        );
+        expect(
+          ScaffoldWithBottomNavBar.resolveActiveTabIndex(
+            path: '/tin-nhan',
+            fallbackIndex: 3,
+          ),
+          1,
+        );
+        expect(
+          ScaffoldWithBottomNavBar.resolveActiveTabIndex(
+            path: '/tin-nhan?conversationId=456',
+            fallbackIndex: 3,
+          ),
+          1,
+        );
+
+        // Tab 2: Trips
+        expect(
+          ScaffoldWithBottomNavBar.resolveActiveTabIndex(
+            path: '/trips',
+            fallbackIndex: 3,
+          ),
+          2,
+        );
+        expect(
+          ScaffoldWithBottomNavBar.resolveActiveTabIndex(
+            path: '/account/trips',
+            fallbackIndex: 3,
+          ),
+          2,
+        );
+        expect(
+          ScaffoldWithBottomNavBar.resolveActiveTabIndex(
+            path: '/account/trips?status=completed',
+            fallbackIndex: 3,
+          ),
+          2,
+        );
+
+        // Tab 3: Account
+        expect(
+          ScaffoldWithBottomNavBar.resolveActiveTabIndex(
+            path: '/settings',
+            fallbackIndex: 1,
+          ),
+          3,
+        );
+        expect(
+          ScaffoldWithBottomNavBar.resolveActiveTabIndex(
+            path: '/account/profile',
+            fallbackIndex: 1,
+          ),
+          3,
+        );
+
+        // Fallback for non-tab modal paths
+        expect(
+          ScaffoldWithBottomNavBar.resolveActiveTabIndex(
+            path: '/villa/101',
+            fallbackIndex: 2,
+          ),
+          2,
+        );
+      },
+    );
+
+    testWidgets(
+      'Item 7g: Listing Selector trigger opens Modern BottomSheet Modal styled like Guest Status Filter',
+      (tester) async {
+        final adapter = _SimpleAdapter((options) async {
+          if (options.path == '/api/host/listings/mine') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'items': [
+                  {
+                    'listingId': 101,
+                    'title': 'Seaside Sunset Homestay & Studio Hạ Long',
+                    'propertyType': 'homestay',
+                    'city': 'Hạ Long',
+                    'status': 'published',
+                  },
+                  {
+                    'listingId': 102,
+                    'title': 'White Lotus Pool Villa Phan Chu Trinh',
+                    'propertyType': 'villa',
+                    'city': 'Vũng Tàu',
+                    'status': 'published',
+                  },
+                  {
+                    'listingId': 103,
+                    'title': 'The Palm Villa Vũng Tàu',
+                    'propertyType': 'villa',
+                    'city': 'Vũng Tàu',
+                    'status': 'published',
+                  },
+                  {
+                    'listingId': 104,
+                    'title': 'Ocean View Penthouse Đà Nẵng',
+                    'propertyType': 'apartment',
+                    'city': 'Đà Nẵng',
+                    'status': 'published',
+                  },
+                  {
+                    'listingId': 105,
+                    'title': 'Mountain Retreat Sa Pa',
+                    'propertyType': 'villa',
+                    'city': 'Sa Pa',
+                    'status': 'published',
+                  },
+                ],
+              }),
+              200,
+              headers: {
+                Headers.contentTypeHeader: [Headers.jsonContentType],
+              },
+            );
+          }
+          if (options.path.contains('/reviews')) {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'items': [
+                  {
+                    'reviewId': 1,
+                    'reviewerName': 'Đặng Kim An',
+                    'rating': 5,
+                    'comment': 'Chỗ nghỉ tuyệt vời!',
+                    'createdAt': '2026-11-15',
+                  },
+                ],
+              }),
+              200,
+              headers: {
+                Headers.contentTypeHeader: [Headers.jsonContentType],
+              },
+            );
+          }
+          return ResponseBody.fromString(
+            jsonEncode({'items': []}),
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        });
+
+        final client = DioClient()..dio.httpClientAdapter = adapter;
+        final testRepo = HostRepository(client);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(testRepo),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: const MaterialApp(
+              home: HostPortalScreen(
+                initialSection: HostPortalSection.reviews,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. Verify trigger is rendered with the selected listing title
+        final triggerFinder = find.byKey(const Key('reviews_listing_dropdown'));
+        expect(triggerFinder, findsOneWidget);
+        expect(
+          find.text('Seaside Sunset Homestay & Studio Hạ Long'),
+          findsWidgets,
+        );
+
+        // 2. Tap trigger to open the Studio BottomSheet modal
+        await tester.tap(triggerFinder);
+        await tester.pumpAndSettle();
+
+        // 3. Verify modal bottom sheet is displayed
+        expect(find.text('Chọn chỗ nghỉ'), findsOneWidget);
+        expect(find.byIcon(LucideIcons.x), findsOneWidget);
+
+        // Verify options are listed and Scrollbar is visible for >3 listings
+        expect(find.byType(Scrollbar), findsOneWidget);
+        final option1 = find.byKey(const Key('listing_option_101'));
+        final option2 = find.byKey(const Key('listing_option_102'));
+        final option5 = find.byKey(const Key('listing_option_105'));
+        expect(option1, findsOneWidget);
+        expect(option2, findsOneWidget);
+
+        // Option 1 is selected and displays checkmark
+        expect(find.byIcon(LucideIcons.check), findsOneWidget);
+
+        // 4. Scroll down to Option 5 (exceeding initial 3-4 visible villas) and tap it
+        await tester.ensureVisible(option5);
+        await tester.pumpAndSettle();
+        expect(option5, findsOneWidget);
+        await tester.tap(option5);
+        await tester.pumpAndSettle();
+
+        // 5. Verify modal closed and trigger updated to Option 5 title
+        expect(find.byIcon(LucideIcons.x), findsNothing);
+        expect(
+          find.text('Mountain Retreat Sa Pa'),
+          findsWidgets,
+        );
+      },
+    );
+
+    testWidgets(
+      'Item 7h: Bookings Section filter and sort triggers open Modern BottomSheet Modals styled like Guest Status Filter',
+      (tester) async {
+        final adapter = _SimpleAdapter((options) async {
+          if (options.path == '/api/host/bookings') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'items': [
+                  {
+                    'bookingId': 501,
+                    'status': 'confirmed',
+                    'listingTitle': 'Villa Biển Vũng Tàu',
+                    'totalPrice': 5000000,
+                    'checkInDate': '2026-11-20',
+                    'checkOutDate': '2026-11-22',
+                  },
+                  {
+                    'bookingId': 502,
+                    'status': 'paid',
+                    'listingTitle': 'Penthouse Hạ Long',
+                    'totalPrice': 8000000,
+                    'checkInDate': '2026-11-25',
+                    'checkOutDate': '2026-11-28',
+                  },
+                ],
+              }),
+              200,
+              headers: {
+                Headers.contentTypeHeader: [Headers.jsonContentType],
+              },
+            );
+          }
+          return ResponseBody.fromString(
+            jsonEncode({'items': []}),
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        });
+
+        final client = DioClient()..dio.httpClientAdapter = adapter;
+        final testRepo = HostRepository(client);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(testRepo),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: const MaterialApp(
+              home: HostPortalScreen(
+                initialSection: HostPortalSection.bookings,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. Verify triggers exist
+        final filterTrigger = find.byKey(const Key('booking_filter_dropdown'));
+        final sortTrigger = find.byKey(const Key('booking_sort_dropdown'));
+        expect(filterTrigger, findsOneWidget);
+        expect(sortTrigger, findsOneWidget);
+
+        // 2. Tap filter trigger: opens modal bottom sheet with status options
+        await tester.tap(filterTrigger);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Lọc trạng thái đơn'), findsOneWidget);
+        expect(find.byType(Scrollbar), findsOneWidget);
+
+        // Tap confirmed status
+        final confirmedOption = find.byKey(const Key('booking_filter_confirmed'));
+        await tester.ensureVisible(confirmedOption);
+        await tester.pumpAndSettle();
+        await tester.tap(confirmedOption);
+        await tester.pumpAndSettle();
+
+        // Modal closed, filter trigger now displays "Đã xác nhận"
+        expect(find.text('Lọc trạng thái đơn'), findsNothing);
+        expect(find.text('Đã xác nhận'), findsWidgets);
+
+        // 3. Tap sort trigger: opens modal bottom sheet with sort options
+        await tester.tap(sortTrigger);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Sắp xếp theo'), findsOneWidget);
+
+        // Tap "Giá cao nhất"
+        final sortPriceOption = find.byKey(const Key('booking_sort_total_desc'));
+        expect(sortPriceOption, findsOneWidget);
+        await tester.tap(sortPriceOption);
+        await tester.pumpAndSettle();
+
+        // Modal closed, sort trigger now displays "Giá cao nhất"
+        expect(find.text('Sắp xếp theo'), findsNothing);
+        expect(find.text('Giá cao nhất'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'Item 7i: Tapping phone button on booking card displays both phone number and email/gmail with copy actions',
+      (tester) async {
+        final adapter = _SimpleAdapter((options) async {
+          if (options.path == '/api/host/bookings') {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'items': [
+                  {
+                    'bookingId': 701,
+                    'status': 'confirmed',
+                    'guestName': 'Lê Hoàng Long',
+                    'guestPhone': '0901234567',
+                    'guestEmail': 'long.le@example.com',
+                    'listingTitle': 'Seaside Sunset Homestay',
+                    'totalPrice': 4440000,
+                    'checkInDate': '2026-11-20',
+                    'checkOutDate': '2026-11-22',
+                  },
+                ],
+              }),
+              200,
+              headers: {
+                Headers.contentTypeHeader: [Headers.jsonContentType],
+              },
+            );
+          }
+          return ResponseBody.fromString(
+            jsonEncode({'items': []}),
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        });
+
+        final client = DioClient()..dio.httpClientAdapter = adapter;
+        final testRepo = HostRepository(client);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(testRepo),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: const MaterialApp(
+              home: HostPortalScreen(
+                initialSection: HostPortalSection.bookings,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Find the phone call button on the booking card
+        final phoneBtn = find.descendant(
+          of: find.byKey(const Key('host_booking_card_701')),
+          matching: find.byIcon(LucideIcons.phone),
+        );
+        expect(phoneBtn, findsOneWidget);
+
+        // Tap the phone button
+        await tester.tap(phoneBtn);
+        await tester.pumpAndSettle();
+
+        // Verify contact dialog appears with both phone and email
+        expect(find.text('Thông tin liên hệ khách'), findsOneWidget);
+        expect(find.text('Lê Hoàng Long'), findsWidgets);
+        expect(find.text('0901234567'), findsOneWidget);
+        expect(find.text('long.le@example.com'), findsOneWidget);
+
+        // Verify copy buttons exist
+        expect(
+          find.byKey(const Key('guest_contact_copy_phone_btn')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('guest_contact_copy_email_btn')),
+          findsOneWidget,
+        );
+
+        // Verify actionable Call, Zalo and Email buttons exist in dialog
+        expect(
+          find.byKey(const Key('guest_contact_call_phone_btn')),
+          findsOneWidget,
+        );
+        expect(find.text('Gọi điện'), findsOneWidget);
+        expect(
+          find.byKey(const Key('guest_contact_zalo_btn')),
+          findsOneWidget,
+        );
+        expect(find.text('Nhắn Zalo'), findsOneWidget);
+        expect(
+          find.byKey(const Key('guest_contact_send_email_btn')),
+          findsOneWidget,
+        );
+        expect(find.text('Gửi thư điện tử (Gmail/Email)'), findsOneWidget);
+
+        // Tap Close button
+        await tester.tap(find.byKey(const Key('guest_contact_close_btn')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Thông tin liên hệ khách'), findsNothing);
+
+        // Verify Zalo quick button also exists directly on the booking card
+        final zaloCardBtn = find.descendant(
+          of: find.byKey(const Key('host_booking_card_701')),
+          matching: find.byIcon(LucideIcons.messageCircle),
+        );
+        expect(zaloCardBtn, findsOneWidget);
       },
     );
   });

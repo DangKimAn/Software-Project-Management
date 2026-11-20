@@ -82,10 +82,10 @@ class AppHeaderMenuButton extends ConsumerWidget {
             unawaited(context.push(_buildAuthRouteWithRedirect('/dang-ky')));
             break;
           case 'profile':
-            unawaited(context.push('/account/profile'));
+            context.go('/account/profile');
             break;
           case 'trips':
-            unawaited(context.push('/account/trips'));
+            context.go('/account/trips');
             break;
           case 'wishlist':
             unawaited(context.push('/yeu-thich'));
@@ -94,7 +94,7 @@ class AppHeaderMenuButton extends ConsumerWidget {
             if (user != null && user.isAdmin) {
               unawaited(context.push('/admin/tin-nhan'));
             } else {
-              unawaited(context.push('/messages'));
+              context.go('/messages');
             }
             break;
           case 'stays':
@@ -111,7 +111,7 @@ class AppHeaderMenuButton extends ConsumerWidget {
             break;
           case 'host':
             if (user != null && user.isHost) {
-              unawaited(context.push('/chu-nha/cho-nghi'));
+              unawaited(context.push('/chu-nha'));
             } else {
               unawaited(context.push('/tro-thanh-host'));
             }

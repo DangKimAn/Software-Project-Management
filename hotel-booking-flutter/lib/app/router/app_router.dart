@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/config/app_config.dart';
 import '../../features/admin/presentation/screens/admin_portal_screens.dart';
 import '../../features/auth/domain/entities/user.dart';
@@ -238,7 +239,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Stateful Navigation Shell for 4-Tab Mobile Navigation
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
-          return ScaffoldWithBottomNavBar(navigationShell: navigationShell);
+          return ScaffoldWithBottomNavBar(
+            navigationShell: navigationShell,
+            state: state,
+          );
         },
         branches: [
           // Branch 0: Home Discovery (/)
@@ -655,7 +659,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ── Host Portal (/chu-nha/* & /host/*) — Host-only ──
       GoRoute(
         path: '/chu-nha',
-        redirect: (context, state) => '/chu-nha/tong-quan',
+        redirect: (context, state) async {
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            final cached = prefs.getString(kHostLastActiveSectionKey);
+            if (cached != null && cached.isNotEmpty && cached != 'tong-quan') {
+              final section = HostPortalSection.fromSlug(cached);
+              if (section != HostPortalSection.overview) {
+                return '/chu-nha/${section.routeSlug}';
+              }
+            }
+          } catch (_) {}
+          return '/chu-nha/tong-quan';
+        },
       ),
       GoRoute(
         path: '/chu-nha/tong-quan',
@@ -710,6 +726,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           accessLevel: RouteAccessLevel.hostOnly,
           child: const HostPortalScreen(section: 'khach-luu-tru'),
         ),
+      ),
+      GoRoute(
+        path: '/chu-nha/khach',
+        redirect: (context, state) => '/chu-nha/khach-luu-tru',
+      ),
+      GoRoute(
+        path: '/chu-nha/lich',
+        redirect: (context, state) => '/chu-nha/lich-luu-tru',
+      ),
+      GoRoute(
+        path: '/chu-nha/them-moi',
+        redirect: (context, state) => '/chu-nha/cho-nghi/them-moi',
+      ),
+      GoRoute(
+        path: '/chu-nha/them-cho-nghi',
+        redirect: (context, state) => '/chu-nha/cho-nghi/them-moi',
       ),
       GoRoute(
         path: '/chu-nha/tin-nhan',
@@ -965,11 +997,44 @@ class SessionVerificationLoadingView extends StatelessWidget {
 /// Khung giao diện `Scaffold` chứa thanh điều hướng đáy 4 tab cho thiết bị di động và tự động ẩn thanh đáy trên màn hình rộng (`>= 1024dp`).
 class ScaffoldWithBottomNavBar extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
+  final GoRouterState? state;
 
   const ScaffoldWithBottomNavBar({
     super.key,
     required this.navigationShell,
+    this.state,
   });
+
+  /// Giải thuật chuẩn hóa và nhận diện chính xác tab đang hoạt động dựa trên URI route thực tế:
+  /// Khắc phục triệt để lỗi gạch đỏ sai tab khi điều hướng từ màn hình phụ (ví dụ Account -> Message) sang nhánh khác.
+  static int resolveActiveTabIndex({
+    required String path,
+    required int fallbackIndex,
+  }) {
+    final clean = path.split('?').first.toLowerCase();
+    if (clean == '/messages' ||
+        clean.startsWith('/messages/') ||
+        clean == '/tin-nhan' ||
+        clean.startsWith('/tin-nhan/')) {
+      return 1;
+    }
+    if (clean == '/trips' ||
+        clean.startsWith('/trips/') ||
+        clean == '/account/trips' ||
+        clean.startsWith('/account/trips/')) {
+      return 2;
+    }
+    if (clean == '/settings' ||
+        clean.startsWith('/settings/') ||
+        clean == '/account/profile' ||
+        clean.startsWith('/account/profile/')) {
+      return 3;
+    }
+    if (clean == '/' || clean.isEmpty) {
+      return 0;
+    }
+    return fallbackIndex;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -986,6 +1051,14 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
       (icon: AppSemanticIcons.userProfile, label: l10n.navAccount),
     ];
 
+    final currentPath = state?.uri.path ??
+        state?.matchedLocation ??
+        (context.mounted ? GoRouterState.of(context).uri.path : '');
+    final activeIndex = resolveActiveTabIndex(
+      path: currentPath,
+      fallbackIndex: navigationShell.currentIndex,
+    );
+
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: Container(
@@ -1000,14 +1073,14 @@ class ScaffoldWithBottomNavBar extends StatelessWidget {
             child: Row(
               children: List.generate(tabs.length, (index) {
                 final tab = tabs[index];
-                final isSelected = navigationShell.currentIndex == index;
+                final isSelected = activeIndex == index;
                 return Expanded(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () {
                       navigationShell.goBranch(
                         index,
-                        initialLocation: index == navigationShell.currentIndex,
+                        initialLocation: index == activeIndex,
                       );
                     },
                     child: ConstrainedBox(

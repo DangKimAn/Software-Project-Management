@@ -943,3 +943,59 @@ export const requestHostPayout = async (
         };
     });
 };
+
+export async function cancelHostPayout(
+    host: AuthenticatedUser,
+    payoutId: number,
+    context: AuditContext = {},
+) {
+    const hostId = Number(host.id);
+    return sequelize.transaction(async (transaction) => {
+        const payout = await HostPayoutBatch.findByPk(payoutId, {
+            transaction,
+            lock: transaction.LOCK.UPDATE,
+        });
+
+        if (!payout) {
+            throw new ApiError(404, "Không tìm thấy yêu cầu rút tiền");
+        }
+
+        if (Number(payout.hostId) !== hostId) {
+            throw new ApiError(403, "Bạn không có quyền thao tác trên yêu cầu này");
+        }
+
+        if (payout.status !== "pending") {
+            throw new ApiError(400, "Chỉ có thể hủy yêu cầu rút tiền đang ở trạng thái Chờ duyệt");
+        }
+
+        payout.status = "cancelled";
+        payout.notes = payout.notes
+            ? `${payout.notes}\n[Đã hủy bởi chủ nhà lúc ${new Date().toISOString()}]`
+            : `Đã hủy bởi chủ nhà lúc ${new Date().toISOString()}`;
+
+        await payout.save({ transaction });
+
+        await writeAuditLog({
+            actorId: hostId,
+            action: "payout.host_cancel",
+            targetType: "host_payout_batch",
+            targetId: payout.payoutId,
+            metadata: {
+                hostId,
+                payoutId: payout.payoutId,
+                amount: Number(payout.amount),
+                currency: payout.currency,
+            },
+            ipAddress: context.ipAddress,
+            userAgent: context.userAgent,
+            transaction,
+        });
+
+        return {
+            payoutId: payout.payoutId,
+            status: payout.status,
+            amount: payout.amount,
+            notes: payout.notes,
+        };
+    });
+}

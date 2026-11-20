@@ -10,7 +10,7 @@ const assert = require("node:assert/strict");
 const { describe, it } = require("node:test");
 
 const { executeDisbursement } = require("../dist/modules/disbursement/disbursement.service");
-const { disburseHostPayout, requestHostPayout } = require("../dist/modules/payouts/payouts.service");
+const { disburseHostPayout, requestHostPayout, cancelHostPayout } = require("../dist/modules/payouts/payouts.service");
 const { approveAndDisburseRefund, rejectRefund } = require("../dist/modules/refunds/refunds.service");
 const HostPayoutBatch = require("../dist/models/host-payout-batch").default;
 const HostPayoutBookingItem = require("../dist/models/host-payout-booking-item").default;
@@ -277,6 +277,74 @@ describe("Disbursement & Refund Mock Engine Unit Tests", () => {
             PayoutAccount.findOne = origFindOne;
             sequelize.query = origQuery;
             HostPayoutBatch.create = origBatchCreate;
+            sequelize.transaction = origTransaction;
+        }
+    });
+
+    it("cancelHostPayout enforces ownership and status rules before cancelling", async () => {
+        const mockHost = {
+            id: 202,
+            email: "host@example.com",
+            roles: ["host"],
+        };
+
+        const origFindByPk = HostPayoutBatch.findByPk;
+        const origTransaction = sequelize.transaction;
+        sequelize.transaction = async (cb: any) => cb({ LOCK: { UPDATE: "UPDATE" } });
+
+        try {
+            // 1. Not found -> 404
+            HostPayoutBatch.findByPk = async () => null;
+            await assert.rejects(
+                async () => cancelHostPayout(mockHost, 999),
+                { message: /Không tìm thấy yêu cầu rút tiền/ },
+            );
+
+            // 2. Different host -> 403
+            HostPayoutBatch.findByPk = async () => ({
+                payoutId: 999,
+                hostId: 9999, // other host
+                status: "pending",
+            });
+            await assert.rejects(
+                async () => cancelHostPayout(mockHost, 999),
+                { message: /Bạn không có quyền thao tác trên yêu cầu này/ },
+            );
+
+            // 3. Status not pending -> 400
+            HostPayoutBatch.findByPk = async () => ({
+                payoutId: 999,
+                hostId: 202,
+                status: "paid",
+            });
+            await assert.rejects(
+                async () => cancelHostPayout(mockHost, 999),
+                { message: /Chỉ có thể hủy yêu cầu rút tiền đang ở trạng thái Chờ duyệt/ },
+            );
+
+            // 4. Success -> status updated to cancelled
+            let saved = false;
+            const mockRecord = {
+                payoutId: 999,
+                hostId: 202,
+                status: "pending",
+                amount: 1000000,
+                currency: "VND",
+                notes: "Can rut gap",
+                save: async () => {
+                    saved = true;
+                },
+            };
+            HostPayoutBatch.findByPk = async () => mockRecord;
+
+            const res = await cancelHostPayout(mockHost, 999);
+            assert.equal(res.payoutId, 999);
+            assert.equal(res.status, "cancelled");
+            assert.equal(mockRecord.status, "cancelled");
+            assert.ok(mockRecord.notes.includes("Đã hủy bởi chủ nhà"));
+            assert.equal(saved, true);
+        } finally {
+            HostPayoutBatch.findByPk = origFindByPk;
             sequelize.transaction = origTransaction;
         }
     });

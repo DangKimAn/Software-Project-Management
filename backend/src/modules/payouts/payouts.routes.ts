@@ -13,6 +13,7 @@ import { requireHostOnly, requireRole } from "../../middlewares/require-role.mid
 import { hostPayoutStatusValues } from "../../models/host-payout-batch";
 import {
     approveHostPayoutHandler,
+    cancelHostPayoutHandler,
     createAdminHostPayout,
     createNewPayoutAccount,
     deleteExistingPayoutAccount,
@@ -134,6 +135,16 @@ hostPayoutsRouter.post(
             .isLength({ max: 500 }),
     ],
     requestHostPayoutHandler,
+);
+hostPayoutsRouter.post(
+    "/payouts/:payoutId/cancel",
+    [payoutIdParamValidator],
+    cancelHostPayoutHandler,
+);
+hostPayoutsRouter.patch(
+    "/payouts/:payoutId/cancel",
+    [payoutIdParamValidator],
+    cancelHostPayoutHandler,
 );
 
 export const adminHostPayoutsRouter = express.Router();

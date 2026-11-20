@@ -95,10 +95,10 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                 bookingId: booking.id,
               );
       if (!mounted) return;
-      unawaited(context.push('/tin-nhan?conversationId=$convId'));
+      context.go('/tin-nhan?conversationId=$convId');
     } catch (_) {
       if (!mounted) return;
-      unawaited(context.push('/tin-nhan'));
+      context.go('/tin-nhan');
     }
   }
 

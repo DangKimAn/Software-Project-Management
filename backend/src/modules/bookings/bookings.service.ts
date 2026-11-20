@@ -919,7 +919,16 @@ const serializeBooking = async (booking: BookingDocument, includeImages = false)
             }
             : null,
         guestName: guestUser?.fullName ?? null,
+        guestPhone: guestUser?.phone ?? null,
         guestEmail: guestUser?.email ?? null,
+        guest: guestUser
+            ? {
+                userId: guestUser.userId,
+                fullName: guestUser.fullName,
+                phone: guestUser.phone,
+                email: guestUser.email,
+            }
+            : null,
         listingTitle: listing?.title ?? null,
         listing: listing
             ? {

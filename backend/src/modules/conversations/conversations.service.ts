@@ -357,35 +357,55 @@ const ensureConversationParticipants = async (
 /**
  * Tuần tự hóa dòng kết quả truy vấn hội thoại thành cấu trúc phản hồi API kèm thông tin chỗ nghỉ và đối phương trò chuyện (`otherParticipant`).
  */
-const serializeConversationRow = (row: ConversationListRow) => ({
-    id: Number(row.conversationId),
-    conversationId: Number(row.conversationId),
-    createdByUserId: row.createdByUserId === null ? null : Number(row.createdByUserId),
-    listingId: row.listingId === null ? null : Number(row.listingId),
-    guestUserId: row.guestUserId === null ? null : Number(row.guestUserId),
-    hostUserId: row.hostUserId === null ? null : Number(row.hostUserId),
-    bookingId: row.bookingOrderId === null ? null : Number(row.bookingOrderId),
-    lastMessage: row.lastMessage ?? null,
-    lastMessageAt: row.lastMessageAt ?? null,
-    unreadCount: Number(row.unreadCount ?? 0),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    listing: row.listingId
-        ? {
-              listingId: Number(row.listingId),
-              title: row.listingTitle ?? "Chỗ nghỉ",
-              coverImageUrl: row.listingCoverImageUrl ?? null,
-          }
-        : null,
-    otherParticipant: row.otherUserId
-        ? {
-              userId: Number(row.otherUserId),
-              fullName: row.otherFullName ?? "Người dùng",
-              avatarUrl: row.otherAvatarUrl ?? null,
-              ...(row.otherRole ? { role: row.otherRole } : {}),
-          }
-        : null,
-});
+const serializeConversationRow = (row: ConversationListRow) => {
+    const rawFullName =
+        row.otherFullName && row.otherFullName.trim().length > 0
+            ? row.otherFullName.trim()
+            : null;
+    const isGenericName =
+        !rawFullName ||
+        rawFullName === "Người dùng" ||
+        rawFullName === "Khách lưu trú";
+    const displayName = isGenericName
+        ? row.otherRole === "admin"
+            ? "Quản trị viên The Palm Villa"
+            : "Khách lưu trú"
+        : rawFullName;
+
+    return {
+        id: Number(row.conversationId),
+        conversationId: Number(row.conversationId),
+        createdByUserId:
+            row.createdByUserId === null ? null : Number(row.createdByUserId),
+        listingId: row.listingId === null ? null : Number(row.listingId),
+        guestUserId: row.guestUserId === null ? null : Number(row.guestUserId),
+        hostUserId: row.hostUserId === null ? null : Number(row.hostUserId),
+        bookingId:
+            row.bookingOrderId === null ? null : Number(row.bookingOrderId),
+        lastMessage: row.lastMessage ?? null,
+        lastMessageAt: row.lastMessageAt ?? null,
+        unreadCount: Number(row.unreadCount ?? 0),
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        guestName: !isGenericName ? rawFullName : null,
+        userName: !isGenericName ? rawFullName : null,
+        listing: row.listingId
+            ? {
+                  listingId: Number(row.listingId),
+                  title: row.listingTitle ?? "Chỗ nghỉ",
+                  coverImageUrl: row.listingCoverImageUrl ?? null,
+              }
+            : null,
+        otherParticipant: row.otherUserId
+            ? {
+                  userId: Number(row.otherUserId),
+                  fullName: displayName,
+                  avatarUrl: row.otherAvatarUrl ?? null,
+                  ...(row.otherRole ? { role: row.otherRole } : {}),
+              }
+            : null,
+    };
+};
 
 /**
  * Tuần tự hóa bản ghi tin nhắn sang định dạng chuẩn đồng bộ cho cả REST API và sự kiện thời gian thực Socket.IO.
@@ -509,12 +529,20 @@ const getConversationRowsForUser = async (
                AND current_participant.user_id = :userId
             LEFT JOIN listings l
                 ON l.listing_id = c.listing_id
+            LEFT JOIN conversation_participant other_cp
+                ON other_cp.conversation_id = c.conversation_id
+               AND other_cp.user_id <> :userId
             LEFT JOIN users other_user
-                ON other_user.user_id = CASE
-                    WHEN c.guest_user_id = :userId THEN c.host_user_id
-                    WHEN c.host_user_id = :userId THEN c.guest_user_id
-                    ELSE COALESCE(c.guest_user_id, c.host_user_id)
-                END
+                ON other_user.user_id = COALESCE(
+                    CASE
+                        WHEN c.guest_user_id = :userId THEN c.host_user_id
+                        WHEN c.host_user_id = :userId THEN c.guest_user_id
+                        ELSE NULL
+                    END,
+                    other_cp.user_id,
+                    CASE WHEN c.host_user_id = :userId THEN c.guest_user_id ELSE c.host_user_id END,
+                    c.created_by_user_id
+                )
             WHERE (
                     c.guest_user_id = :userId
                  OR c.host_user_id = :userId

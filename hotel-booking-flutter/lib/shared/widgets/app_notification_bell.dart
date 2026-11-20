@@ -45,7 +45,19 @@ class NotificationBell extends ConsumerWidget {
   ) {
     final route = item.resolveInternalRoute();
     if (route != null && route.isNotEmpty) {
-      context.push(route);
+      final clean = route.split('?').first.toLowerCase();
+      final isTab = clean == '/' ||
+          clean == '/messages' ||
+          clean == '/tin-nhan' ||
+          clean == '/trips' ||
+          clean == '/account/trips' ||
+          clean == '/settings' ||
+          clean == '/account/profile';
+      if (isTab) {
+        context.go(route);
+      } else {
+        context.push(route);
+      }
     }
   }
 

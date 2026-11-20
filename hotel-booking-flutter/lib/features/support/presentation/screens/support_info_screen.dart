@@ -79,7 +79,7 @@ class SupportInfoScreen extends StatelessWidget {
           ctaTitle: l10n.supportCancelCtaTitle,
           ctaDescription: l10n.supportCancelCtaDesc,
           primaryActionLabel: l10n.supportCancelPrimaryAction,
-          onPrimaryAction: () => context.push('/account/trips'),
+          onPrimaryAction: () => context.go('/account/trips'),
           secondaryActionLabel: l10n.supportCancelSecondaryAction,
           onSecondaryAction: () => context.push('/ho-tro/cau-hoi-thuong-gap'),
         );
@@ -107,7 +107,7 @@ class SupportInfoScreen extends StatelessWidget {
           primaryActionLabel: l10n.supportComplaintsPrimaryAction,
           onPrimaryAction: () => context.push('/lien-he'),
           secondaryActionLabel: l10n.supportComplaintsSecondaryAction,
-          onSecondaryAction: () => context.push('/messages'),
+          onSecondaryAction: () => context.go('/messages'),
         );
 
       case SupportPageType.faq:

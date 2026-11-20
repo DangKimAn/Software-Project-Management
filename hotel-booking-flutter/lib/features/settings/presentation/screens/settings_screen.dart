@@ -176,7 +176,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context.push(loginUri.toString());
       return;
     }
-    context.push(targetPath);
+    final clean = targetPath.split('?').first.toLowerCase();
+    final isTab = clean == '/' ||
+        clean == '/messages' ||
+        clean == '/tin-nhan' ||
+        clean == '/trips' ||
+        clean == '/account/trips' ||
+        clean == '/settings' ||
+        clean == '/account/profile';
+    if (isTab) {
+      context.go(targetPath);
+    } else {
+      context.push(targetPath);
+    }
   }
 
   Future<bool> _confirmSensitivePhoneChange(
@@ -1276,7 +1288,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           tileKey: const Key('menu_host_portal'),
                           icon: AppSemanticIcons.home,
                           title: l10n.settingsManageProperties,
-                          onTap: () => context.push('/chu-nha/cho-nghi'),
+                          onTap: () => context.push('/chu-nha'),
                         )
                       else if (effectiveUser != null && effectiveUser.isNewHost)
                         _buildSettingsMenuTile(

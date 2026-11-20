@@ -1350,7 +1350,7 @@ void main() {
           );
           expect(
             AuthNotifier.defaultRouteForUser(verifiedHost),
-            '/chu-nha/cho-nghi',
+            '/chu-nha',
           );
           expect(AuthNotifier.defaultRouteForUser(adminUser), '/admin');
 

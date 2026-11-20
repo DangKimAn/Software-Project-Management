@@ -292,6 +292,10 @@ class HostPortalViewModel {
     );
   }
 
+  Future<Map<String, dynamic>> cancelPayout(int payoutId) {
+    return _repo.cancelPayout(payoutId);
+  }
+
   Future<List<Map<String, dynamic>>> getMyPayouts({
     String? status,
     String? from,

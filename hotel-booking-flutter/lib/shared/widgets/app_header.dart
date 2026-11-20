@@ -241,7 +241,7 @@ class AppTopHeader extends ConsumerWidget {
                                     key: const Key('header_become_host_button'),
                                     onTap: () {
                                       if (authUser != null && authUser.isHost) {
-                                        context.push('/chu-nha/cho-nghi');
+                                        context.push('/chu-nha');
                                       } else {
                                         context.push('/tro-thanh-host');
                                       }

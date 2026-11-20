@@ -1440,39 +1440,68 @@ class _HostListingFormScreenState extends ConsumerState<HostListingFormScreen> {
             ),
           );
 
-    if (widget.embedded) {
-      return content;
-    }
+    final canPopForm = (!_effectiveStepMode || _currentStep == 0) &&
+        !widget.embedded &&
+        Navigator.canPop(context);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surfaceBase,
-        elevation: 0,
-        leading: IconButton(
-          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-          icon: const Icon(LucideIcons.arrowLeft, color: AppColors.textPrimary),
-          onPressed: () {
-            if (widget.onCancel != null) {
-              widget.onCancel!();
-            } else if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/host');
-            }
-          },
-          tooltip: 'Quay lại',
-        ),
-        title: Text(
-          _isEditMode ? 'Sửa chỗ nghỉ' : 'Thêm chỗ nghỉ mới',
-          style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-      body: SafeArea(child: content),
+    final formBody = widget.embedded
+        ? content
+        : Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(
+              backgroundColor: AppColors.surfaceBase,
+              elevation: 0,
+              leading: IconButton(
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                icon: const Icon(LucideIcons.arrowLeft, color: AppColors.textPrimary),
+                onPressed: () {
+                  if (_effectiveStepMode && _currentStep > 0) {
+                    _goToPrevStep();
+                  } else if (widget.onCancel != null) {
+                    widget.onCancel!();
+                  } else if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  } else {
+                    try {
+                      context.go('/host');
+                    } catch (_) {}
+                  }
+                },
+                tooltip: 'Quay lại',
+              ),
+              title: Text(
+                _isEditMode ? 'Sửa chỗ nghỉ' : 'Thêm chỗ nghỉ mới',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            body: SafeArea(child: content),
+          );
+
+    return PopScope(
+      canPop: canPopForm,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_effectiveStepMode && _currentStep > 0) {
+          _goToPrevStep();
+          return;
+        }
+        if (widget.onCancel != null) {
+          widget.onCancel!();
+          return;
+        }
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        } else {
+          try {
+            context.go('/host');
+          } catch (_) {}
+        }
+      },
+      child: formBody,
     );
   }
 

@@ -1790,21 +1790,30 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       },
     );
 
-    if (_isEmbeddedPortal) {
-      return Material(
-        color: AppColors.surfaceBase,
-        child: bodyContent,
-      );
-    }
+    final mainContent = _isEmbeddedPortal
+        ? Material(
+            color: AppColors.surfaceBase,
+            child: bodyContent,
+          )
+        : Scaffold(
+            backgroundColor: AppColors.background,
+            body: Column(
+              children: [
+                const AppSearchHeader(currentPath: '/messages'),
+                Expanded(child: bodyContent),
+              ],
+            ),
+          );
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
-        children: [
-          const AppSearchHeader(currentPath: '/messages'),
-          Expanded(child: bodyContent),
-        ],
-      ),
+    return PopScope(
+      canPop: _selectedConversationId == null,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_selectedConversationId != null) {
+          _leaveActiveConversationToInbox();
+        }
+      },
+      child: mainContent,
     );
   }
 

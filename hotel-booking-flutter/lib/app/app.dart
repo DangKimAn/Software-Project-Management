@@ -75,7 +75,19 @@ class _ThePalmVillaAppState extends ConsumerState<ThePalmVillaApp>
       unawaited(ref.read(notificationsProvider.notifier).markAsRead(notifId));
     }
     if (event.route.isNotEmpty) {
-      ref.read(appRouterProvider).push(event.route);
+      final clean = event.route.split('?').first.toLowerCase();
+      final isTab = clean == '/' ||
+          clean == '/messages' ||
+          clean == '/tin-nhan' ||
+          clean == '/trips' ||
+          clean == '/account/trips' ||
+          clean == '/settings' ||
+          clean == '/account/profile';
+      if (isTab) {
+        ref.read(appRouterProvider).go(event.route);
+      } else {
+        ref.read(appRouterProvider).push(event.route);
+      }
     }
   }
 
