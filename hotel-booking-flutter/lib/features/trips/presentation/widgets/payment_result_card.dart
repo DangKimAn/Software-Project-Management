@@ -1,18 +1,38 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 
-/// Shared receipt layout for payment results on mobile and desktop.
+/// Thẻ biên lai dùng chung hiển thị kết quả giao dịch thanh toán trên cả thiết bị di động và máy tính để bàn.
+///
+/// Tự động chuyển đổi bố cục cặp khóa - giá trị sang dạng xếp chồng dọc khi màn hình hẹp hoặc cỡ chữ trợ năng lớn.
 class PaymentResultCard extends StatelessWidget {
+  /// Biểu tượng minh họa trạng thái kết quả thanh toán.
   final IconData icon;
+
+  /// Tiêu đề chính thông báo kết quả giao dịch.
   final String title;
+
+  /// Nội dung giải thích chi tiết trạng thái đơn và hướng dẫn tiếp theo.
   final String subtitle;
+
+  /// Cho biết hệ thống có đang trong quá trình đối soát trạng thái với máy chủ hay không.
   final bool isVerifying;
+
+  /// Danh sách các dòng thông tin biên lai (như Mã đặt phòng, Mã giao dịch, Phương thức, Số tiền).
   final Map<String, String> details;
+
+  /// Thao tác kích hoạt kiểm tra lại trạng thái giao dịch thủ công.
   final VoidCallback? onRecheck;
+
+  /// Thao tác quay lại trang thanh toán để thử giao dịch mới.
   final VoidCallback? onRetry;
+
+  /// Thao tác mở trang danh sách chuyến đi của tôi.
   final VoidCallback? onViewTrips;
+
+  /// Thao tác điều hướng về Trang chủ.
   final VoidCallback? onGoHome;
 
+  /// Khởi tạo `PaymentResultCard`.
   const PaymentResultCard(
       {super.key,
       required this.icon,

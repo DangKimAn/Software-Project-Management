@@ -10,6 +10,7 @@ const assert = require("node:assert/strict");
 const { after, afterEach, beforeEach, describe, it } = require("node:test");
 const { UniqueConstraintError } = require("sequelize");
 import type { PatchEntry } from "./helpers/types";
+import { futureDate, futureDateObject } from "./helpers/date-helpers";
 
 const { ApiError } = require("../dist/common/api-error");
 const sequelize = require("../dist/config/database").default || require("../dist/config/database").sequelize;
@@ -22,14 +23,14 @@ const {
     buildReservedDates,
     createBookingDateLocks,
     releaseBookingDateLocksForBooking,
-} = require("../dist/services/booking-date-lock.service");
+} = require("../dist/modules/bookings/booking-date-lock.service");
 const {
     assertBookingStatusTransition,
     transitionBookingStatus,
 } = require("../dist/modules/bookings/booking-state-machine");
 const bookingsService = require("../dist/modules/bookings/bookings.service");
 const { calculateBookingPricing } = require("../dist/modules/bookings/booking-pricing.service");
-const { buildBookingDateOverlapWhere, buildActiveBookingStatusWhere } = require("../dist/common/booking-availability");
+const { buildBookingDateOverlapWhere, buildActiveBookingStatusWhere } = require("../dist/modules/bookings/booking-availability");
 
 const originals: PatchEntry[] = [];
 
@@ -96,11 +97,11 @@ describe("Part B - Booking & Date Lock Concurrency (BK-33 to BK-41)", () => {
         patch(sequelize, "query", async () => [{ value: 1001 }]);
     });
 
-    it("BK-33: Overlap một phần (A: 10-13/11, B: 12-15/11) - Khách B nhận 409 Conflict khi A có hold hợp lệ", async () => {
-        const checkInA = "2026-11-10";
-        const checkOutA = "2026-11-13";
-        const checkInB = "2026-11-12";
-        const checkOutB = "2026-11-15";
+    it("BK-33: Overlap một phần (A: +10..+13 ngày, B: +12..+15 ngày) - Khách B nhận 409 Conflict khi A có hold hợp lệ", async () => {
+        const checkInA = futureDate(10);
+        const checkOutA = futureDate(13);
+        const checkInB = futureDate(12);
+        const checkOutB = futureDate(15);
 
         // Formula check: Existing A (10-13) overlaps with Request B (12-15)
         const whereClause = buildBookingDateOverlapWhere(checkInB, checkOutB);
@@ -172,8 +173,8 @@ describe("Part B - Booking & Date Lock Concurrency (BK-33 to BK-41)", () => {
                     await createBookingDateLocks({
                         bookingId: 888,
                         listingId: 101,
-                        checkInDate: new Date("2026-11-10"),
-                        checkOutDate: new Date("2026-11-13"),
+                        checkInDate: futureDateObject(10),
+                        checkOutDate: futureDateObject(13),
                         transaction: tx,
                     });
                 });
@@ -199,8 +200,8 @@ describe("Part B - Booking & Date Lock Concurrency (BK-33 to BK-41)", () => {
             async () => {
                 await bookingsService.createBooking(mockUser as any, {
                     listingId: 101,
-                    checkInDate: "2026-11-20",
-                    checkOutDate: "2026-11-22",
+                    checkInDate: futureDate(20),
+                    checkOutDate: futureDate(22),
                     guestCount: 2,
                 });
             },
@@ -227,7 +228,7 @@ describe("Part B - Booking & Date Lock Concurrency (BK-33 to BK-41)", () => {
         const pricing = await calculateBookingPricing({
             userId: 301,
             listing: listingSnapshot as any,
-            dates: ["2026-12-01", "2026-12-02"], // 2 nights
+            dates: [futureDate(30), futureDate(31)], // 2 nights
             guestCount: 2,
             calendarByDate: new Map(),
             transaction: fakeTransaction as any,
@@ -343,9 +344,10 @@ describe("Part B - Booking & Date Lock Concurrency (BK-33 to BK-41)", () => {
 
     it("BK-40: Race đa instance - DB unique constraint ném UniqueConstraintError chuyển thành 409", async () => {
         // When two instances race, second one hits unique constraint on (listing_id, reserved_date, released_at)
+        const raceDateStart = futureDate(15);
         patch(BookingDateLock, "bulkCreate", async () => {
             const err = new UniqueConstraintError({
-                message: "Duplicate entry '101-2026-11-15' for key 'listing_reserved_date_unique'",
+                message: `Duplicate entry '101-${raceDateStart}' for key 'listing_reserved_date_unique'`,
                 errors: [],
             });
             throw err;
@@ -356,8 +358,8 @@ describe("Part B - Booking & Date Lock Concurrency (BK-33 to BK-41)", () => {
                 await createBookingDateLocks({
                     bookingId: 333,
                     listingId: 101,
-                    checkInDate: new Date("2026-11-15"),
-                    checkOutDate: new Date("2026-11-17"),
+                    checkInDate: futureDateObject(15),
+                    checkOutDate: futureDateObject(17),
                     transaction: fakeTransaction as any,
                 });
             },

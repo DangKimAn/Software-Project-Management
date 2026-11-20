@@ -1,3 +1,9 @@
+/**
+ * Tầng truy cập dữ liệu (Repository) của phân hệ xác thực (`auth`):
+ * - Tái xuất các mô hình xác thực (`AuthOtpToken`, `RefreshSession`, `SocialAccount`, `User`) và cung cấp các truy vấn SQL tham số hóa
+ *   ghi nhật ký kiểm toán an toàn (`audit_logs`) cũng như đếm tần suất sự kiện theo bản băm định danh (`identifierHash`).
+ */
+
 import { QueryTypes, type Transaction } from "sequelize";
 
 import sequelize from "../../config/database";
@@ -20,6 +26,9 @@ type AuditLogInput = {
     transaction?: Transaction;
 };
 
+/**
+ * Thực thi câu lệnh SQL tham số hóa chèn bản ghi kiểm toán vào bảng `audit_logs` một cách an toàn lỗi (fail-safe), hỗ trợ chạy trong giao dịch DB.
+ */
 export const createAuditLog = async (input: AuditLogInput) => {
     try {
         await sequelize.query(
@@ -67,6 +76,9 @@ export const createAuditLog = async (input: AuditLogInput) => {
     }
 };
 
+/**
+ * Đếm số lượng sự kiện kiểm toán khớp `action` và khóa băm ẩn danh `$.identifierHash` trong `metadata_json` kể từ mốc thời gian `since` phục vụ chống Brute-Force/Spam.
+ */
 export const countRecentAuditLogsByIdentifierHash = async (
     action: string,
     identifierHash: string,
@@ -92,7 +104,11 @@ export const countRecentAuditLogsByIdentifierHash = async (
         );
 
         return Number(rows[0]?.count ?? 0);
-    } catch {
+    } catch (error) {
+        logger.warn("Failed to count recent audit logs by identifierHash", {
+            action,
+            error: error instanceof Error ? error.message : String(error),
+        });
         return 0;
     }
 };

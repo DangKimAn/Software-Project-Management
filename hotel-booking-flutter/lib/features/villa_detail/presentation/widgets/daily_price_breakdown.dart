@@ -7,6 +7,11 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../villas/domain/entities/nightly_price.dart';
 
+/// Bảng bóc tách đơn giá từng đêm lưu trú từ lịch máy chủ với chiều cao tối đa được khống chế chặt chẽ.
+///
+/// Đảm bảo thanh hành động cố định (`BookingActionBar`) không bao giờ bị đẩy khuất khỏi màn hình:
+/// khi kỳ nghỉ ngắn (1–4 đêm) khung tự thu gọn vừa khít; khi kỳ nghỉ dài (10–20 đêm) danh sách cuộn độc lập bên trong.
+///
 /// Price list component constrained in height to ensure sticky action bar is NEVER pushed off-screen.
 ///
 /// Adheres strictly to FLUTTER_RULES.md section 10:
@@ -14,9 +19,13 @@ import '../../../villas/domain/entities/nightly_price.dart';
 /// - Uses ConstrainedBox + ListView.builder(shrinkWrap: true, primary: false).
 /// - 1-4 nights shrinks naturally; 10-20 nights scrolls independently.
 class DailyPriceBreakdown extends StatelessWidget {
+  /// Danh sách giá và trạng thái trống từng đêm trong khoảng nửa mở `[checkIn, checkOut)`.
   final List<NightlyPrice> nightlyPrices;
+
+  /// Cho biết giao diện đang hiển thị trên bố cục máy tính bảng hay điện thoại để chọn trần chiều cao phù hợp.
   final bool isTablet;
 
+  /// Khởi tạo bảng chi tiết giá theo từng đêm `DailyPriceBreakdown`.
   const DailyPriceBreakdown({
     super.key,
     required this.nightlyPrices,

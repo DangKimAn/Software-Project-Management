@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,21 +11,35 @@ import '../../../../l10n/l10n.dart';
 import '../../../../shared/animations/source_animations.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/vung_tau_map_picker.dart';
-import '../../../villas/data/repositories/villa_repository_impl.dart';
+import '../../../villas/domain/entities/villa.dart';
 
+/// Thanh tìm kiếm trung tâm đa chế độ thích ứng bố cục di động, thanh điều hướng ghim và màn hình rộng.
+///
+/// Giải thuật thích ứng khung tìm kiếm và hộp thoại ngăn kéo (`Responsive Search Bar & Modal Sheet`):
+/// - Trên màn hình rộng (`>= 768px`, khi không bật `isCompact` hoặc `isInHeader`), hiển thị thanh viên thuốc
+///   4 phân đoạn (`Địa điểm`, `Nhận phòng`, `Trả phòng`, `Khách`) mở trực tiếp đúng thẻ tương ứng.
+/// - Trên điện thoại hoặc khi ghim trong `AppTopHeader`, thu gọn thành viên thuốc đơn hiển thị tóm tắt địa điểm,
+///   thời gian và số khách.
+/// - Bấm vào bất kỳ phân đoạn nào sẽ mở `DraggableScrollableSheet` bù khoảng đệm bàn phím `viewInsets.bottom`,
+///   tự động thu gọn thanh chuyển thẻ khi bề rộng hẹp hoặc cỡ chữ `TextScaler` lớn.
+///
 /// Complete port of `SearchBar.tsx`, `BookingWidget.tsx`, `DatePickerPanel.tsx`, `Guest.tsx`, and `StayFilterModal`.
 class SourceSearchBar extends ConsumerStatefulWidget {
+  /// Cho biết thanh tìm kiếm luôn hiển thị ở chế độ viên thuốc thu gọn hay không.
   final bool isCompact;
-  final bool isInHeader;
-  final VoidCallback? onSearchSubmitted;
-  final VoidCallback? onOpenAiSearch;
 
+  /// Cho biết thanh tìm kiếm đang được nhúng bên trong thanh điều hướng đỉnh `AppTopHeader`.
+  final bool isInHeader;
+
+  /// Hàm gọi lại sau khi người dùng xác nhận tìm kiếm (mặc định điều hướng tới `/tim-kiem` nếu để `null`).
+  final VoidCallback? onSearchSubmitted;
+
+  /// Khởi tạo thanh tìm kiếm `SourceSearchBar`.
   const SourceSearchBar({
     super.key,
     this.isCompact = false,
     this.isInHeader = false,
     this.onSearchSubmitted,
-    this.onOpenAiSearch,
   });
 
   @override
@@ -82,9 +97,12 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
     }
     if (filter.dateMode == 'flexible') {
       final label = switch (filter.flexDuration) {
-        'week' => (locale == 'en' ? '1 week' : (locale == 'ko' ? '1주일' : '1 tuần')),
-        'month' => (locale == 'en' ? '1 month' : (locale == 'ko' ? '1개월' : '1 tháng')),
-        _ => (locale == 'en' ? 'Weekend' : (locale == 'ko' ? '주말' : 'Cuối tuần')),
+        'week' =>
+          (locale == 'en' ? '1 week' : (locale == 'ko' ? '1주일' : '1 tuần')),
+        'month' =>
+          (locale == 'en' ? '1 month' : (locale == 'ko' ? '1개월' : '1 tháng')),
+        _ =>
+          (locale == 'en' ? 'Weekend' : (locale == 'ko' ? '주말' : 'Cuối tuần')),
       };
       if (locale == 'en') return 'Flexible ($label)';
       if (locale == 'ko') return '유연한 일정 ($label)';
@@ -133,9 +151,12 @@ class _SourceSearchBarState extends ConsumerState<SourceSearchBar> {
     }
     if (filter.dateMode == 'flexible') {
       final label = switch (filter.flexDuration) {
-        'week' => (locale == 'en' ? '1 week' : (locale == 'ko' ? '1주일' : '1 tuần')),
-        'month' => (locale == 'en' ? '1 month' : (locale == 'ko' ? '1개월' : '1 tháng')),
-        _ => (locale == 'en' ? 'Weekend' : (locale == 'ko' ? '주말' : 'Cuối tuần')),
+        'week' =>
+          (locale == 'en' ? '1 week' : (locale == 'ko' ? '1주일' : '1 tuần')),
+        'month' =>
+          (locale == 'en' ? '1 month' : (locale == 'ko' ? '1개월' : '1 tháng')),
+        _ =>
+          (locale == 'en' ? 'Weekend' : (locale == 'ko' ? '주말' : 'Cuối tuần')),
       };
       if (locale == 'en') return 'Flexible • $label';
       if (locale == 'ko') return '유연한 일정 • $label';
@@ -552,6 +573,8 @@ class _SegmentTrigger extends StatelessWidget {
   }
 }
 
+/// Ngăn kéo tương tác 3 bước (`Địa điểm`, `Thời gian`, `Khách`) tích hợp bản đồ Vũng Tàu, lịch tháng và bộ đếm khách.
+///
 /// Interactive Search Popover Sheet (`SearchPopover.tsx` + `DatePickerPanel.tsx` + `Guest.tsx` + `LocationMapPicker.tsx`).
 class _SearchPopoverSheet extends ConsumerStatefulWidget {
   final int initialTab; // 0 = Địa điểm, 1 = Thời gian, 2 = Khách
@@ -567,7 +590,16 @@ class _SearchPopoverSheet extends ConsumerStatefulWidget {
       _SearchPopoverSheetState();
 }
 
+/// Chuẩn hóa chuỗi tiếng Việt `input` về chữ thường không dấu để đối sánh tìm kiếm không phân biệt dấu.
+///
+/// Giải thuật khử dấu tiếng Việt (Vietnamese Diacritic Folding):
+/// 1. Hạ toàn bộ ký tự về chữ thường (`toLowerCase()`) và cắt khoảng trắng hai đầu (`trim()`).
+/// 2. Duyệt bảng ánh xạ nguyên âm mang dấu thanh / dấu mũ (`à..ẵ`, `è..ễ`, `ì..ĩ`, `ò..ỡ`, `ù..ữ`, `ỳ..ỹ`)
+///    và phụ âm `đ`, thay thế từng mã điểm Unicode dựng sẵn về ký tự ASCII cơ sở (`a`, `e`, `i`, `o`, `u`, `y`, `d`).
+/// 3. Nhờ đó người dùng gõ `'bai sau'`, `'tran phu'` hay `'chi linh'` đều khớp chính xác với `'Bãi Sau'`,
+///    `'Trần Phú'` và `'Chí Linh'` trong danh mục khu vực Vũng Tàu.
 String _normalizeViSearch(String input) {
+  // Giải thuật khử dấu tiếng Việt theo bảng mã điểm nguyên âm và phụ âm đ:
   var s = input.toLowerCase().trim();
   const diacritics = <String, String>{
     'a': 'àáạảãâầấậẩẫăằắặẳẵ',
@@ -593,6 +625,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
   bool _selectingCheckOut = false;
   late int _calendarMonth;
   late int _calendarYear;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -601,13 +634,15 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     final filter = ref.read(villaFilterProvider);
     _queryCtrl = TextEditingController(text: filter.searchQuery);
     _showMapPicker = filter.lat != null && filter.lng != null;
-    final now = DateTime.now();
+    // Giải thuật đồng bộ tháng/năm mở đầu bộ chọn lịch theo múi giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7):
+    final now = BookingDate.todayVn();
     _calendarMonth = filter.checkIn?.month ?? now.month;
     _calendarYear = filter.checkIn?.year ?? now.year;
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _queryCtrl.dispose();
     super.dispose();
   }
@@ -621,6 +656,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
   }
 
   void _submitSearch() {
+    _searchDebounce?.cancel();
     final q = _queryCtrl.text.trim();
     if (q.isNotEmpty) {
       ref.read(searchHistoryProvider.notifier).addTerm(q);
@@ -634,7 +670,8 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     widget.onSubmitted();
   }
 
-  String? _activeLocationBadge(VillaFilterState filter, {String locale = 'vi'}) {
+  String? _activeLocationBadge(VillaFilterState filter,
+      {String locale = 'vi'}) {
     if (filter.locationGroup != null && filter.locationGroup!.isNotEmpty) {
       final match = VungTauMapConstants.findLocationGroup(filter.locationGroup);
       if (match != null) return match.label;
@@ -804,23 +841,17 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
 
     final tabs = [
       (
-        label: locale == 'vi'
-            ? 'Địa điểm'
-            : (locale == 'ko' ? '여행지' : 'Where'),
+        label: locale == 'vi' ? 'Địa điểm' : (locale == 'ko' ? '여행지' : 'Where'),
         icon: LucideIcons.mapPin,
         hasValue: locBadge != null,
       ),
       (
-        label: locale == 'vi'
-            ? 'Thời gian'
-            : (locale == 'ko' ? '날짜' : 'Dates'),
+        label: locale == 'vi' ? 'Thời gian' : (locale == 'ko' ? '날짜' : 'Dates'),
         icon: LucideIcons.calendar,
         hasValue: dateBadge != null,
       ),
       (
-        label: locale == 'vi'
-            ? 'Khách'
-            : (locale == 'ko' ? '게스트' : 'Guests'),
+        label: locale == 'vi' ? 'Khách' : (locale == 'ko' ? '게스트' : 'Guests'),
         icon: LucideIcons.users,
         hasValue: guestBadge != null,
       ),
@@ -1256,9 +1287,7 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     final trimmedQuery = _queryCtrl.text.trim();
     final filteredGroups = trimmedQuery.isEmpty
         ? allGroups
-        : allGroups
-            .where((g) => _groupMatchesQuery(g, trimmedQuery))
-            .toList();
+        : allGroups.where((g) => _groupMatchesQuery(g, trimmedQuery)).toList();
     final textScale = MediaQuery.textScalerOf(context).scale(1);
 
     return Column(
@@ -1348,13 +1377,19 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
           ),
           onChanged: (val) {
             setState(() {});
-            ref.read(villaFilterProvider.notifier).update(
-                  (s) => s.copyWith(
-                    searchQuery: val,
-                    clearLocationGroup: val.trim().isNotEmpty,
-                    page: 1,
-                  ),
-                );
+            // Giải thuật trì hoãn gõ từ khóa tìm kiếm (Search Input Debouncing 250ms):
+            // Hủy bộ hẹn giờ cũ khi người dùng gõ liên tiếp nhằm giảm truy vấn trung gian và tránh nhấp nháy danh sách.
+            _searchDebounce?.cancel();
+            _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+              if (!mounted) return;
+              ref.read(villaFilterProvider.notifier).update(
+                    (s) => s.copyWith(
+                      searchQuery: val,
+                      clearLocationGroup: val.trim().isNotEmpty,
+                      page: 1,
+                    ),
+                  );
+            });
           },
         ),
         if (trimmedQuery.isNotEmpty) ...[
@@ -1478,7 +1513,19 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                     (s) => s.copyWith(
                       lat: lat,
                       lng: lng,
-                      radius: VungTauMapConstants.defaultRadiusMeters,
+                      radius:
+                          s.radius ?? VungTauMapConstants.defaultRadiusMeters,
+                      clearLocationGroup: true,
+                      page: 1,
+                    ),
+                  );
+            },
+            onRadiusChanged: (radius) {
+              ref.read(villaFilterProvider.notifier).update(
+                    (s) => s.copyWith(
+                      lat: s.lat ?? VungTauMapConstants.defaultLat,
+                      lng: s.lng ?? VungTauMapConstants.defaultLng,
+                      radius: radius,
                       clearLocationGroup: true,
                       page: 1,
                     ),
@@ -1675,8 +1722,9 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
               for (var i = 0; i < filteredGroups.length; i += 2) {
                 if (i > 0) rows.add(const SizedBox(height: spacing));
                 final leftGroup = filteredGroups[i];
-                final rightGroup =
-                    i + 1 < filteredGroups.length ? filteredGroups[i + 1] : null;
+                final rightGroup = i + 1 < filteredGroups.length
+                    ? filteredGroups[i + 1]
+                    : null;
                 rows.add(
                   IntrinsicHeight(
                     child: Row(
@@ -1841,6 +1889,14 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     });
   }
 
+  /// Chuyển đổi giữa các chế độ chọn thời gian (`dates`, `months`, `flexible`) và đồng bộ khoảng `[checkIn, checkOut)`.
+  ///
+  /// Giải thuật đồng bộ chế độ thời gian qua `SearchDateModeHelper`:
+  /// - Chế độ `'months'`: Gọi `SearchDateModeHelper.computeForMonths` để quy đổi tập tháng đã chọn thành
+  ///   cặp ngày đầu tháng - đầu tháng kế tiếp hợp lệ cho truy vấn backend.
+  /// - Chế độ `'flexible'`: Gọi `SearchDateModeHelper.computeForFlexible` để sinh khoảng ngày đại diện cho
+  ///   kỳ nghỉ cuối tuần, 1 tuần hoặc 1 tháng.
+  /// - Chế độ `'dates'`: Khôi phục cặp ngày cụ thể hoặc lùi về mặc định nhận phòng ngày mai (`today + 1`), lưu trú `2` đêm.
   void _switchDateMode(String nextMode, VillaFilterState current) {
     setState(() => _selectingCheckOut = false);
     if (nextMode == 'months') {
@@ -1890,7 +1946,8 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
 
   Widget _buildDateTab(VillaFilterState filter) {
     final mode = filter.dateMode == 'months' ? 'months' : 'dates';
-    final currentMonth = DateTime.now().month;
+    // Giải thuật xác định danh sách tháng khả dụng theo múi giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7):
+    final currentMonth = BookingDate.todayVn().month;
     final availableMonths = [
       for (int m = currentMonth; m <= 12; m++) m,
     ];
@@ -1971,33 +2028,40 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
 
         if (mode == 'dates') ...[
           // Quick 1-tap stay presets
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildPresetChip(
-                label: 'Đêm mai',
-                selected: filter.checkIn == today.addDays(1) &&
-                    filter.checkOut == today.addDays(2),
-                onTap: () =>
-                    _applyQuickStay(today.addDays(1), today.addDays(2)),
-              ),
-              _buildPresetChip(
-                label: 'Cuối tuần này',
-                selected: filter.checkIn == upcomingSat &&
-                    filter.checkOut == upcomingSat.addDays(1),
-                onTap: () =>
-                    _applyQuickStay(upcomingSat, upcomingSat.addDays(1)),
-              ),
-              if (!upcomingFri.isBefore(today))
-                _buildPresetChip(
-                  label: 'Thứ 6 – CN (2 đêm)',
-                  selected: filter.checkIn == upcomingFri &&
-                      filter.checkOut == upcomingSat.addDays(1),
-                  onTap: () =>
-                      _applyQuickStay(upcomingFri, upcomingSat.addDays(1)),
-                ),
-            ],
+          // Giải thuật xác định kỳ nghỉ 2 đêm cho nút chọn nhanh 'Cuối tuần này':
+          // Nếu Thứ Sáu chưa qua thì chọn Thứ Sáu -> Chủ Nhật (2 đêm), nếu đã sang Thứ Bảy/Chủ Nhật thì chọn từ Thứ Bảy/hôm nay + 2 đêm.
+          Builder(
+            builder: (context) {
+              final weekendStart =
+                  !upcomingFri.isBefore(today) ? upcomingFri : upcomingSat;
+              final weekendEnd = weekendStart.addDays(2);
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildPresetChip(
+                    label: 'Đêm mai',
+                    selected: filter.checkIn == today.addDays(1) &&
+                        filter.checkOut == today.addDays(2),
+                    onTap: () =>
+                        _applyQuickStay(today.addDays(1), today.addDays(2)),
+                  ),
+                  _buildPresetChip(
+                    label: 'Cuối tuần này',
+                    selected: filter.checkIn == weekendStart &&
+                        filter.checkOut == weekendEnd,
+                    onTap: () => _applyQuickStay(weekendStart, weekendEnd),
+                  ),
+                  _buildPresetChip(
+                    label: 'Thứ 7 – Thứ 2 (2 đêm)',
+                    selected: filter.checkIn == upcomingSat &&
+                        filter.checkOut == upcomingSat.addDays(2),
+                    onTap: () =>
+                        _applyQuickStay(upcomingSat, upcomingSat.addDays(2)),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 12),
 
@@ -2133,102 +2197,178 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: AppColors.borderSoft),
             ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: LayoutBuilder(
+              builder: (context, calConstraints) {
+                // Giải thuật hiển thị lịch kép 2 tháng liên tiếp trên khung tìm kiếm rộng (>= 640px):
+                // Tính tháng kế tiếp qua DateTime(_calendarYear, _calendarMonth + 1, 1) để tự động chuyển năm khi sang tháng 1.
+                final showDualMonths =
+                    calConstraints.maxWidth >= 640 && textScale <= 1.2;
+                final nextMonthDate =
+                    DateTime(_calendarYear, _calendarMonth + 1, 1);
+                void handleDaySelected(BookingDate date) {
+                  final currentIn = filter.checkIn;
+                  if (!_selectingCheckOut ||
+                      currentIn == null ||
+                      !date.isAfter(currentIn)) {
+                    ref.read(villaFilterProvider.notifier).update(
+                          (s) => s.copyWith(
+                            checkIn: date,
+                            checkOut: date.addDays(1),
+                            page: 1,
+                          ),
+                        );
+                    setState(() => _selectingCheckOut = true);
+                  } else {
+                    ref.read(villaFilterProvider.notifier).update(
+                          (s) => s.copyWith(
+                            checkOut: date,
+                            page: 1,
+                          ),
+                        );
+                    setState(() => _selectingCheckOut = false);
+                  }
+                }
+
+                return Column(
                   children: [
-                    Semantics(
-                      button: true,
-                      label: context.l10n.calendarPrevMonth,
-                      child: InkWell(
-                        onTap: () => _stepCalendarMonth(-1),
-                        borderRadius: BorderRadius.circular(999),
-                        child: const SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: Center(
-                            child: Icon(
-                              LucideIcons.chevronLeft,
-                              size: 18,
-                              color: AppColors.iconStrong,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Semantics(
+                          button: true,
+                          label: context.l10n.calendarPrevMonth,
+                          child: InkWell(
+                            onTap: () => _stepCalendarMonth(-1),
+                            borderRadius: BorderRadius.circular(999),
+                            child: const SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: Center(
+                                child: Icon(
+                                  LucideIcons.chevronLeft,
+                                  size: 18,
+                                  color: AppColors.iconStrong,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                    Flexible(
-                      child: Text(
-                        LocaleFormatters.formatMonthYear(
-                          _calendarYear,
-                          _calendarMonth,
-                          localeCode: context.activeLanguageCode,
-                          includeComma: false,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    Semantics(
-                      button: true,
-                      label: context.l10n.calendarNextMonth,
-                      child: InkWell(
-                        onTap: () => _stepCalendarMonth(1),
-                        borderRadius: BorderRadius.circular(999),
-                        child: const SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: Center(
-                            child: Icon(
-                              LucideIcons.chevronRight,
-                              size: 18,
-                              color: AppColors.iconStrong,
+                        if (showDualMonths) ...[
+                          Expanded(
+                            child: Text(
+                              LocaleFormatters.formatMonthYear(
+                                _calendarYear,
+                                _calendarMonth,
+                                localeCode: context.activeLanguageCode,
+                                includeComma: false,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            child: Text(
+                              LocaleFormatters.formatMonthYear(
+                                nextMonthDate.year,
+                                nextMonthDate.month,
+                                localeCode: context.activeLanguageCode,
+                                includeComma: false,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ] else
+                          Flexible(
+                            child: Text(
+                              LocaleFormatters.formatMonthYear(
+                                _calendarYear,
+                                _calendarMonth,
+                                localeCode: context.activeLanguageCode,
+                                includeComma: false,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        Semantics(
+                          button: true,
+                          label: context.l10n.calendarNextMonth,
+                          child: InkWell(
+                            onTap: () => _stepCalendarMonth(1),
+                            borderRadius: BorderRadius.circular(999),
+                            child: const SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: Center(
+                                child: Icon(
+                                  LucideIcons.chevronRight,
+                                  size: 18,
+                                  color: AppColors.iconStrong,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    MonthInSwitcher(
+                      monthKey: '$_calendarYear-$_calendarMonth',
+                      child: showDualMonths
+                          ? Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _SimpleMonthGrid(
+                                    year: _calendarYear,
+                                    month: _calendarMonth,
+                                    checkIn: filter.checkIn,
+                                    checkOut: filter.checkOut,
+                                    onDayTapped: handleDaySelected,
+                                  ),
+                                ),
+                                const SizedBox(width: 20),
+                                Expanded(
+                                  child: _SimpleMonthGrid(
+                                    year: nextMonthDate.year,
+                                    month: nextMonthDate.month,
+                                    checkIn: filter.checkIn,
+                                    checkOut: filter.checkOut,
+                                    onDayTapped: handleDaySelected,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : _SimpleMonthGrid(
+                              year: _calendarYear,
+                              month: _calendarMonth,
+                              checkIn: filter.checkIn,
+                              checkOut: filter.checkOut,
+                              onDayTapped: handleDaySelected,
+                            ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 6),
-                MonthInSwitcher(
-                  monthKey: '$_calendarYear-$_calendarMonth',
-                  child: _SimpleMonthGrid(
-                    year: _calendarYear,
-                    month: _calendarMonth,
-                    checkIn: filter.checkIn,
-                    checkOut: filter.checkOut,
-                    onDayTapped: (date) {
-                      final currentIn = filter.checkIn;
-                      if (!_selectingCheckOut ||
-                          currentIn == null ||
-                          !date.isAfter(currentIn)) {
-                        ref.read(villaFilterProvider.notifier).update(
-                              (s) => s.copyWith(
-                                checkIn: date,
-                                checkOut: date.addDays(1),
-                                page: 1,
-                              ),
-                            );
-                        setState(() => _selectingCheckOut = true);
-                      } else {
-                        ref.read(villaFilterProvider.notifier).update(
-                              (s) => s.copyWith(
-                                checkOut: date,
-                                page: 1,
-                              ),
-                            );
-                        setState(() => _selectingCheckOut = false);
-                      }
-                    },
-                  ),
-                ),
-              ],
+                );
+              },
             ),
           ),
         ] else ...[
@@ -2275,9 +2415,8 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: selected
-                        ? AppColors.brandSoft
-                        : AppColors.surfaceBase,
+                    color:
+                        selected ? AppColors.brandSoft : AppColors.surfaceBase,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color:
@@ -2350,6 +2489,12 @@ class _SearchPopoverSheetState extends ConsumerState<_SearchPopoverSheet> {
     );
   }
 
+  /// Dựng giao diện thẻ chọn số lượng khách phân nhóm (`Người lớn`, `Trẻ em`, `Em bé`, `Thú cưng`).
+  ///
+  /// Giải thuật ràng buộc bộ đếm khách lưu trú:
+  /// - Tự động nâng `adults = 1` nếu người dùng tăng `children`, `infants` hoặc `pets` lớn hơn `0` khi `adults == 0`
+  ///   (đảm bảo không có đoàn khách nào chỉ gồm trẻ nhỏ hoặc thú cưng đi một mình).
+  /// - Giới hạn mỗi nhóm đếm trong đoạn `[0, 40]` và không cộng `infants` (dưới 2 tuổi) vào `effectiveGuests`.
   Widget _buildGuestTab(VillaFilterState filter) {
     void updateGuestCounts({
       int? adults,
@@ -2659,9 +2804,8 @@ class _GuestCounterRow extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15.5,
                     fontWeight: FontWeight.w700,
-                    color: value > 0
-                        ? AppColors.textPrimary
-                        : AppColors.textMuted,
+                    color:
+                        value > 0 ? AppColors.textPrimary : AppColors.textMuted,
                   ),
                 ),
               ),
@@ -2709,6 +2853,14 @@ class _GuestCounterRow extends StatelessWidget {
   }
 }
 
+/// Lưới lịch tháng rút gọn dùng trong ngăn kéo tìm kiếm chung (không khóa theo từng căn biệt thự riêng lẻ).
+///
+/// Giải thuật dựng lưới lịch tháng và dải băng chọn ngày (`_SimpleMonthGrid`):
+/// 1. Tính tổng số ngày của tháng qua `DateTime(year, month + 1, 0).day` và độ lệch đầu tuần chuẩn Thứ Hai
+///    `startOffset = (firstDay.weekday - 1) % 7` để chèn đúng số ô đệm trống trước ngày mùng 1.
+/// 2. Khóa toàn bộ các ngày quá khứ đứng trước `BookingDate.todayVn()` (theo múi giờ Việt Nam `UTC+7`).
+/// 3. Vẽ lớp nền dải băng ngang màu `AppColors.rangeBackground` bên dưới các ngày nằm trong `[checkIn, checkOut]`
+///    (bo tròn nửa trái tại `isStart`, bo tròn nửa phải tại `isEnd`) và tô tròn màu Coral `AppColors.primary` ở hai đầu mút.
 class _SimpleMonthGrid extends StatelessWidget {
   final int year;
   final int month;
@@ -2726,10 +2878,11 @@ class _SimpleMonthGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Giải thuật tính biên độ tháng dương lịch và độ lệch cột Thứ Hai đầu tuần:
     final firstDay = DateTime(year, month, 1);
     final daysInMonth = DateTime(year, month + 1, 0).day;
     final startOffset = (firstDay.weekday - 1) % 7;
-    final today = BookingDate.today();
+    final today = BookingDate.todayVn();
     final hasRange =
         checkIn != null && checkOut != null && checkOut!.isAfter(checkIn!);
 
@@ -2775,9 +2928,8 @@ class _SimpleMonthGrid extends StatelessWidget {
             final isToday = date == today;
             final isStart = checkIn == date;
             final isEnd = checkOut == date;
-            final isInRange = hasRange &&
-                date.isAfter(checkIn!) &&
-                date.isBefore(checkOut!);
+            final isInRange =
+                hasRange && date.isAfter(checkIn!) && date.isBefore(checkOut!);
 
             return InkWell(
               onTap: isPast ? null : () => onDayTapped(date),
@@ -2829,12 +2981,10 @@ class _SimpleMonthGrid extends StatelessWidget {
                           '$day',
                           style: TextStyle(
                             fontSize: 13,
-                            fontWeight: (isStart ||
-                                    isEnd ||
-                                    isInRange ||
-                                    isToday)
-                                ? FontWeight.w700
-                                : FontWeight.w500,
+                            fontWeight:
+                                (isStart || isEnd || isInRange || isToday)
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
                             color: isPast
                                 ? AppColors.textTertiary
                                 : (isStart || isEnd)
@@ -2855,6 +3005,8 @@ class _SimpleMonthGrid extends StatelessWidget {
   }
 }
 
+/// Mở ngăn kéo bộ lọc tìm kiếm nâng cao cho phép lọc theo thứ tự sắp xếp, loại hình, khoảng giá, số phòng và 12 tiện nghi chuẩn.
+///
 /// Opens the StayFilterModal (`stays/filter/StayFilterModal.tsx`) for advanced filtering.
 Future<void> showStayFilterModal(BuildContext context, WidgetRef ref) async {
   await showModalBottomSheet<void>(
@@ -2931,7 +3083,7 @@ class _StayFilterModalSheetState extends ConsumerState<_StayFilterModalSheet> {
     _beds = f.beds ?? 0;
     _bathrooms = f.bathrooms ?? 0;
     _amenities =
-        f.amenities.map(VillaRepositoryImpl.normalizeAmenityCode).toSet();
+        VillaSearchQueryNormalizer.normalizeAmenities(f.amenities).toSet();
     _sort = f.sort;
   }
 
@@ -3216,10 +3368,9 @@ class _StayFilterModalSheetState extends ConsumerState<_StayFilterModalSheet> {
                                     priceMax: maxP < 20000000 ? maxP : null,
                                     clearPrice:
                                         minP <= 500000 && maxP >= 20000000,
-                                    bedrooms: _bedrooms > 0 ? _bedrooms : null,
-                                    beds: _beds > 0 ? _beds : null,
-                                    bathrooms:
-                                        _bathrooms > 0 ? _bathrooms : null,
+                                    bedrooms: _bedrooms,
+                                    beds: _beds,
+                                    bathrooms: _bathrooms,
                                     amenities: _amenities.toList(),
                                     sort: _sort,
                                     page: 1,
@@ -3318,141 +3469,4 @@ class _RoomCountPills extends StatelessWidget {
       ],
     );
   }
-}
-
-/// Opens the AI Search Quick Overlay Modal (`SearchBar.tsx` AI overlay).
-Future<void> showAiSearchQuickModal(
-  BuildContext context,
-  WidgetRef ref,
-) async {
-  final prefs = ref.read(preferencesServiceProvider);
-  final ctrl = TextEditingController(text: prefs.getLastAiSearchQuery());
-
-  await showModalBottomSheet<void>(
-    context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    backgroundColor: AppColors.surfaceBase,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-    ),
-    builder: (ctx) {
-      return SafeArea(
-        top: false,
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 16,
-            bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    LucideIcons.search,
-                    size: 20,
-                    color: AppColors.iconStrong,
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Tìm kiếm chỗ nghỉ bằng AI (CLIP Semantic Search)',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () => Navigator.of(ctx).pop(),
-                    borderRadius: BorderRadius.circular(12),
-                    child: const SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: Center(
-                        child: Icon(
-                          LucideIcons.x,
-                          size: 20,
-                          color: AppColors.iconStrong,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Mô tả không gian phòng ngủ, hồ bơi, tầm nhìn biển hoặc phong cách thiết kế bạn mong muốn.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: ctrl,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  hintText:
-                      'VD: Villa gần biển có hồ bơi cho 8 người cuối tuần này...',
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final suggestion in const [
-                    'Villa gần biển có hồ bơi cho 8 người cuối tuần này',
-                    'Chỗ nghỉ yên tĩnh gần Bãi Trước cho cặp đôi dưới 1tr5',
-                    'Homestay có bếp và chỗ đậu xe cho gia đình 6 người',
-                  ])
-                    ActionChip(
-                      label: Text(
-                        suggestion,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      onPressed: () {
-                        ctrl.text = suggestion;
-                      },
-                    ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    final q = ctrl.text.trim();
-                    if (q.isNotEmpty) {
-                      prefs.setLastAiSearchQuery(q);
-                    }
-                    Navigator.of(ctx).pop();
-                    context.push(
-                      '/tim-kiem-ai${q.isNotEmpty ? '?q=${Uri.encodeComponent(q)}' : ''}',
-                    );
-                  },
-                  icon: const Icon(
-                    LucideIcons.search,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                  label: const Text('Khám phá bằng AI'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
 }

@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu thông tin hành khách đi cùng trong đơn đặt phòng phục vụ khai báo lưu trú.
+ */
 import {
     CreationOptional,
     DataTypes,

@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/app/di/providers.dart';
 import 'package:hotel_booking_flutter/l10n/l10n.dart';
-import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
+// CONFLICT-RESOLVED: Cập nhật đường dẫn import sang app_footer.dart sau khi tách app_header_footer.dart theo nguyên tắc đơn trách nhiệm.
+import 'package:hotel_booking_flutter/shared/widgets/app_footer.dart';
 
-class _TestLocaleNotifier extends StateNotifier<String> implements LocaleNotifier {
+class _TestLocaleNotifier extends StateNotifier<String>
+    implements LocaleNotifier {
   _TestLocaleNotifier(super.state);
 
   @override
@@ -23,7 +25,8 @@ void main() {
     Widget buildTestHarness(String languageCode) {
       return ProviderScope(
         overrides: [
-          localeProvider.overrideWith((ref) => _TestLocaleNotifier(languageCode)),
+          localeProvider
+              .overrideWith((ref) => _TestLocaleNotifier(languageCode)),
         ],
         child: MaterialApp(
           locale: Locale(languageCode),
@@ -47,29 +50,33 @@ void main() {
       );
     }
 
-    testWidgets('Renders English strings when active locale is en', (tester) async {
+    testWidgets('Renders English strings when active locale is en',
+        (tester) async {
       await tester.pumpWidget(buildTestHarness('en'));
       await tester.pumpAndSettle();
 
       expect(find.text('Support'), findsOneWidget);
-      expect(find.text('Booking Guide'), findsOneWidget);
-      expect(find.text('Cancellation Policy'), findsOneWidget);
+      expect(find.text('Booking guide'), findsOneWidget);
+      expect(find.text('Cancellation policy'), findsOneWidget);
       expect(find.text('Complaints & Feedback'), findsOneWidget);
-      expect(find.text('Frequently Asked Questions (FAQ)'), findsOneWidget);
+      expect(find.text('Frequently asked questions (FAQ)'), findsOneWidget);
 
+      expect(find.text('Explore & Services'), findsOneWidget);
+      expect(find.text('About us'), findsOneWidget);
       expect(find.text('Explore Vung Tau'), findsOneWidget);
-      expect(find.text('About Us'), findsOneWidget);
-      expect(find.text('Travel Guide'), findsOneWidget);
-      expect(find.text('Add-on Services'), findsOneWidget);
-      expect(find.text('Member Offers'), findsOneWidget);
+      expect(find.text('Travel guide'), findsOneWidget);
+      expect(find.text('Add-on services'), findsOneWidget);
+      expect(find.text('Member offers'), findsOneWidget);
 
       expect(find.text('Contact'), findsOneWidget);
-      expect(find.text('Address: 28 Thi Sach'), findsOneWidget);
+      expect(find.text('Address: 28 Thi Sách, TP. Vũng Tàu'), findsOneWidget);
       expect(find.text('Social'), findsOneWidget);
-      expect(find.text('© Copyright Villa Vung Tau 2026'), findsOneWidget);
+      expect(find.text('© 2026 The Palm Villa Vung Tau. All rights reserved.'),
+          findsOneWidget);
     });
 
-    testWidgets('Renders Vietnamese strings when active locale is vi', (tester) async {
+    testWidgets('Renders Vietnamese strings when active locale is vi',
+        (tester) async {
       await tester.pumpWidget(buildTestHarness('vi'));
       await tester.pumpAndSettle();
 
@@ -79,27 +86,30 @@ void main() {
       expect(find.text('Khiếu nại & Góp ý'), findsOneWidget);
       expect(find.text('Câu hỏi thường gặp (FAQ)'), findsOneWidget);
 
-      expect(find.text('Khám phá Vũng Tàu'), findsOneWidget);
+      expect(find.text('Khám phá & Dịch vụ'), findsOneWidget);
       expect(find.text('Về chúng tôi'), findsOneWidget);
+      expect(find.text('Khám phá Vũng Tàu'), findsOneWidget);
       expect(find.text('Cẩm nang du lịch'), findsOneWidget);
       expect(find.text('Dịch vụ đi kèm'), findsOneWidget);
       expect(find.text('Ưu đãi thành viên'), findsOneWidget);
 
       expect(find.text('Liên hệ'), findsOneWidget);
-      expect(find.text('Địa chỉ: 28 Thi Sách'), findsOneWidget);
-      expect(find.text('Mạng xã hội'), findsOneWidget);
-      expect(find.text('© Bản quyền thuộc về Villa Vũng Tàu 2026'), findsOneWidget);
+      expect(find.text('Địa chỉ: 28 Thi Sách, TP. Vũng Tàu'), findsOneWidget);
+      expect(find.text('Social'), findsOneWidget);
+      expect(find.text('© 2026 The Palm Villa Vũng Tàu. Bảo lưu mọi quyền.'),
+          findsOneWidget);
     });
 
-    testWidgets('Renders Korean strings when active locale is ko', (tester) async {
+    testWidgets('Renders Korean strings when active locale is ko',
+        (tester) async {
       await tester.pumpWidget(buildTestHarness('ko'));
       await tester.pumpAndSettle();
 
       expect(find.text('고객 지원'), findsOneWidget);
-      expect(find.text('예약 안내'), findsOneWidget);
-      expect(find.text('취소 정책'), findsOneWidget);
-      expect(find.text('붕따우 둘러보기'), findsOneWidget);
-      expect(find.text('연락처'), findsOneWidget);
+      expect(find.text('예약 가이드'), findsOneWidget);
+      expect(find.text('취소 및 환불 정책'), findsOneWidget);
+      expect(find.text('탐색 및 서비스'), findsOneWidget);
+      expect(find.text('연락처 안내'), findsOneWidget);
       expect(find.text('소셜 미디어'), findsOneWidget);
     });
   });

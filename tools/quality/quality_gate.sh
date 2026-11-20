@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # Minh Thanh Villa — Quality Gate & Release Readiness Runner
+# CONFLICT-RESOLVED: Trỏ thống nhất về ../tools/quality tại thư mục gốc kho lưu trữ sau khi xóa bản sao trùng lặp trong hotel-booking-flutter/tools/quality/.
 
 if [ -f "pubspec.yaml" ]; then
   PROJECT_DIR="."
@@ -15,13 +16,14 @@ fi
 cd "$PROJECT_DIR"
 
 echo "=== [1/4] Running Secret, Zero-Mock & FLUTTER_RULES Audit ==="
-dart run tools/quality/secret_and_rule_audit.dart
+dart run ../tools/quality/secret_and_rule_audit.dart
 
 echo "=== [2/4] Checking Dart Formatting ==="
-dart format --output=none --set-exit-if-changed test/integration integration_test tools/quality
+dart format --output=none --set-exit-if-changed test/integration integration_test ../tools/quality
 
 echo "=== [3/4] Running Static Analysis ==="
-flutter analyze --no-fatal-infos test/integration integration_test tools/quality
+flutter analyze --no-fatal-infos test/integration integration_test
+dart analyze ../tools/quality
 
 echo "=== [4/4] Running Automated E2E & Visual Checklist Suites ==="
 flutter test test/integration/e2e_all_flows_test.dart test/integration/visual_ui_checklist_test.dart

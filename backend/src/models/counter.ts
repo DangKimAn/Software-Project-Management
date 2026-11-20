@@ -31,6 +31,11 @@ CounterModel.init(
     },
 );
 
+/**
+ * Giải thuật cấp phát số thứ tự tuần tự (Monotonic Counter Sequence):
+ * - Sử dụng findOrCreate theo khóa định danh `key` để khởi tạo mốc bắt đầu `startAt` nếu chưa tồn tại.
+ * - Nếu bản ghi đã có sẵn, tăng giá trị bộ đếm thêm 1 đơn vị và lưu xuống bảng `counters`.
+ */
 export const getNextSequence = async (key: string, startAt = 1) => {
     const [counter, created] = await CounterModel.findOrCreate({
         where: { key },

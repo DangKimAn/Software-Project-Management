@@ -290,6 +290,8 @@ abstract final class BlogContentSanitizer {
   }
 
   /// Normalizes and validates a blog slug from deep links or route parameters.
+  // Giải thuật chuẩn hóa và kiểm duyệt nghiêm ngặt định danh đường dẫn bài viết (slug),
+  // loại bỏ tham số truy vấn, ký tự điều khiển, leo thang thư mục và chỉ chấp nhận chữ thường/chữ số nối bằng dấu gạch ngang.
   static String normalizeSlug(String? rawSlug) {
     if (rawSlug == null) return '';
     var trimmed = rawSlug.trim();
@@ -302,7 +304,7 @@ abstract final class BlogContentSanitizer {
     if (hIdx >= 0) trimmed = trimmed.substring(0, hIdx);
 
     try {
-      trimmed = Uri.decodeComponent(trimmed).trim();
+      trimmed = Uri.decodeComponent(trimmed).trim().toLowerCase();
     } catch (_) {
       return '';
     }
@@ -311,7 +313,7 @@ abstract final class BlogContentSanitizer {
         trimmed.contains('..') ||
         trimmed.contains('/') ||
         trimmed.contains('\\') ||
-        RegExp(r'[<>"\x00-\x1F\s]').hasMatch(trimmed)) {
+        !RegExp(r'^[a-z0-9]+(?:-[a-z0-9]+)*$').hasMatch(trimmed)) {
       return '';
     }
     return trimmed;
@@ -676,6 +678,42 @@ class BlogPost {
     this.status = 'published',
   });
 
+  BlogPost copyWith({
+    String? id,
+    String? slug,
+    String? title,
+    String? excerpt,
+    String? content,
+    String? coverImage,
+    String? category,
+    String? location,
+    String? readTime,
+    String? authorName,
+    String? publishedAt,
+    int? readTimeMinutes,
+    List<String>? tags,
+    List<BlogContentBlock>? contentBlocks,
+    String? status,
+  }) {
+    return BlogPost(
+      id: id ?? this.id,
+      slug: slug ?? this.slug,
+      title: title ?? this.title,
+      excerpt: excerpt ?? this.excerpt,
+      content: content ?? this.content,
+      coverImage: coverImage ?? this.coverImage,
+      category: category ?? this.category,
+      location: location ?? this.location,
+      readTime: readTime ?? this.readTime,
+      authorName: authorName ?? this.authorName,
+      publishedAt: publishedAt ?? this.publishedAt,
+      readTimeMinutes: readTimeMinutes ?? this.readTimeMinutes,
+      tags: tags ?? this.tags,
+      contentBlocks: contentBlocks ?? this.contentBlocks,
+      status: status ?? this.status,
+    );
+  }
+
   /// Returns sanitized rich content blocks, parsing [content] on the fly if [contentBlocks] was not pre-populated.
   List<BlogContentBlock> get resolvedBlocks {
     if (contentBlocks.isNotEmpty) return contentBlocks;
@@ -756,8 +794,7 @@ class BlogPost {
       category: rawCategory.isNotEmpty ? rawCategory : 'Cẩm nang du lịch',
       location: rawLocation.isNotEmpty ? rawLocation : 'Vũng Tàu',
       readTime: readTimeStr,
-      authorName:
-          rawAuthor.isNotEmpty ? rawAuthor : 'Ban biên tập The Palm',
+      authorName: rawAuthor.isNotEmpty ? rawAuthor : 'Ban biên tập The Palm',
       publishedAt: _sanitizeDate(json['publishedAt'] ?? json['createdAt']),
       readTimeMinutes: mins,
       tags: parsedTags,

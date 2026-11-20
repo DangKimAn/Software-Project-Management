@@ -45,13 +45,17 @@ final class UrlSecurityValidator {
     return hostLower == domain || hostLower.endsWith('.$domain');
   }
 
+  // Giải thuật kiểm tra cho phép HTTP rõ (cleartext) trên địa chỉ Loopback cục bộ:
+  // Chỉ mở cho `localhost`/`127.0.0.1`/`10.0.2.2`/`::1` khi đang ở môi trường `dev` hoặc bật tường minh `AppConfig.allowLocalApiInNonDev`.
   static bool isCleartextAllowedForHost(
     String host, {
     bool? isDev,
     bool? isRelease,
   }) {
-    final devMode = isDev ?? AppConfig.isDevelopment;
-    final releaseMode = isRelease ?? kReleaseMode;
+    final devMode =
+        isDev ?? (AppConfig.isDevelopment || AppConfig.allowLocalApiInNonDev);
+    final releaseMode =
+        isRelease ?? (kReleaseMode && !AppConfig.allowLocalApiInNonDev);
     if (!devMode || releaseMode) {
       return false;
     }

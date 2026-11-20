@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../l10n/l10n.dart';
 
+/// Thành phần hiển thị vòng quay tải dữ liệu trung tâm tuân thủ trợ năng (Accessibility).
+///
+/// Giải thuật thích ứng chuyển động và đọc màn hình:
+/// - Tự động chuyển `CircularProgressIndicator` sang giá trị tĩnh `.75` khi hệ điều hành bật chế độ giảm chuyển động (`MediaQuery.disableAnimationsOf`).
+/// - Gắn `Semantics(liveRegion: true)` để trình đọc màn hình thông báo trạng thái đang tải cho người khiếm thị.
 class AppLoading extends StatelessWidget {
   final String? message;
 
@@ -8,7 +14,7 @@ class AppLoading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: message == null ? 'Đang tải' : null,
+      label: message ?? context.l10n.loadingText,
       liveRegion: true,
       child: Center(
         child: SingleChildScrollView(

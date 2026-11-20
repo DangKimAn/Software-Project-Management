@@ -1,24 +1,63 @@
+/// Thực thể miền đại diện cho người dùng hệ thống (Khách hàng, Chủ nhà, Chủ nhà mới đăng ký hoặc Quản trị viên).
 class User {
+  /// Mã định danh duy nhất của người dùng.
   final String id;
+
+  /// Địa chỉ email đăng nhập chính thức.
   final String email;
+
+  /// Họ và tên đệm của người dùng.
   final String firstName;
+
+  /// Tên gọi chính của người dùng.
   final String lastName;
+
+  /// Số điện thoại liên hệ của người dùng.
   final String? phone;
+
+  /// Mã vai trò chính đã được chuẩn hóa (`'guest'`, `'host'`, `'host new'`, `'admin'`).
   final String role;
+
+  /// Danh sách toàn bộ các mã vai trò được gán cho tài khoản trên máy chủ.
   final List<String> roles;
+
+  /// Đường dẫn ảnh đại diện của người dùng.
   final String? avatarUrl;
+
+  /// Cho biết địa chỉ email hoặc danh tính cơ bản của tài khoản đã được xác minh hay chưa.
   final bool isVerified;
+
+  /// Đoạn giới thiệu bản thân trên trang hồ sơ cá nhân.
   final String? bio;
+
+  /// Tỉnh/thành phố hoặc khu vực sinh sống hiện tại.
   final String? location;
+
+  /// Nghề nghiệp hoặc lĩnh vực công việc của người dùng.
   final String? job;
+
+  /// Điểm đến mơ ước chia sẻ trên hồ sơ cộng đồng.
   final String? dreamDestination;
+
+  /// Trường học đã hoặc đang theo học.
   final String? school;
+
+  /// Danh sách các ngôn ngữ giao tiếp mà người dùng sử dụng.
   final List<String> languages;
+
+  /// Năm gia nhập nền tảng The Palm Villa.
   final int? joinedYear;
+
+  /// Trạng thái hoạt động của tài khoản (`'active'`, `'locked'`, ...).
   final String status;
+
+  /// Trạng thái xét duyệt hồ sơ đăng ký trở thành Chủ nhà (nếu có).
   final String? hostApplicationStatus;
+
+  /// Cho biết hồ sơ pháp lý/danh tính Chủ nhà đã được Quản trị viên xác minh hay chưa.
   final bool isHostVerified;
 
+  /// Khởi tạo thực thể `User`.
   const User({
     required this.id,
     required this.email,
@@ -41,11 +80,13 @@ class User {
     this.isHostVerified = false,
   });
 
+  /// Họ và tên đầy đủ kết hợp từ `firstName` và `lastName`, tự động lùi về `email` nếu tên trống.
   String get fullName {
     final name = '$firstName $lastName'.trim();
     return name.isNotEmpty ? name : email;
   }
 
+  /// Bí danh truy cập số điện thoại `phone`.
   String? get phoneNumber => phone;
 
   static bool _isApprovedHostToken(String raw) {
@@ -62,16 +103,20 @@ class User {
         normalized == 'host-new';
   }
 
+  /// Cho biết tài khoản đã được phê duyệt quyền Chủ nhà chính thức hay chưa.
   bool get isHost =>
       _isApprovedHostToken(role) || roles.any(_isApprovedHostToken);
 
+  /// Cho biết tài khoản đang ở trạng thái Chủ nhà mới chờ hoàn tất/duyệt hồ sơ hay không.
   bool get isNewHost =>
       !isHost && (_isNewHostToken(role) || roles.any(_isNewHostToken));
 
+  /// Cho biết tài khoản có quyền Quản trị viên hệ thống (`'admin'`) hay không.
   bool get isAdmin =>
       role.trim().toLowerCase() == 'admin' ||
       roles.any((r) => r.trim().toLowerCase() == 'admin');
 
+  /// Tách chuỗi họ tên đầy đủ `rawName` thành cặp `(firstName, lastName)` chuẩn hóa khoảng trắng.
   static ({String firstName, String lastName}) splitFullName(String rawName) {
     final parts = rawName
         .trim()
@@ -89,6 +134,7 @@ class User {
     return (firstName: firstName, lastName: lastName);
   }
 
+  /// Phân giải vai trò ưu tiên cao nhất từ `rawRole` và mảng `roles` theo thứ tự: `'admin'` -> `'host'` -> `'host new'` -> `'guest'`.
   static String normalizeRole(String? rawRole, List<String> roles) {
     final allTokens = <String>[
       if (rawRole != null && rawRole.trim().isNotEmpty)
@@ -106,6 +152,7 @@ class User {
     return 'guest';
   }
 
+  /// Giải mã đối tượng JSON từ `/api/auth/me` hoặc `/api/users/me` thành thực thể `User`.
   factory User.fromJson(Map<String, dynamic> json) {
     final idVal = json['id'] ?? json['userId'];
     final profile = json['profile'] is Map<String, dynamic>
@@ -178,6 +225,7 @@ class User {
     );
   }
 
+  /// Tạo bản sao `User` bất biến với các trường hồ sơ được cập nhật mới.
   User copyWith({
     String? firstName,
     String? lastName,
@@ -221,6 +269,7 @@ class User {
     );
   }
 
+  /// Tuần tự hóa thực thể `User` thành bản đồ JSON phục vụ lưu trữ hoặc truyền tải nội bộ.
   Map<String, dynamic> toJson() {
     return {
       'id': id,

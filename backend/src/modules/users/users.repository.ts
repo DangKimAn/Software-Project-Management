@@ -7,14 +7,30 @@ import UserProfile from "../../models/user-profile";
 
 export { User };
 
+/**
+ * Giải thuật truy vấn điểm (`point lookup`) thực thể `User` theo khóa chính `userId`.
+ */
 export const findUserById = (userId: string | number) => User.findById(userId);
 
+/**
+ * Giải thuật truy vấn thực thể `User` theo địa chỉ `email` duy nhất.
+ */
 export const findUserByEmail = (email: string) => User.findOne({ email });
 
+/**
+ * Giải thuật truy vấn thực thể `User` theo số điện thoại `phone` chuẩn hóa.
+ */
 export const findUserByPhone = (phone: string) => User.findOne({ phone });
 
+/**
+ * Giải thuật truy vấn thực thể `User` theo tên đăng nhập `username` duy nhất.
+ */
 export const findUserByUsername = (username: string) => User.findOne({ username });
 
+/**
+ * Giải thuật truy vấn tập vai trò của người dùng từ bảng liên kết `user_role` và `roles`:
+ * Sắp xếp cố định theo thứ bậc đặc quyền `FIELD(r.code, 'admin', 'host', 'guest')`, lọc qua tập giá trị hợp lệ `userRoleValues` và mặc định trả về `["guest"]` nếu rỗng.
+ */
 export const getUserRoles = async (userId: string | number, transaction?: Transaction): Promise<UserRole[]> => {
     const rows = await sequelize.query<{ code: string }>(
         `
@@ -38,6 +54,10 @@ export const getUserRoles = async (userId: string | number, transaction?: Transa
     return roles.length > 0 ? roles : ["guest"];
 };
 
+/**
+ * Giải thuật đảm bảo sự tồn tại của mã vai trò trong bảng `roles` bằng mệnh đề lũy đẳng `INSERT ... ON DUPLICATE KEY UPDATE`,
+ * sau đó phân giải về khóa nguyên `roleId` trong cùng giao dịch CSDL.
+ */
 const ensureRoleId = async (role: UserRole, transaction?: Transaction) => {
     await sequelize.query(
         `
@@ -74,6 +94,10 @@ const ensureRoleId = async (role: UserRole, transaction?: Transaction) => {
     return Number(roleId);
 };
 
+/**
+ * Giải thuật thay thế nguyên tử tập vai trò của người dùng trên bảng `user_role`:
+ * Khử trùng lặp mảng `roles`, bắt buộc tối thiểu 1 vai trò (ném lỗi 422 nếu rỗng), xóa sạch gán quyền cũ và chèn lại từng `roleId` hợp lệ.
+ */
 export const replaceUserRoles = async (
     userId: string | number,
     roles: UserRole[],
@@ -106,6 +130,10 @@ export const replaceUserRoles = async (
     }
 };
 
+/**
+ * Giải thuật đồng bộ trạng thái xác minh khi Quản trị viên hạ quyền từ Chủ nhà (`host`) về Khách (`guest`):
+ * Đặt lại `is_host_verified = 0`, `host_application_status = 'rejected'` trên bảng `users` và chuyển các đơn `host_applications` đang `approved` sang `rejected` kèm lý do đối soát.
+ */
 export const syncUserHostDemotion = async (
     userId: string | number,
     adminId: string | number,
@@ -131,6 +159,10 @@ export const syncUserHostDemotion = async (
     );
 };
 
+/**
+ * Giải thuật đồng bộ trạng thái xác minh khi Quản trị viên thăng quyền trực tiếp lên Chủ nhà (`host`):
+ * Bật cờ `is_host_verified = 1` và cập nhật `host_application_status = 'approved'` trên bảng `users` để cho phép đăng và xuất bản chỗ nghỉ.
+ */
 export const syncUserHostPromotion = async (
     userId: string | number,
     transaction?: Transaction,
@@ -144,6 +176,10 @@ export const syncUserHostPromotion = async (
     );
 };
 
+/**
+ * Giải thuật đếm số lượng tài khoản duy nhất (`COUNT(DISTINCT u.user_id)`) đang ở trạng thái `active` và mang vai trò chỉ định,
+ * phục vụ kiểm tra bất biến bảo vệ Admin hoạt động cuối cùng của hệ thống.
+ */
 export const countActiveUsersWithRole = async (role: UserRole, transaction?: Transaction) => {
     const rows = await sequelize.query<{ count: number }>(
         `
@@ -177,6 +213,9 @@ export type UserUpdateAttributes = Partial<{
     status: UserStatus;
 }>;
 
+/**
+ * Giải thuật gán thuộc tính cập nhật và lưu thực thể `UserDocument` trong phạm vi giao dịch CSDL.
+ */
 export const saveUserUpdates = async (
     user: UserDocument,
     values: UserUpdateAttributes,
@@ -195,6 +234,9 @@ export type UserProfileUpdateAttributes = Partial<{
     languages: string[] | null;
 }>;
 
+/**
+ * Giải thuật truy vấn hồ sơ mở rộng `UserProfile` theo `userId` (mặc định lọc bỏ bản ghi đã xóa mềm `deletedAt = null` trừ khi bật `includeDeleted`).
+ */
 export const findUserProfileByUserId = (
     userId: string | number,
     transaction?: Transaction,
@@ -208,6 +250,9 @@ export const findUserProfileByUserId = (
         transaction,
     });
 
+/**
+ * Giải thuật cập nhật hoặc tạo mới (upsert) bản ghi `UserProfile` theo `userId`, tự động gỡ dấu xóa mềm (`deletedAt = null`) nếu hồ sơ từng tồn tại.
+ */
 export const saveUserProfileUpdates = async (
     userId: string | number,
     values: UserProfileUpdateAttributes,
@@ -230,6 +275,9 @@ export const saveUserProfileUpdates = async (
     );
 };
 
+/**
+ * Giải thuật bọc hàm xử lý bất đồng bộ trong một giao dịch Sequelize nguyên tử.
+ */
 export const withTransaction = <T>(callback: (transaction: Transaction) => Promise<T>) =>
     sequelize.transaction(callback);
 export type AdminListUsersFilter = {
@@ -251,6 +299,10 @@ const adminVietnameseNameCollator = new Intl.Collator("vi", {
     numeric: true,
 });
 
+/**
+ * Giải thuật phân giải vai trò chính phục vụ xếp hạng nhóm quyền trên trang quản trị người dùng,
+ * ưu tiên trường `role` trực tiếp hoặc suy diễn theo thứ bậc `admin > host > guest` từ mảng `roles`.
+ */
 const resolveAdminItemPrimaryRole = (item: {
     role?: string | null;
     roles?: readonly string[] | null;
@@ -271,6 +323,9 @@ const resolveAdminItemPrimaryRole = (item: {
     return "guest";
 };
 
+/**
+ * Giải thuật trích xuất tên hiển thị đại diện phục vụ so sánh thứ tự chữ cái tiếng Việt (`fullName -> name -> username -> "User #<id>"`).
+ */
 const resolveAdminItemDisplayName = (item: {
     fullName?: string | null;
     name?: string | null;
@@ -290,6 +345,12 @@ const resolveAdminItemDisplayName = (item: {
     return fallbackId ? `User #${fallbackId}` : "";
 };
 
+/**
+ * Giải thuật sắp xếp đa khóa tất định (multi-key deterministic sort) danh sách người dùng quản trị:
+ * - Khóa 1: Thứ bậc nhóm vai trò tăng dần (`guest (0) -> host (1) -> admin (2)`).
+ * - Khóa 2: Tên hiển thị so sánh theo quy tắc ngôn ngữ tiếng Việt `Intl.Collator("vi", { sensitivity: "accent", numeric: true })`.
+ * - Khóa 3 & 4: Địa chỉ email chữ thường tăng dần và khóa định danh `userId` số tăng dần. Độ phức tạp: O(N log N).
+ */
 export const sortAdminUserItems = <
     T extends {
         role?: string | null;
@@ -336,13 +397,27 @@ export const sortAdminUserItems = <
     });
 };
 
+/**
+ * Giải thuật truy vấn tìm kiếm, lọc trạng thái/vai trò và phân trang danh sách người dùng dành cho Quản trị viên:
+ * - Hợp nhất các trạng thái khóa (`suspended`, `blocked`, `locked`) khi lọc tab tạm khóa và thoát ký tự đại diện SQL LIKE khi tìm kiếm đa trường (`email`, `phone`, `full_name`, `username`).
+ * - Phân tách vai trò `guest` thuần túy bằng điều kiện `EXISTS` kết hợp `NOT EXISTS ('host', 'admin')` nhằm không liệt kê nhầm tài khoản đã thăng quyền.
+ * - Thực thi song song truy vấn dữ liệu tổng hợp vai trò `GROUP_CONCAT` và truy vấn đếm `COUNT(DISTINCT)`, sau đó sắp xếp chuẩn hóa qua `sortAdminUserItems`.
+ */
 export const listUsersForAdmin = async ({ search, role, status, page, limit }: AdminListUsersFilter) => {
     const replacements: Array<string | number> = [];
     const conditions = ["u.deleted_at IS NULL"];
 
+    // Giải thuật lọc trạng thái và vai trò người dùng chính xác cho Admin:
+    // - Khi lọc `status = 'suspended'` (tab "Tạm khóa"), gom cả 'blocked' và 'locked' để hiển thị đầy đủ tài khoản đang bị khóa.
+    // - Khi lọc `role = 'guest'`, loại trừ người dùng đã nâng cấp lên 'host' hoặc 'admin' (vì user_role giữ song song dòng guest cũ).
+    // CONFLICT-RESOLVED: Đồng bộ phân loại trạng thái khóa và vai trò khách/chủ nhà giữa Admin UI và truy vấn SQL.
     if (status) {
-        conditions.push("u.status = ?");
-        replacements.push(status);
+        if (status === "suspended") {
+            conditions.push("u.status IN ('suspended', 'blocked', 'locked')");
+        } else {
+            conditions.push("u.status = ?");
+            replacements.push(status);
+        }
     }
 
     if (search) {
@@ -359,6 +434,11 @@ export const listUsersForAdmin = async ({ search, role, status, page, limit }: A
             "EXISTS (SELECT 1 FROM user_role ur2 INNER JOIN roles r2 ON r2.role_id = ur2.role_id WHERE ur2.user_id = u.user_id AND r2.code = ?)",
         );
         replacements.push(role);
+        if (role === "guest") {
+            conditions.push(
+                "NOT EXISTS (SELECT 1 FROM user_role ur_higher INNER JOIN roles r_higher ON r_higher.role_id = ur_higher.role_id WHERE ur_higher.user_id = u.user_id AND r_higher.code IN ('host', 'admin'))",
+            );
+        }
     }
 
     const whereSql = conditions.join(" AND ");

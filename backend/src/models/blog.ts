@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu bài viết cẩm nang du lịch, nội dung xuất bản và định danh đường dẫn tĩnh (slug).
+ */
 import {
     CreationOptional,
     DataTypes,
@@ -22,6 +25,7 @@ class BlogModel extends Model<InferAttributes<BlogModel>, InferCreationAttribute
     declare excerpt: string;
     declare coverImage: CreationOptional<string | null>;
     declare content: string[];
+    declare tags: CreationOptional<string[]>;
     declare status: CreationOptional<BlogStatus>;
     declare publishedAt: CreationOptional<Date | null>;
     declare createdByUserId: CreationOptional<number | null>;
@@ -80,6 +84,12 @@ BlogModel.init(
             type: DataTypes.JSON,
             allowNull: false,
             field: "content_json",
+            defaultValue: [],
+        },
+        tags: {
+            type: DataTypes.JSON,
+            allowNull: true,
+            field: "tags_json",
             defaultValue: [],
         },
         status: {

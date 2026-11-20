@@ -1,3 +1,8 @@
+/**
+ * Bộ điều phối HTTP xử lý báo cáo vi phạm từ người dùng và trích xuất dữ liệu thống kê doanh thu/vận hành (`reports`):
+ * - Bao gồm gửi báo cáo, xem báo cáo đã gửi, xử lý/bác bỏ báo cáo phía `admin` và cung cấp biểu đồ phân tích doanh thu, đơn đặt phòng, chỗ ở, chủ nhà.
+ */
+
 import type { RequestHandler } from "express";
 
 import { asyncHandler } from "../../common/async-handler";
@@ -32,6 +37,9 @@ const getReportActionContext = (req: Parameters<RequestHandler>[0]) => ({
     userAgent: req.get("user-agent") ?? null,
 });
 
+/**
+ * Tiếp nhận báo cáo vi phạm hoặc phản ánh sự cố mới từ người dùng.
+ */
 export const createUserReport: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -45,6 +53,9 @@ export const createUserReport: RequestHandler = asyncHandler(async (req, res) =>
     });
 });
 
+/**
+ * Liệt kê các báo cáo vi phạm do chính người dùng hiện tại đã gửi.
+ */
 export const listMyReports: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -56,6 +67,9 @@ export const listMyReports: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Liệt kê phân trang toàn bộ báo cáo vi phạm để quản trị viên xem xét xử lý.
+ */
 export const listAdminReports: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -67,6 +81,9 @@ export const listAdminReports: RequestHandler = asyncHandler(async (req, res) =>
     });
 });
 
+/**
+ * Đánh dấu đã giải quyết báo cáo vi phạm kèm ghi chú xử lý của quản trị viên.
+ */
 export const resolveAdminReport: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -80,6 +97,9 @@ export const resolveAdminReport: RequestHandler = asyncHandler(async (req, res) 
     });
 });
 
+/**
+ * Bác bỏ báo cáo vi phạm không đủ căn cứ kèm lý do từ quản trị viên.
+ */
 export const rejectAdminReport: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -93,6 +113,9 @@ export const rejectAdminReport: RequestHandler = asyncHandler(async (req, res) =
     });
 });
 
+/**
+ * Tổng hợp số liệu phân tích doanh thu toàn nền tảng theo khoảng thời gian cho quản trị viên.
+ */
 export const getAdminRevenueAnalytics: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -102,6 +125,9 @@ export const getAdminRevenueAnalytics: RequestHandler = asyncHandler(async (req,
     return sendSuccess(res, { data: result });
 });
 
+/**
+ * Tổng hợp thống kê lượng đơn đặt phòng và tỷ lệ chuyển đổi/hủy đơn toàn hệ thống.
+ */
 export const getAdminBookingsAnalytics: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -111,6 +137,9 @@ export const getAdminBookingsAnalytics: RequestHandler = asyncHandler(async (req
     return sendSuccess(res, { data: result });
 });
 
+/**
+ * Tổng hợp thống kê tăng trưởng và hiệu suất hoạt động của chỗ ở trên nền tảng.
+ */
 export const getAdminListingsAnalytics: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -120,6 +149,9 @@ export const getAdminListingsAnalytics: RequestHandler = asyncHandler(async (req
     return sendSuccess(res, { data: result });
 });
 
+/**
+ * Tổng hợp thống kê hoạt động và doanh thu theo nhóm chủ nhà cho quản trị viên.
+ */
 export const getAdminHostsAnalytics: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -129,6 +161,9 @@ export const getAdminHostsAnalytics: RequestHandler = asyncHandler(async (req, r
     return sendSuccess(res, { data: result });
 });
 
+/**
+ * Tổng hợp biểu đồ doanh thu và công suất đặt phòng dành riêng cho chủ nhà đang đăng nhập.
+ */
 export const getHostRevenueAnalytics: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 

@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu tin nhắn văn bản, hình ảnh hoặc thông báo hệ thống bên trong luồng hội thoại trực tuyến.
+ */
 import {
     CreationOptional,
     DataTypes,

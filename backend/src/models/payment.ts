@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý bản ghi thanh toán của đơn đặt phòng, trạng thái thu tiền, mã tham chiếu đối tác và thời hạn giữ chỗ.
+ */
 import {
     CreationOptional,
     DataTypes,

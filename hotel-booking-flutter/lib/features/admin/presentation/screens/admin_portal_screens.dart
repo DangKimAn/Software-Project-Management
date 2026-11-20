@@ -3,23 +3,29 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hotel_booking_flutter/core/formatters/currency_formatter.dart';
-import 'package:hotel_booking_flutter/core/security/url_security_validator.dart';
-import 'package:hotel_booking_flutter/features/admin/data/admin_repository.dart';
+import 'package:hotel_booking_flutter/app/di/providers.dart';
+import 'package:hotel_booking_flutter/l10n/l10n.dart';
+// CONFLICT-RESOLVED: Điều phối toàn bộ dữ liệu quản trị qua `AdminPortalViewModel` thay vì gọi trực tiếp Repository trên Screen (FLUTTER_RULES.md Mục 2).
+import 'package:hotel_booking_flutter/features/admin/presentation/view_models/admin_portal_view_model.dart';
+import 'package:hotel_booking_flutter/features/admin/domain/admin_status_helper.dart';
 import 'package:hotel_booking_flutter/features/admin/presentation/theme/admin_studio_tokens.dart';
+import 'package:hotel_booking_flutter/features/admin/presentation/widgets/admin_kyc_document_viewer.dart';
+import 'package:hotel_booking_flutter/features/admin/presentation/widgets/admin_payout_batch_panel.dart';
+import 'package:hotel_booking_flutter/features/admin/presentation/widgets/admin_reports_tab.dart';
 import 'package:hotel_booking_flutter/features/admin/presentation/widgets/admin_studio_widgets.dart';
 import 'package:hotel_booking_flutter/features/auth/domain/entities/user.dart';
 import 'package:hotel_booking_flutter/features/auth/presentation/view_models/auth_notifier.dart';
-import 'package:hotel_booking_flutter/features/messages/data/conversations_repository.dart';
 import 'package:hotel_booking_flutter/features/messages/presentation/screens/messages_screen.dart';
 import 'package:hotel_booking_flutter/shared/animations/fade_slide_in.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_dialog.dart';
-import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_header.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_image.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
+import 'package:hotel_booking_flutter/shared/widgets/currency_language_selector.dart';
+import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+/// Mô hình cấu hình một mục điều hướng thanh bên của Cổng Quản trị viên (Admin Studio).
 class AdminNavItem {
   const AdminNavItem({
     required this.id,
@@ -36,6 +42,32 @@ class AdminNavItem {
   final IconData icon;
   final String title;
   final String subtitle;
+
+  /// Phân giải nhãn điều hướng Admin theo ngôn ngữ hiện hành, giữ nguyên vẹn nhãn Tiếng Việt gốc khi `localeCode == 'vi'`.
+  String localizedLabel(AppLocalizations l10n, String localeCode) {
+    if (localeCode == 'vi') return label;
+    switch (id) {
+      case 'tong-quan':
+        return l10n.adminTabOverview;
+      case 'nguoi-dung':
+        return l10n.adminTabUsers;
+      case 'kiem-duyet':
+        return l10n.adminTabModeration;
+      case 'ho-so-host':
+        return l10n.adminTabHostApplications;
+      case 'phan-quyen':
+        return l10n.adminTabRoles;
+      case 'phi-nen-tang':
+      case 'chi-tra':
+        return l10n.adminTabFinance;
+      case 'bao-cao':
+        return localeCode == 'en' ? 'Reports' : '신고 관리';
+      case 'tin-nhan':
+        return l10n.navMessages;
+      default:
+        return label;
+    }
+  }
 }
 
 const List<AdminNavItem> kAdminNavItems = [
@@ -89,12 +121,31 @@ const List<AdminNavItem> kAdminNavItems = [
         'Áp dụng phí toàn sàn, thời gian thông báo 7 ngày và quản lý lịch sử.',
   ),
   AdminNavItem(
+    id: 'chi-tra',
+    label: 'Duyệt chi trả',
+    route: '/admin/chi-tra',
+    icon: LucideIcons.wallet,
+    title: 'Duyệt chi trả & Hoàn tiền',
+    subtitle:
+        'Phê duyệt giải ngân Napas 24/7 cho Host rút tiền và Khách hoàn tiền.',
+  ),
+  AdminNavItem(
+    id: 'bao-cao',
+    label: 'Báo cáo vi phạm',
+    route: '/admin/bao-cao',
+    icon: LucideIcons.flag,
+    title: 'Báo cáo vi phạm',
+    subtitle:
+        'Tiếp nhận, thẩm tra và xử lý báo cáo vi phạm từ Khách hàng & Chủ nhà.',
+  ),
+  AdminNavItem(
     id: 'tin-nhan',
     label: 'Tin nhắn',
     route: '/admin/tin-nhan',
     icon: AppSemanticIcons.messageHost,
     title: 'Tin nhắn hỗ trợ',
-    subtitle: 'Trao đổi trực tiếp với Chủ nhà và Khách hàng trên toàn hệ thống.',
+    subtitle:
+        'Trao đổi trực tiếp với Chủ nhà và Khách hàng trên toàn hệ thống.',
   ),
 ];
 
@@ -360,6 +411,7 @@ class _AdminPaginationBar extends StatelessWidget {
   }
 }
 
+/// Mô hình mục điều hướng thanh đáy rút gọn trên thiết bị di động của Cổng Quản trị viên.
 class AdminBottomNavItem {
   const AdminBottomNavItem({
     required this.id,
@@ -409,6 +461,7 @@ const List<AdminBottomNavItem> kAdminBottomNavItems = [
   ),
 ];
 
+/// Màn hình trung tâm Cổng Quản trị viên điều phối toàn bộ phân hệ duyệt KYC, kiểm duyệt tin đăng AI Vision, đối soát chi trả Maker-Checker, phí nền tảng và báo cáo doanh thu.
 class AdminPortalScreen extends ConsumerStatefulWidget {
   const AdminPortalScreen({
     super.key,
@@ -586,7 +639,12 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  item.label,
+                                  item.localizedLabel(
+                                    lookupAppLocalizations(
+                                      Locale(ref.watch(localeProvider)),
+                                    ),
+                                    ref.watch(localeProvider),
+                                  ),
                                   style: AdminStudioTokens.pillText.copyWith(
                                     fontSize: 13.5,
                                     fontWeight: selected
@@ -653,17 +711,23 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                         if (inDrawer) Navigator.of(context).pop();
                         _navigateExternalRoute(context, '/');
                       },
-                      child: const Wrap(
+                      child: Wrap(
                         spacing: 8,
                         alignment: WrapAlignment.center,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Icon(
+                          const Icon(
                             AppSemanticIcons.home,
                             size: 15,
                             color: AdminStudioTokens.iconInk,
                           ),
-                          Text('Về trang khách'),
+                          Text(
+                            ref.watch(localeProvider) == 'vi'
+                                ? 'Về trang khách'
+                                : lookupAppLocalizations(
+                                    Locale(ref.watch(localeProvider)),
+                                  ).ctaBackHome,
+                          ),
                         ],
                       ),
                     ),
@@ -674,23 +738,42 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                     child: OutlinedButton(
                       style: _kPillOutlinedStyle,
                       onPressed: () async {
+                        // Giải thuật xác nhận hai bước trước khi đăng xuất khỏi Cổng Quản trị viên (`TC-065`).
+                        final activeL10n = lookupAppLocalizations(
+                          Locale(ref.read(localeProvider)),
+                        );
+                        final confirmed = await AppDialog.show(
+                          context,
+                          title: activeL10n.settingsConfirmLogoutTitle,
+                          message: activeL10n.settingsConfirmLogout,
+                          confirmText: activeL10n.authLogout,
+                          cancelText: activeL10n.ctaCancel,
+                        );
+                        if (confirmed != true || !context.mounted) return;
                         if (inDrawer) Navigator.of(context).pop();
+                        ref
+                            .read(notificationsProvider.notifier)
+                            .clearForLogout();
                         await ref.read(authNotifierProvider.notifier).logout();
                         if (context.mounted) {
                           _navigateExternalRoute(context, '/dang-nhap');
                         }
                       },
-                      child: const Wrap(
+                      child: Wrap(
                         spacing: 8,
                         alignment: WrapAlignment.center,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Icon(
+                          const Icon(
                             AppSemanticIcons.logout,
                             size: 15,
                             color: AdminStudioTokens.iconInk,
                           ),
-                          Text('Đăng xuất'),
+                          Text(
+                            lookupAppLocalizations(
+                              Locale(ref.watch(localeProvider)),
+                            ).authLogout,
+                          ),
                         ],
                       ),
                     ),
@@ -810,6 +893,9 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
                             ],
                           ),
                         ),
+                        HeaderCurrencyLanguageButton(
+                          showCodePill: width >= 768,
+                        ),
                         const NotificationBell(),
                         if (!isDesktop)
                           AdminStudioCircleButton(
@@ -838,6 +924,8 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
   Widget _buildBottomNavBar(BuildContext context) {
     final isMenuTabActive = _currentTab == 'phan-quyen' ||
         _currentTab == 'phi-nen-tang' ||
+        _currentTab == 'chi-tra' ||
+        _currentTab == 'bao-cao' ||
         _currentTab == 'tin-nhan';
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final showCompactCircleOnly = textScale > 1.45;
@@ -964,6 +1052,10 @@ class _AdminPortalScreenState extends ConsumerState<AdminPortalScreen> {
         return const _AdminRolesTab();
       case 'phi-nen-tang':
         return const _AdminPlatformFeeTab();
+      case 'chi-tra':
+        return const _AdminDisbursementsTab();
+      case 'bao-cao':
+        return const AdminReportsTab();
       case 'tin-nhan':
         return _AdminMessagesTab(
           initialConversationId: widget.initialConversationId,
@@ -990,6 +1082,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
   bool _isOffline = false;
   int _rangeDays = 30;
   String _group = 'day';
+  bool _showFullRevenueSeries = false;
 
   @override
   void initState() {
@@ -1004,10 +1097,11 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
       _isOffline = false;
     });
     try {
-      final stats = await ref.read(adminRepositoryProvider).getOverviewStats(
-            days: _rangeDays,
-            group: _group,
-          );
+      final stats =
+          await ref.read(adminPortalViewModelProvider).getOverviewStats(
+                days: _rangeDays,
+                group: _group,
+              );
       if (!mounted) return;
       setState(() {
         _stats = stats;
@@ -1018,8 +1112,8 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
       if (!mounted) return;
       setState(() {
         _stats = null;
-        _isOffline = AdminRepository.isOfflineError(e);
-        _error = AdminRepository.extractErrorMessage(
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể tải tổng quan admin.',
         );
@@ -1034,7 +1128,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
     final revenueSubtitle = _loading || stats == null
         ? null
         : stats.pendingStayRevenue > 0
-            ? 'Tạm giữ chờ ở: ${CurrencyFormatter.formatVnd(stats.pendingStayRevenue.round(), fallback: '0 ₫')} (${stats.pendingStayBookingCount} đơn)'
+            ? 'Tạm giữ chờ ở: ${MoneyFormatter.formatVnd(stats.pendingStayRevenue.round(), fallback: '0 ₫')} (${stats.pendingStayBookingCount} đơn)'
             : 'Đơn đã hoàn tất lưu trú';
     final bookingsSubtitle = _loading || stats == null
         ? null
@@ -1073,7 +1167,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
         label: 'Doanh thu thực nhận',
         value: _loading
             ? '...'
-            : CurrencyFormatter.formatVnd(
+            : MoneyFormatter.formatVnd(
                 (stats?.grossRevenue ?? 0).round(),
                 fallback: '0 ₫',
               ),
@@ -1105,7 +1199,14 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
     ];
 
     final series = stats?.revenueSeries ?? const <AdminRevenuePoint>[];
-    final maxRevenue = series.fold<double>(
+    // Giải thuật hiển thị chuỗi doanh thu linh hoạt (`TC-087`):
+    // Mặc định hiển thị 14 kỳ gần nhất theo thứ tự thời gian ASC để gọn giao diện, đồng thời cho phép mở rộng
+    // toàn bộ chuỗi 30/90 ngày kèm dải cột cuộn ngang (`SingleChildScrollView`) không cắt bớt dữ liệu.
+    // CONFLICT-RESOLVED: Giữ 14 kỳ doanh thu mới nhất theo thứ tự thời gian ASC mặc định và hỗ trợ xem toàn bộ 30/90 kỳ.
+    final visibleSeries = _showFullRevenueSeries
+        ? List<AdminRevenuePoint>.unmodifiable(series)
+        : AdminStatusHelper.sliceLatestRevenueWindow(series, maxItems: 14);
+    final maxRevenue = visibleSeries.fold<double>(
       0,
       (prev, item) => item.grossRevenue > prev ? item.grossRevenue : prev,
     );
@@ -1283,6 +1384,20 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                   runSpacing: 6,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    if (!_loading && series.length > 14)
+                      OutlinedButton(
+                        key: const Key('admin_revenue_toggle_full_series_btn'),
+                        style: _kCompactPillOutlinedStyle,
+                        onPressed: () => setState(
+                          () =>
+                              _showFullRevenueSeries = !_showFullRevenueSeries,
+                        ),
+                        child: Text(
+                          _showFullRevenueSeries
+                              ? 'Thu gọn 14 kỳ'
+                              : 'Xem đủ ${series.length} kỳ',
+                        ),
+                      ),
                     if (!_loading && stats != null)
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -1297,7 +1412,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                           boxShadow: AdminStudioTokens.cardShadow,
                         ),
                         child: Text(
-                          'Chủ nhà nhận: ${CurrencyFormatter.formatVnd(stats.hostRevenue.round(), fallback: '0 ₫')}',
+                          'Chủ nhà nhận: ${MoneyFormatter.formatVnd(stats.hostRevenue.round(), fallback: '0 ₫')}',
                           style: AdminStudioTokens.metaCaption.copyWith(
                             fontWeight: FontWeight.w500,
                             color: AdminStudioTokens.inkPrimary,
@@ -1372,7 +1487,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                       const SizedBox(width: 9),
                                       Expanded(
                                         child: Text(
-                                          'Tiền chờ lưu trú (tạm giữ): ${CurrencyFormatter.formatVnd(stats.pendingStayRevenue.round(), fallback: '0 ₫')} · ${stats.pendingStayBookingCount} đơn chưa check-out (Chủ nhà dự kiến: ${CurrencyFormatter.formatVnd(stats.pendingStayHostRevenue.round(), fallback: '0 ₫')})',
+                                          'Tiền chờ lưu trú (tạm giữ): ${MoneyFormatter.formatVnd(stats.pendingStayRevenue.round(), fallback: '0 ₫')} · ${stats.pendingStayBookingCount} đơn chưa check-out (Chủ nhà dự kiến: ${MoneyFormatter.formatVnd(stats.pendingStayHostRevenue.round(), fallback: '0 ₫')})',
                                           style: AdminStudioTokens.metaCaption
                                               .copyWith(
                                             color: AdminStudioTokens.inkPrimary,
@@ -1404,88 +1519,54 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                         chartConstraints.maxWidth < 460 ||
                                             textScale > 1.25;
                                     return Column(
-                                      children: series.take(14).map((point) {
-                                        final ratio = maxRevenue > 0
-                                            ? (point.grossRevenue / maxRevenue)
-                                                .clamp(0.05, 1.0)
-                                            : 0.05;
-                                        final amountLabel =
-                                            '${CurrencyFormatter.formatVnd(point.grossRevenue.round(), fallback: '0 ₫')} (${point.bookingCount} đơn)';
-                                        return AdminStudioInnerCard(
-                                          margin:
-                                              const EdgeInsets.only(bottom: 8),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 12,
-                                          ),
-                                          child: compactChart
-                                              ? Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Wrap(
-                                                      spacing: 8,
-                                                      runSpacing: 4,
-                                                      alignment: WrapAlignment
-                                                          .spaceBetween,
-                                                      crossAxisAlignment:
-                                                          WrapCrossAlignment
-                                                              .center,
-                                                      children: [
-                                                        Row(
-                                                          mainAxisSize:
-                                                              MainAxisSize.min,
-                                                          children: [
-                                                            const Icon(
-                                                              LucideIcons
-                                                                  .calendar,
-                                                              size: 13,
-                                                              color:
-                                                                  AdminStudioTokens
-                                                                      .iconMuted,
-                                                            ),
-                                                            const SizedBox(
-                                                              width: 6,
-                                                            ),
-                                                            Text(
-                                                              point.period,
-                                                              style: AdminStudioTokens
-                                                                  .metaCaption,
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        Text(
-                                                          amountLabel,
-                                                          style:
-                                                              AdminStudioTokens
-                                                                  .pillText
-                                                                  .copyWith(
-                                                            fontSize: 12.5,
-                                                            color:
-                                                                AdminStudioTokens
-                                                                    .inkPrimary,
-                                                          ),
-                                                        ),
-                                                      ],
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        if (_showFullRevenueSeries &&
+                                            visibleSeries.length > 14)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 12,
+                                            ),
+                                            child: SingleChildScrollView(
+                                              key: const Key(
+                                                'admin_revenue_horizontal_scroll',
+                                              ),
+                                              scrollDirection: Axis.horizontal,
+                                              child: Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.end,
+                                                children: visibleSeries.map((
+                                                  pt,
+                                                ) {
+                                                  final barRatio =
+                                                      maxRevenue > 0
+                                                          ? (pt.grossRevenue /
+                                                                  maxRevenue)
+                                                              .clamp(0.08, 1.0)
+                                                          : 0.08;
+                                                  final shortLabel =
+                                                      pt.period.length >= 5
+                                                          ? pt.period.substring(
+                                                              pt.period.length -
+                                                                  5,
+                                                            )
+                                                          : pt.period;
+                                                  return Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                      right: 8,
                                                     ),
-                                                    const SizedBox(height: 8),
-                                                    ClipRRect(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                        AdminStudioTokens
-                                                            .pillRadius,
-                                                      ),
-                                                      child: Container(
-                                                        height: 7,
-                                                        color: AdminStudioTokens
-                                                            .softCircle,
-                                                        alignment: Alignment
-                                                            .centerLeft,
-                                                        child:
-                                                            FractionallySizedBox(
-                                                          widthFactor: ratio,
-                                                          child: Container(
-                                                            height: 7,
+                                                    child: SizedBox(
+                                                      width: 44,
+                                                      child: Column(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          Container(
+                                                            height:
+                                                                96 * barRatio,
+                                                            width: 22,
                                                             decoration:
                                                                 BoxDecoration(
                                                               color:
@@ -1494,48 +1575,102 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                                               borderRadius:
                                                                   BorderRadius
                                                                       .circular(
-                                                                AdminStudioTokens
-                                                                    .pillRadius,
+                                                                6,
                                                               ),
                                                             ),
                                                           ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                )
-                                              : Row(
-                                                  children: [
-                                                    SizedBox(
-                                                      width: 102,
-                                                      child: Row(
-                                                        children: [
-                                                          const Icon(
-                                                            LucideIcons
-                                                                .calendar,
-                                                            size: 13,
-                                                            color:
-                                                                AdminStudioTokens
-                                                                    .iconMuted,
-                                                          ),
                                                           const SizedBox(
-                                                            width: 6,
+                                                            height: 4,
                                                           ),
-                                                          Expanded(
-                                                            child: Text(
-                                                              point.period,
-                                                              overflow:
-                                                                  TextOverflow
-                                                                      .ellipsis,
-                                                              style: AdminStudioTokens
-                                                                  .metaCaption,
+                                                          Text(
+                                                            shortLabel,
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            style:
+                                                                AdminStudioTokens
+                                                                    .metaCaption
+                                                                    .copyWith(
+                                                              fontSize: 10,
                                                             ),
                                                           ),
                                                         ],
                                                       ),
                                                     ),
-                                                    Expanded(
-                                                      child: ClipRRect(
+                                                  );
+                                                }).toList(),
+                                              ),
+                                            ),
+                                          ),
+                                        ...visibleSeries.map((point) {
+                                          final ratio = maxRevenue > 0
+                                              ? (point.grossRevenue /
+                                                      maxRevenue)
+                                                  .clamp(0.05, 1.0)
+                                              : 0.05;
+                                          final amountLabel =
+                                              '${MoneyFormatter.formatVnd(point.grossRevenue.round(), fallback: '0 ₫')} (${point.bookingCount} đơn)';
+                                          return AdminStudioInnerCard(
+                                            margin: const EdgeInsets.only(
+                                                bottom: 8),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 12,
+                                            ),
+                                            child: compactChart
+                                                ? Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Wrap(
+                                                        spacing: 8,
+                                                        runSpacing: 4,
+                                                        alignment: WrapAlignment
+                                                            .spaceBetween,
+                                                        crossAxisAlignment:
+                                                            WrapCrossAlignment
+                                                                .center,
+                                                        children: [
+                                                          Row(
+                                                            mainAxisSize:
+                                                                MainAxisSize
+                                                                    .min,
+                                                            children: [
+                                                              const Icon(
+                                                                LucideIcons
+                                                                    .calendar,
+                                                                size: 13,
+                                                                color: AdminStudioTokens
+                                                                    .iconMuted,
+                                                              ),
+                                                              const SizedBox(
+                                                                width: 6,
+                                                              ),
+                                                              Text(
+                                                                point.period,
+                                                                style: AdminStudioTokens
+                                                                    .metaCaption,
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          Text(
+                                                            amountLabel,
+                                                            style:
+                                                                AdminStudioTokens
+                                                                    .pillText
+                                                                    .copyWith(
+                                                              fontSize: 12.5,
+                                                              color:
+                                                                  AdminStudioTokens
+                                                                      .inkPrimary,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      const SizedBox(height: 8),
+                                                      ClipRRect(
                                                         borderRadius:
                                                             BorderRadius
                                                                 .circular(
@@ -1543,7 +1678,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                                               .pillRadius,
                                                         ),
                                                         child: Container(
-                                                          height: 8,
+                                                          height: 7,
                                                           color:
                                                               AdminStudioTokens
                                                                   .softCircle,
@@ -1553,7 +1688,7 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                                               FractionallySizedBox(
                                                             widthFactor: ratio,
                                                             child: Container(
-                                                              height: 8,
+                                                              height: 7,
                                                               decoration:
                                                                   BoxDecoration(
                                                                 color:
@@ -1570,28 +1705,98 @@ class _AdminOverviewTabState extends ConsumerState<_AdminOverviewTab> {
                                                           ),
                                                         ),
                                                       ),
-                                                    ),
-                                                    const SizedBox(width: 12),
-                                                    SizedBox(
-                                                      width: 156,
-                                                      child: Text(
-                                                        amountLabel,
-                                                        textAlign:
-                                                            TextAlign.right,
-                                                        style: AdminStudioTokens
-                                                            .pillText
-                                                            .copyWith(
-                                                          fontSize: 12,
-                                                          color:
-                                                              AdminStudioTokens
-                                                                  .inkPrimary,
+                                                    ],
+                                                  )
+                                                : Row(
+                                                    children: [
+                                                      SizedBox(
+                                                        width: 102,
+                                                        child: Row(
+                                                          children: [
+                                                            const Icon(
+                                                              LucideIcons
+                                                                  .calendar,
+                                                              size: 13,
+                                                              color:
+                                                                  AdminStudioTokens
+                                                                      .iconMuted,
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 6,
+                                                            ),
+                                                            Expanded(
+                                                              child: Text(
+                                                                point.period,
+                                                                overflow:
+                                                                    TextOverflow
+                                                                        .ellipsis,
+                                                                style: AdminStudioTokens
+                                                                    .metaCaption,
+                                                              ),
+                                                            ),
+                                                          ],
                                                         ),
                                                       ),
-                                                    ),
-                                                  ],
-                                                ),
-                                        );
-                                      }).toList(),
+                                                      Expanded(
+                                                        child: ClipRRect(
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(
+                                                            AdminStudioTokens
+                                                                .pillRadius,
+                                                          ),
+                                                          child: Container(
+                                                            height: 8,
+                                                            color:
+                                                                AdminStudioTokens
+                                                                    .softCircle,
+                                                            alignment: Alignment
+                                                                .centerLeft,
+                                                            child:
+                                                                FractionallySizedBox(
+                                                              widthFactor:
+                                                                  ratio,
+                                                              child: Container(
+                                                                height: 8,
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: AdminStudioTokens
+                                                                      .obsidian,
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                    AdminStudioTokens
+                                                                        .pillRadius,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 12),
+                                                      SizedBox(
+                                                        width: 156,
+                                                        child: Text(
+                                                          amountLabel,
+                                                          textAlign:
+                                                              TextAlign.right,
+                                                          style:
+                                                              AdminStudioTokens
+                                                                  .pillText
+                                                                  .copyWith(
+                                                            fontSize: 12,
+                                                            color:
+                                                                AdminStudioTokens
+                                                                    .inkPrimary,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                          );
+                                        }),
+                                      ],
                                     );
                                   },
                                 ),
@@ -1665,7 +1870,7 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
     });
     try {
       final result =
-          await ref.read(adminRepositoryProvider).getAdminUsersPaginated(
+          await ref.read(adminPortalViewModelProvider).getAdminUsersPaginated(
                 page: _page,
                 limit: _limit,
                 search: _debouncedSearch,
@@ -1683,8 +1888,8 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isOffline = AdminRepository.isOfflineError(e);
-        _error = AdminRepository.extractErrorMessage(
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể tải danh sách người dùng.',
         );
@@ -1712,21 +1917,45 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
       return;
     }
 
-    final currentStatus = '${user['status'] ?? 'active'}'.toLowerCase();
-    final isLocked = ['blocked', 'suspended', 'locked'].contains(currentStatus);
-    final nextStatus = isLocked ? 'active' : 'suspended';
+    // CONFLICT-RESOLVED: Phân tách chuẩn 4 trạng thái tài khoản (active / inactive / suspended|blocked|locked / deleted) thay vì gộp chung non-locked thành active.
+    final statusInfo = AdminStatusHelper.classifyUserStatus(user['status']);
+    if (!statusInfo.canToggleStatus || statusInfo.nextTargetStatus == null) {
+      return;
+    }
+    final nextStatus = statusInfo.nextTargetStatus!;
     final displayName =
         '${user['fullName'] ?? user['name'] ?? user['email'] ?? '#$userId'}';
+    final subtitleText = switch (statusInfo.kind) {
+      AdminUserStatusKind.suspended =>
+        'Kích hoạt lại tài khoản $displayName (#$userId)?',
+      AdminUserStatusKind.inactive =>
+        'Kích hoạt tài khoản $displayName (#$userId) sang trạng thái đang hoạt động?',
+      AdminUserStatusKind.active ||
+      AdminUserStatusKind.deleted =>
+        'Tạm khóa (suspended) tài khoản $displayName (#$userId)?',
+    };
+    final noteHint = switch (statusInfo.kind) {
+      AdminUserStatusKind.suspended => 'Ghi chú mở khóa (tùy chọn)...',
+      AdminUserStatusKind.inactive =>
+        'Ghi chú kích hoạt tài khoản (tùy chọn)...',
+      AdminUserStatusKind.active ||
+      AdminUserStatusKind.deleted =>
+        'Lý do khóa tài khoản (ví dụ: vi phạm chính sách)...',
+    };
+    final successToast = switch (statusInfo.kind) {
+      AdminUserStatusKind.suspended => 'Đã kích hoạt lại tài khoản #$userId.',
+      AdminUserStatusKind.inactive => 'Đã kích hoạt tài khoản #$userId.',
+      AdminUserStatusKind.active ||
+      AdminUserStatusKind.deleted =>
+        'Đã tạm khóa (suspended) tài khoản #$userId.',
+    };
     final reasonCtrl = TextEditingController();
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AppModal(
-        title:
-            isLocked ? 'Xác nhận mở khóa tài khoản' : 'Xác nhận khóa tài khoản',
-        subtitle: isLocked
-            ? 'Kích hoạt lại tài khoản $displayName (#$userId)?'
-            : 'Tạm khóa (suspended) tài khoản $displayName (#$userId)?',
+        title: statusInfo.confirmTitle ?? 'Xác nhận cập nhật trạng thái',
+        subtitle: subtitleText,
         maxWidth: 460,
         actions: [
           OutlinedButton(
@@ -1737,16 +1966,14 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
           ElevatedButton(
             style: _kPillElevatedStyle,
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(isLocked ? 'Xác nhận mở khóa' : 'Xác nhận khóa'),
+            child: Text(statusInfo.confirmCtaLabel ?? 'Xác nhận'),
           ),
         ],
         child: TextField(
           controller: reasonCtrl,
           maxLines: 2,
           decoration: _multilineInputDecoration(
-            hintText: isLocked
-                ? 'Ghi chú mở khóa (tùy chọn)...'
-                : 'Lý do khóa tài khoản (ví dụ: vi phạm chính sách)...',
+            hintText: noteHint,
           ),
         ),
       ),
@@ -1762,26 +1989,24 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
     });
     try {
       await ref
-          .read(adminRepositoryProvider)
+          .read(adminPortalViewModelProvider)
           .updateAdminUserStatus(userId, nextStatus);
       if (!mounted) return;
       AppToast.show(
         context,
-        isLocked
-            ? 'Đã kích hoạt lại tài khoản #$userId.'
-            : 'Đã tạm khóa (suspended) tài khoản #$userId.',
+        successToast,
         type: AppToastType.success,
       );
       await _fetchUsers();
     } catch (e) {
       if (!mounted) return;
-      final status = AdminRepository.extractStatusCode(e);
-      final msg = AdminRepository.extractErrorMessage(
+      final status = AdminPortalViewModel.extractStatusCode(e);
+      final msg = AdminPortalViewModel.extractErrorMessage(
         e,
         'Không thể cập nhật trạng thái người dùng.',
       );
       setState(() {
-        _isOffline = AdminRepository.isOfflineError(e);
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
         _error = msg;
       });
       if (status == 409) {
@@ -1860,7 +2085,7 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
       _isOffline = false;
     });
     try {
-      await ref.read(adminRepositoryProvider).updateAdminUser(userId, {
+      await ref.read(adminPortalViewModelProvider).updateAdminUser(userId, {
         if (nextName.isNotEmpty) 'fullName': nextName,
         'phone': nextPhone.isEmpty ? null : nextPhone,
       });
@@ -1874,8 +2099,8 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isOffline = AdminRepository.isOfflineError(e);
-        _error = AdminRepository.extractErrorMessage(
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể cập nhật thông tin người dùng.',
         );
@@ -1883,6 +2108,69 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
     } finally {
       if (mounted) setState(() => _actionUserId = null);
     }
+  }
+
+  // Giải thuật ánh xạ màu sắc semantic chuẩn Studio cho từng trạng thái người dùng (không dùng chấm xanh active cho tài khoản ngừng hoạt động/đã xóa).
+  Widget _buildUserStatusBadge(
+    AdminUserStatusClassification statusInfo, {
+    required String userId,
+  }) {
+    final (Color bg, Color fg) = switch (statusInfo.kind) {
+      AdminUserStatusKind.active => (
+          AdminStudioTokens.successTint,
+          AdminStudioTokens.successInk,
+        ),
+      AdminUserStatusKind.inactive => (
+          AdminStudioTokens.warningTint,
+          AdminStudioTokens.warningInk,
+        ),
+      AdminUserStatusKind.suspended => (
+          AdminStudioTokens.dangerTint,
+          AdminStudioTokens.dangerInk,
+        ),
+      AdminUserStatusKind.deleted => (
+          AdminStudioTokens.softCircle,
+          AdminStudioTokens.inkMuted,
+        ),
+    };
+
+    return Container(
+      key: ValueKey('admin-user-status-$userId'),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(AdminStudioTokens.pillRadius),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            key: statusInfo.showsActiveDot
+                ? ValueKey('admin-user-active-dot-$userId')
+                : ValueKey('admin-user-nonactive-dot-$userId'),
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: fg,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              statusInfo.badgeLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AdminStudioTokens.metaCaption.copyWith(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: fg,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1957,40 +2245,16 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                         final stackFilters =
                             filterConstraints.maxWidth < 290 || textScale > 1.3;
 
+                        // Giải thuật khung lọc co giãn theo chiều dọc (minHeight: 40) chống cắt chữ ở tỷ lệ font 1.5x–2.0x.
                         Widget buildPillDropdown({
                           required String value,
                           required List<DropdownMenuItem<String>> items,
                           required ValueChanged<String?> onChanged,
                         }) {
-                          return Container(
-                            height: 40,
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(
-                                AdminStudioTokens.pillRadius,
-                              ),
-                              boxShadow: AdminStudioTokens.cardShadow,
-                            ),
-                            alignment: Alignment.centerLeft,
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: value,
-                                isExpanded: true,
-                                isDense: true,
-                                icon: const Icon(
-                                  LucideIcons.chevronDown,
-                                  size: 14,
-                                  color: AdminStudioTokens.iconMuted,
-                                ),
-                                style: AdminStudioTokens.pillText.copyWith(
-                                  fontWeight: FontWeight.w400,
-                                  color: AdminStudioTokens.inkPrimary,
-                                ),
-                                items: items,
-                                onChanged: onChanged,
-                              ),
-                            ),
+                          return AdminStudioPillDropdown<String>(
+                            value: value,
+                            items: items,
+                            onChanged: onChanged,
                           );
                         }
 
@@ -1999,19 +2263,35 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                           items: const [
                             DropdownMenuItem(
                               value: 'all',
-                              child: Text('Vai trò: Tất cả'),
+                              child: Text(
+                                'Vai trò: Tất cả',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                             DropdownMenuItem(
                               value: 'guest',
-                              child: Text('Guest'),
+                              child: Text(
+                                'Guest',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                             DropdownMenuItem(
                               value: 'host',
-                              child: Text('Host'),
+                              child: Text(
+                                'Host',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                             DropdownMenuItem(
                               value: 'admin',
-                              child: Text('Admin'),
+                              child: Text(
+                                'Admin',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
                           onChanged: (value) {
@@ -2029,19 +2309,35 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                           items: const [
                             DropdownMenuItem(
                               value: 'all',
-                              child: Text('Trạng thái: Tất cả'),
+                              child: Text(
+                                'Trạng thái: Tất cả',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                             DropdownMenuItem(
                               value: 'active',
-                              child: Text('Hoạt động'),
+                              child: Text(
+                                'Đang hoạt động',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                             DropdownMenuItem(
                               value: 'suspended',
-                              child: Text('Tạm khóa'),
+                              child: Text(
+                                'Tạm khóa',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                             DropdownMenuItem(
                               value: 'inactive',
-                              child: Text('Ngưng hoạt động'),
+                              child: Text(
+                                'Ngừng hoạt động',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
                           onChanged: (value) {
@@ -2153,13 +2449,11 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
 
                               final role =
                                   AdminModerationPolicy.resolvePrimaryRole(u);
-                              final status =
-                                  '${u['status'] ?? 'active'}'.toLowerCase();
-                              final locked = [
-                                'blocked',
-                                'suspended',
-                                'locked',
-                              ].contains(status);
+                              // CONFLICT-RESOLVED: Hiển thị đúng nhãn & màu sắc theo từng trạng thái (active / inactive / suspended / deleted) và ẩn nút khóa trên tài khoản đã xóa.
+                              final statusInfo =
+                                  AdminStatusHelper.classifyUserStatus(
+                                u['status'],
+                              );
 
                               final userHeader = Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -2171,79 +2465,43 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                                   ),
                                   const SizedBox(width: 11),
                                   Expanded(
-                                    child: Row(
+                                    child: Column(
                                       crossAxisAlignment:
-                                          CrossAxisAlignment.center,
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Expanded(
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Flexible(
-                                                child: Text(
-                                                  name,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: AdminStudioTokens
-                                                      .cardTitle,
-                                                ),
+                                        Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                name,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style:
+                                                    AdminStudioTokens.cardTitle,
                                               ),
-                                              const SizedBox(width: 6),
-                                              if (locked)
-                                                Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 2,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: AdminStudioTokens
-                                                        .dangerTint,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                      AdminStudioTokens
-                                                          .pillRadius,
-                                                    ),
-                                                  ),
-                                                  child: Text(
-                                                    'Khóa',
-                                                    style: AdminStudioTokens
-                                                        .metaCaption
-                                                        .copyWith(
-                                                      fontSize: 11,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      color: AdminStudioTokens
-                                                          .dangerInk,
-                                                    ),
-                                                  ),
-                                                )
-                                              else
-                                                Container(
-                                                  width: 6,
-                                                  height: 6,
-                                                  decoration:
-                                                      const BoxDecoration(
-                                                    color: AdminStudioTokens
-                                                        .successInk,
-                                                    shape: BoxShape.circle,
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            ConstrainedBox(
+                                              constraints: const BoxConstraints(
+                                                maxWidth: 88,
+                                              ),
+                                              child: Text(
+                                                role,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: AdminStudioTokens
+                                                    .cardSubtitle,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        const SizedBox(width: 10),
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(right: 4),
-                                          child: Text(
-                                            role,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style:
-                                                AdminStudioTokens.cardSubtitle,
-                                          ),
+                                        const SizedBox(height: 5),
+                                        _buildUserStatusBadge(
+                                          statusInfo,
+                                          userId: userId,
                                         ),
                                       ],
                                     ),
@@ -2253,14 +2511,20 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
 
                               final canActOnUser =
                                   canManageUsers && _actionUserId != userId;
-                              final lockLabel = locked ? 'Mở khóa' : 'Khóa';
+                              final canEditUser =
+                                  canActOnUser && !statusInfo.isDeleted;
+                              final statusActionIcon = statusInfo.isSuspended
+                                  ? LucideIcons.lockOpen
+                                  : statusInfo.isInactive
+                                      ? LucideIcons.userCheck
+                                      : LucideIcons.lock;
                               final actionButtons = Wrap(
                                 spacing: 8,
                                 runSpacing: 8,
                                 children: [
                                   Semantics(
                                     button: true,
-                                    enabled: canActOnUser,
+                                    enabled: canEditUser,
                                     label: 'Sửa',
                                     child: Tooltip(
                                       message: 'Sửa',
@@ -2269,7 +2533,7 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                                           'admin-user-edit-$userId',
                                         ),
                                         style: _kCompactIconActionStyle,
-                                        onPressed: !canActOnUser
+                                        onPressed: !canEditUser
                                             ? null
                                             : () => _openEditUserDialog(u),
                                         child: const Icon(
@@ -2279,29 +2543,29 @@ class _AdminUsersTabState extends ConsumerState<_AdminUsersTab> {
                                       ),
                                     ),
                                   ),
-                                  Semantics(
-                                    button: true,
-                                    enabled: canActOnUser,
-                                    label: lockLabel,
-                                    child: Tooltip(
-                                      message: lockLabel,
-                                      child: OutlinedButton(
-                                        key: ValueKey(
-                                          'admin-user-lock-$userId',
-                                        ),
-                                        style: _kCompactIconActionStyle,
-                                        onPressed: !canActOnUser
-                                            ? null
-                                            : () => _toggleUserStatus(u),
-                                        child: Icon(
-                                          locked
-                                              ? LucideIcons.lockOpen
-                                              : LucideIcons.lock,
-                                          size: 15.5,
+                                  if (statusInfo.canToggleStatus &&
+                                      statusInfo.actionLabel != null)
+                                    Semantics(
+                                      button: true,
+                                      enabled: canActOnUser,
+                                      label: statusInfo.actionLabel!,
+                                      child: Tooltip(
+                                        message: statusInfo.actionLabel!,
+                                        child: OutlinedButton(
+                                          key: ValueKey(
+                                            'admin-user-lock-$userId',
+                                          ),
+                                          style: _kCompactIconActionStyle,
+                                          onPressed: !canActOnUser
+                                              ? null
+                                              : () => _toggleUserStatus(u),
+                                          child: Icon(
+                                            statusActionIcon,
+                                            size: 15.5,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
                                 ],
                               );
 
@@ -2400,6 +2664,7 @@ class _AdminModerationTab extends ConsumerStatefulWidget {
 
 class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
   List<Map<String, dynamic>> _listings = const [];
+  String _statusFilter = 'pending_approval';
   int _page = 1;
   final int _limit = 20;
   int _total = 0;
@@ -2426,11 +2691,13 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
       }
     });
     try {
-      final paginated =
-          await ref.read(adminRepositoryProvider).getPendingListingsPaginated(
-                page: _page,
-                limit: _limit,
-              );
+      final paginated = await ref
+          .read(adminPortalViewModelProvider)
+          .getAdminListingsPaginated(
+            status: _statusFilter,
+            page: _page,
+            limit: _limit,
+          );
       if (!mounted) return;
       setState(() {
         _listings = paginated.items;
@@ -2442,8 +2709,8 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isOffline = AdminRepository.isOfflineError(e);
-        _error = AdminRepository.extractErrorMessage(
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể tải bài chờ duyệt.',
         );
@@ -2474,7 +2741,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
     });
     try {
       final detail = await ref
-          .read(adminRepositoryProvider)
+          .read(adminPortalViewModelProvider)
           .getAdminListingDetail(listingId);
       if (!mounted) return;
       setState(() {
@@ -2485,8 +2752,8 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isOffline = AdminRepository.isOfflineError(e);
-        _error = AdminRepository.extractErrorMessage(
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không tải được chi tiết căn.',
         );
@@ -2519,7 +2786,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
       _isOffline = false;
     });
     try {
-      await ref.read(adminRepositoryProvider).approveListing(listingId);
+      await ref.read(adminPortalViewModelProvider).approveListing(listingId);
       if (!mounted) return;
       AppToast.show(
         context,
@@ -2529,10 +2796,11 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
       await _fetchPending();
     } catch (e) {
       if (!mounted) return;
-      final statusCode = AdminRepository.extractStatusCode(e);
+      final statusCode = AdminPortalViewModel.extractStatusCode(e);
       setState(() {
-        _isOffline = AdminRepository.isOfflineError(e);
-        _error = AdminRepository.extractErrorMessage(e, 'Duyệt căn thất bại.');
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
+        _error =
+            AdminPortalViewModel.extractErrorMessage(e, 'Duyệt căn thất bại.');
       });
       if (statusCode == 409) {
         await _fetchPending(preserveError: true);
@@ -2610,7 +2878,9 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
       _isOffline = false;
     });
     try {
-      await ref.read(adminRepositoryProvider).rejectListing(listingId, reason);
+      await ref
+          .read(adminPortalViewModelProvider)
+          .rejectListing(listingId, reason);
       if (!mounted) return;
       AppToast.show(
         context,
@@ -2620,10 +2890,10 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
       await _fetchPending();
     } catch (e) {
       if (!mounted) return;
-      final statusCode = AdminRepository.extractStatusCode(e);
+      final statusCode = AdminPortalViewModel.extractStatusCode(e);
       setState(() {
-        _isOffline = AdminRepository.isOfflineError(e);
-        _error = AdminRepository.extractErrorMessage(
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Từ chối căn thất bại.',
         );
@@ -2701,10 +2971,10 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
             });
             try {
               await ref
-                  .read(adminRepositoryProvider)
+                  .read(adminPortalViewModelProvider)
                   .analyzeAllListingImages(listingId, force: true);
               final refreshed = await ref
-                  .read(adminRepositoryProvider)
+                  .read(adminPortalViewModelProvider)
                   .getAdminListingDetail(listingId);
               setModalState(() {
                 currentDetail = refreshed;
@@ -2715,7 +2985,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
             } catch (e) {
               setModalState(() {
                 reanalyzingAll = false;
-                modalFeedback = AdminRepository.extractErrorMessage(
+                modalFeedback = AdminPortalViewModel.extractErrorMessage(
                   e,
                   'Dịch vụ phân tích ảnh AI hiện không khả dụng.',
                 );
@@ -2740,10 +3010,10 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
             });
             try {
               await ref
-                  .read(adminRepositoryProvider)
+                  .read(adminPortalViewModelProvider)
                   .reanalyzeListingImage(imageId);
               final refreshed = await ref
-                  .read(adminRepositoryProvider)
+                  .read(adminPortalViewModelProvider)
                   .getAdminListingDetail(listingId);
               setModalState(() {
                 currentDetail = refreshed;
@@ -2754,7 +3024,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
             } catch (e) {
               setModalState(() {
                 reanalyzingImageId = null;
-                modalFeedback = AdminRepository.extractErrorMessage(
+                modalFeedback = AdminPortalViewModel.extractErrorMessage(
                   e,
                   'Không thể phân tích lại AI cho ảnh #$imageId.',
                 );
@@ -2918,17 +3188,17 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                             ),
                                             const SizedBox(height: 8),
                                             Text(
-                                              'Giá thường: ${CurrencyFormatter.formatVnd((double.tryParse('${currentDetail['basePrice'] ?? 0}') ?? 0).round(), fallback: '0 ₫')}',
+                                              'Giá thường: ${MoneyFormatter.formatVnd((double.tryParse('${currentDetail['basePrice'] ?? 0}') ?? 0).round(), fallback: '0 ₫')}',
                                               style:
                                                   AdminStudioTokens.bodyRegular,
                                             ),
                                             Text(
-                                              'Giá cuối tuần: ${CurrencyFormatter.formatVnd((double.tryParse('${currentDetail['weekendPrice'] ?? 0}') ?? 0).round(), fallback: '0 ₫')}',
+                                              'Giá cuối tuần: ${MoneyFormatter.formatVnd((double.tryParse('${currentDetail['weekendPrice'] ?? 0}') ?? 0).round(), fallback: '0 ₫')}',
                                               style:
                                                   AdminStudioTokens.bodyRegular,
                                             ),
                                             Text(
-                                              'Phí dọn dẹp: ${CurrencyFormatter.formatVnd((double.tryParse('${currentDetail['cleaningFee'] ?? 0}') ?? 0).round(), fallback: '0 ₫')}',
+                                              'Phí dọn dẹp: ${MoneyFormatter.formatVnd((double.tryParse('${currentDetail['cleaningFee'] ?? 0}') ?? 0).round(), fallback: '0 ₫')}',
                                               style:
                                                   AdminStudioTokens.bodyRegular,
                                             ),
@@ -2937,6 +3207,15 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                               style:
                                                   AdminStudioTokens.bodyRegular,
                                             ),
+                                            if (currentDetail['latitude'] !=
+                                                    null &&
+                                                currentDetail['longitude'] !=
+                                                    null)
+                                              Text(
+                                                'Tọa độ GPS: ${currentDetail['latitude']}, ${currentDetail['longitude']}',
+                                                style: AdminStudioTokens
+                                                    .bodyRegular,
+                                              ),
                                           ],
                                         ),
                                       ),
@@ -3125,6 +3404,18 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                               ],
                                               if (allLabels.isNotEmpty) ...[
                                                 const SizedBox(height: 6),
+                                                Text(
+                                                  'Nhãn phù hợp:',
+                                                  style: AdminStudioTokens
+                                                      .metaCaption
+                                                      .copyWith(
+                                                    fontSize: 10.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: AdminStudioTokens
+                                                        .successInk,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 3),
                                                 Wrap(
                                                   spacing: 4,
                                                   runSpacing: 4,
@@ -3139,7 +3430,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                                       ),
                                                       decoration: BoxDecoration(
                                                         color: AdminStudioTokens
-                                                            .softCircle,
+                                                            .successTint,
                                                         borderRadius:
                                                             BorderRadius
                                                                 .circular(
@@ -3155,7 +3446,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                                           fontSize: 11,
                                                           color:
                                                               AdminStudioTokens
-                                                                  .inkSecondary,
+                                                                  .successInk,
                                                         ),
                                                       ),
                                                     );
@@ -3178,11 +3469,11 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                                     ),
                                                   ),
                                                   child: Text(
-                                                    [
+                                                    'Cảnh báo lỗi ảnh: ${[
                                                       ...warnings,
                                                       if (aiError.isNotEmpty)
                                                         aiError,
-                                                    ].join(' · '),
+                                                    ].join(' · ')}',
                                                     style: AdminStudioTokens
                                                         .metaCaption
                                                         .copyWith(
@@ -3373,6 +3664,37 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                     onRetry: _loading ? null : _fetchPending,
                   ),
                 ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: const [
+                    ('pending_approval', 'Chờ duyệt'),
+                    ('active', 'Đang hoạt động'),
+                    ('rejected', 'Đã từ chối'),
+                    ('inactive', 'Đã ẩn'),
+                    ('all', 'Tất cả'),
+                  ].map((opt) {
+                    final selected = _statusFilter == opt.$1;
+                    return ChoiceChip(
+                      key: Key('admin_moderation_filter_${opt.$1}'),
+                      label: Text(opt.$2),
+                      selected: selected,
+                      onSelected: _loading
+                          ? null
+                          : (_) {
+                              if (_statusFilter == opt.$1) return;
+                              setState(() {
+                                _statusFilter = opt.$1;
+                                _page = 1;
+                              });
+                              _fetchPending();
+                            },
+                    );
+                  }).toList(),
+                ),
+              ),
               AdminStudioGroupCard(
                 title: 'Hàng đợi kiểm duyệt',
                 trailing: Container(
@@ -3473,6 +3795,10 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                           Container(
                                             width: 92,
                                             height: 66,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 4,
+                                            ),
                                             alignment: Alignment.center,
                                             decoration: BoxDecoration(
                                               color:
@@ -3480,10 +3806,16 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                               borderRadius:
                                                   BorderRadius.circular(15),
                                             ),
-                                            child: const Text(
-                                              'Chưa có ảnh',
-                                              style:
-                                                  AdminStudioTokens.metaCaption,
+                                            child: const FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              child: Text(
+                                                'Chưa có ảnh',
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                textAlign: TextAlign.center,
+                                                style: AdminStudioTokens
+                                                    .metaCaption,
+                                              ),
                                             ),
                                           ),
                                         ConstrainedBox(
@@ -3533,7 +3865,7 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                               ],
                                               const SizedBox(height: 4),
                                               Text(
-                                                CurrencyFormatter.formatVnd(
+                                                MoneyFormatter.formatVnd(
                                                   price.round(),
                                                   fallback: '0 ₫',
                                                 ),
@@ -3564,7 +3896,16 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                         ElevatedButton(
                                           style: _kCompactPillElevatedStyle,
                                           onPressed: !canModerate ||
-                                                  _processingId == listingId
+                                                  _processingId == listingId ||
+                                                  !const {
+                                                    '',
+                                                    'pending_approval',
+                                                    'pending',
+                                                  }.contains(
+                                                    '${item['status'] ?? 'pending_approval'}'
+                                                        .trim()
+                                                        .toLowerCase(),
+                                                  )
                                               ? null
                                               : () => _handleApprove(listingId),
                                           child: Text(
@@ -3576,7 +3917,16 @@ class _AdminModerationTabState extends ConsumerState<_AdminModerationTab> {
                                         OutlinedButton(
                                           style: _kCompactPillOutlinedStyle,
                                           onPressed: !canModerate ||
-                                                  _processingId == listingId
+                                                  _processingId == listingId ||
+                                                  !const {
+                                                    '',
+                                                    'pending_approval',
+                                                    'pending',
+                                                  }.contains(
+                                                    '${item['status'] ?? 'pending_approval'}'
+                                                        .trim()
+                                                        .toLowerCase(),
+                                                  )
                                               ? null
                                               : () => _openRejectDialog(item),
                                           child: const Text('Từ chối'),
@@ -3673,7 +4023,7 @@ class _AdminHostApplicationsTabState
     });
     try {
       final result = await ref
-          .read(adminRepositoryProvider)
+          .read(adminPortalViewModelProvider)
           .getAdminHostApplicationsPaginated(
             status: _status,
             page: _appPage,
@@ -3690,8 +4040,8 @@ class _AdminHostApplicationsTabState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isOffline = AdminRepository.isOfflineError(e);
-        _error = AdminRepository.extractErrorMessage(
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể tải danh sách hồ sơ host.',
         );
@@ -3710,7 +4060,7 @@ class _AdminHostApplicationsTabState
     });
     try {
       final result = await ref
-          .read(adminRepositoryProvider)
+          .read(adminPortalViewModelProvider)
           .getAdminVerificationsPaginated(
             status: _verificationStatus,
             page: _verificationPage,
@@ -3728,8 +4078,8 @@ class _AdminHostApplicationsTabState
       if (!mounted) return;
       setState(() {
         _verifications = const [];
-        _verificationOffline = AdminRepository.isOfflineError(e);
-        _verificationError = AdminRepository.extractErrorMessage(
+        _verificationOffline = AdminPortalViewModel.isOfflineError(e);
+        _verificationError = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể tải danh sách Legacy Verifications.',
         );
@@ -3747,6 +4097,15 @@ class _AdminHostApplicationsTabState
       });
       return;
     }
+    // CONFLICT-RESOLVED: Chặn thao tác duyệt trên bản ghi xác minh đã xử lý để tránh lỗi HTTP 409.
+    final targetItem = _verifications
+        .where((item) =>
+            '${item['verificationId'] ?? item['id'] ?? ''}' == verificationId)
+        .firstOrNull;
+    if (targetItem != null &&
+        !AdminStatusHelper.canReviewSubmission(targetItem['status'])) {
+      return;
+    }
 
     setState(() {
       _processingVerificationId = verificationId;
@@ -3756,7 +4115,7 @@ class _AdminHostApplicationsTabState
     });
     try {
       await ref
-          .read(adminRepositoryProvider)
+          .read(adminPortalViewModelProvider)
           .approveHostVerification(verificationId);
       if (!mounted) return;
       setState(() => _message = 'Đã duyệt xác minh #$verificationId.');
@@ -3768,10 +4127,10 @@ class _AdminHostApplicationsTabState
       await _fetchVerifications();
     } catch (e) {
       if (!mounted) return;
-      final status = AdminRepository.extractStatusCode(e);
+      final status = AdminPortalViewModel.extractStatusCode(e);
       setState(() {
-        _isOffline = AdminRepository.isOfflineError(e);
-        _error = AdminRepository.extractErrorMessage(
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể duyệt xác minh.',
         );
@@ -3792,6 +4151,15 @@ class _AdminHostApplicationsTabState
         _error =
             'Chỉ Quản trị viên (Admin) mới có quyền từ chối xác minh (403).';
       });
+      return;
+    }
+    // CONFLICT-RESOLVED: Chặn thao tác từ chối trên bản ghi xác minh không còn ở trạng thái pending.
+    final targetItem = _verifications
+        .where((item) =>
+            '${item['verificationId'] ?? item['id'] ?? ''}' == verificationId)
+        .firstOrNull;
+    if (targetItem != null &&
+        !AdminStatusHelper.canReviewSubmission(targetItem['status'])) {
       return;
     }
 
@@ -3840,17 +4208,17 @@ class _AdminHostApplicationsTabState
     });
     try {
       await ref
-          .read(adminRepositoryProvider)
+          .read(adminPortalViewModelProvider)
           .rejectHostVerification(verificationId, reason);
       if (!mounted) return;
       setState(() => _message = 'Đã từ chối xác minh #$verificationId.');
       await _fetchVerifications();
     } catch (e) {
       if (!mounted) return;
-      final status = AdminRepository.extractStatusCode(e);
+      final status = AdminPortalViewModel.extractStatusCode(e);
       setState(() {
-        _isOffline = AdminRepository.isOfflineError(e);
-        _error = AdminRepository.extractErrorMessage(
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể từ chối xác minh.',
         );
@@ -3875,7 +4243,7 @@ class _AdminHostApplicationsTabState
     });
     try {
       final detail = await ref
-          .read(adminRepositoryProvider)
+          .read(adminPortalViewModelProvider)
           .getAdminHostApplicationDetail(applicationId);
       if (!mounted) return;
       setState(() {
@@ -3890,8 +4258,8 @@ class _AdminHostApplicationsTabState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isOffline = AdminRepository.isOfflineError(e);
-        _error = AdminRepository.extractErrorMessage(
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể tải chi tiết hồ sơ host.',
         );
@@ -3919,9 +4287,24 @@ class _AdminHostApplicationsTabState
         builder: (ctx, setModalState) {
           final appId =
               '${currentDetail['applicationId'] ?? currentDetail['id'] ?? applicationId}';
-          final documents = currentDetail['documents'] is List
+          final rawDocuments = currentDetail['documents'] is List
               ? (currentDetail['documents'] as List)
               : const <dynamic>[];
+          final legacyUrls = currentDetail['documentUrls'] is List
+              ? (currentDetail['documentUrls'] as List)
+              : const <dynamic>[];
+          final documents = rawDocuments.isNotEmpty
+              ? rawDocuments
+              : legacyUrls
+                  .where((u) => u != null && '$u'.trim().isNotEmpty)
+                  .map(
+                    (u) => <String, dynamic>{
+                      'documentType': 'cccd',
+                      'side': 'legacy',
+                      'url': '$u'.trim(),
+                    },
+                  )
+                  .toList();
 
           Future<void> handleApprove() async {
             if (appId.isEmpty) return;
@@ -3943,7 +4326,7 @@ class _AdminHostApplicationsTabState
             });
             try {
               await ref
-                  .read(adminRepositoryProvider)
+                  .read(adminPortalViewModelProvider)
                   .approveHostApplication(appId);
               if (ctx.mounted) {
                 Navigator.of(ctx).pop();
@@ -3959,12 +4342,12 @@ class _AdminHostApplicationsTabState
               AppToast.show(context, successMsg, type: AppToastType.success);
               await _fetchApplications();
             } catch (e) {
-              final status = AdminRepository.extractStatusCode(e);
-              final errMsg = AdminRepository.extractErrorMessage(
+              final status = AdminPortalViewModel.extractStatusCode(e);
+              final errMsg = AdminPortalViewModel.extractErrorMessage(
                 e,
                 'Không thể duyệt hồ sơ.',
               );
-              final offline = AdminRepository.isOfflineError(e);
+              final offline = AdminPortalViewModel.isOfflineError(e);
               if (ctx.mounted) {
                 setModalState(() {
                   actionLoading = false;
@@ -4006,7 +4389,7 @@ class _AdminHostApplicationsTabState
             });
             try {
               await ref
-                  .read(adminRepositoryProvider)
+                  .read(adminPortalViewModelProvider)
                   .rejectHostApplication(appId, reason);
               if (ctx.mounted) {
                 Navigator.of(ctx).pop();
@@ -4022,12 +4405,12 @@ class _AdminHostApplicationsTabState
               AppToast.show(context, infoMsg, type: AppToastType.info);
               await _fetchApplications();
             } catch (e) {
-              final status = AdminRepository.extractStatusCode(e);
-              final errMsg = AdminRepository.extractErrorMessage(
+              final status = AdminPortalViewModel.extractStatusCode(e);
+              final errMsg = AdminPortalViewModel.extractErrorMessage(
                 e,
                 'Không thể từ chối hồ sơ.',
               );
-              final offline = AdminRepository.isOfflineError(e);
+              final offline = AdminPortalViewModel.isOfflineError(e);
               if (ctx.mounted) {
                 setModalState(() {
                   actionLoading = false;
@@ -4037,6 +4420,66 @@ class _AdminHostApplicationsTabState
               }
               if (status == 409 && mounted) {
                 await _fetchApplications(preserveError: true);
+              }
+            }
+          }
+
+          Future<void> handleRequestMoreInfo() async {
+            if (appId.isEmpty) return;
+            final latestActor = ref.read(authNotifierProvider).valueOrNull;
+            if (!_isActorAdmin(latestActor)) {
+              setModalState(() {
+                modalError =
+                    'Chỉ Quản trị viên (Admin) mới có quyền yêu cầu bổ sung hồ sơ host (403).';
+                modalIsOffline = false;
+              });
+              return;
+            }
+
+            final reason = _rejectReasonCtrl.text.trim();
+            if (reason.isEmpty) {
+              setModalState(() {
+                rejectReasonError =
+                    'Vui lòng nhập nội dung cần ứng viên bổ sung hoặc chụp lại.';
+              });
+              return;
+            }
+
+            setModalState(() {
+              actionLoading = true;
+              modalError = null;
+              rejectReasonError = null;
+              modalIsOffline = false;
+            });
+            try {
+              await ref
+                  .read(adminPortalViewModelProvider)
+                  .requestMoreInfoHostApplication(appId, reason);
+              if (ctx.mounted) {
+                Navigator.of(ctx).pop();
+              }
+              if (!mounted) return;
+              final infoMsg =
+                  'Đã gửi yêu cầu bổ sung chứng từ cho hồ sơ #$appId.';
+              setState(() {
+                _message = infoMsg;
+                _error = null;
+                _isOffline = false;
+              });
+              AppToast.show(context, infoMsg, type: AppToastType.info);
+              await _fetchApplications();
+            } catch (e) {
+              final errMsg = AdminPortalViewModel.extractErrorMessage(
+                e,
+                'Không thể gửi yêu cầu bổ sung hồ sơ.',
+              );
+              final offline = AdminPortalViewModel.isOfflineError(e);
+              if (ctx.mounted) {
+                setModalState(() {
+                  actionLoading = false;
+                  modalError = errMsg;
+                  modalIsOffline = offline;
+                });
               }
             }
           }
@@ -4126,7 +4569,7 @@ class _AdminHostApplicationsTabState
                               currentDetail['idNumberMasked'] != null) ...[
                             const SizedBox(height: 4),
                             Text(
-                              'Số định danh (KYC): ${AdminRepository.maskKycIdentifier('${currentDetail['idNumberMasked'] ?? currentDetail['idNumber'] ?? ''}')}',
+                              'Số định danh (KYC): ${AdminPortalViewModel.maskKycIdentifier('${currentDetail['idNumberMasked'] ?? currentDetail['idNumber'] ?? ''}')}',
                               style: AdminStudioTokens.cardSubtitle,
                             ),
                           ],
@@ -4178,74 +4621,10 @@ class _AdminHostApplicationsTabState
                         final doc = rawDoc is Map
                             ? Map<String, dynamic>.from(rawDoc)
                             : const <String, dynamic>{};
-                        final fileUrl =
-                            '${doc['fileUrl'] ?? doc['proxyUrl'] ?? ''}';
-                        final signedUrl = '${doc['signedUrl'] ?? ''}';
-                        final previewUrl =
-                            fileUrl.isNotEmpty ? fileUrl : signedUrl;
-                        final mimeType = '${doc['mimeType'] ?? ''}';
-                        return AdminStudioInnerCard(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${doc['documentType'] ?? 'cccd'} / ${doc['side'] ?? 'front'}',
-                                style: AdminStudioTokens.cardTitle,
-                              ),
-                              const SizedBox(height: 8),
-                              if (previewUrl.isNotEmpty &&
-                                  mimeType != 'application/pdf')
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: AppImage(
-                                    imageUrl: previewUrl,
-                                    height: 180,
-                                    width: double.infinity,
-                                  ),
-                                ),
-                              if (signedUrl.isNotEmpty ||
-                                  previewUrl.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                OutlinedButton(
-                                  style: _kPillOutlinedStyle,
-                                  onPressed: () async {
-                                    final target = signedUrl.isNotEmpty
-                                        ? signedUrl
-                                        : previewUrl;
-                                    final resolvedTarget =
-                                        target.startsWith('http')
-                                            ? target
-                                            : AppImage.resolveNetworkUrl(
-                                                target,
-                                              );
-                                    final uri = Uri.tryParse(resolvedTarget);
-                                    if (uri != null &&
-                                        UrlSecurityValidator
-                                            .isTrustedAdminDocumentUrl(
-                                          resolvedTarget,
-                                        )) {
-                                      await launchUrl(
-                                        uri,
-                                        mode: LaunchMode.externalApplication,
-                                      );
-                                    } else if (mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Liên kết tài liệu không thuộc nguồn tin cậy hoặc không an toàn.',
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  child: const Text('Mở tài liệu'),
-                                ),
-                              ],
-                            ],
-                          ),
+                        return AdminKycDocumentViewer(
+                          viewModel: ref.read(adminPortalViewModelProvider),
+                          applicationId: appId,
+                          document: doc,
                         );
                       })
                     else
@@ -4256,7 +4635,11 @@ class _AdminHostApplicationsTabState
                         ),
                       ),
                     const SizedBox(height: 6),
-                    if (currentDetail['status'] == 'approved')
+                    // CONFLICT-RESOLVED: Chỉ hiển thị form phê duyệt/từ chối khi hồ sơ thực sự ở trạng thái pending (tránh HTTP 409).
+                    if (AdminStatusHelper.classifyReviewStatus(
+                          currentDetail['status'],
+                        ).kind ==
+                        AdminReviewStatusKind.approved)
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(15),
@@ -4284,7 +4667,10 @@ class _AdminHostApplicationsTabState
                           ],
                         ),
                       )
-                    else if (currentDetail['status'] == 'rejected')
+                    else if (AdminStatusHelper.classifyReviewStatus(
+                          currentDetail['status'],
+                        ).kind ==
+                        AdminReviewStatusKind.rejected)
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(15),
@@ -4329,7 +4715,9 @@ class _AdminHostApplicationsTabState
                           ],
                         ),
                       )
-                    else
+                    else if (AdminStatusHelper.canReviewSubmission(
+                      currentDetail['status'],
+                    ))
                       AdminStudioInnerCard(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -4374,6 +4762,16 @@ class _AdminHostApplicationsTabState
                                         ? 'Đang xử lý...'
                                         : 'Phê duyệt hồ sơ',
                                   ),
+                                ),
+                                OutlinedButton(
+                                  key: const Key(
+                                    'admin_host_app_request_more_info_btn',
+                                  ),
+                                  style: _kPillOutlinedStyle,
+                                  onPressed: !canManageHostApps || actionLoading
+                                      ? null
+                                      : handleRequestMoreInfo,
+                                  child: const Text('Yêu cầu bổ sung'),
                                 ),
                                 OutlinedButton(
                                   key: const Key(
@@ -4460,6 +4858,35 @@ class _AdminHostApplicationsTabState
         ),
       );
     }
+    if (status == 'supplement_required') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: AdminStudioTokens.warningTint,
+          borderRadius: BorderRadius.circular(AdminStudioTokens.pillRadius),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              LucideIcons.fileWarning,
+              size: 13.5,
+              color: AdminStudioTokens.warningInk,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                'Yêu cầu bổ sung hồ sơ',
+                style: AdminStudioTokens.metaCaption.copyWith(
+                  color: AdminStudioTokens.warningInk,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -4480,6 +4907,57 @@ class _AdminHostApplicationsTabState
               'Chờ phê duyệt',
               style: AdminStudioTokens.metaCaption.copyWith(
                 color: AdminStudioTokens.warningInk,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Giải thuật hiển thị nhãn trạng thái chỉ đọc cho bản ghi Legacy Verification đã hoàn tất xét duyệt.
+  Widget _buildVerificationReadOnlyChip(
+    AdminReviewStatusClassification reviewInfo, {
+    required String verificationId,
+  }) {
+    final (Color bg, Color fg, IconData icon) = switch (reviewInfo.kind) {
+      AdminReviewStatusKind.approved => (
+          AdminStudioTokens.successTint,
+          AdminStudioTokens.successInk,
+          LucideIcons.circleCheck,
+        ),
+      AdminReviewStatusKind.rejected => (
+          AdminStudioTokens.dangerTint,
+          AdminStudioTokens.dangerInk,
+          LucideIcons.circleX,
+        ),
+      AdminReviewStatusKind.pending || AdminReviewStatusKind.closed => (
+          AdminStudioTokens.softCircle,
+          AdminStudioTokens.inkSecondary,
+          LucideIcons.info,
+        ),
+    };
+
+    return Container(
+      key: ValueKey('admin-verification-readonly-$verificationId'),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(AdminStudioTokens.pillRadius),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13.5, color: fg),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              reviewInfo.badgeLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AdminStudioTokens.metaCaption.copyWith(
+                color: fg,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -4729,60 +5207,54 @@ class _AdminHostApplicationsTabState
 
     final verificationsSection = AdminStudioGroupCard(
       title: 'Bảng Legacy Verifications',
-      trailing: Container(
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 13),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(AdminStudioTokens.pillRadius),
-          boxShadow: AdminStudioTokens.cardShadow,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _verificationStatus,
-                isDense: true,
-                icon: const Padding(
-                  padding: EdgeInsets.only(left: 5),
-                  child: Icon(
-                    LucideIcons.chevronDown,
-                    size: 14,
-                    color: AdminStudioTokens.iconMuted,
-                  ),
-                ),
-                style: AdminStudioTokens.pillText.copyWith(
-                  fontWeight: FontWeight.w400,
-                  color: AdminStudioTokens.inkPrimary,
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'all', child: Text('Tất cả')),
-                  DropdownMenuItem(
-                    value: 'pending',
-                    child: Text('Chờ duyệt'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'approved',
-                    child: Text('Đã duyệt'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'rejected',
-                    child: Text('Từ chối'),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() {
-                    _verificationStatus = value;
-                    _verificationPage = 1;
-                  });
-                  _fetchVerifications();
-                },
-              ),
+      trailing: AdminStudioPillDropdown<String>(
+        value: _verificationStatus,
+        minHeight: 36,
+        maxWidth: 220,
+        isExpanded: false,
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+        items: const [
+          DropdownMenuItem(
+            value: 'all',
+            child: Text(
+              'Tất cả',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
-        ),
+          ),
+          DropdownMenuItem(
+            value: 'pending',
+            child: Text(
+              'Chờ duyệt',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          DropdownMenuItem(
+            value: 'approved',
+            child: Text(
+              'Đã duyệt',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          DropdownMenuItem(
+            value: 'rejected',
+            child: Text(
+              'Từ chối',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+        onChanged: (value) {
+          if (value == null) return;
+          setState(() {
+            _verificationStatus = value;
+            _verificationPage = 1;
+          });
+          _fetchVerifications();
+        },
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4837,16 +5309,19 @@ class _AdminHostApplicationsTabState
                 );
                 final vType =
                     '${v['verificationType'] ?? v['documentType'] ?? 'identity'}';
-                final vStatus = '${v['status'] ?? 'pending'}';
+                // CONFLICT-RESOLVED: Chỉ hiển thị nút "Duyệt xác minh" và "Từ chối" khi bản ghi đang ở trạng thái 'pending', thay thế bằng chip chỉ đọc khi đã duyệt/từ chối để ngăn HTTP 409.
+                final reviewInfo =
+                    AdminStatusHelper.classifyReviewStatus(v['status']);
                 final rawIdNum =
                     '${v['idNumberMasked'] ?? v['idNumber'] ?? ''}'.trim();
                 final maskedIdNum = rawIdNum.isNotEmpty
-                    ? ' · Định danh: ${AdminRepository.maskKycIdentifier(rawIdNum)}'
+                    ? ' · Định danh: ${AdminPortalViewModel.maskKycIdentifier(rawIdNum)}'
                     : '';
                 final isProcessing =
                     _processingVerificationId == verificationId;
 
                 return AdminStudioInnerCard(
+                  key: ValueKey('admin-verification-row-$verificationId'),
                   margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.all(14),
                   child: Wrap(
@@ -4874,7 +5349,7 @@ class _AdminHostApplicationsTabState
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Loại: ${vType == 'identity' ? 'Định danh (CCCD/CMND)' : vType} · Trạng thái: ${vStatus == 'approved' ? 'Đã duyệt' : vStatus == 'rejected' ? 'Đã từ chối' : 'Chờ duyệt'}$maskedIdNum',
+                                  'Loại: ${vType == 'identity' ? 'Định danh (CCCD/CMND)' : vType} · Trạng thái: ${reviewInfo.badgeLabel}$maskedIdNum',
                                   style: AdminStudioTokens.metaCaption,
                                 ),
                               ],
@@ -4882,30 +5357,32 @@ class _AdminHostApplicationsTabState
                           ),
                         ],
                       ),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          ElevatedButton(
-                            style: _kCompactPillElevatedStyle,
-                            onPressed: !canManageHostApps ||
-                                    isProcessing ||
-                                    vStatus == 'approved'
-                                ? null
-                                : () => _approveVerification(verificationId),
-                            child: const Text('Duyệt xác minh'),
-                          ),
-                          OutlinedButton(
-                            style: _kCompactPillOutlinedStyle,
-                            onPressed: !canManageHostApps ||
-                                    isProcessing ||
-                                    vStatus == 'rejected'
-                                ? null
-                                : () => _rejectVerification(verificationId),
-                            child: const Text('Từ chối'),
-                          ),
-                        ],
-                      ),
+                      if (reviewInfo.canApproveOrReject)
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            ElevatedButton(
+                              style: _kCompactPillElevatedStyle,
+                              onPressed: !canManageHostApps || isProcessing
+                                  ? null
+                                  : () => _approveVerification(verificationId),
+                              child: const Text('Duyệt xác minh'),
+                            ),
+                            OutlinedButton(
+                              style: _kCompactPillOutlinedStyle,
+                              onPressed: !canManageHostApps || isProcessing
+                                  ? null
+                                  : () => _rejectVerification(verificationId),
+                              child: const Text('Từ chối'),
+                            ),
+                          ],
+                        )
+                      else
+                        _buildVerificationReadOnlyChip(
+                          reviewInfo,
+                          verificationId: verificationId,
+                        ),
                     ],
                   ),
                 );
@@ -5082,7 +5559,7 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
     });
     try {
       final paginated =
-          await ref.read(adminRepositoryProvider).getAdminUsersPaginated(
+          await ref.read(adminPortalViewModelProvider).getAdminUsersPaginated(
                 page: _page,
                 limit: _limit,
                 search: _debouncedSearch,
@@ -5109,8 +5586,8 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isOffline = AdminRepository.isOfflineError(e);
-        _error = AdminRepository.extractErrorMessage(
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể tải phân quyền.',
         );
@@ -5148,7 +5625,7 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
     });
     try {
       await ref
-          .read(adminRepositoryProvider)
+          .read(adminPortalViewModelProvider)
           .updateAdminUser(userId, {'role': role});
       if (!mounted) return;
       AppToast.show(
@@ -5159,10 +5636,10 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
       await _fetchUsers();
     } catch (e) {
       if (!mounted) return;
-      final status = AdminRepository.extractStatusCode(e);
+      final status = AdminPortalViewModel.extractStatusCode(e);
       setState(() {
-        _isOffline = AdminRepository.isOfflineError(e);
-        _error = AdminRepository.extractErrorMessage(
+        _isOffline = AdminPortalViewModel.isOfflineError(e);
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể cập nhật vai trò người dùng.',
         );
@@ -5376,76 +5853,59 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                               Widget buildRoleControls({
                                 required bool expandDropdown,
                               }) {
-                                final dropdownPill = Container(
+                                final dropdownPill =
+                                    AdminStudioPillDropdown<String>(
                                   width: expandDropdown ? null : 164,
-                                  height: 40,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
+                                  minHeight: 40,
+                                  fillColor: AdminStudioTokens.softCircle,
+                                  boxShadow: null,
+                                  border: isChanged
+                                      ? Border.all(
+                                          color: AdminStudioTokens.obsidian,
+                                          width: 1.1,
+                                        )
+                                      : null,
+                                  textStyle:
+                                      AdminStudioTokens.pillText.copyWith(
+                                    color: AdminStudioTokens.inkPrimary,
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: AdminStudioTokens.softCircle,
-                                    borderRadius: BorderRadius.circular(
-                                      AdminStudioTokens.pillRadius,
-                                    ),
-                                    border: isChanged
-                                        ? Border.all(
-                                            color: AdminStudioTokens.obsidian,
-                                            width: 1.1,
-                                          )
-                                        : null,
-                                  ),
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      isExpanded: true,
-                                      icon: const Icon(
-                                        LucideIcons.chevronDown,
-                                        size: 14,
-                                        color: AdminStudioTokens.iconMuted,
+                                  value: _supportedRoles.contains(draftRole)
+                                      ? draftRole
+                                      : 'guest',
+                                  items: const [
+                                    DropdownMenuItem(
+                                      value: 'guest',
+                                      child: Text(
+                                        'Guest',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      style:
-                                          AdminStudioTokens.pillText.copyWith(
-                                        color: AdminStudioTokens.inkPrimary,
-                                      ),
-                                      value: _supportedRoles.contains(draftRole)
-                                          ? draftRole
-                                          : 'guest',
-                                      items: const [
-                                        DropdownMenuItem(
-                                          value: 'guest',
-                                          child: Text(
-                                            'Guest',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'host',
-                                          child: Text(
-                                            'Host',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'admin',
-                                          child: Text(
-                                            'Admin',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                      onChanged: !canManageRoles
-                                          ? null
-                                          : (next) {
-                                              if (next == null) return;
-                                              setState(
-                                                () =>
-                                                    _draftRoles[userId] = next,
-                                              );
-                                            },
                                     ),
-                                  ),
+                                    DropdownMenuItem(
+                                      value: 'host',
+                                      child: Text(
+                                        'Host',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'admin',
+                                      child: Text(
+                                        'Admin',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                  onChanged: !canManageRoles
+                                      ? null
+                                      : (next) {
+                                          if (next == null) return;
+                                          setState(
+                                            () => _draftRoles[userId] = next,
+                                          );
+                                        },
                                 );
 
                                 final saveButton = ElevatedButton(
@@ -5454,7 +5914,10 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                                       Size(64, 40),
                                     ),
                                     padding: const WidgetStatePropertyAll(
-                                      EdgeInsets.symmetric(horizontal: 15),
+                                      EdgeInsets.symmetric(
+                                        horizontal: 15,
+                                        vertical: 8,
+                                      ),
                                     ),
                                   ),
                                   onPressed: !canManageRoles ||
@@ -5473,7 +5936,10 @@ class _AdminRolesTabState extends ConsumerState<_AdminRolesTab> {
                                       Size(54, 40),
                                     ),
                                     padding: const WidgetStatePropertyAll(
-                                      EdgeInsets.symmetric(horizontal: 12),
+                                      EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
                                     ),
                                   ),
                                   onPressed: () {
@@ -5614,7 +6080,7 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
 
     try {
       final data =
-          await ref.read(adminRepositoryProvider).getPlatformFeeStatus();
+          await ref.read(adminPortalViewModelProvider).getPlatformFeeStatus();
       if (!mounted) return;
 
       setState(() {
@@ -5634,7 +6100,7 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = AdminRepository.extractErrorMessage(
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể tải trạng thái phí nền tảng.',
         );
@@ -5695,7 +6161,7 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
     });
 
     try {
-      await ref.read(adminRepositoryProvider).schedulePlatformFeeChange(
+      await ref.read(adminPortalViewModelProvider).schedulePlatformFeeChange(
             feePct: rawFee,
             reason: reason.isEmpty ? null : reason,
           );
@@ -5712,7 +6178,7 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error = AdminRepository.extractErrorMessage(
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể lên lịch điều chỉnh phí.',
         );
@@ -5763,7 +6229,7 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
     });
 
     try {
-      await ref.read(adminRepositoryProvider).cancelScheduledPlatformFee();
+      await ref.read(adminPortalViewModelProvider).cancelScheduledPlatformFee();
       if (!mounted) return;
       setState(() {
         _submitting = false;
@@ -5774,7 +6240,7 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error = AdminRepository.extractErrorMessage(
+        _error = AdminPortalViewModel.extractErrorMessage(
           e,
           'Không thể hủy lịch điều chỉnh phí.',
         );
@@ -5898,7 +6364,8 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
               title: 'Tổng quan phí nền tảng',
               child: LayoutBuilder(
                 builder: (ctx, constraints) {
-                  final isNarrow = constraints.maxWidth < 520;
+                  final isNarrow = constraints.maxWidth < 520 ||
+                      MediaQuery.textScalerOf(ctx).scale(1) > 1.35;
                   final cards = [
                     AdminStudioKpiCard(
                       label: 'Phí sàn hiện tại',
@@ -5908,7 +6375,7 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
                     ),
                     AdminStudioKpiCard(
                       label: 'Tổng phí đã thu',
-                      value: CurrencyFormatter.formatVnd(_totalPlatformRevenue),
+                      value: MoneyFormatter.formatVnd(_totalPlatformRevenue),
                       subtitle: 'Doanh thu tích lũy nền tảng',
                       icon: LucideIcons.wallet,
                     ),
@@ -6150,18 +6617,23 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
                                         Container(
                                           width: 42,
                                           height: 42,
+                                          padding: const EdgeInsets.all(5),
                                           decoration: const BoxDecoration(
                                             color: AdminStudioTokens.softCircle,
                                             shape: BoxShape.circle,
                                           ),
                                           child: Center(
-                                            child: Text(
-                                              '$fee%',
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w600,
-                                                color: AdminStudioTokens
-                                                    .inkPrimary,
+                                            child: FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              child: Text(
+                                                '$fee%',
+                                                maxLines: 1,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AdminStudioTokens
+                                                      .inkPrimary,
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -6226,6 +6698,1434 @@ class _AdminPlatformFeeTabState extends ConsumerState<_AdminPlatformFeeTab> {
   }
 }
 
+// ── 8. DUYỆT CHI TRẢ & HOÀN TIỀN (/admin/chi-tra) ──
+class _AdminDisbursementsTab extends ConsumerStatefulWidget {
+  const _AdminDisbursementsTab();
+
+  @override
+  ConsumerState<_AdminDisbursementsTab> createState() =>
+      _AdminDisbursementsTabState();
+}
+
+class _AdminDisbursementsTabState
+    extends ConsumerState<_AdminDisbursementsTab> {
+  String _activeSubTab = 'payouts'; // 'payouts' or 'refunds'
+  String _payoutFilter = 'all';
+  String _refundFilter = 'all';
+
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _payouts = const [];
+  List<Map<String, dynamic>> _refunds = const [];
+  final Set<String> _processingIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  // CONFLICT-RESOLVED: Gọi qua `adminPortalViewModelProvider` và `MoneyFormatter.formatVnd` thay vì `adminRepositoryProvider` / `CurrencyFormatter` để tuân thủ MVVM và bộ định dạng tiền tệ hợp nhất.
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final vm = ref.read(adminPortalViewModelProvider);
+      final results = await Future.wait<List<Map<String, dynamic>>>([
+        vm.getAdminHostPayouts(limit: 100),
+        vm.getAdminRefunds(limit: 100),
+      ]);
+
+      if (!mounted) return;
+      setState(() {
+        _payouts = results[0];
+        _refunds = results[1];
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Không thể tải dữ liệu chi trả & hoàn tiền: $e';
+      });
+    }
+  }
+
+  Future<void> _disburseHostPayout(Map<String, dynamic> payout) async {
+    final payoutId = '${payout['payoutId'] ?? payout['id'] ?? ''}';
+    final amount = double.tryParse('${payout['amount'] ?? 0}') ?? 0;
+    final bankName = (payout['bankName'] ?? 'Ngân hàng').toString();
+    final accName = (payout['accountName'] ?? '').toString();
+    final accNumber =
+        (payout['accountNumberMasked'] ?? payout['accountNumber'] ?? '')
+            .toString();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceBase,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(LucideIcons.arrowUpRight, color: AppColors.primary, size: 20),
+            SizedBox(width: 8),
+            Text(
+              'Xác nhận duyệt & chi tiền',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Bạn có chắc chắn muốn duyệt và giải ngân cho đơn rút tiền Payout #$payoutId?',
+              style:
+                  const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceBase,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Số tiền: ${MoneyFormatter.formatVnd(amount.round())}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Ngân hàng: $bankName',
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textPrimary),
+                  ),
+                  if (accName.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Chủ TK: $accName',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textPrimary),
+                    ),
+                  ],
+                  const SizedBox(height: 2),
+                  Text(
+                    'STK: $accNumber',
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Row(
+              children: [
+                Icon(LucideIcons.shieldCheck,
+                    size: 14, color: AppColors.textSecondary),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Giao dịch được xử lý tự động qua Napas 24/7.',
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.textInverse,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Duyệt & Chi tiền ngay'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _processingIds.add(payoutId));
+    try {
+      final vm = ref.read(adminPortalViewModelProvider);
+      final result = await vm.disburseHostPayout(payoutId);
+      if (!mounted) return;
+
+      final transferRef = (result['disbursement']?['transferReference'] ??
+              result['transferReference'] ??
+              'Thành công')
+          .toString();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Duyệt chi trả thành công qua Napas 24/7! (Mã FT: $transferRef)',
+          ),
+          backgroundColor: AppColors.successGreen,
+        ),
+      );
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi duyệt chi trả: $e'),
+          backgroundColor: AppColors.errorRed,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingIds.remove(payoutId));
+      }
+    }
+  }
+
+  // Giải thuật thực thi Bước 2 (phê duyệt độc lập) và Bước 3 (ghi nhận mã chuyển khoản FT) của quy trình Maker-Checker (`TC-093`).
+  Future<void> _approveHostPayoutStep2(Map<String, dynamic> payout) async {
+    final payoutId = '${payout['payoutId'] ?? payout['id'] ?? ''}';
+    if (payoutId.isEmpty) return;
+    setState(() => _processingIds.add(payoutId));
+    try {
+      await ref.read(adminPortalViewModelProvider).approveHostPayout(payoutId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã duyệt lệnh chi trả Payout #$payoutId (Bước 2).'),
+          backgroundColor: AppColors.successGreen,
+        ),
+      );
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AdminPortalViewModel.extractErrorMessage(
+              e,
+              'Không thể duyệt lệnh chi trả.',
+            ),
+          ),
+          backgroundColor: AppColors.errorRed,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingIds.remove(payoutId));
+      }
+    }
+  }
+
+  Future<void> _markHostPayoutPaidStep3(Map<String, dynamic> payout) async {
+    final payoutId = '${payout['payoutId'] ?? payout['id'] ?? ''}';
+    if (payoutId.isEmpty) return;
+    final transferRef = await showMarkPayoutPaidDialog(
+      context: context,
+      payoutId: payoutId,
+    );
+    if (transferRef == null || !mounted) return;
+    setState(() => _processingIds.add(payoutId));
+    try {
+      await ref
+          .read(adminPortalViewModelProvider)
+          .markHostPayoutPaid(payoutId, transferRef);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đã xác nhận chuyển khoản Payout #$payoutId (Mã FT: $transferRef).',
+          ),
+          backgroundColor: AppColors.successGreen,
+        ),
+      );
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AdminPortalViewModel.extractErrorMessage(
+              e,
+              'Không thể xác nhận chuyển khoản.',
+            ),
+          ),
+          backgroundColor: AppColors.errorRed,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingIds.remove(payoutId));
+      }
+    }
+  }
+
+  Future<void> _rejectHostPayout(Map<String, dynamic> payout) async {
+    final payoutId = '${payout['payoutId'] ?? payout['id'] ?? ''}';
+    final reasonController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceBase,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Text(
+          'Từ chối yêu cầu rút tiền',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Nhập lý do từ chối yêu cầu rút tiền Payout #$payoutId để thông báo cho Host:',
+              style:
+                  const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                hintText: 'Lý do từ chối (bắt buộc)...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (reasonController.text.trim().isEmpty) return;
+              Navigator.of(ctx).pop(true);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.textStrong,
+              foregroundColor: AppColors.textInverse,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Xác nhận từ chối'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _processingIds.add(payoutId));
+    try {
+      final vm = ref.read(adminPortalViewModelProvider);
+      await vm.rejectHostPayout(payoutId, reasonController.text.trim());
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đã từ chối đơn rút tiền thành công.'),
+        ),
+      );
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi từ chối đơn: $e'),
+          backgroundColor: AppColors.errorRed,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingIds.remove(payoutId));
+      }
+    }
+  }
+
+  Future<void> _approveRefund(Map<String, dynamic> refund) async {
+    final refundId = '${refund['refundId'] ?? refund['id'] ?? ''}';
+    final amount = double.tryParse('${refund['amount'] ?? 0}') ?? 0;
+    final bankName = (refund['bankName'] ?? 'Ngân hàng').toString();
+    final accName = (refund['accountName'] ?? '').toString();
+    final accNumber = (refund['accountNumber'] ?? '').toString();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceBase,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(LucideIcons.arrowUpRight, color: AppColors.primary, size: 20),
+            SizedBox(width: 8),
+            Text(
+              'Xác nhận duyệt & hoàn tiền',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Duyệt hoàn tiền cho đơn Refund #$refundId? Tiền sẽ được chuyển ngay vào tài khoản của khách.',
+              style:
+                  const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceBase,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Số tiền hoàn: ${MoneyFormatter.formatVnd(amount.round())}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Ngân hàng: $bankName',
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textPrimary),
+                  ),
+                  if (accName.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Chủ TK: $accName',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textPrimary),
+                    ),
+                  ],
+                  if (accNumber.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'STK: $accNumber',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textMuted),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Row(
+              children: [
+                Icon(LucideIcons.shieldCheck,
+                    size: 14, color: AppColors.textSecondary),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Chuyển tiền tự động Napas 24/7 tức thì.',
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.textInverse,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Duyệt & Hoàn tiền ngay'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _processingIds.add(refundId));
+    try {
+      final vm = ref.read(adminPortalViewModelProvider);
+      final result = await vm.approveRefund(refundId);
+      if (!mounted) return;
+
+      final transferRef = (result['refund']?['transferReference'] ??
+              result['transferReference'] ??
+              'Thành công')
+          .toString();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đã duyệt hoàn tiền qua Napas 24/7 thành công! (Mã FT: $transferRef)',
+          ),
+          backgroundColor: AppColors.successGreen,
+        ),
+      );
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi duyệt hoàn tiền: $e'),
+          backgroundColor: AppColors.errorRed,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingIds.remove(refundId));
+      }
+    }
+  }
+
+  Future<void> _rejectRefund(Map<String, dynamic> refund) async {
+    final refundId = '${refund['refundId'] ?? refund['id'] ?? ''}';
+    final reasonController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceBase,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Text(
+          'Từ chối hoàn tiền',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Nhập lý do từ chối yêu cầu hoàn tiền Refund #$refundId:',
+              style:
+                  const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                hintText: 'Lý do từ chối (bắt buộc)...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (reasonController.text.trim().isEmpty) return;
+              Navigator.of(ctx).pop(true);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.textStrong,
+              foregroundColor: AppColors.textInverse,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Xác nhận từ chối'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _processingIds.add(refundId));
+    try {
+      final vm = ref.read(adminPortalViewModelProvider);
+      await vm.rejectRefund(refundId, reasonController.text.trim());
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đã từ chối yêu cầu hoàn tiền.'),
+        ),
+      );
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi từ chối hoàn tiền: $e'),
+          backgroundColor: AppColors.errorRed,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingIds.remove(refundId));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pendingPayouts = _payouts
+        .where((p) =>
+            '${p['status']}'.toLowerCase() == 'pending' ||
+            '${p['status']}'.toLowerCase() == 'approved')
+        .toList();
+    final pendingRefunds = _refunds
+        .where((r) => '${r['status']}'.toLowerCase() == 'pending')
+        .toList();
+
+    double totalPendingPayoutAmount = 0;
+    for (final p in pendingPayouts) {
+      totalPendingPayoutAmount += (double.tryParse('${p['amount'] ?? 0}') ?? 0);
+    }
+
+    double totalPendingRefundAmount = 0;
+    for (final r in pendingRefunds) {
+      totalPendingRefundAmount += (double.tryParse('${r['amount'] ?? 0}') ?? 0);
+    }
+
+    final filteredPayouts = _payouts.where((p) {
+      if (_payoutFilter == 'all') return true;
+      return '${p['status']}'.toLowerCase() == _payoutFilter;
+    }).toList();
+
+    final filteredRefunds = _refunds.where((r) {
+      if (_refundFilter == 'all') return true;
+      final st = '${r['status']}'.toLowerCase();
+      if (_refundFilter == 'completed' || _refundFilter == 'succeeded') {
+        return st == 'completed' || st == 'succeeded';
+      }
+      if (_refundFilter == 'cancelled' || _refundFilter == 'rejected') {
+        return st == 'cancelled' || st == 'rejected' || st == 'failed';
+      }
+      return st == _refundFilter;
+    }).toList();
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Duyệt chi trả & Hoàn tiền',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Phê duyệt và chuyển tiền tự động Napas 24/7',
+                  style:
+                      TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // SUB-TAB SWITCHER
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surfaceBase,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              padding: const EdgeInsets.all(4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildSubTabButton(
+                      id: 'payouts',
+                      label: 'Rút tiền Host (${pendingPayouts.length})',
+                      icon: LucideIcons.wallet,
+                      isActive: _activeSubTab == 'payouts',
+                      onTap: () => setState(() => _activeSubTab = 'payouts'),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: _buildSubTabButton(
+                      id: 'refunds',
+                      label: 'Hoàn tiền Khách (${pendingRefunds.length})',
+                      icon: LucideIcons.rotateCcw,
+                      isActive: _activeSubTab == 'refunds',
+                      onTap: () => setState(() => _activeSubTab = 'refunds'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // KPI CARDS
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceBase,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _activeSubTab == 'payouts'
+                              ? 'Đơn rút chờ duyệt'
+                              : 'Đơn hoàn chờ duyệt',
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _activeSubTab == 'payouts'
+                              ? '${pendingPayouts.length} đơn'
+                              : '${pendingRefunds.length} đơn',
+                          style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceBase,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _activeSubTab == 'payouts'
+                              ? 'Tổng tiền cần chi'
+                              : 'Tổng tiền cần hoàn',
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _activeSubTab == 'payouts'
+                              ? (totalPendingPayoutAmount > 0
+                                  ? MoneyFormatter.formatVnd(
+                                      totalPendingPayoutAmount.round())
+                                  : '0 đ')
+                              : (totalPendingRefundAmount > 0
+                                  ? MoneyFormatter.formatVnd(
+                                      totalPendingRefundAmount.round())
+                                  : '0 đ'),
+                          style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            if (_loading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (_error != null)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceBase,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  children: [
+                    Text(_error!,
+                        style: const TextStyle(color: AppColors.errorRed)),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: _loadData,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: const Text('Thử lại'),
+                    ),
+                  ],
+                ),
+              )
+            else if (_activeSubTab == 'payouts') ...[
+              // PAYOUTS VIEW
+              AdminPayoutMakerCheckerBar(
+                onCreateBatch: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final created = await showCreateAdminPayoutBatchDialog(
+                    context: context,
+                    viewModel: ref.read(adminPortalViewModelProvider),
+                  );
+                  if (created && mounted) {
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text('Đã khởi tạo lô chi trả mới thành công.'),
+                      ),
+                    );
+                    await _loadData();
+                  }
+                },
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildFilterChip('Tất cả', 'all', _payoutFilter,
+                      (val) => setState(() => _payoutFilter = val)),
+                  _buildFilterChip('Chờ duyệt', 'pending', _payoutFilter,
+                      (val) => setState(() => _payoutFilter = val)),
+                  _buildFilterChip('Đã duyệt', 'approved', _payoutFilter,
+                      (val) => setState(() => _payoutFilter = val)),
+                  _buildFilterChip('Đã chi tiền', 'paid', _payoutFilter,
+                      (val) => setState(() => _payoutFilter = val)),
+                  _buildFilterChip('Từ chối', 'rejected', _payoutFilter,
+                      (val) => setState(() => _payoutFilter = val)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (filteredPayouts.isEmpty)
+                _buildEmptyState('Không có yêu cầu rút tiền nào trong mục này.')
+              else
+                ...filteredPayouts.map((p) => _buildPayoutCard(p)),
+            ] else ...[
+              // REFUNDS VIEW
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildFilterChip('Tất cả', 'all', _refundFilter,
+                      (val) => setState(() => _refundFilter = val)),
+                  _buildFilterChip('Chờ duyệt', 'pending', _refundFilter,
+                      (val) => setState(() => _refundFilter = val)),
+                  _buildFilterChip('Đã hoàn tiền', 'completed', _refundFilter,
+                      (val) => setState(() => _refundFilter = val)),
+                  _buildFilterChip('Từ chối', 'cancelled', _refundFilter,
+                      (val) => setState(() => _refundFilter = val)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (filteredRefunds.isEmpty)
+                _buildEmptyState(
+                    'Không có yêu cầu hoàn tiền nào trong mục này.')
+              else
+                ...filteredRefunds.map((r) => _buildRefundCard(r)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubTabButton({
+    required String id,
+    required String label,
+    required IconData icon,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primary : AppColors.surfaceBase,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isActive ? AppColors.textInverse : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                color: isActive ? AppColors.textInverse : AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(
+    String label,
+    String value,
+    String current,
+    ValueChanged<String> onSelected,
+  ) {
+    final isSelected = value == current;
+    return InkWell(
+      onTap: () => onSelected(value),
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.textStrong : AppColors.surfaceBase,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+              color: isSelected ? AppColors.textStrong : AppColors.border),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? AppColors.textInverse : AppColors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String msg) {
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(LucideIcons.inbox, size: 28, color: AppColors.textMuted),
+            const SizedBox(height: 8),
+            Text(msg,
+                style: const TextStyle(
+                    fontSize: 13, color: AppColors.textSecondary)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPayoutCard(Map<String, dynamic> payout) {
+    final payoutId = '${payout['payoutId'] ?? payout['id'] ?? ''}';
+    final amount = double.tryParse('${payout['amount'] ?? 0}') ?? 0;
+    final status = '${payout['status'] ?? 'pending'}'.toLowerCase();
+    final bankName = (payout['bankName'] ?? 'Ngân hàng').toString();
+    final accName = (payout['accountName'] ?? '').toString();
+    final accNumber =
+        (payout['accountNumberMasked'] ?? payout['accountNumber'] ?? '')
+            .toString();
+    final hostName = (payout['hostName'] ??
+            payout['host']?['fullName'] ??
+            'Host #${payout['hostId']}')
+        .toString();
+    final transferRef = (payout['transferReference'] ?? '').toString();
+    final isProcessing = _processingIds.contains(payoutId);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Payout #$payoutId',
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary),
+              ),
+              _buildStatusBadge(status),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            MoneyFormatter.formatVnd(amount.round()),
+            style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceBase,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.textStrong,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    bankName.length > 6
+                        ? bankName.substring(0, 6).toUpperCase()
+                        : bankName.toUpperCase(),
+                    style: const TextStyle(
+                        color: AppColors.textInverse,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        accName.isNotEmpty ? '$accName ($hostName)' : hostName,
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary),
+                      ),
+                      Text(
+                        accNumber.isNotEmpty ? 'STK: $accNumber' : bankName,
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textMuted,
+                            fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (transferRef.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Mã chuyển khoản Napas: $transferRef',
+              style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.successGreen,
+                  fontWeight: FontWeight.w600),
+            ),
+          ],
+          if (status == 'pending' || status == 'approved') ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
+              children: [
+                OutlinedButton(
+                  onPressed:
+                      isProcessing ? null : () => _rejectHostPayout(payout),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textStrong,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: const Size(0, 36),
+                  ),
+                  child: const Text('Từ chối'),
+                ),
+                if (status == 'pending')
+                  OutlinedButton.icon(
+                    key: Key('admin_payout_approve_btn_$payoutId'),
+                    onPressed: isProcessing
+                        ? null
+                        : () => _approveHostPayoutStep2(payout),
+                    icon: const Icon(LucideIcons.shieldCheck, size: 14),
+                    label: const Text('Duyệt lệnh'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      minimumSize: const Size(0, 36),
+                    ),
+                  ),
+                if (status == 'approved')
+                  OutlinedButton.icon(
+                    key: Key('admin_payout_mark_paid_btn_$payoutId'),
+                    onPressed: isProcessing
+                        ? null
+                        : () => _markHostPayoutPaidStep3(payout),
+                    icon: const Icon(LucideIcons.check, size: 14),
+                    label: const Text('Xác nhận chuyển (FT)'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.successGreen,
+                      side: const BorderSide(color: AppColors.successGreen),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      minimumSize: const Size(0, 36),
+                    ),
+                  ),
+                ElevatedButton.icon(
+                  onPressed:
+                      isProcessing ? null : () => _disburseHostPayout(payout),
+                  icon: const Icon(LucideIcons.arrowUpRight, size: 14),
+                  label: isProcessing
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.textInverse))
+                      : const Text('Duyệt & Chi tiền'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.textInverse,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: const Size(0, 36),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRefundCard(Map<String, dynamic> refund) {
+    final refundId = '${refund['refundId'] ?? refund['id'] ?? ''}';
+    final bookingId = '${refund['bookingId'] ?? ''}';
+    final amount = double.tryParse('${refund['amount'] ?? 0}') ?? 0;
+    final status = '${refund['status'] ?? 'pending'}'.toLowerCase();
+    final bankName = (refund['bankName'] ?? 'Ngân hàng').toString();
+    final accName = (refund['accountName'] ?? '').toString();
+    final accNumber = (refund['accountNumber'] ?? '').toString();
+    final reason = (refund['reason'] ?? 'Khách hủy đặt phòng').toString();
+    final transferRef = (refund['providerRef'] ??
+            refund['provider_ref'] ??
+            refund['transferReference'] ??
+            '')
+        .toString();
+    final isProcessing = _processingIds.contains(refundId);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Refund #$refundId · Đơn #$bookingId',
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary),
+              ),
+              _buildStatusBadge(status),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            MoneyFormatter.formatVnd(amount.round()),
+            style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Lý do: $reason',
+            style:
+                const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceBase,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.textStrong,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    bankName.length > 6
+                        ? bankName.substring(0, 6).toUpperCase()
+                        : bankName.toUpperCase(),
+                    style: const TextStyle(
+                        color: AppColors.textInverse,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        accName.isNotEmpty ? accName : 'Khách hàng',
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary),
+                      ),
+                      Text(
+                        accNumber.isNotEmpty ? 'STK: $accNumber' : bankName,
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textMuted,
+                            fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (transferRef.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Mã chuyển khoản Napas: $transferRef',
+              style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.successGreen,
+                  fontWeight: FontWeight.w600),
+            ),
+          ],
+          if (status == 'pending') ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton(
+                  onPressed: isProcessing ? null : () => _rejectRefund(refund),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textStrong,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: const Size(0, 36),
+                  ),
+                  child: const Text('Từ chối'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: isProcessing ? null : () => _approveRefund(refund),
+                  icon: const Icon(LucideIcons.arrowUpRight, size: 14),
+                  label: isProcessing
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.textInverse))
+                      : const Text('Duyệt & Hoàn tiền'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.textInverse,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: const Size(0, 36),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color textColor;
+    String label;
+    IconData icon;
+
+    switch (status) {
+      case 'paid':
+      case 'succeeded':
+      case 'completed':
+      case 'refunded':
+        textColor = AppColors.successGreen;
+        label = status == 'paid' ? 'Đã chi tiền' : 'Đã hoàn tiền';
+        icon = LucideIcons.check;
+        break;
+      case 'rejected':
+      case 'cancelled':
+      case 'failed':
+        textColor = AppColors.errorRed;
+        label = status == 'failed' ? 'Thất bại' : 'Đã từ chối';
+        icon = LucideIcons.x;
+        break;
+      case 'processing':
+        textColor = AppColors.primary;
+        label = 'Đang xử lý';
+        icon = LucideIcons.refreshCw;
+        break;
+      case 'approved':
+        textColor = AppColors.primary;
+        label = 'Đã duyệt';
+        icon = LucideIcons.clock;
+        break;
+      case 'pending':
+      default:
+        textColor = AppColors.warningAmber;
+        label = 'Chờ duyệt';
+        icon = LucideIcons.clock;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBase,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: textColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w700, color: textColor),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ── 7. TIN NHẮN HỖ TRỢ (/admin/tin-nhan) ──
 class _AdminMessagesTab extends ConsumerStatefulWidget {
   const _AdminMessagesTab({this.initialConversationId});
@@ -6270,7 +8170,7 @@ class _AdminMessagesTabState extends ConsumerState<_AdminMessagesTab> {
       });
       try {
         final res =
-            await ref.read(adminRepositoryProvider).getAdminUsersPaginated(
+            await ref.read(adminPortalViewModelProvider).getAdminUsersPaginated(
                   page: 1,
                   limit: 20,
                   search: keyword.trim(),
@@ -6286,7 +8186,7 @@ class _AdminMessagesTabState extends ConsumerState<_AdminMessagesTab> {
       } catch (e) {
         setModalState(() {
           loading = false;
-          errorMsg = AdminRepository.extractErrorMessage(
+          errorMsg = AdminPortalViewModel.extractErrorMessage(
             e,
             'Không thể tải danh sách người dùng.',
           );
@@ -6346,7 +8246,8 @@ class _AdminMessagesTabState extends ConsumerState<_AdminMessagesTab> {
                         textInputAction: TextInputAction.search,
                         onSubmitted: (v) => fetchUsers(setModalState, v),
                         decoration: InputDecoration(
-                          hintText: 'Tìm tên, email hoặc SĐT Chủ nhà / Khách...',
+                          hintText:
+                              'Tìm tên, email hoặc SĐT Chủ nhà / Khách...',
                           prefixIcon: const Icon(LucideIcons.search, size: 18),
                           suffixIcon: IconButton(
                             tooltip: 'Tìm kiếm người dùng',
@@ -6409,8 +8310,9 @@ class _AdminMessagesTabState extends ConsumerState<_AdminMessagesTab> {
                               final u = users[idx];
                               final uid =
                                   '${u['userId'] ?? u['id'] ?? ''}'.trim();
-                              final name = '${u['fullName'] ?? u['email'] ?? 'Người dùng #$uid'}'
-                                  .trim();
+                              final name =
+                                  '${u['fullName'] ?? u['email'] ?? 'Người dùng #$uid'}'
+                                      .trim();
                               final email = '${u['email'] ?? ''}'.trim();
                               final role = '${u['role'] ?? 'guest'}'
                                   .trim()
@@ -6480,16 +8382,15 @@ class _AdminMessagesTabState extends ConsumerState<_AdminMessagesTab> {
     if (pickedUserId == null || pickedUserId.isEmpty || !mounted) return;
     try {
       final conv = await ref
-          .read(conversationsRepositoryProvider)
-          .getOrCreateDirectConversation(pickedUserId);
-      ref.invalidate(conversationsListProvider);
+          .read(adminPortalViewModelProvider)
+          .openDirectSupportConversation(pickedUserId);
       if (!mounted) return;
       setState(() {
         _selectedConversationId = conv.id;
       });
     } catch (e) {
       if (!mounted) return;
-      final msg = AdminRepository.extractErrorMessage(
+      final msg = AdminPortalViewModel.extractErrorMessage(
         e,
         'Không thể khởi tạo cuộc trò chuyện hỗ trợ.',
       );

@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
 
+/// Hệ thống phân cấp kiểu chữ (Typography) đồng nhất trên họ phông San Francisco (`SF Pro Display`, `SF Pro Text`, `SF Pro Rounded`).
+///
+/// Giải thuật chuỗi phông chữ dự phòng đa ngôn ngữ (`vi` / `en` / `ko`):
+/// Ưu tiên phông đóng gói `SF Pro Display` cho tiêu đề / nút bấm / giá tiền và `SF Pro Text` cho nội dung văn bản,
+/// tiếp nối bằng `Apple SD Gothic Neo` và `Noto Sans KR` cho ký tự Hangul tiếng Hàn, cùng `Be Vietnam Pro` / `Roboto` đảm bảo hiển thị trọn vẹn dấu tiếng Việt.
 abstract final class AppTypography {
   static const String primaryFontFamily = 'SF Pro Display';
   static const String textFontFamily = 'SF Pro Text';
   static const String roundedFontFamily = 'SF Pro Rounded';
 
   // Font Family Fallbacks using bundled SF Pro assets first
+  /// Chuỗi phông chữ dự phòng theo thứ tự ưu tiên bảo đảm hiển thị đầy đủ dấu tiếng Việt và chữ Hàn Hangul.
   static const List<String> fontFallbacks = [
     'SF Pro Display',
     'SF Pro Text',

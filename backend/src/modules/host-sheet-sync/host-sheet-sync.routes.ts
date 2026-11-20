@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP tích hợp đồng bộ Google Sheets của chủ nhà (`/api/host/sheet-sync`):
+ * - Bắt buộc xác thực (`authenticate`), kiểm tra quyền chủ nhà và kiểm chứng dữ liệu cấu hình bảng tính cũng như quyết định giải quyết xung đột lịch.
+ */
+
 import express from "express";
 import { body, param, query } from "express-validator";
 
@@ -14,9 +19,36 @@ import {
     syncHostSpreadsheetNowHandler,
     updateHostSheetSettingsHandler,
     verifyHostSpreadsheetPermissionsHandler,
+    sheetButtonPreviewHandler,
+    sheetButtonSyncHandler,
 } from "./host-sheet-sync.controller";
 
 const router = express.Router();
+
+// Endpoints called directly from Google Sheets Apps Script button
+router.post(
+    "/sheet-button-preview",
+    [
+        body("spreadsheetId")
+            .isString()
+            .trim()
+            .notEmpty()
+            .withMessage("spreadsheetId is required"),
+    ],
+    sheetButtonPreviewHandler,
+);
+
+router.post(
+    "/sheet-button-sync",
+    [
+        body("spreadsheetId")
+            .isString()
+            .trim()
+            .notEmpty()
+            .withMessage("spreadsheetId is required"),
+    ],
+    sheetButtonSyncHandler,
+);
 
 // Every host sheet sync endpoint strictly requires authenticated Host role (401 unauthenticated, 403 non-host)
 router.use(authenticate, requireHostOnly);

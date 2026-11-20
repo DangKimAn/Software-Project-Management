@@ -1,3 +1,6 @@
+/// Thư viện xuất tập trung (barrel) cho phân hệ tiền tệ, tỷ giá hối đoái và định dạng hiển thị giá.
+library;
+
 export 'app_currency.dart';
 export 'currency_preference.dart';
 export 'currency_providers.dart';

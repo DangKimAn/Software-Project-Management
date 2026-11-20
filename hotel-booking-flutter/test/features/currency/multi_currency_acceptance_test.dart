@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -233,11 +234,13 @@ class _FakeVillaRepository implements VillaRepository {
     int? beds,
     int? bathrooms,
     List<String>? amenities,
+    bool? pets,
     BookingDate? checkIn,
     BookingDate? checkOut,
     String? sort,
     int page = 1,
     int limit = 20,
+    CancelToken? cancelToken,
   }) async {
     getVillasCalls += 1;
     return villas;
@@ -258,11 +261,13 @@ class _FakeVillaRepository implements VillaRepository {
     int? beds,
     int? bathrooms,
     List<String>? amenities,
+    bool? pets,
     BookingDate? checkIn,
     BookingDate? checkOut,
     String? sort,
     int page = 1,
     int limit = 12,
+    CancelToken? cancelToken,
   }) async {
     getVillasCalls += 1;
     return PaginatedResult<Villa>(items: villas);
@@ -313,13 +318,6 @@ class _FakeVillaRepository implements VillaRepository {
       true;
 
   @override
-  Future<SemanticSearchResponse> semanticSearch({
-    required String query,
-    int topK = 12,
-  }) async =>
-      SemanticSearchResponse(query: query, items: villas);
-
-  @override
   Future<List<Map<String, dynamic>>> getAmenitiesCatalog() async =>
       const <Map<String, dynamic>>[];
 }
@@ -368,6 +366,9 @@ class _FakeBookingRepository implements BookingRepository {
   Future<void> cancelBooking({
     required String bookingId,
     required String reason,
+    String? bankName,
+    String? accountNumber,
+    String? accountName,
   }) async {}
 
   @override

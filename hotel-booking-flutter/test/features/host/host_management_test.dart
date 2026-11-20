@@ -9,10 +9,11 @@ import 'package:hotel_booking_flutter/features/host/data/host_repository.dart';
 import 'package:hotel_booking_flutter/features/host/domain/host_models.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/screens/host_onboarding_screens.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/screens/host_portal_screens.dart';
-import 'package:hotel_booking_flutter/features/host/presentation/screens/them_cho_nghi_screen.dart';
+import 'package:hotel_booking_flutter/features/host/presentation/screens/host_listing_form_screen.dart';
+import 'package:hotel_booking_flutter/features/host/presentation/widgets/host_chat_composer_bar.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/widgets/host_studio_widgets.dart';
 import 'package:hotel_booking_flutter/features/host/services/host_file_picker_service.dart';
-import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_header.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_image.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -85,12 +86,19 @@ class FakeTestFilePickerService implements HostFilePickerService {
   HostPickedFile? nextKycFile;
   List<HostPickedFile> nextListingImages = [];
 
+  bool? lastImageOnlyFlag;
+
   @override
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = '',
-  }) async =>
-      nextKycFile;
+    // CONFLICT-RESOLVED: Đáp ứng chữ ký `pickKycDocument` hợp nhất gồm cả `imageOnly` và `source`.
+    bool imageOnly = false,
+    HostKycFileSource source = HostKycFileSource.deviceFile,
+  }) async {
+    lastImageOnlyFlag = imageOnly;
+    return nextKycFile;
+  }
 
   @override
   Future<List<HostPickedFile>> pickListingImages({
@@ -833,7 +841,8 @@ void main() {
               ],
             });
           }
-          if (options.path == '/api/listings/1/reviews') {
+          if (options.path == '/api/host/listings/1/reviews' ||
+              options.path == '/api/listings/1/reviews') {
             return jsonResponse({
               'items': [
                 {
@@ -884,7 +893,7 @@ void main() {
     });
 
     testWidgets(
-        'HostPortalScreen & ThemChoNghiScreen render cleanly at 360px mobile width without overflow',
+        'HostPortalScreen & HostListingFormScreen render cleanly at 360px mobile width without overflow',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(360, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -905,9 +914,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Verify real average rating is computed (5.00 ★ from 1 review, NOT hardcoded 4.9 / 12)
+      // Verify real average rating is computed (5.00 / 5.0 from 1 review, NOT hardcoded 4.9 / 12)
       expect(
-        find.textContaining('5.00 ★ (1 đánh giá)'),
+        find.textContaining('5.00 / 5.0 (1 đánh giá)'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
@@ -920,7 +929,7 @@ void main() {
             hostCurrentUserRoleProvider.overrideWithValue('host'),
           ],
           child: const MaterialApp(
-            home: ThemChoNghiScreen(),
+            home: HostListingFormScreen(),
           ),
         ),
       );
@@ -1016,7 +1025,7 @@ void main() {
     });
 
     testWidgets(
-        'HostPortalScreen and ThemChoNghiScreen render role guard when user role is guest',
+        'HostPortalScreen and HostListingFormScreen render role guard when user role is guest',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(360, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1056,7 +1065,7 @@ void main() {
             hostCurrentUserRoleProvider.overrideWithValue('guest'),
           ],
           child: const MaterialApp(
-            home: ThemChoNghiScreen(),
+            home: HostListingFormScreen(),
           ),
         ),
       );
@@ -1250,7 +1259,7 @@ void main() {
       'Host Widget Tests: Weekend Price, Upload Retry, Calendar Confirm & 320/768dp Responsive',
       () {
     testWidgets(
-        'ThemChoNghiScreen auto-syncs weekendPrice with basePrice until manually overridden, and surfaces amenity/rule errors without swallowing',
+        'HostListingFormScreen auto-syncs weekendPrice with basePrice until manually overridden, and surfaces amenity/rule errors without swallowing',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(430, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1357,7 +1366,7 @@ void main() {
             hostCurrentUserRoleProvider.overrideWithValue('host'),
           ],
           child: const MaterialApp(
-            home: ThemChoNghiScreen(),
+            home: HostListingFormScreen(),
           ),
         ),
       );
@@ -1632,7 +1641,7 @@ void main() {
     });
 
     testWidgets(
-        'ThemChoNghiScreen retries failed addListingImages without duplicate R2 PUT when uploadedPublicUrl exists',
+        'HostListingFormScreen retries failed addListingImages without duplicate R2 PUT when uploadedPublicUrl exists',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1736,7 +1745,7 @@ void main() {
             hostCurrentUserRoleProvider.overrideWithValue('host'),
           ],
           child: const MaterialApp(
-            home: ThemChoNghiScreen(listingId: '99'),
+            home: HostListingFormScreen(listingId: '99'),
           ),
         ),
       );
@@ -2149,7 +2158,7 @@ void main() {
     testWidgets(
         'Guests and Reports sections use capsule pill borders and naked monochrome icons cleanly',
         (tester) async {
-      final todayIso = DateTime.now().toIso8601String().split('T').first;
+      final todayIso = getVietnamTodayDateString();
       final apiAdapter = FakeRecordingHttpClientAdapter(
         responder: (options) {
           if (options.path == '/api/host/bookings') {
@@ -2301,5 +2310,1530 @@ void main() {
         expect(tester.takeException(), isNull);
       }
     });
+
+    test(
+        'Host booking status helper separates financial overlays from lifecycle filters accurately',
+        () async {
+      final now = DateTime.utc(2026, 11, 4, 5, 0); // 2026-11-04 12:00 VN
+
+      // 1. Completed booking with payout_paid / payout_pending STILL matches 'completed' ("Hoàn tất")
+      final completedPaidOut = <String, dynamic>{
+        'bookingId': 801,
+        'status': 'completed',
+        'persistedStatus': 'completed',
+        'internalStatus': 'completed',
+        'paymentStatus': 'paid',
+        'payoutStatus': 'paid',
+        'checkedInAt': '2026-10-20T07:00:00Z',
+        'checkedOutAt': '2026-10-22T05:00:00Z',
+      };
+      final dispCompleted = getBookingDisplayStatus(
+        completedPaidOut,
+        role: BookingActionRole.host,
+        now: now,
+      );
+      expect(dispCompleted.normalizedStatus, 'completed');
+      expect(dispCompleted.code, 'payout_paid');
+      expect(dispCompleted.label, 'Hoàn tất · Đã chi trả');
+      expect(
+        bookingMatchesDisplayStatus(completedPaidOut, 'completed', now: now),
+        isTrue,
+      );
+      expect(
+        bookingMatchesDisplayStatus(completedPaidOut, 'checked_out', now: now),
+        isTrue,
+      );
+      expect(
+        bookingMatchesDisplayStatus(completedPaidOut, 'cancelled', now: now),
+        isFalse,
+      );
+
+      final checkedOutPendingPayout = <String, dynamic>{
+        'bookingId': 802,
+        'status': 'checked_out',
+        'payoutStatus': 'pending',
+      };
+      expect(
+        bookingMatchesDisplayStatus(
+          checkedOutPendingPayout,
+          'completed',
+          now: now,
+        ),
+        isTrue,
+      );
+
+      // 2. Checked-in booking matches 'checked_in' ("Khách đã nhận phòng")
+      final checkedIn = <String, dynamic>{
+        'bookingId': 803,
+        'status': 'checked_in',
+        'paymentStatus': 'paid',
+        'checkInDate': '2026-11-03',
+        'checkOutDate': '2026-11-05',
+      };
+      final dispCheckedInHost = getBookingDisplayStatus(
+        checkedIn,
+        role: BookingActionRole.host,
+        now: now,
+      );
+      final dispCheckedInGuest = getBookingDisplayStatus(
+        checkedIn,
+        role: BookingActionRole.guest,
+        now: now,
+      );
+      expect(dispCheckedInHost.normalizedStatus, 'checked_in');
+      expect(dispCheckedInHost.label, 'Khách đã nhận phòng');
+      expect(dispCheckedInGuest.label, 'Đã nhận phòng');
+      expect(
+        bookingMatchesDisplayStatus(checkedIn, 'checked_in', now: now),
+        isTrue,
+      );
+
+      // 3. Cancelled / Rejected bookings with refund STILL match 'cancelled' ("Đã hủy")
+      for (final cancelledCase in <Map<String, dynamic>>[
+        {
+          'bookingId': 804,
+          'status': 'cancelled_by_guest',
+          'paymentStatus': 'refunded',
+          'refundStatus': 'succeeded',
+        },
+        {
+          'bookingId': 805,
+          'status': 'cancelled_by_host',
+          'paymentStatus': 'paid',
+          'refundStatus': 'pending',
+        },
+        {
+          'bookingId': 806,
+          'status': 'cancelled_by_admin',
+          'paymentStatus': 'refunded',
+        },
+        {
+          'bookingId': 807,
+          'status': 'rejected',
+          'paymentStatus': 'paid',
+          'refundStatus': 'processing',
+        },
+      ]) {
+        expect(
+          bookingMatchesDisplayStatus(cancelledCase, 'cancelled', now: now),
+          isTrue,
+          reason:
+              'Booking #${cancelledCase['bookingId']} must remain in Đã hủy even with refund status',
+        );
+        expect(
+          bookingMatchesDisplayStatus(cancelledCase, 'completed', now: now),
+          isFalse,
+        );
+        expect(isSuccessfulHostBooking(cancelledCase, now), isFalse);
+        expect(isCalendarBlockingHostBooking(cancelledCase, now), isFalse);
+      }
+
+      // 4. Unpaid pending_payment hold past lockedUntil resolves to 'payment_expired'
+      final expiredHold = <String, dynamic>{
+        'bookingId': 808,
+        'status': 'pending_payment',
+        'paymentStatus': 'unpaid',
+        'lockedUntil': '2026-11-04T04:30:00Z',
+      };
+      expect(
+        getEffectiveBookingLifecycleStatus(expiredHold, now),
+        'payment_expired',
+      );
+      expect(
+        bookingMatchesDisplayStatus(expiredHold, 'payment_expired', now: now),
+        isTrue,
+      );
+      expect(
+        bookingMatchesDisplayStatus(expiredHold, 'pending_payment', now: now),
+        isFalse,
+      );
+      expect(isSuccessfulHostBooking(<String, dynamic>{}, now), isFalse);
+
+      // 5. Guest partition excludes cancelled/expired/completed from default Hôm nay & Sắp tới
+      final partitionAll = partitionHostGuestBookings(
+        [
+          checkedIn,
+          completedPaidOut,
+          {
+            'bookingId': 809,
+            'status': 'cancelled_by_guest',
+            'checkInDate': '2026-11-04',
+            'checkOutDate': '2026-11-06',
+          },
+          {
+            'bookingId': 810,
+            'status': 'confirmed',
+            'paymentStatus': 'paid',
+            'checkInDate': '2026-11-10',
+            'checkOutDate': '2026-11-12',
+          },
+        ],
+        statusFilter: 'all',
+        now: now,
+      );
+      expect(
+        partitionAll.todayBookings.map((b) => b['bookingId']).toList(),
+        [803],
+      );
+      expect(
+        partitionAll.upcomingBookings.map((b) => b['bookingId']).toList(),
+        [810],
+      );
+
+      // 6. Multi-page getAllHostBookings fetches remaining pages and deduplicates by bookingId
+      final pageAdapter = FakeRecordingHttpClientAdapter(
+        responder: (options) {
+          if (options.path == '/api/host/bookings') {
+            final page =
+                int.tryParse('${options.queryParameters['page'] ?? 1}') ?? 1;
+            if (page == 1) {
+              return jsonResponse({
+                'items': [
+                  {'bookingId': 903, 'status': 'confirmed'},
+                  {'bookingId': 902, 'status': 'checked_in'},
+                ],
+                'pagination': {
+                  'page': 1,
+                  'limit': 2,
+                  'total': 3,
+                  'totalPages': 2,
+                },
+              });
+            }
+            return jsonResponse({
+              'items': [
+                {'bookingId': 902, 'status': 'checked_in'},
+                {
+                  'bookingId': 901,
+                  'status': 'completed',
+                  'payoutStatus': 'paid',
+                },
+              ],
+              'pagination': {
+                'page': 2,
+                'limit': 2,
+                'total': 3,
+                'totalPages': 2,
+              },
+            });
+          }
+          return jsonResponse({'items': <dynamic>[]});
+        },
+      );
+      final repo = HostRepository(
+        DioClient()..dio.httpClientAdapter = pageAdapter,
+      );
+      final allBookings = await repo.getAllHostBookings(pageSize: 2);
+      expect(allBookings.map((b) => b['bookingId']).toList(), [903, 902, 901]);
+    });
+
+    testWidgets(
+        'Host Bookings and Guests sections filter Khách đã nhận phòng, Hoàn tất, Đã hủy, and Quá hạn thanh toán accurately',
+        (tester) async {
+      final todayIso = getVietnamTodayDateString();
+      final futureDate = DateTime.now()
+          .toUtc()
+          .add(const Duration(days: 7, hours: 7))
+          .toIso8601String()
+          .split('T')
+          .first;
+
+      final sampleBookings = <Map<String, dynamic>>[
+        {
+          'bookingId': 701,
+          'listingId': 105,
+          'listingTitle': 'Ocean Pearl Villa',
+          'guestName': 'Lê Hoàng Nam',
+          'guestPhone': '0901112233',
+          'guestsCount': 4,
+          'checkInDate': todayIso,
+          'checkOutDate': futureDate,
+          'totalPrice': 6800000,
+          'status': 'checked_in',
+          'paymentStatus': 'paid',
+        },
+        {
+          'bookingId': 702,
+          'listingId': 105,
+          'listingTitle': 'Ocean Pearl Villa',
+          'guestName': 'Phạm Thu Hà',
+          'guestsCount': 2,
+          'checkInDate': '2026-09-10',
+          'checkOutDate': '2026-09-12',
+          'totalPrice': 5200000,
+          'status': 'completed',
+          'paymentStatus': 'paid',
+          'payoutStatus': 'paid',
+          'checkedInAt': '2026-09-10T07:00:00Z',
+          'checkedOutAt': '2026-09-12T05:00:00Z',
+        },
+        {
+          'bookingId': 703,
+          'listingId': 105,
+          'listingTitle': 'Ocean Pearl Villa',
+          'guestName': 'Vũ Quốc Bảo',
+          'guestsCount': 3,
+          'checkInDate': todayIso,
+          'checkOutDate': futureDate,
+          'totalPrice': 4500000,
+          'status': 'cancelled_by_guest',
+          'paymentStatus': 'refunded',
+          'refundStatus': 'succeeded',
+        },
+        {
+          'bookingId': 704,
+          'listingId': 105,
+          'listingTitle': 'Ocean Pearl Villa',
+          'guestName': 'Đặng Ngọc Mai',
+          'guestsCount': 5,
+          'checkInDate': futureDate,
+          'checkOutDate': futureDate,
+          'totalPrice': 8100000,
+          'status': 'rejected',
+          'paymentStatus': 'paid',
+          'refundStatus': 'pending',
+        },
+        {
+          'bookingId': 705,
+          'listingId': 105,
+          'listingTitle': 'Ocean Pearl Villa',
+          'guestName': 'Hoàng Gia Huy',
+          'guestsCount': 2,
+          'checkInDate': futureDate,
+          'checkOutDate': futureDate,
+          'totalPrice': 3900000,
+          'status': 'pending_payment',
+          'paymentStatus': 'unpaid',
+          'lockedUntil': '2020-01-01T00:00:00Z',
+        },
+      ];
+
+      final apiAdapter = FakeRecordingHttpClientAdapter(
+        responder: (options) {
+          if (options.path == '/api/host/bookings') {
+            return jsonResponse({'items': sampleBookings});
+          }
+          return jsonResponse({'items': <dynamic>[]});
+        },
+      );
+      final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+      final repo = HostRepository(client, roleResolver: () => 'host');
+      final fakePicker = FakeTestFilePickerService();
+
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      // A. Verify HostPortalSection.bookings category chips
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
+          ],
+          child: const MaterialApp(
+            home: HostPortalScreen(
+              initialSection: HostPortalSection.bookings,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap "Khách đã nhận phòng"
+      final chipCheckedIn = find.byKey(const Key('booking_chip_checked_in'));
+      await tester.ensureVisible(chipCheckedIn);
+      await tester.tap(chipCheckedIn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('host_booking_card_701')), findsOneWidget);
+      expect(find.byKey(const Key('host_booking_card_702')), findsNothing);
+      expect(find.byKey(const Key('host_booking_card_703')), findsNothing);
+
+      // Tap "Hoàn tất" -> must include payout_paid completed booking #702
+      final chipCompleted = find.byKey(const Key('booking_chip_completed'));
+      await tester.ensureVisible(chipCompleted);
+      await tester.tap(chipCompleted);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('host_booking_card_702')), findsOneWidget);
+      expect(find.text('Hoàn tất · Đã chi trả'), findsOneWidget);
+      expect(find.byKey(const Key('host_booking_card_701')), findsNothing);
+
+      // Tap "Đã hủy" -> must include refunded guest-cancelled #703 AND refund-pending rejected #704
+      final chipCancelled = find.byKey(const Key('booking_chip_cancelled'));
+      await tester.ensureVisible(chipCancelled);
+      await tester.tap(chipCancelled);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('host_booking_card_703')), findsOneWidget);
+      expect(find.byKey(const Key('host_booking_card_704')), findsOneWidget);
+      expect(find.text('Khách đã hủy · Đã hoàn tiền'), findsOneWidget);
+      expect(find.text('Host đã từ chối · Chờ hoàn tiền'), findsOneWidget);
+      expect(find.byKey(const Key('host_booking_card_705')), findsNothing);
+
+      // Tap "Quá hạn thanh toán" -> must include expired hold #705
+      final chipExpired = find.byKey(const Key('booking_chip_payment_expired'));
+      await tester.ensureVisible(chipExpired);
+      await tester.tap(chipExpired);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('host_booking_card_705')), findsOneWidget);
+      expect(find.byKey(const Key('host_booking_card_703')), findsNothing);
+
+      // B. Verify HostPortalSection.guests default Hôm nay + status filter modal
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostFilePickerProvider.overrideWithValue(fakePicker),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
+          ],
+          child: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(390, 844),
+              textScaler: TextScaler.linear(1.4),
+            ),
+            child: MaterialApp(
+              home: HostPortalScreen(
+                key: UniqueKey(),
+                initialSection: HostPortalSection.guests,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // Default 'Tất cả khách hàng' + 'Hôm nay' shows active checked_in #701, NOT cancelled #703
+      expect(find.text('Lê Hoàng Nam'), findsOneWidget);
+      expect(find.text('Vũ Quốc Bảo'), findsNothing);
+
+      // Filter by "Hoàn tất" in Guests modal -> shows historical completed #702
+      await tester.tap(find.text('Tất cả khách hàng'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('guest_status_option_completed')));
+      await tester.pumpAndSettle();
+      expect(find.text('Phạm Thu Hà'), findsOneWidget);
+      expect(find.text('Lê Hoàng Nam'), findsNothing);
+
+      // Filter by "Đã hủy" in Guests modal -> shows #703 and #704
+      await tester.tap(find.text('Hoàn tất'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('guest_status_option_cancelled')));
+      await tester.pumpAndSettle();
+      expect(find.text('Vũ Quốc Bảo'), findsOneWidget);
+      expect(find.text('Đặng Ngọc Mai'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  // ===========================================================================
+  // 8. GROUP 1: HOST PORTAL & KYC 7 BUGS + 1.3x–2.0x FONT SCALING VERIFICATION
+  // ===========================================================================
+  group('Group 1: Host Portal & KYC 7 Bugs + 1.3x–2.0x Font Scaling', () {
+    test(
+      'Item 1 & 2 (Unit): HostListingStatus.rejected, internalStatus fallback, HostListingSummary, validate(isCreate: false), and toUpdateJson(includeStatus)',
+      () {
+        expect(
+          HostListingStatus.fromApi('rejected'),
+          HostListingStatus.rejected,
+        );
+        expect(HostListingStatus.rejected.labelVi, 'Bị từ chối');
+        expect(
+          HostListingStatus.fromListingMap({
+            'status': 'draft',
+            'internalStatus': 'rejected',
+          }),
+          HostListingStatus.rejected,
+        );
+
+        final summary = HostListingSummary.fromJson({
+          'listingId': 301,
+          'title': 'Villa Đồi Sứ Bãi Trước',
+          'status': 'draft',
+          'internalStatus': 'rejected',
+          'rejectionReason': 'Ảnh bìa chứa số điện thoại cá nhân.',
+          'propertyType': 'villa',
+          'basePrice': 3900000,
+          'maxGuests': 12,
+        });
+        expect(summary.id, '301');
+        expect(summary.status, HostListingStatus.rejected);
+        expect(
+          summary.rejectionReason,
+          'Ảnh bìa chứa số điện thoại cá nhân.',
+        );
+
+        const publishedDto = HostListingUpsertDto(
+          title: 'Villa Biển Đang Hiển Thị',
+          description: 'Mô tả hợp lệ đầy đủ tiện nghi cao cấp.',
+          addressLine: '10 Thùy Vân',
+          ward: 'Phường Thắng Tam',
+          city: 'Vũng Tàu',
+          latitude: 10.34,
+          longitude: 107.09,
+          propertyType: HostPropertyType.villa,
+          roomType: HostRoomType.entirePlace,
+          maxGuests: 10,
+          bedrooms: 4,
+          beds: 5,
+          bathrooms: 4,
+          basePrice: 4000000,
+          weekendPrice: 4500000,
+          status: HostListingStatus.published,
+        );
+
+        // Create mode blocks 'published', edit mode allows 'published', 'hidden', 'rejected'
+        expect(publishedDto.validate(isCreate: true), isNotNull);
+        expect(publishedDto.validate(isCreate: false), isNull);
+
+        // Normal "Lưu thay đổi" omits status; explicit targetStatus includes status
+        final patchWithoutStatus =
+            publishedDto.toUpdateJson(includeStatus: false);
+        expect(patchWithoutStatus.containsKey('status'), isFalse);
+
+        final patchWithStatus = publishedDto.toUpdateJson(
+          includeStatus: true,
+          nextStatus: HostListingStatus.pendingApproval,
+        );
+        expect(patchWithStatus['status'], 'pending_approval');
+      },
+    );
+
+    testWidgets(
+      'Item 1 (Widget): HostListingFormScreen edits published/hidden listings without status transition and shows Lưu & Gửi duyệt for rejected listing',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(430, 900));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        String currentServerStatus = 'published';
+        String? currentInternalStatus;
+        final patchPayloads = <Map<String, dynamic>>[];
+
+        final apiAdapter = FakeRecordingHttpClientAdapter(
+          responder: (options) {
+            if (options.path == '/api/host/listings/501' &&
+                options.method == 'GET') {
+              return jsonResponse({
+                'listingId': 501,
+                'title': 'Villa Biển Bãi Sau',
+                'description': 'Biệt thự sát biển đầy đủ hồ bơi riêng.',
+                'addressLine': '88 Thùy Vân',
+                'ward': 'Phường 2',
+                'city': 'Vũng Tàu',
+                'latitude': 10.34,
+                'longitude': 107.09,
+                'propertyType': 'villa',
+                'roomType': 'entire_place',
+                'maxGuests': 10,
+                'bedrooms': 4,
+                'beds': 5,
+                'bathrooms': 4,
+                'basePrice': 3600000,
+                'weekendPrice': 4200000,
+                'status': currentServerStatus,
+                if (currentInternalStatus != null)
+                  'internalStatus': currentInternalStatus,
+                'images': [
+                  {
+                    'imageId': 1,
+                    'url': 'assets/images/343vothisau.jpg',
+                    'isCover': true,
+                    'sortOrder': 0,
+                  },
+                ],
+                'amenities': <dynamic>[],
+              });
+            }
+            if (options.path == '/api/host/listings/501' &&
+                options.method == 'PATCH') {
+              final data = Map<String, dynamic>.from(options.data as Map);
+              patchPayloads.add(data);
+              return jsonResponse({
+                'listingId': 501,
+                'status': data['status'] ?? currentServerStatus,
+              });
+            }
+            if (options.path == '/api/host/listings/501/amenities' ||
+                options.path == '/api/host/listings/501/rules') {
+              return jsonResponse({'ok': true});
+            }
+            return jsonResponse({'items': <dynamic>[]});
+          },
+        );
+
+        final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+        final repo = HostRepository(client, roleResolver: () => 'host');
+        final fakePicker = FakeTestFilePickerService();
+
+        // A. Published listing: "Lưu & Gửi duyệt" hidden; "Lưu thay đổi" omits status
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(repo),
+              hostFilePickerProvider.overrideWithValue(fakePicker),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: const MaterialApp(
+              home: HostListingFormScreen(listingId: '501'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('listing_submit_approval_btn')),
+          findsNothing,
+        );
+        final saveBtn = find.byKey(const Key('listing_save_btn'));
+        await tester.ensureVisible(saveBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(saveBtn);
+        await tester.pumpAndSettle();
+
+        expect(patchPayloads, hasLength(1));
+        expect(patchPayloads.single.containsKey('status'), isFalse);
+
+        // B. Hidden listing: "Lưu & Gửi duyệt" also hidden
+        currentServerStatus = 'hidden';
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(repo),
+              hostFilePickerProvider.overrideWithValue(fakePicker),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: MaterialApp(
+              home: HostListingFormScreen(
+                key: UniqueKey(),
+                listingId: '501',
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('listing_submit_approval_btn')),
+          findsNothing,
+        );
+
+        // C. Rejected listing: "Lưu & Gửi duyệt" visible and sends status: 'pending_approval'
+        currentServerStatus = 'draft';
+        currentInternalStatus = 'rejected';
+        patchPayloads.clear();
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(repo),
+              hostFilePickerProvider.overrideWithValue(fakePicker),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: MaterialApp(
+              key: UniqueKey(),
+              home: HostListingFormScreen(
+                key: UniqueKey(),
+                listingId: '501',
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final submitApprovalBtn =
+            find.byKey(const Key('listing_submit_approval_btn'));
+        expect(submitApprovalBtn, findsOneWidget);
+        await tester.ensureVisible(submitApprovalBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(submitApprovalBtn);
+        await tester.pumpAndSettle();
+
+        expect(patchPayloads, hasLength(1));
+        expect(patchPayloads.single['status'], 'pending_approval');
+      },
+    );
+
+    testWidgets(
+      'Item 2 & 3: getMyListings paginates all pages, Properties rejected tab shows reason & Gửi duyệt lại (never Hiện), and _allListingsSnapshot stays decoupled',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(390, 844));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        var rejectedSubmitted = false;
+        final patchRequests = <Map<String, dynamic>>[];
+
+        final page1Items = <Map<String, dynamic>>[
+          {
+            'listingId': 201,
+            'title': 'Palm Ocean Villa 1',
+            'propertyType': 'villa',
+            'basePrice': 3500000,
+            'maxGuests': 10,
+            'status': 'published',
+          },
+          {
+            'listingId': 202,
+            'title': 'Palm Hidden Homestay',
+            'propertyType': 'homestay',
+            'basePrice': 1800000,
+            'maxGuests': 4,
+            'status': 'hidden',
+          },
+        ];
+
+        Map<String, dynamic> buildRejectedItem() => {
+              'listingId': 203,
+              'title': 'Villa Cần Bổ Sung Ảnh',
+              'propertyType': 'villa',
+              'basePrice': 4100000,
+              'maxGuests': 12,
+              'status': rejectedSubmitted ? 'pending_approval' : 'rejected',
+              'internalStatus':
+                  rejectedSubmitted ? 'pending_approval' : 'rejected',
+              'rejectionReason': rejectedSubmitted
+                  ? null
+                  : 'Thiếu hình ảnh mặt tiền và hồ bơi thực tế.',
+            };
+
+        final apiAdapter = FakeRecordingHttpClientAdapter(
+          responder: (options) {
+            if (options.path == '/api/host/listings/mine' &&
+                options.method == 'GET') {
+              final statusFilter =
+                  options.queryParameters['status']?.toString();
+              final page =
+                  int.tryParse('${options.queryParameters['page'] ?? 1}') ?? 1;
+              final allItems = [...page1Items, buildRejectedItem()];
+              if (statusFilter != null && statusFilter.isNotEmpty) {
+                final filtered = allItems
+                    .where((item) => item['status'] == statusFilter)
+                    .toList();
+                return jsonResponse({
+                  'items': filtered,
+                  'pagination': {
+                    'page': 1,
+                    'limit': 50,
+                    'total': filtered.length,
+                    'totalPages': 1,
+                  },
+                });
+              }
+              if (page == 1) {
+                return jsonResponse({
+                  'items': page1Items,
+                  'pagination': {
+                    'page': 1,
+                    'limit': 2,
+                    'total': 3,
+                    'totalPages': 2,
+                  },
+                });
+              }
+              return jsonResponse({
+                'items': [buildRejectedItem()],
+                'pagination': {
+                  'page': 2,
+                  'limit': 2,
+                  'total': 3,
+                  'totalPages': 2,
+                },
+              });
+            }
+            if (options.path == '/api/host/listings/203' &&
+                options.method == 'PATCH') {
+              final body = Map<String, dynamic>.from(options.data as Map);
+              patchRequests.add(body);
+              if (body['status'] == 'pending_approval') {
+                rejectedSubmitted = true;
+              }
+              return jsonResponse(buildRejectedItem());
+            }
+            return jsonResponse({'items': <dynamic>[]});
+          },
+        );
+
+        final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+        final repo = HostRepository(client, roleResolver: () => 'host');
+
+        // Verify multi-page getMyListings fetches page 1 + page 2 (total 3 listings)
+        final multiPageItems =
+            (await tester.runAsync(() => repo.getMyListings(limit: 2)))!;
+        expect(multiPageItems.length, 3);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(repo),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: const MaterialApp(
+              home: HostPortalScreen(
+                initialSection: HostPortalSection.properties,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Filter by "Bị từ chối"
+        final rejectedTab = find.byKey(const Key('listing_filter_rejected'));
+        await tester.ensureVisible(rejectedTab);
+        await tester.tap(rejectedTab);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Villa Cần Bổ Sung Ảnh'), findsOneWidget);
+        expect(find.text('Palm Ocean Villa 1'), findsNothing);
+        expect(
+          find.byKey(const Key('listing_rejection_reason_203')),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Thiếu hình ảnh mặt tiền và hồ bơi thực tế.'),
+          findsOneWidget,
+        );
+        expect(find.text('Chỉnh sửa'), findsOneWidget);
+        expect(find.text('Gửi duyệt lại'), findsOneWidget);
+        // Rejected listing MUST NEVER render "Hiện" toggle button
+        expect(
+          find.byKey(const Key('listing_toggle_visibility_btn_203')),
+          findsNothing,
+        );
+
+        // Tap "Gửi duyệt lại" -> sends PATCH {status: 'pending_approval'} and preserves _allListingsSnapshot (total = 3)
+        await tester
+            .tap(find.byKey(const Key('listing_submit_approval_btn_203')));
+        await tester.pumpAndSettle();
+
+        expect(patchRequests, hasLength(1));
+        expect(patchRequests.single['status'], 'pending_approval');
+        // Snapshot still knows there are 3 total listings even while filtered on 'rejected' (now 0 items)
+        expect(find.text('3'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'Item 4: getMyPayouts paginates all pages, Chờ xử lý sums ONLY pending/approved/processing (excludes rejected/failed/cancelled), and renders all status tabs',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(390, 900));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        final page1Payouts = [
+          {
+            'payoutId': 1,
+            'amount': 1000000,
+            'status': 'pending',
+            'accountNumber': '0071001112223',
+            'createdAt': '2026-10-25',
+          },
+          {
+            'payoutId': 2,
+            'amount': 2000000,
+            'status': 'approved',
+            'accountNumber': '0071001112223',
+            'createdAt': '2026-10-26',
+          },
+          {
+            'payoutId': 3,
+            'amount': 3000000,
+            'status': 'processing',
+            'accountNumber': '0071001112223',
+            'createdAt': '2026-10-27',
+          },
+        ];
+        final page2Payouts = [
+          {
+            'payoutId': 4,
+            'amount': 10000000,
+            'status': 'paid',
+            'accountNumber': '0071001112223',
+            'createdAt': '2026-10-28',
+          },
+          {
+            'payoutId': 5,
+            'amount': 5000000,
+            'status': 'rejected',
+            'accountNumber': '0071001112223',
+            'createdAt': '2026-10-29',
+          },
+          {
+            'payoutId': 6,
+            'amount': 4000000,
+            'status': 'failed',
+            'accountNumber': '0071001112223',
+            'createdAt': '2026-10-30',
+          },
+          {
+            'payoutId': 7,
+            'amount': 6000000,
+            'status': 'cancelled',
+            'accountNumber': '0071001112223',
+            'createdAt': '2026-10-31',
+          },
+        ];
+
+        final apiAdapter = FakeRecordingHttpClientAdapter(
+          responder: (options) {
+            if (options.path == '/api/host/payout-accounts') {
+              return jsonResponse({'items': <dynamic>[]});
+            }
+            if (options.path == '/api/host/payouts') {
+              final page =
+                  int.tryParse('${options.queryParameters['page'] ?? 1}') ?? 1;
+              return jsonResponse({
+                'items': page == 1 ? page1Payouts : page2Payouts,
+                'pagination': {
+                  'page': page,
+                  'limit': 3,
+                  'total': 7,
+                  'totalPages': 2,
+                },
+              });
+            }
+            return jsonResponse({'items': <dynamic>[]});
+          },
+        );
+
+        final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+        final repo = HostRepository(client, roleResolver: () => 'host');
+
+        final allPayouts =
+            (await tester.runAsync(() => repo.getMyPayouts(limit: 3)))!;
+        expect(allPayouts.length, 7);
+        final summary = computeHostPayoutSummary(allPayouts);
+        expect(summary.totalPaid, 10000000);
+        // MUST equal 1M + 2M + 3M = 6M (never includes 5M rejected, 4M failed, 6M cancelled)
+        expect(summary.totalPending, 6000000);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(repo),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: const MaterialApp(
+              home: HostPortalScreen(
+                initialSection: HostPortalSection.payouts,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('6.000.000'), findsWidgets);
+        expect(find.textContaining('21.000.000'), findsNothing);
+
+        // Verify filter chips & Vietnamese labels for processing, failed, cancelled
+        expect(
+          find.byKey(const Key('payout_filter_chip_processing')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('payout_filter_chip_failed')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('payout_filter_chip_cancelled')),
+          findsOneWidget,
+        );
+        expect(find.text('Đang chuyển'), findsWidgets);
+        expect(find.text('Thất bại'), findsWidgets);
+        expect(find.text('Đã hủy'), findsWidgets);
+
+        final failedChip = find.byKey(const Key('payout_filter_chip_failed'));
+        await tester.ensureVisible(failedChip);
+        await tester.tap(failedChip);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('#6'), findsOneWidget);
+        expect(find.textContaining('#4'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Item 5: Calendar Month Grid allows editing cancelled/rejected/expired booking days and prioritizes isBooked before isToday on today cell',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(430, 900));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        // Unit check on HostCalendarDay.fromJson
+        final cancelledDay = HostCalendarDay.fromJson({
+          'date': '2026-12-10',
+          'basePrice': 2500000,
+          'effectivePrice': 2500000,
+          'isAvailable': true,
+          'isBooked': false,
+          'bookingStatus': 'cancelled_by_guest',
+          'canEdit': true,
+        });
+        expect(cancelledDay.isBooked, isFalse);
+        expect(cancelledDay.isEditable(), isTrue);
+
+        final now = DateTime.now().toUtc().add(const Duration(hours: 7));
+        final todayStr =
+            '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        final altDayNum = now.day == 15 ? 16 : 15;
+        final altDateStr =
+            '${now.year}-${now.month.toString().padLeft(2, '0')}-${altDayNum.toString().padLeft(2, '0')}';
+
+        final apiAdapter = FakeRecordingHttpClientAdapter(
+          responder: (options) {
+            if (options.path == '/api/host/listings/mine') {
+              return jsonResponse({
+                'items': [
+                  {
+                    'listingId': 10,
+                    'title': 'Villa Lịch Tháng',
+                    'propertyType': 'villa',
+                    'basePrice': 3000000,
+                    'maxGuests': 8,
+                    'status': 'published',
+                  },
+                ],
+              });
+            }
+            if (options.path == '/api/host/listings/10/calendar') {
+              return jsonResponse({
+                'listingId': 10,
+                'days': [
+                  {
+                    'date': todayStr,
+                    'basePrice': 3000000,
+                    'effectivePrice': 3000000,
+                    'isAvailable': false,
+                    'isBooked': true,
+                    'bookingStatus': 'confirmed',
+                    'isPast': false,
+                    'canEdit': false,
+                  },
+                  {
+                    'date': altDateStr,
+                    'basePrice': 3000000,
+                    'effectivePrice': 3000000,
+                    'isAvailable': true,
+                    'isBooked': false,
+                    'bookingStatus': 'cancelled_by_guest',
+                    'isPast': false,
+                    'canEdit': true,
+                  },
+                ],
+              });
+            }
+            return jsonResponse({'items': <dynamic>[]});
+          },
+        );
+
+        final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+        final repo = HostRepository(client, roleResolver: () => 'host');
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(repo),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: const MaterialApp(
+              home: HostPortalScreen(
+                initialSection: HostPortalSection.calendar,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Today is booked -> must use booked bg Color(0xFFF8FAFC) (not unbooked today pink 0xFFFFF1F2) while keeping AppColors.primary border!
+        final todayCellFinder = find.byKey(Key('calendar_day_$todayStr'));
+        expect(todayCellFinder, findsOneWidget);
+        final todayContainer = tester.widget<Container>(
+          find
+              .descendant(
+                of: todayCellFinder,
+                matching: find.byType(Container),
+              )
+              .first,
+        );
+        final todayDecoration = todayContainer.decoration! as BoxDecoration;
+        expect(todayDecoration.color, const Color(0xFFF8FAFC));
+        expect(
+          (todayDecoration.border! as Border).top.color,
+          AppColors.primary,
+        );
+
+        // Non-blocking cancelled_by_guest date remains selectable!
+        final cancelledCellFinder = find.byKey(Key('calendar_day_$altDateStr'));
+        await tester.ensureVisible(cancelledCellFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(cancelledCellFinder);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('(1 ngày đã chọn)'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Item 6: getListingReviews uses /api/host/listings/:id/reviews (with 404 fallback) and Reports renders pendingStayHostRevenue & pendingStayBookingCount',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(390, 844));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        final apiAdapter = FakeRecordingHttpClientAdapter(
+          responder: (options) {
+            if (options.path == '/api/host/listings/77/reviews') {
+              return jsonResponse({
+                'items': [
+                  {
+                    'reviewId': 1,
+                    'reviewerName': 'Trần Thanh',
+                    'rating': 5,
+                    'comment': 'Đánh giá trên chỗ nghỉ đang ẩn vẫn tải được!',
+                  },
+                ],
+              });
+            }
+            if (options.path == '/api/host/listings/88/reviews') {
+              return jsonResponse({'message': 'Not found'}, statusCode: 404);
+            }
+            if (options.path == '/api/listings/88/reviews') {
+              return jsonResponse({
+                'items': [
+                  {
+                    'reviewId': 2,
+                    'reviewerName': 'Fallback Guest',
+                    'rating': 4
+                  },
+                ],
+              });
+            }
+            if (options.path == '/api/host/listings/mine') {
+              return jsonResponse({
+                'items': [
+                  {
+                    'listingId': 77,
+                    'title': 'Hidden Pool Villa',
+                    'status': 'hidden',
+                  },
+                ],
+              });
+            }
+            if (options.path == '/api/host/reports/revenue') {
+              return jsonResponse({
+                'totals': {
+                  'grossRevenue': 20000000,
+                  'platformRevenue': 2000000,
+                  'hostRevenue': 18000000,
+                  'pendingStayRevenue': 9000000,
+                  'pendingStayHostRevenue': 8100000,
+                  'pendingStayBookingCount': 2,
+                  'bookingCount': 3,
+                },
+                'series': <dynamic>[],
+              });
+            }
+            return jsonResponse({'items': <dynamic>[]});
+          },
+        );
+
+        final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+        final repo = HostRepository(client, roleResolver: () => 'host');
+
+        // 1. Primary host reviews endpoint works for hidden/draft/rejected listings
+        final hiddenReviews =
+            (await tester.runAsync(() => repo.getListingReviews('77')))!;
+        expect(hiddenReviews, hasLength(1));
+        expect(
+          apiAdapter.requests.first.path,
+          '/api/host/listings/77/reviews',
+        );
+
+        // 2. Fallback to public reviews endpoint when host endpoint returns 404
+        final fallbackReviews =
+            (await tester.runAsync(() => repo.getListingReviews('88')))!;
+        expect(fallbackReviews, hasLength(1));
+
+        // 3. Reports UI renders pendingStayHostRevenue & pendingStayBookingCount card
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(repo),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: const MaterialApp(
+              home: HostPortalScreen(
+                initialSection: HostPortalSection.reports,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('reports_pending_stay_card')),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Doanh thu chờ hoàn tất lưu trú'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('2 đơn đang & sắp lưu trú'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('8.100.000'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Item 7a & 7b: Identity KYC rejects PDF (allows image only) and Host Messages materializes support chat + calls markConversationRead + handles 404 no online admin',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(390, 844));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        // 7a. Identity KYC rejects PDF while Business License still accepts PDF
+        final pdfFile = HostPickedFile(
+          name: 'cccd_front.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 1024,
+          bytes: Uint8List(1024),
+        );
+        final pngFile = createValidImageFile(
+          name: 'cccd_front.png',
+          mimeType: 'image/png',
+        );
+        expect(
+          validateIdentityKycPickedFile(pdfFile),
+          contains('không hỗ trợ tệp PDF'),
+        );
+        expect(validateIdentityKycPickedFile(pngFile), isNull);
+
+        final badIdentityDto = HostKycSubmissionDto(
+          contactName: 'Nguyễn Văn Host',
+          contactEmail: 'host@vt.vn',
+          phone: '0901234567',
+          profileType: HostProfileType.individual,
+          documentType: HostDocumentType.passport,
+          businessAddress: '12 Thùy Vân, Vũng Tàu',
+          identitySingle: pdfFile,
+        );
+        expect(
+          badIdentityDto.validate(),
+          contains('không hỗ trợ tệp PDF'),
+        );
+
+        // 7b. Support chat & markConversationRead
+        var adminOnline = false;
+        final apiAdapter = FakeRecordingHttpClientAdapter(
+          responder: (options) {
+            if (options.path == '/api/conversations' &&
+                options.method == 'GET') {
+              return jsonResponse({
+                'items': [
+                  {
+                    'id': '502',
+                    'conversationId': '502',
+                    'guestName': 'Khách Lê Minh',
+                    'otherParticipant': {
+                      'fullName': 'Khách Lê Minh',
+                      'role': 'guest',
+                    },
+                    'lastMessage': {
+                      'content': 'Cho mình hỏi giờ nhận phòng nhé',
+                      'createdAt': '2026-11-01T10:00:00Z',
+                    },
+                    'unreadCount': 3,
+                  },
+                ],
+              });
+            }
+            if (options.path == '/api/conversations/502/read' &&
+                options.method == 'PATCH') {
+              return jsonResponse({'ok': true});
+            }
+            if (options.path == '/api/conversations/502/messages' &&
+                options.method == 'GET') {
+              return jsonResponse({'items': <dynamic>[]});
+            }
+            if (options.path == '/api/conversations' &&
+                options.method == 'POST') {
+              final data = Map<String, dynamic>.from(options.data as Map);
+              if (data['support'] == true) {
+                if (!adminOnline) {
+                  return jsonResponse(
+                    {'message': 'No active admin found'},
+                    statusCode: 404,
+                  );
+                }
+                return jsonResponse({
+                  'id': '777',
+                  'conversationId': '777',
+                  'otherParticipant': {
+                    'fullName': 'Quản trị viên Hỗ trợ',
+                    'role': 'admin',
+                  },
+                  'unreadCount': 0,
+                }, statusCode: 201);
+              }
+            }
+            if (options.path == '/api/conversations/777/read' &&
+                options.method == 'PATCH') {
+              return jsonResponse({'ok': true});
+            }
+            if (options.path == '/api/conversations/777/messages' &&
+                options.method == 'GET') {
+              return jsonResponse({
+                'items': [
+                  {
+                    'messageId': 'm777',
+                    'content': 'Xin chào, Admin đang hỗ trợ bạn!',
+                    'isMe': false,
+                    'createdAt': '2026-11-01T10:05:00Z',
+                  },
+                ],
+              });
+            }
+            if (options.path.contains('admin_support')) {
+              return jsonResponse(
+                {'message': 'Invalid non-numeric id admin_support'},
+                statusCode: 422,
+              );
+            }
+            return jsonResponse({'items': <dynamic>[]});
+          },
+        );
+
+        final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+        final repo = HostRepository(client, roleResolver: () => 'host');
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(repo),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: const MaterialApp(
+              home: HostPortalScreen(
+                initialSection: HostPortalSection.messages,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Unread badge '3' visible before opening
+        expect(find.text('3'), findsOneWidget);
+
+        // Open numeric conversation '502' -> calls PATCH /api/conversations/502/read
+        await tester.tap(find.text('Khách Lê Minh'));
+        await tester.pumpAndSettle();
+        expect(
+          apiAdapter.requests.any(
+            (r) =>
+                r.method == 'PATCH' && r.path == '/api/conversations/502/read',
+          ),
+          isTrue,
+        );
+
+        // Return to list -> unread badge '3' is now cleared
+        await tester.tap(find.byTooltip('Quay lại danh sách'));
+        await tester.pumpAndSettle();
+        expect(find.text('3'), findsNothing);
+
+        // Open Support section and tap support_chat_with_admin_btn while adminOnline == false (404) -> friendly Vietnamese state, ZERO calls to admin_support
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(repo),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: MaterialApp(
+              home: HostPortalScreen(
+                key: UniqueKey(),
+                initialSection: HostPortalSection.support,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final supportBtnOffline =
+            find.byKey(const Key('support_chat_with_admin_btn'));
+        await tester.ensureVisible(supportBtnOffline);
+        await tester.pumpAndSettle();
+        await tester.tap(supportBtnOffline);
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('Hiện chưa có Quản trị viên trực tuyến'),
+          findsOneWidget,
+        );
+        expect(
+          apiAdapter.requests.any((r) => r.path.contains('admin_support')),
+          isFalse,
+        );
+
+        // Now bring Admin online and tap support_chat_with_admin_btn -> materializes real numeric conversation '777'
+        adminOnline = true;
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(repo),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: MaterialApp(
+              home: HostPortalScreen(
+                key: UniqueKey(),
+                initialSection: HostPortalSection.support,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final supportBtnOnline =
+            find.byKey(const Key('support_chat_with_admin_btn'));
+        await tester.ensureVisible(supportBtnOnline);
+        await tester.pumpAndSettle();
+        await tester.tap(supportBtnOnline);
+        await tester.pumpAndSettle();
+
+        expect(
+          apiAdapter.requests.any(
+            (r) =>
+                r.method == 'POST' &&
+                r.path == '/api/conversations' &&
+                (r.data as Map)['support'] == true,
+          ),
+          isTrue,
+        );
+        expect(find.text('Xin chào, Admin đang hỗ trợ bạn!'), findsOneWidget);
+        expect(
+          apiAdapter.requests.any((r) => r.path.contains('admin_support')),
+          isFalse,
+        );
+      },
+    );
+
+    testWidgets(
+      'Item 7c: Host font-scaling (1.3x–2.0x) prevents overflow on Voice Recording bar, Chat Composer bar (usable TextField width), Review 58x58 score box, and HostStudioInitialsBadge',
+      (tester) async {
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        final apiAdapter = FakeRecordingHttpClientAdapter(
+          responder: (options) {
+            if (options.path == '/api/conversations' &&
+                options.method == 'GET') {
+              return jsonResponse({
+                'items': [
+                  {
+                    'id': '901',
+                    'conversationId': '901',
+                    'guestName': 'Nguyễn Thị Bảo Trâm',
+                    'otherParticipant': {'fullName': 'Nguyễn Thị Bảo Trâm'},
+                    'lastMessage': {'content': 'Xin chào Host'},
+                  },
+                ],
+              });
+            }
+            if (options.path == '/api/host/listings/mine') {
+              return jsonResponse({
+                'items': [
+                  {
+                    'listingId': 1,
+                    'title': 'The Palm Oceanfront Villa',
+                    'status': 'published',
+                  },
+                ],
+              });
+            }
+            if (options.path == '/api/host/listings/1/reviews') {
+              return jsonResponse({
+                'items': [
+                  {
+                    'reviewId': 10,
+                    'reviewerName': 'Trần Hoàng Minh',
+                    'rating': 5,
+                    'comment': 'Rất tuyệt vời!',
+                  },
+                ],
+              });
+            }
+            return jsonResponse({'items': <dynamic>[]});
+          },
+        );
+
+        final client = DioClient()..dio.httpClientAdapter = apiAdapter;
+        final repo = HostRepository(client, roleResolver: () => 'host');
+
+        await tester.binding.setSurfaceSize(const Size(320, 800));
+        for (final scale in [1.3, 2.0]) {
+          // 1. Narrow 320px chat detail view + active voice recording bar at 1.3x & 2.0x
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                hostRepositoryProvider.overrideWithValue(repo),
+                hostCurrentUserRoleProvider.overrideWithValue('host'),
+              ],
+              child: MediaQuery(
+                data: MediaQueryData(
+                  size: const Size(320, 800),
+                  textScaler: TextScaler.linear(scale),
+                ),
+                child: MaterialApp(
+                  home: HostPortalScreen(
+                    key: UniqueKey(),
+                    initialSection: HostPortalSection.messages,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+
+          await tester.tap(find.text('Nguyễn Thị Bảo Trâm').first);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+
+          // Check TextField retains usable width even at 2.0x on 320px viewport
+          final inputSize =
+              tester.getSize(find.byKey(const Key('host_message_input')));
+          expect(
+            inputSize.width,
+            greaterThanOrEqualTo(95),
+            reason:
+                'Chat TextField width (${inputSize.width}) must stay usable at scale=$scale',
+          );
+
+          // Toggle voice recording bar -> must not overflow Row at 1.3x or 2.0x!
+          await tester.tap(find.byKey(const Key('chat_mic_btn')));
+          await tester.pump();
+          expect(find.byType(HostVoiceRecordingBar), findsOneWidget);
+          expect(tester.takeException(), isNull);
+
+          // Cancel recording cleanly so timer is disposed
+          await tester
+              .tap(find.byKey(const Key('host_voice_recording_cancel_btn')));
+          await tester.pump();
+          expect(tester.takeException(), isNull);
+
+          // 2. Reviews 58x58 score box & HostStudioInitialsBadge at 1.3x & 2.0x
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                hostRepositoryProvider.overrideWithValue(repo),
+                hostCurrentUserRoleProvider.overrideWithValue('host'),
+              ],
+              child: MediaQuery(
+                data: MediaQueryData(
+                  size: const Size(320, 800),
+                  textScaler: TextScaler.linear(scale),
+                ),
+                child: MaterialApp(
+                  home: HostPortalScreen(
+                    key: UniqueKey(),
+                    initialSection: HostPortalSection.reviews,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('5.0'), findsOneWidget);
+          expect(find.byType(HostStudioInitialsBadge), findsWidgets);
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
   });
 }

@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu yêu cầu xác minh danh tính, giấy phép kinh doanh hoặc tài khoản ngân hàng của chủ nhà.
+ */
 import {
     CreationOptional,
     DataTypes,

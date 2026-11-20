@@ -6,11 +6,15 @@ const sensitiveQueryKeys = new Set([
     "vnp_SecureHash",
     "vnp_SecureHashType",
     "token",
+    "streamToken",
     "accessToken",
     "refreshToken",
     "password",
 ]);
 
+/**
+ * Giải thuật che giấu tham số nhạy cảm trên chuỗi truy vấn URL trước khi ghi nhật ký truy cập HTTP.
+ */
 const sanitizeUrlForLog = (value: string) => {
     const [path, queryString] = value.split("?", 2);
 
@@ -30,6 +34,9 @@ const sanitizeUrlForLog = (value: string) => {
     return sanitizedQuery ? `${path}?${sanitizedQuery}` : path;
 };
 
+/**
+ * Giải thuật ghi nhận nhật ký truy cập HTTP kèm độ trễ xử lý (`durationMs`) và mã định danh `requestId` khi phản hồi kết thúc.
+ */
 export const requestLogger: RequestHandler = (req, res, next) => {
     const startedAt = Date.now();
 

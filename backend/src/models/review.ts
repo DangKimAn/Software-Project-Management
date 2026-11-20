@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý đánh giá chất lượng lưu trú và điểm xếp hạng sao gắn với kỳ nghỉ đã hoàn tất.
+ */
 import {
     CreationOptional,
     DataTypes,

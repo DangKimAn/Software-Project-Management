@@ -8,7 +8,7 @@ import {
     SHEET_COLORS,
     SHEET_FONT_FAMILY,
     SheetRgbColor,
-} from "../../services/google-sheets-client.service";
+} from "./google-sheets.client";
 
 export const DIRECTORY_TAB_TITLE = "DANH MỤC CĂN";
 
@@ -38,22 +38,39 @@ export type RollingMonthSpec = {
     lastDate: string; // YYYY-MM-DD
 };
 
+/**
+ * Giải thuật tính số ngày thực tế (`28..31`, tự động xử lý năm nhuận) của tháng dương lịch `(year, month)`
+ * bằng cách lấy ngày UTC thứ `0` của tháng kế tiếp (`Date.UTC(year, month, 0)`), tương ứng ngày cuối cùng của tháng `month`.
+ */
 export const getDaysInCalendarMonth = (year: number, month: number): number => {
     return new Date(Date.UTC(year, month, 0)).getUTCDate();
 };
 
+/**
+ * Định dạng bộ ba `(year, month, day)` thành chuỗi ngày chuẩn ISO-8601 `YYYY-MM-DD` có đệm chữ số `0`.
+ */
 export const formatIsoDate = (year: number, month: number, day: number): string => {
     return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 };
 
+/**
+ * Định dạng bộ ba `(year, month, day)` thành chuỗi ngày hiển thị `DD/MM/YYYY` cho cột tiêu đề ngày trên trang tính.
+ */
 export const formatDisplayDate = (year: number, month: number, day: number): string => {
     return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${String(year).padStart(4, "0")}`;
 };
 
+/**
+ * Định dạng năm và tháng thành khóa định danh tab lịch tháng chuẩn `MM-YYYY` (ví dụ `"10-2026"`).
+ */
 export const formatMonthTabKey = (year: number, month: number): string => {
     return `${String(month).padStart(2, "0")}-${String(year).padStart(4, "0")}`;
 };
 
+/**
+ * Giải thuật phân tích và xác thực khóa tên tab `MM-YYYY` sang cấu trúc đặc tả tháng `RollingMonthSpec`
+ * gồm tổng số ngày trong tháng cùng ngày đầu/cuối tháng chuẩn ISO; trả về `null` nếu sai định dạng.
+ */
 export const parseMonthTabKey = (tabKey: string): RollingMonthSpec | null => {
     const match = /^(0[1-9]|1[0-2])-(\d{4})$/.exec(tabKey.trim());
     if (!match) {
@@ -72,6 +89,10 @@ export const parseMonthTabKey = (tabKey: string): RollingMonthSpec | null => {
     };
 };
 
+/**
+ * Giải thuật kiểm chứng ngày dương lịch hợp lệ (`1 <= day <= maxDay`) từ chuỗi `YYYY-MM-DD`
+ * và trích xuất khóa tab tháng `MM-YYYY` tương ứng.
+ */
 export const monthTabKeyFromIsoDate = (isoDate: string): string | null => {
     const match = /^(\d{4})-(0[1-9]|1[0-2])-(\d{2})$/.exec(isoDate.trim());
     if (!match) {
@@ -87,6 +108,12 @@ export const monthTabKeyFromIsoDate = (isoDate: string): string | null => {
     return formatMonthTabKey(year, month);
 };
 
+/**
+ * Giải thuật sinh danh sách đặc tả cửa sổ cuốn chiếu `monthCount` tháng liên tiếp kể từ tháng của `baseIsoDate`:
+ * - Ánh xạ `(baseYear, baseMonth)` sang trục số nguyên tháng tuyến tính `totalMonths = baseYear * 12 + (baseMonth - 1) + offset`,
+ *   sau đó giải ngược `year = floor(totalMonths / 12)` và `month = (totalMonths mod 12) + 1` để cộng tháng qua ranh giới năm
+ *   chính xác tuyệt đối mà không phụ thuộc múi giờ máy chủ.
+ */
 export const buildRollingMonthSpecs = (baseIsoDate: string, monthCount = 6): RollingMonthSpec[] => {
     const match = /^(\d{4})-(0[1-9]|1[0-2])-(\d{2})$/.exec(baseIsoDate.trim());
     const baseYear = match ? Number(match[1]) : new Date().getUTCFullYear();
@@ -110,10 +137,23 @@ export const buildRollingMonthSpecs = (baseIsoDate: string, monthCount = 6): Rol
     return specs;
 };
 
+/**
+ * Thoát ký tự đặc biệt cho tiêu đề tab khi ghép biểu thức vùng A1 bằng cách nhân đôi dấu nháy đơn (`'` -> `''`)
+ * và bao đóng toàn bộ tên tab trong cặp dấu nháy đơn.
+ */
 export const escapeSheetTitleForA1 = (title: string): string => {
     return `'${title.replace(/'/g, "''")}'`;
 };
 
+/**
+ * Giải thuật chuyển đổi chỉ số cột 0-based (`0, 1, ..., 25, 26, ...`) sang ký hiệu cột chữ cái A1 (`A..Z, AA..ZZ, ...`)
+ * theo hệ đếm song ánh cơ số 26 không có chữ số 0 (Bijective Base-26 Numeration):
+ * 1. Dịch chỉ số 0-based sang số thứ tự cột nguyên dương 1-based: `n = max(0, floor(colIndex)) + 1`.
+ * 2. Lặp khi `n > 0`:
+ *    - Lấy phần dư dịch chuẩn `rem = (n - 1) mod 26` thuộc `{0..25}` và ánh xạ sang chữ cái mã ASCII `65 + rem` (`A..Z`).
+ *    - Ghép chữ cái vào đầu chuỗi kết quả và giảm bậc thương số `n = floor((n - 1) / 26)`.
+ *    Phép trừ `1` trước mỗi bước chia loại bỏ hoàn toàn sự thiếu vắng chữ số `0`, đảm bảo song ánh chuẩn (`25 -> Z`, `26 -> AA`).
+ */
 export const columnIndexToA1Letter = (colIndex: number): string => {
     let n = Math.max(0, Math.floor(colIndex)) + 1;
     let letters = "";
@@ -125,6 +165,10 @@ export const columnIndexToA1Letter = (colIndex: number): string => {
     return letters;
 };
 
+/**
+ * Giải thuật tính biểu thức vùng địa chỉ A1 tối ưu cần tải cho một tab lịch tháng dựa trên kích thước lưới thực tế
+ * và số lượng căn gợi ý (`listingCountHint`), bao phủ trọn vẹn vùng hướng dẫn, tiêu đề cột và tối đa 31 ngày.
+ */
 export const buildMonthTabA1Range = (tab: RawSheetTab, listingCountHint = 0): string => {
     const gridCols = tab.properties.gridProperties?.columnCount ?? SHEET_TOTAL_COLUMNS;
     const totalCols = Math.max(SHEET_TOTAL_COLUMNS, gridCols, listingCountHint + 10);
@@ -133,6 +177,10 @@ export const buildMonthTabA1Range = (tab: RawSheetTab, listingCountHint = 0): st
     return `${escapeSheetTitleForA1(tab.properties.title)}!A1:${endColLetter}${maxRows}`;
 };
 
+/**
+ * Giải thuật định vị tab `DANH MỤC CĂN` trong bảng tính: ưu tiên đối sánh thẻ `DeveloperMetadata` bất biến
+ * (`agy_directory_tab === "true"`) để chịu lỗi khi chủ nhà đổi tên hiển thị, sau đó dự phòng khớp tên tiêu đề.
+ */
 export const resolveDirectorySheetTab = (sheets: RawSheetTab[]): RawSheetTab | undefined => {
     const byMetadata = sheets.find((sheet) =>
         (sheet.developerMetadata ?? []).some(
@@ -148,6 +196,10 @@ export const resolveDirectorySheetTab = (sheets: RawSheetTab[]): RawSheetTab | u
     );
 };
 
+/**
+ * Giải thuật định vị tab lịch tháng theo khóa `MM-YYYY`: ưu tiên tìm theo `DeveloperMetadata` (`agy_month_tab`)
+ * trước khi dự phòng đối sánh trực tiếp tiêu đề tab.
+ */
 export const resolveMonthSheetTab = (sheets: RawSheetTab[], monthTabKey: string): RawSheetTab | undefined => {
     const byMetadata = sheets.find((sheet) =>
         (sheet.developerMetadata ?? []).some(
@@ -185,6 +237,10 @@ export type ExtractedMonthSheetStructure = {
     guideRowCount?: number;
 };
 
+/**
+ * Giải thuật phân tích chuỗi văn bản ô tiêu đề (bỏ các dấu nháy đơn dẫn đầu `'+`) thành số nguyên dương
+ * định danh chỗ nghỉ an toàn (`Number.isSafeInteger(num) && num > 0`); trả về `null` nếu không hợp lệ.
+ */
 export const parsePositiveListingId = (raw: string | undefined | null): number | null => {
     if (!raw) {
         return null;
@@ -197,6 +253,10 @@ export const parsePositiveListingId = (raw: string | undefined | null): number |
     return Number.isSafeInteger(num) && num > 0 ? num : null;
 };
 
+/**
+ * Giải thuật tìm mã `listingId` từ `DeveloperMetadata` gắn ở cấp dòng (`dimension === "ROWS"`),
+ * tra cứu cả siêu dữ liệu dòng trong vùng lưới (`gridRowMeta`) lẫn danh sách siêu dữ liệu cấp tab.
+ */
 const findRowDeveloperMetadataListingId = (
     tab: RawSheetTab,
     rowIndex: number,
@@ -232,6 +292,10 @@ const findRowDeveloperMetadataListingId = (
     return null;
 };
 
+/**
+ * Giải thuật thu thập và khử trùng lặp (theo `metadataId`) mọi bản ghi `DeveloperMetadata` khóa `agy_listing_id`
+ * được gắn trên cột chỉ số `colIndex` (`dimension === "COLUMNS"`).
+ */
 const collectColumnListingMetadataEntries = (
     tab: RawSheetTab,
     colIndex: number,
@@ -271,6 +335,9 @@ const collectColumnListingMetadataEntries = (
     return entries;
 };
 
+/**
+ * Trích xuất mã `listingId` nguyên dương hợp lệ đầu tiên từ tập `DeveloperMetadata` của cột `colIndex`.
+ */
 const findColumnDeveloperMetadataListingId = (
     tab: RawSheetTab,
     colIndex: number,
@@ -286,6 +353,23 @@ const findColumnDeveloperMetadataListingId = (
     return null;
 };
 
+/**
+ * Giải thuật tự động nhận diện hướng bố cục bảng tính lịch tháng, ánh xạ từng cột/hàng căn hộ/villa
+ * theo siêu dữ liệu hoặc mã listing và trích xuất ma trận ô lịch theo ngày `1..31`:
+ * 1. Nhận diện bố cục tự động (Vertical vs Horizontal Layout Detection):
+ *    - Kiểm tra nhãn tiêu đề (`Mã căn`, `Ngày \ Tên căn`), định dạng ngày `DD/MM/YYYY` tại cột A dòng 11
+ *      và sự tồn tại của `DeveloperMetadata` cấp cột/dòng để phân biệt bố cục dọc chuẩn (`isVerticalLayout = true`:
+ *      Cột A chứa các ngày `1..31` từ chỉ số dòng `10`, các cột từ B trở đi ứng với từng căn hộ/villa có ID ở dòng `8`
+ *      và tên căn ở dòng `9`) hay bố cục ngang kế thừa (`isVerticalLayout = false`: mỗi dòng từ chỉ số `2` là một căn,
+ *      các cột từ C trở đi là các ngày `1..31`).
+ * 2. Ánh xạ căn hộ & kiểm tra toàn vẹn cấu trúc:
+ *    - Đối chiếu mã `metadataListingId` bất biến với mã văn bản hiển thị trên ô tiêu đề; ưu tiên `metadataListingId`
+ *      làm khóa định danh chuẩn, đánh dấu `colMismatch` / `tamperedRowIndices` khi phát hiện sửa tay lệch mã,
+ *      và đưa vào `duplicateListingIds` nếu một căn hộ bị nhân bản thành nhiều cột/hàng.
+ * 3. Trích xuất ma trận ô lịch `1..31`:
+ *    - Với mỗi căn hợp lệ, ánh xạ từng ngày `day` thuộc `[1, 31]` tới ô dữ liệu tương ứng lưu vào `cellsByDay`,
+ *      đồng thời xác định chỉ số cột/hàng trống tiếp theo (`nextAppendColIndex` / `nextAppendRowIndex`) để chèn căn mới.
+ */
 export const extractMonthSheetStructure = (tab: RawSheetTab): ExtractedMonthSheetStructure => {
     const grid = tab.data?.[0];
     const rowData = grid?.rowData ?? [];
@@ -522,6 +606,9 @@ export const extractMonthSheetStructure = (tab: RawSheetTab): ExtractedMonthShee
     };
 };
 
+/**
+ * Khởi tạo cấu trúc ô tiêu đề đã định dạng sẵn màu nền RGB, căn lề ngang và kiểu chữ in đậm.
+ */
 const makeStyledHeaderCell = (
     text: string,
     bgColor: SheetRgbColor,
@@ -546,6 +633,15 @@ const makeStyledHeaderCell = (
     },
 });
 
+/**
+ * Giải thuật dựng lô yêu cầu `batchUpdate` khởi tạo và chuẩn hóa mẫu bảng tính lịch tháng:
+ * 1. Cấu hình vùng đóng băng (`10` dòng đầu, `1` cột ngày), mở rộng số dòng/cột lưới đủ chứa danh sách căn,
+ *    gắn `DeveloperMetadata` khóa `agy_month_tab` và thiết lập độ rộng hiển thị chuẩn cho cột Ngày (`135px`) và cột Căn (`220px`).
+ * 2. Dựng bảng chú giải quy tắc màu sắc trực quan ở dòng `0..7` (Trắng: trống, Cam `G`: giữ chỗ, Xanh lá `Đ`: đã đặt, Đỏ `K`: khóa).
+ * 3. Ghi tiêu đề cột A (`Mã căn (ID)`, `Ngày \ Tên căn`) và danh sách nhãn ngày `DD/MM/YYYY` (`1..daysInMonth`)
+ *    tách biệt hoàn toàn trong phạm vi cột A (`startColumnIndex = 0, endColumnIndex = 1`) để không xóa nhầm dữ liệu căn ở cột B.
+ * 4. Thiết lập vùng bảo vệ cảnh báo (`warningOnly` Protected Range) cho cột A và 10 dòng đầu chống sửa nhầm cấu trúc.
+ */
 export const buildMonthTabHeaderRequests = (
     tab: RawSheetTab,
     monthSpec: RollingMonthSpec,
@@ -661,14 +757,26 @@ export const buildMonthTabHeaderRequests = (
         },
     });
 
-    // Build Rows 0 to 7: HƯỚNG DẪN & NOTE GHI CHÚ MÀU SẮC (Gộp dòng & gộp cột chuyên nghiệp, xác nhận hold/booked thuần màu không chữ)
+    // Build Rows 0 to 8: HƯỚNG DẪN, CHECKBOX XÁC NHẬN & NOTE GHI CHÚ MÀU SẮC
     const rows: Array<{ values: RawSheetCell[] }> = [
-        // Row 0: Header Hướng dẫn (Col A: HƯỚNG DẪN, Col B..end: Tiêu đề banner)
+        // Row 0: Checkbox xác nhận (Col A: [ ]) & Tiêu đề banner hướng dẫn (Col B..end)
         {
             values: [
-                makeStyledHeaderCell("HƯỚNG DẪN", SHEET_COLORS.HEADER_BG, { bold: true, align: "CENTER", valign: "MIDDLE" }),
+                {
+                    userEnteredValue: { boolValue: false },
+                    userEnteredFormat: {
+                        backgroundColorStyle: { rgbColor: SHEET_COLORS.SUBHEADER_BG },
+                        horizontalAlignment: "CENTER",
+                        verticalAlignment: "MIDDLE",
+                        wrapStrategy: "OVERFLOW_CELL",
+                        textFormat: {
+                            bold: true,
+                            fontFamily: SHEET_FONT_FAMILY,
+                        },
+                    },
+                },
                 makeStyledHeaderCell(
-                    `QUY TẮC MÀU SẮC & ĐỒNG BỘ LỊCH TỰ ĐỘNG (THÁNG ${monthSpec.tabKey})`,
+                    `👉 TÍCH VÀO Ô BÊN TRÁI ĐỂ XÁC NHẬN LƯU THAY ĐỔI VÀO APP (Đổi giá, Đóng/Mở lịch) — THÁNG ${monthSpec.tabKey} (Tự động bỏ tích khi hoàn tất)`,
                     SHEET_COLORS.HEADER_BG,
                     { bold: true, align: "LEFT", valign: "MIDDLE" },
                 ),
@@ -692,12 +800,12 @@ export const buildMonthTabHeaderRequests = (
                 makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
             ],
         },
-        // Row 3: Ví dụ 2 - CAM: Giữ chỗ (Gộp dòng với Row 4) — Xác nhận thuần màu cam, không ghi chữ
+        // Row 3: Ví dụ 2 - CAM: Giữ chỗ (Gộp dòng với Row 4)
         {
             values: [
                 makeStyledHeaderCell("", SHEET_COLORS.PENDING_HOLD_ORANGE, { valign: "MIDDLE" }),
                 makeStyledHeaderCell(
-                    "Màu cam: Đang giữ chỗ (Hold) — Tự động thể hiện bằng màu cam (không ghi chữ). Đơn tạm giữ 10 phút khi khách đang thanh toán.",
+                    "Màu cam: Đang giữ chỗ (Hold) — Tự động đổi màu cam và giữ nguyên giá phòng. Đơn tạm giữ 10 phút khi khách đang thanh toán.",
                     SHEET_COLORS.WHITE,
                     { bold: false, align: "LEFT", valign: "MIDDLE", wrap: true },
                 ),
@@ -710,12 +818,12 @@ export const buildMonthTabHeaderRequests = (
                 makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
             ],
         },
-        // Row 5: Ví dụ 3 - XANH LÁ: Đã đặt (Gộp dòng với Row 6) — Xác nhận thuần màu xanh, không ghi chữ
+        // Row 5: Ví dụ 3 - XANH LÁ: Đã đặt (Gộp dòng với Row 6)
         {
             values: [
                 makeStyledHeaderCell("", SHEET_COLORS.BOOKED_GREEN, { valign: "MIDDLE" }),
                 makeStyledHeaderCell(
-                    "Màu xanh lá: Đã đặt phòng (Booked) — Tự động thể hiện bằng màu xanh lá (không ghi chữ). Đơn đặt thành công (vui lòng không tự ý mở trống).",
+                    "Màu xanh lá: Đã đặt phòng (Booked) — Tự động đổi màu xanh lá và giữ nguyên giá phòng. Đơn đặt thành công (vui lòng không tự ý mở trống).",
                     SHEET_COLORS.WHITE,
                     { bold: false, align: "LEFT", valign: "MIDDLE", wrap: true },
                 ),
@@ -728,12 +836,12 @@ export const buildMonthTabHeaderRequests = (
                 makeStyledHeaderCell("", SHEET_COLORS.WHITE, { valign: "MIDDLE" }),
             ],
         },
-        // Row 7: Ví dụ 4 - ĐỎ: Host khóa (Gộp dòng với Row 8) — Xác nhận thuần màu đỏ, không ghi chữ
+        // Row 7: Ví dụ 4 - ĐỎ: Host khóa (Gộp dòng với Row 8)
         {
             values: [
                 makeStyledHeaderCell("", SHEET_COLORS.HOST_BLOCKED_RED, { valign: "MIDDLE" }),
                 makeStyledHeaderCell(
-                    "Màu đỏ: Host khóa phòng — Chủ nhà chủ động đóng lịch (Điền chữ K hoặc tô màu đỏ tại ô ngày tương ứng).",
+                    "Màu đỏ: Host khóa phòng — Chủ nhà chủ động đóng lịch (Tô màu đỏ tại ô ngày tương ứng, nội dung giá phòng vẫn được giữ nguyên).",
                     SHEET_COLORS.WHITE,
                     { bold: false, align: "LEFT", valign: "MIDDLE", wrap: true },
                 ),
@@ -942,6 +1050,26 @@ export const buildMonthTabHeaderRequests = (
         },
     });
 
+    // Native Checkbox validation for Cell A1 (Xác nhận lưu thay đổi vào App)
+    requests.push({
+        setDataValidation: {
+            range: {
+                sheetId,
+                startRowIndex: 0,
+                endRowIndex: 1,
+                startColumnIndex: 0,
+                endColumnIndex: 1,
+            },
+            rule: {
+                condition: {
+                    type: "BOOLEAN",
+                },
+                showCustomUi: true,
+                strict: true,
+            },
+        },
+    });
+
     const hasProtection = (tab.protectedRanges ?? []).some(
         (range) => range.description === `agy_protect_col_a_${monthSpec.tabKey}`,
     );
@@ -983,6 +1111,19 @@ export const buildMonthTabHeaderRequests = (
     return requests;
 };
 
+export const isMonthTabCheckboxConfirmed = (tab: RawSheetTab): boolean => {
+    const row0 = tab.data?.[0]?.rowData?.[0];
+    const cellA1 = row0?.values?.[0];
+    if (!cellA1) {
+        return false;
+    }
+    if (cellA1.userEnteredValue?.boolValue !== undefined) {
+        return cellA1.userEnteredValue.boolValue === true;
+    }
+    const raw = String(cellA1.userEnteredValue?.stringValue ?? "").trim().toUpperCase();
+    return raw === "TRUE" || raw === "1";
+};
+
 export type DirectoryListingEntry = {
     listingId: number;
     title: string;
@@ -993,6 +1134,13 @@ export type DirectoryListingEntry = {
     deletedAt: Date | null;
 };
 
+/**
+ * Giải thuật sinh lô yêu cầu `batchUpdate` dựng trang tổng hợp `DANH MỤC CĂN`:
+ * 1. Đánh dấu `DeveloperMetadata` khóa `agy_directory_tab = "true"`, đóng băng 2 dòng tiêu đề và cột Mã căn.
+ * 2. Tách danh sách chỗ nghỉ thành hai phân vùng: căn đang quản lý hoạt động (`!deletedAt`) và căn đã ngừng
+ *    kinh doanh lưu trữ lịch sử (`deletedAt !== null`, giữ nguyên ID bất biến để không tái sử dụng nhầm).
+ * 3. Đệm thêm 5 dòng trống nền trắng phía cuối bảng nhằm dọn sạch tàn dư hiển thị khi số căn giảm xuống.
+ */
 export const buildDirectoryTabRequests = (
     tab: RawSheetTab,
     listings: DirectoryListingEntry[],
@@ -1103,6 +1251,9 @@ export const buildDirectoryTabRequests = (
         },
     ];
 
+    /**
+     * Ánh xạ mã trạng thái chỗ nghỉ nội bộ và cờ xóa mềm sang nhãn hiển thị tiếng Việt trên trang danh mục.
+     */
     const statusLabel = (status: string, deletedAt: Date | null): string => {
         if (deletedAt) return "Đã ngừng (Lưu trữ)";
         switch (status) {

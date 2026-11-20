@@ -15,7 +15,7 @@ const authRepository = require("../dist/modules/auth/auth.repository");
 const authService = require("../dist/modules/auth/auth.service");
 const usersRepository = require("../dist/modules/users/users.repository");
 const User = require("../dist/models/user").default;
-const hostVerificationsService = require("../dist/modules/verifications/verifications.service");
+const hostVerificationsService = require("../dist/modules/host-kyc/host-verification.service");
 const adminListingsService = require("../dist/modules/admin/admin.service");
 
 type TestUserRecord = {

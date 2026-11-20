@@ -3,7 +3,12 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../l10n/l10n.dart';
 
+/// Chuyên mục Quy định và Câu hỏi thường gặp dạng danh sách đóng mở (`ExpansionTile`) trên trang Chi tiết biệt thự.
+///
+/// Giải đáp trước các thắc mắc cốt lõi về giờ nhận/trả phòng, quy định âm thanh sau 22:00 tại Vũng Tàu,
+/// dụng cụ bếp BBQ và chính sách đặt cọc - dời lịch lưu trú.
 class PropertyFaqSection extends StatelessWidget {
+  /// Khởi tạo khối câu hỏi thường gặp `PropertyFaqSection`.
   const PropertyFaqSection({super.key});
 
   @override

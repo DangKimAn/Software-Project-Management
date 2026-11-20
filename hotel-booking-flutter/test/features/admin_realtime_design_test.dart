@@ -20,7 +20,7 @@ import 'package:hotel_booking_flutter/features/messages/data/conversations_repos
 import 'package:hotel_booking_flutter/shared/animations/animated_heart_button.dart';
 import 'package:hotel_booking_flutter/shared/animations/fade_slide_in.dart';
 import 'package:hotel_booking_flutter/shared/widgets/app_dialog.dart';
-import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_header.dart';
 
 class _FakeSecureStorage extends SecureStorageService {
   String? token;

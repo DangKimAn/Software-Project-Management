@@ -17,7 +17,8 @@ class VillaDescriptionSection extends StatefulWidget {
   });
 
   @override
-  State<VillaDescriptionSection> createState() => _VillaDescriptionSectionState();
+  State<VillaDescriptionSection> createState() =>
+      _VillaDescriptionSectionState();
 }
 
 class _VillaDescriptionSectionState extends State<VillaDescriptionSection> {

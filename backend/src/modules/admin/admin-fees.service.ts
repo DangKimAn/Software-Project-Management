@@ -19,6 +19,10 @@ export type FeeSettingResponse = {
 let cachedActiveFeePct = 10;
 let cacheExpiresAt = Date.now() + 60 * 1000;
 
+/**
+ * Giải thuật vô hiệu hóa tức thời bộ nhớ đệm tỷ lệ phí nền tảng trong RAM bằng cách đặt `cacheExpiresAt = 0`,
+ * buộc lần truy xuất tiếp theo phải đồng bộ lại trạng thái trực tiếp từ CSDL.
+ */
 export const invalidatePlatformFeeCache = () => {
     cacheExpiresAt = 0;
 };
@@ -26,6 +30,11 @@ export const invalidatePlatformFeeCache = () => {
 /**
  * Ensures any scheduled fee that has reached its effective date
  * is automatically transitioned to 'active', while previous 'active' becomes 'superseded'.
+ *
+ * Giải thuật đồng bộ tự động máy trạng thái biểu phí nền tảng kết hợp bộ nhớ đệm TTL 60 giây:
+ * - Nếu chưa hết hạn cache (`cacheExpiresAt > now`) và không ép đồng bộ (`!forceSync`), trả về ngay `cachedActiveFeePct` trong O(1).
+ * - Khi truy vấn CSDL: duyệt tuần tự theo thời gian hiệu lực tăng dần các bản ghi `scheduled` đã tới hạn (`effectiveAt <= now`),
+ *   hạ toàn bộ bản ghi `active` trước đó sang `superseded` và kích hoạt bản ghi mới lên `active`, sau đó gia hạn cache thêm 60 giây.
  */
 export const syncEffectivePlatformFee = async (
     transaction?: Transaction,
@@ -77,6 +86,11 @@ export const syncEffectivePlatformFee = async (
     return cachedActiveFeePct;
 };
 
+/**
+ * Giải thuật tổng hợp bảng điều khiển biểu phí dịch vụ nền tảng cho Quản trị viên:
+ * - Đồng bộ cưỡng bức biểu phí hiệu lực mới nhất, lấy lịch điều chỉnh sắp tới (tính thời gian đếm ngược `countdownSeconds = max(0, floor((effectiveAt - now) / 1000))`) và 20 bản ghi lịch sử gần nhất.
+ * - Tính tổng doanh thu phí dịch vụ thực thu từ các đơn lưu trú hợp lệ không có giao dịch hoàn tiền đang chờ/thành công.
+ */
 export const getCurrentPlatformFeeStatus = async () => {
     // 1. Sync any ready-to-activate records
     const activeFeePct = await syncEffectivePlatformFee(undefined, true);
@@ -99,14 +113,23 @@ export const getCurrentPlatformFeeStatus = async () => {
         limit: 20,
     });
 
-    // Calculate total platform revenue to date
+    // Giải thuật tính tổng doanh thu phí nền tảng thực thu:
+    // Chỉ cộng các đơn đã thanh toán hợp lệ trong vòng đời lưu trú ('paid', 'confirmed', 'checked_in', 'checked_out', 'completed')
+    // và loại trừ các đơn đang/đã hoàn tiền trong bảng refunds.
+    // CONFLICT-RESOLVED: Bỏ điều kiện sai `NOT IN ('cancelled', 'rejected')` từng làm cộng nhầm đơn cancelled_by_* và pending_payment.
     let totalPlatformRevenue = 0;
     try {
         const [revResult] = await sequelize.query<{ totalPlatformRevenue: string | number }>(
             `
             SELECT COALESCE(SUM(b.service_fee_amount), 0) AS totalPlatformRevenue
             FROM bookings b
-            WHERE b.status NOT IN ('cancelled', 'rejected')
+            WHERE b.status IN ('paid', 'confirmed', 'checked_in', 'checked_out', 'completed')
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM refunds r
+                  WHERE r.booking_id = b.booking_id
+                    AND r.status IN ('pending', 'processing', 'succeeded')
+              )
             `,
             { type: QueryTypes.SELECT },
         );
@@ -154,6 +177,11 @@ export const getCurrentPlatformFeeStatus = async () => {
     };
 };
 
+/**
+ * Giải thuật lập lịch điều chỉnh tỷ lệ phí nền tảng có thời gian ân hạn báo trước 7 ngày:
+ * - Kiểm tra miền hợp lệ `0 <= feePct <= 100`, đồng bộ mức phí hiện hành và chặn trường hợp trùng mức phí đang áp dụng (`|current - feePct| < 0.001`) hoặc đang tồn tại lịch chờ kích hoạt khác (`409`).
+ * - Tạo bản ghi `scheduled` có mốc hiệu lực chính xác sau 7 ngày (`now + 7 * 86.400.000 ms`), xóa cache và phát tán thông báo đa kênh tới toàn bộ Host đang hoạt động.
+ */
 export const schedulePlatformFeeChange = async (params: {
     feePct: number;
     reason?: string | null;
@@ -227,6 +255,10 @@ export const schedulePlatformFeeChange = async (params: {
     };
 };
 
+/**
+ * Giải thuật hủy lịch điều chỉnh phí nền tảng đang chờ hiệu lực (`status = "scheduled"`, `effectiveAt > now`):
+ * Chuyển trạng thái sang `cancelled`, lưu định danh Admin thực hiện hủy và xóa bộ nhớ đệm biểu phí.
+ */
 export const cancelScheduledPlatformFee = async (adminUserId: number) => {
     const pendingScheduled = await PlatformFeeSetting.findOne({
         where: {

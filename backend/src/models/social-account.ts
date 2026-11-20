@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize liên kết định danh đăng nhập mạng xã hội (Google OAuth) với tài khoản người dùng nội bộ.
+ */
 import {
     CreationOptional,
     DataTypes,

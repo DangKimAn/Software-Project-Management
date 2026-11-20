@@ -5,13 +5,25 @@ import '../../app/theme/app_typography.dart';
 
 import 'app_button.dart';
 
+/// Khung hiển thị trạng thái lỗi thân thiện có khả năng tự suy diễn biểu tượng ngữ cảnh
+/// (mất mạng, lỗi máy chủ hoặc cảnh báo chung) và cung cấp nút thử lại chuẩn `48dp`.
 class AppErrorView extends StatelessWidget {
+  /// Tiêu đề tóm tắt sự cố (mặc định `'Đã có lỗi xảy ra'`).
   final String title;
+
+  /// Thông điệp chi tiết giải thích nguyên nhân hoặc hướng xử lý cho người dùng.
   final String message;
+
+  /// Hàm gọi lại để thực hiện tải lại dữ liệu khi người dùng nhấn nút thử lại.
   final VoidCallback? onRetry;
+
+  /// Nhãn hiển thị trên nút thử lại (mặc định `'Thử lại'`).
   final String retryText;
+
+  /// Biểu tượng ghi đè tùy chọn; nếu để `null` sẽ tự động phân loại theo nội dung lỗi.
   final IconData? icon;
 
+  /// Khởi tạo khung thông báo lỗi `AppErrorView`.
   const AppErrorView({
     super.key,
     this.title = 'Đã có lỗi xảy ra',
@@ -21,7 +33,13 @@ class AppErrorView extends StatelessWidget {
     this.icon,
   });
 
+  /// Suy diễn biểu tượng `LucideIcons` phù hợp với ngữ cảnh lỗi dựa trên từ khóa trong `title` và `message`.
   IconData _resolveContextualIcon() {
+    // Giải thuật phân loại biểu tượng ngữ cảnh theo từ khóa lỗi (Contextual Error Icon Heuristic):
+    // - Ưu tiên biểu tượng truyền tường minh qua tham số icon.
+    // - Nếu chuỗi gộp chữ thường chứa từ khóa kết nối/mạng/wifi/offline -> trả về wifiOff.
+    // - Nếu chứa từ khóa máy chủ/timeout hoặc mã trạng thái 5xx -> trả về cloudOff.
+    // - Các trường hợp còn lại dùng biểu tượng cảnh báo tổng quát circleAlert.
     if (icon != null) return icon!;
     final haystack = '$title $message'.toLowerCase();
     if (haystack.contains('mạng') ||
@@ -43,6 +61,7 @@ class AppErrorView extends StatelessWidget {
     return LucideIcons.circleAlert;
   }
 
+  /// Dựng thẻ thông báo lỗi căn giữa tối đa `344dp` kèm nút thử lại hình viên thuốc.
   @override
   Widget build(BuildContext context) {
     final resolvedIcon = _resolveContextualIcon();

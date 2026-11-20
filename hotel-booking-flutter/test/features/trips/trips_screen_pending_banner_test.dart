@@ -10,6 +10,7 @@ import 'package:hotel_booking_flutter/features/trips/domain/entities/booking.dar
 import 'package:hotel_booking_flutter/features/trips/presentation/screens/trips_screen.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/view_models/trips_view_model.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/widgets/global_pending_booking_banner.dart';
+import 'package:hotel_booking_flutter/l10n/l10n.dart';
 
 void main() {
   final now = DateTime.now();
@@ -44,12 +45,17 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            // CONFLICT-RESOLVED: Ghi đè đồng thời `authNotifierProvider` và `localeProvider` từ develop kèm cấu hình `AppLocalizations`.
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
             localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
             myBookingsProvider.overrideWith((ref) => Future.value([])),
             activePendingBookingProvider.overrideWithValue(null),
           ],
           child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            locale: Locale('vi'),
             home: TripsScreen(),
           ),
         ),
@@ -72,12 +78,18 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            // CONFLICT-RESOLVED: Ghi đè `localeProvider` và cấu hình `AppLocalizations` cho bài kiểm thử biểu ngữ giữ chỗ ghim đầu trang.
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
             localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
-            myBookingsProvider.overrideWith((ref) => Future.value([testPendingBooking])),
+            myBookingsProvider
+                .overrideWith((ref) => Future.value([testPendingBooking])),
             activePendingBookingProvider.overrideWithValue(testPendingBooking),
           ],
           child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            locale: Locale('vi'),
             home: TripsScreen(),
           ),
         ),
@@ -143,12 +155,18 @@ void main() {
         ProviderScope(
           overrides: [
             appRouterProvider.overrideWithValue(testRouter),
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            // CONFLICT-RESOLVED: Ghi đè `localeProvider` và cấu hình `AppLocalizations` cho bài kiểm thử điều hướng nút Thanh toán.
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
             localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
-            myBookingsProvider.overrideWith((ref) => Future.value([testPendingBooking])),
+            myBookingsProvider
+                .overrideWith((ref) => Future.value([testPendingBooking])),
             activePendingBookingProvider.overrideWithValue(testPendingBooking),
           ],
           child: MaterialApp.router(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            locale: const Locale('vi'),
             routerConfig: testRouter,
           ),
         ),

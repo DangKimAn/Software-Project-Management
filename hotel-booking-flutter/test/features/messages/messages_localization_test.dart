@@ -150,10 +150,12 @@ void main() {
     return ProviderScope(
       overrides: [
         localeProvider.overrideWith((ref) => _FakeLocaleNotifier(localeCode)),
-        authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(guestUser)),
+        authNotifierProvider
+            .overrideWith((ref) => _FakeAuthNotifier(guestUser)),
         dioClientProvider.overrideWithValue(client),
         socketServiceProvider.overrideWithValue(socket),
-        conversationsRepositoryProvider.overrideWithValue(ConversationsRepository(client)),
+        conversationsRepositoryProvider
+            .overrideWithValue(ConversationsRepository(client)),
         villaDetailProvider('villa-101').overrideWith((ref) async => testVilla),
       ],
       child: MaterialApp(
@@ -174,10 +176,12 @@ void main() {
     return ProviderScope(
       overrides: [
         localeProvider.overrideWith((ref) => _FakeLocaleNotifier(localeCode)),
-        authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(guestUser)),
+        authNotifierProvider
+            .overrideWith((ref) => _FakeAuthNotifier(guestUser)),
         dioClientProvider.overrideWithValue(client),
         socketServiceProvider.overrideWithValue(socket),
-        conversationsRepositoryProvider.overrideWithValue(ConversationsRepository(client)),
+        conversationsRepositoryProvider
+            .overrideWithValue(ConversationsRepository(client)),
         villaDetailProvider('villa-101').overrideWith((ref) async => testVilla),
       ],
       child: MaterialApp(

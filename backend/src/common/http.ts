@@ -33,6 +33,9 @@ const toNumber = (value: unknown, fallback = 0) => {
     return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+/**
+ * Giải thuật đồng nhất siêu dữ liệu phân trang (`page`, `limit`, `total`, `totalPages`) về cấu trúc chuẩn.
+ */
 const normalizePaginationMeta = (value: Record<string, unknown>) => {
     const page = toNumber(value.page, 1);
     const limit = toNumber(value.limit, 10);
@@ -51,6 +54,9 @@ const hasFlatPagination = (value: Record<string, unknown>) =>
     Array.isArray(value.items) &&
     (value.page !== undefined || value.limit !== undefined || value.total !== undefined || value.totalItems !== undefined);
 
+/**
+ * Giải thuật chuẩn hóa trường `data` của phản hồi thành công, tự động quy hoạch phân trang phẳng về khóa `pagination`.
+ */
 const normalizeSuccessData = <T>(data: T | undefined): T | EmptyData | Record<string, unknown> => {
     if (data === undefined) {
         return {};
@@ -86,6 +92,9 @@ const normalizeSuccessData = <T>(data: T | undefined): T | EmptyData | Record<st
     return data;
 };
 
+/**
+ * Giải thuật đóng gói và trả về phản hồi JSON thành công (`{ success: true, message, data }`) theo hợp đồng API chuẩn.
+ */
 export function sendSuccess<T>(res: Response, options?: SuccessOptions<T>): Response;
 export function sendSuccess<T>(res: Response, statusCode?: number, message?: string, data?: T): Response;
 export function sendSuccess<T>(
@@ -112,6 +121,9 @@ export function sendSuccess<T>(
     return res.status(options.statusCode ?? 200).json(payload);
 }
 
+/**
+ * Giải thuật đóng gói và trả về phản hồi lỗi chuẩn hóa (`{ success: false, message, code, details, errors }`).
+ */
 export const sendError = (
     res: Response,
     statusCode: number,

@@ -2,21 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/errors/app_failure.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/app_text_field.dart';
-import '../../data/services/google_auth_service.dart';
+
 import '../../domain/entities/user.dart';
 import '../view_models/auth_notifier.dart';
 import '../validation/auth_validation.dart';
 
+/// Màn hình đăng ký tài khoản mới (`/dang-ky`), tích hợp bộ đo độ mạnh mật khẩu trực quan 4 mức,
+/// kiểm tra định dạng số điện thoại/email và hỗ trợ đăng ký nhanh bằng tài khoản Google.
 class RegisterScreen extends ConsumerStatefulWidget {
+  /// Đường dẫn nội bộ cần chuyển tiếp sau khi tạo tài khoản thành công (nếu có).
   final String? redirectTo;
 
+  /// Khởi tạo `RegisterScreen`.
   const RegisterScreen({super.key, this.redirectTo});
 
   @override
@@ -29,7 +35,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
+  bool _acceptedTerms = false;
+  String? _termsError;
   bool _isLoading = false;
   String? _errorMessage;
   Map<String, String> _fieldErrors = {};
@@ -48,11 +58,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  /// Evaluates 4 password rules matching `getPasswordStrength` in `RegisterPage.tsx`.
-  ({int score, String label, Color color}) _getPasswordStrength(String pwd) {
+  // Giải thuật chấm điểm độ mạnh mật khẩu theo 4 tiêu chí: độ dài >= 8, có cả chữ hoa & thường, có chữ số và có ký tự đặc biệt.
+  ({int score, String label, Color color}) _getPasswordStrength(
+    String pwd,
+    AppLocalizations l10n,
+  ) {
     var score = 0;
     if (pwd.length >= 8) score++;
     if (RegExp(r'[a-z]').hasMatch(pwd) && RegExp(r'[A-Z]').hasMatch(pwd)) {
@@ -62,13 +76,29 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (RegExp(r'[^A-Za-z0-9]').hasMatch(pwd)) score++;
 
     if (score <= 1) {
-      return (score: score, label: 'Yếu', color: AppColors.errorRed);
+      return (
+        score: score,
+        label: l10n.authStrengthWeak,
+        color: AppColors.errorRed
+      );
     } else if (score == 2) {
-      return (score: score, label: 'Trung bình', color: AppColors.warningAmber);
+      return (
+        score: score,
+        label: l10n.authStrengthFair,
+        color: AppColors.warningAmber
+      );
     } else if (score == 3) {
-      return (score: score, label: 'Khá', color: AppColors.successGreen);
+      return (
+        score: score,
+        label: l10n.authStrengthGood,
+        color: AppColors.successGreen
+      );
     } else {
-      return (score: score, label: 'Mạnh', color: AppColors.successGreen);
+      return (
+        score: score,
+        label: l10n.authStrengthStrong,
+        color: AppColors.successGreen
+      );
     }
   }
 
@@ -88,9 +118,23 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   Future<void> _handleRegister() async {
+    // Giải thuật kiểm tra đồng thời toàn bộ điều kiện đăng ký tài khoản (`TC-014`):
+    // Kiểm tra biểu mẫu (họ tên, SĐT Việt Nam, email, độ mạnh mật khẩu, khớp xác nhận mật khẩu)
+    // VÀ bắt buộc người dùng tích đồng ý Điều khoản dịch vụ trước khi gọi API `/api/auth/register`.
     if (_isLoading) return;
+    final activeL10n = lookupAppLocalizations(Locale(ref.read(localeProvider)));
     _fieldErrors = {};
-    if (!_formKey.currentState!.validate()) return;
+    final isFormValid = _formKey.currentState!.validate();
+    if (!_acceptedTerms) {
+      setState(() {
+        _termsError = activeL10n.authTermsRequiredError;
+      });
+    } else if (_termsError != null) {
+      setState(() {
+        _termsError = null;
+      });
+    }
+    if (!isFormValid || !_acceptedTerms) return;
 
     setState(() {
       _isLoading = true;
@@ -155,8 +199,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final activeL10n =
+        lookupAppLocalizations(Locale(ref.watch(localeProvider)));
     final pwd = _passwordController.text;
-    final strength = _getPasswordStrength(pwd);
+    final strength = _getPasswordStrength(pwd, activeL10n);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -164,7 +210,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          tooltip: 'Quay lại',
+          tooltip: activeL10n.ctaBack,
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           icon: const Icon(LucideIcons.arrowLeft, color: AppColors.iconStrong),
           onPressed: () {
@@ -197,13 +243,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Tạo tài khoản mới',
+                        activeL10n.authCreateAccountTitle,
                         style: AppTypography.display
                             .copyWith(color: AppColors.textStrong),
                       ),
                       const SizedBox(height: AppSpacing.s8),
                       Text(
-                        'Trải nghiệm đặt phòng villa nghỉ dưỡng đẳng cấp và nhận ưu đãi độc quyền.',
+                        activeL10n.authRegisterSubtitle,
                         style: AppTypography.body
                             .copyWith(color: AppColors.textMuted),
                       ),
@@ -243,8 +289,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       AppTextField(
                         controller: _fullNameController,
                         readOnly: _isLoading,
-                        labelText: 'Họ và tên',
-                        hintText: 'Nhập họ và tên',
+                        labelText: activeL10n.authFullNameLabel,
+                        hintText: activeL10n.authFullNameHint,
                         prefixIcon: const Icon(
                           LucideIcons.userRound,
                           size: 20,
@@ -274,8 +320,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       AppTextField(
                         controller: _phoneController,
                         readOnly: _isLoading,
-                        labelText: 'Số điện thoại *',
-                        hintText: 'Nhập số điện thoại',
+                        labelText: activeL10n.authPhoneRequiredLabel,
+                        hintText: activeL10n.authPhoneHint,
                         prefixIcon: const Icon(
                           LucideIcons.phone,
                           size: 20,
@@ -298,8 +344,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       AppTextField(
                         controller: _emailController,
                         readOnly: _isLoading,
-                        labelText: 'Email *',
-                        hintText: 'Nhập địa chỉ email',
+                        labelText: activeL10n.authEmailRequiredLabel,
+                        hintText: activeL10n.authEmailHint,
                         prefixIcon: const Icon(
                           LucideIcons.mail,
                           size: 20,
@@ -321,10 +367,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       AppTextField(
                         controller: _passwordController,
                         readOnly: _isLoading,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => _handleRegister(),
-                        labelText: 'Mật khẩu',
-                        hintText: 'Tạo mật khẩu (tối thiểu 8 ký tự)',
+                        textInputAction: TextInputAction.next,
+                        labelText: activeL10n.authPasswordLabel,
+                        hintText: activeL10n.authPasswordCreateHint,
                         obscureText: _obscurePassword,
                         onChanged: (_) {
                           if (_fieldErrors.containsKey('password')) {
@@ -332,6 +377,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               _fieldErrors.remove('password');
                               _formKey.currentState?.validate();
                             });
+                          } else if (_confirmPasswordController
+                              .text.isNotEmpty) {
+                            _formKey.currentState?.validate();
                           }
                         },
                         prefixIcon: const Icon(
@@ -341,8 +389,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         ),
                         suffixIcon: IconButton(
                           tooltip: _obscurePassword
-                              ? 'Hiện mật khẩu'
-                              : 'Ẩn mật khẩu',
+                              ? activeL10n.authShowPasswordTooltip
+                              : activeL10n.authHidePasswordTooltip,
                           constraints:
                               const BoxConstraints(minWidth: 48, minHeight: 48),
                           icon: Icon(
@@ -383,16 +431,131 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Độ mạnh mật khẩu: ${strength.label}',
+                          activeL10n.authPasswordStrengthLabel(strength.label),
                           style: AppTypography.caption.copyWith(
                             color: strength.color,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
+                      const SizedBox(height: AppSpacing.s16),
+                      AppTextField(
+                        controller: _confirmPasswordController,
+                        readOnly: _isLoading,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _handleRegister(),
+                        labelText: activeL10n.authConfirmPasswordLabel,
+                        hintText: activeL10n.authConfirmPasswordHint,
+                        obscureText: _obscureConfirmPassword,
+                        onChanged: (_) {
+                          if (_confirmPasswordController.text.isNotEmpty) {
+                            _formKey.currentState?.validate();
+                          }
+                        },
+                        prefixIcon: const Icon(
+                          LucideIcons.lock,
+                          size: 20,
+                          color: AppColors.iconMuted,
+                        ),
+                        suffixIcon: IconButton(
+                          tooltip: _obscureConfirmPassword
+                              ? activeL10n.authShowPasswordTooltip
+                              : activeL10n.authHidePasswordTooltip,
+                          constraints:
+                              const BoxConstraints(minWidth: 48, minHeight: 48),
+                          icon: Icon(
+                            _obscureConfirmPassword
+                                ? LucideIcons.eyeOff
+                                : LucideIcons.eye,
+                            size: 20,
+                            color: AppColors.iconStrong,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _obscureConfirmPassword =
+                                  !_obscureConfirmPassword;
+                            });
+                          },
+                        ),
+                        validator: (v) {
+                          if (v == null || v.isEmpty) {
+                            return 'Vui lòng nhập xác nhận mật khẩu';
+                          }
+                          if (v != _passwordController.text) {
+                            return 'Mật khẩu xác nhận không khớp';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: AppSpacing.s16),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: _isLoading
+                            ? null
+                            : () {
+                                setState(() {
+                                  _acceptedTerms = !_acceptedTerms;
+                                  if (_acceptedTerms) {
+                                    _termsError = null;
+                                  }
+                                });
+                              },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: Checkbox(
+                                  key: const Key('register_terms_checkbox'),
+                                  value: _acceptedTerms,
+                                  activeColor: AppColors.primary,
+                                  onChanged: _isLoading
+                                      ? null
+                                      : (val) {
+                                          setState(() {
+                                            _acceptedTerms = val ?? false;
+                                            if (_acceptedTerms) {
+                                              _termsError = null;
+                                            }
+                                          });
+                                        },
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  activeL10n.authTermsAgreement,
+                                  style: AppTypography.caption.copyWith(
+                                    color: AppColors.textStrong,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (_termsError != null) ...[
+                        const SizedBox(height: 6),
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            _termsError!,
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.errorRed,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: AppSpacing.s24),
                       AppButton(
-                        text: _isLoading ? 'Đang tạo tài khoản...' : 'Đăng ký',
+                        text: _isLoading
+                            ? activeL10n.authCreatingAccount
+                            : activeL10n.authRegisterBtn,
                         isLoading: _isLoading,
                         icon: const Icon(
                           LucideIcons.arrowRight,
@@ -408,7 +571,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text(
-                              'Bạn đã có tài khoản?',
+                              activeL10n.authAlreadyHaveAccount,
                               style: AppTypography.body
                                   .copyWith(color: AppColors.textMuted),
                             ),
@@ -442,7 +605,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               child: Text(
-                                'Đăng nhập',
+                                activeL10n.authLoginTitle,
                                 style: AppTypography.body.copyWith(
                                   color: AppColors.primary,
                                   fontWeight: FontWeight.w600,
@@ -459,7 +622,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: Text(
-                              'HOẶC',
+                              activeL10n.authOrDivider,
                               style: AppTypography.caption
                                   .copyWith(color: AppColors.textMuted),
                             ),
@@ -469,7 +632,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       ),
                       const SizedBox(height: AppSpacing.s16),
                       AppButton.secondary(
-                        text: 'Đăng nhập với Google',
+                        text: activeL10n.authGoogleLoginBtn,
                         icon: const AppBrandIcon.googleLogo(size: 20),
                         onPressed: _isLoading ? null : _handleGoogleLogin,
                       ),

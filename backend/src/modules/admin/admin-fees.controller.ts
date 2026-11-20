@@ -1,3 +1,8 @@
+/**
+ * Bộ điều phối HTTP quản trị cấu hình phí dịch vụ nền tảng (Platform Fee):
+ * - Tiếp nhận yêu cầu từ quản trị viên để tra cứu mức phí hiện hành, đặt lịch thay đổi phí và hủy lịch thay đổi phí.
+ */
+
 import { Request, Response, RequestHandler } from "express";
 
 import { asyncHandler } from "../../common/async-handler";
@@ -7,6 +12,9 @@ import {
     schedulePlatformFeeChange,
 } from "./admin-fees.service";
 
+/**
+ * Trả về cấu hình tỷ lệ phí dịch vụ nền tảng hiện hành và lịch thay đổi phí sắp tới (nếu có).
+ */
 export const getCurrentPlatformFeeStatusHandler: RequestHandler = asyncHandler(async (_req: Request, res: Response) => {
     const data = await getCurrentPlatformFeeStatus();
     res.status(200).json({
@@ -16,6 +24,9 @@ export const getCurrentPlatformFeeStatusHandler: RequestHandler = asyncHandler(a
     });
 });
 
+/**
+ * Đặt lịch áp dụng mức phí nền tảng mới vào thời điểm hiệu lực xác định.
+ */
 export const schedulePlatformFeeChangeHandler: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
     const { feePct, reason } = req.body;
     const adminUserId = Number((req as any).user?.userId ?? 1);
@@ -33,6 +44,9 @@ export const schedulePlatformFeeChangeHandler: RequestHandler = asyncHandler(asy
     });
 });
 
+/**
+ * Hủy bỏ lịch thay đổi phí dịch vụ nền tảng đang chờ áp dụng.
+ */
 export const cancelScheduledPlatformFeeHandler: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
     const adminUserId = Number((req as any).user?.userId ?? 1);
     const data = await cancelScheduledPlatformFee(adminUserId);

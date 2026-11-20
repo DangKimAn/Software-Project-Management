@@ -9,6 +9,7 @@ import '../logging/app_logger.dart';
 import '../security/secure_storage_service.dart';
 import 'dio_adapter.dart';
 
+/// Siêu dữ liệu phân trang chuẩn hóa cho danh sách trả về từ REST API.
 class PaginationMeta {
   final int page;
   final int limit;
@@ -38,6 +39,9 @@ class PaginationMeta {
     return null;
   }
 
+  /// Giải thuật trích xuất và suy diễn siêu dữ liệu phân trang từ JSON đa định dạng:
+  /// Chấp nhận các bí danh trường phổ biến (`page`/`currentPage`, `limit`/`pageSize`/`perPage`, `total`/`totalItems`/`count`)
+  /// và tự tính số trang trần `(total + limit - 1) ~/ limit` khi máy chủ không trả sẵn `totalPages`.
   factory PaginationMeta.fromJson(Map<String, dynamic>? json) {
     if (json == null || json.isEmpty) return const PaginationMeta();
     final rawPage = _parsePositiveOrZeroInt(
@@ -71,6 +75,7 @@ class PaginationMeta {
   }
 }
 
+/// Kết quả truy vấn danh sách có phân trang gồm tập phần tử `items` và siêu dữ liệu `pagination`.
 class PaginatedResult<T> {
   final List<T> items;
   final PaginationMeta pagination;
@@ -86,6 +91,8 @@ typedef SessionRefreshedCallback = void Function(
   Map<String, dynamic>? userJson,
 );
 
+/// Trình khách HTTP trung tâm bọc quanh `Dio`, đảm nhiệm chuẩn hóa đường dẫn `/api`, đính kèm xác thực Bearer/Cookie theo nguồn gốc tin cậy,
+/// làm mới phiên hợp nhất đơn luồng (Single-Flight), thử lại lũy thừa cho truy vấn đọc bất biến và ánh xạ lỗi phân loại `AppFailure`.
 class DioClient {
   final Dio _dio;
   final SecureStorageService? _secureStorage;
@@ -157,12 +164,17 @@ class DioClient {
 
   /// Normalizes a base URL so that trailing slashes and redundant `/api`
   /// suffixes are stripped, ensuring `/api` is joined exactly once.
+  /// Chuẩn hóa URL gốc của API, loại bỏ dấu `/` dư ở cuối và hậu tố `/api` trùng lặp thông qua `AppConfig.normalizeApiBaseUrl`.
   static String normalizeBaseUrl(String rawBaseUrl) {
     return AppConfig.normalizeApiBaseUrl(rawBaseUrl);
   }
 
   /// Normalizes an API request path so that `/api` is present exactly once
   /// (unless the path is an absolute URL or the root `/health` probe).
+  /// Giải thuật chuẩn hóa đường dẫn API đảm bảo tiền tố `/api` xuất hiện đúng một lần duy nhất:
+  /// 1. Với URL tuyệt đối (`http://` hoặc `https://`), gộp các đoạn lặp `/api/api/...` về `/api`.
+  /// 2. Với đường dẫn tương đối, gộp các dấu `/` liên tiếp, khử tiền tố `/api/api` lặp, giữ nguyên đầu dò gốc `/health`, và tự chèn `/api` nếu thiếu.
+  /// 3. Nếu `baseUrl` truyền kèm vẫn kết thúc bằng `/api`, cắt bỏ `/api` ở đầu `path` để phép ghép `baseUrl + path` không tạo `/api/api`.
   static String normalizeApiPath(String rawPath, {String? baseUrl}) {
     final trimmed = rawPath.trim();
     if (trimmed.isEmpty) {
@@ -217,6 +229,7 @@ class DioClient {
   }
 
   /// Builds the normalized full URI for an endpoint, guaranteeing `/api` is joined once.
+  /// Tạo `Uri` điểm cuối đầy đủ đã chuẩn hóa từ `baseUrl` và `path`.
   static Uri buildEndpointUri(String baseUrl, String path) {
     final cleanBase = normalizeBaseUrl(baseUrl);
     final cleanPath = normalizeApiPath(path);
@@ -264,6 +277,7 @@ class DioClient {
 
   /// Creates and tracks a session-scoped [CancelToken] that is automatically
   /// cancelled if the user logs out or the session expires.
+  /// Khởi tạo và theo dõi `CancelToken` gắn với vòng đời phiên đăng nhập để tự động hủy khi đăng xuất hoặc hết hạn phiên.
   CancelToken createSessionCancelToken() {
     final token = CancelToken();
     _activeSessionCancelTokens.add(token);
@@ -275,6 +289,8 @@ class DioClient {
 
   /// Creates a keyed [CancelToken] that automatically cancels any previous
   /// in-flight request sharing the same [requestKey] (e.g. search/filter queries).
+  /// Giải thuật hủy yêu cầu cũ trùng khóa (`Keyed Request Cancellation`):
+  /// Tự động hủy `CancelToken` đang bay của truy vấn trước có cùng `requestKey` (như ô tìm kiếm/bộ lọc) trước khi cấp `CancelToken` mới.
   CancelToken createKeyedCancelToken(
     String requestKey, {
     String reason = 'Superseded by newer request',
@@ -298,6 +314,7 @@ class DioClient {
   }
 
   /// Cancels an in-flight request tracked by [requestKey], if any.
+  /// Hủy chủ động yêu cầu mạng đang chờ theo khóa định danh `requestKey` nếu còn hoạt động.
   void cancelPendingRequest(
     String requestKey, [
     String reason = 'Request cancelled',
@@ -326,6 +343,7 @@ class DioClient {
   }
 
   /// Executes or joins the single-flight refresh token request.
+  /// Thực thi hoặc tham gia vào luồng làm mới `accessToken` đơn nhất đang chạy; trả về `null` nếu làm mới thất bại.
   Future<String?> refreshAccessToken() async {
     try {
       return await _refreshAccessTokenOnce();
@@ -335,6 +353,10 @@ class DioClient {
   }
 
   /// Aborts all in-flight refresh and authenticated session requests upon logout.
+  /// Giải thuật hủy toàn diện phiên mạng khi người dùng đăng xuất (`abortSession`):
+  /// 1. Tăng kỷ nguyên phiên `_sessionEpoch` để vô hiệu hóa mọi phản hồi làm mới token hoặc lịch thử lại đến muộn.
+  /// 2. Hủy ngay yêu cầu `/api/auth/refresh` đang chạy, đánh lỗi `SESSION_ABORTED` cho `_refreshCompleter` và hủy toàn bộ `CancelToken` cùng bộ hẹn giờ thử lại.
+  /// 3. Xóa sạch dữ liệu xác thực trong `SecureStorageService` nếu `clearStorage == true`.
   Future<void> abortSession({
     String reason = 'Session terminated by logout',
     bool clearStorage = false,
@@ -419,16 +441,13 @@ class DioClient {
 
   /// Determines whether an endpoint is a public read endpoint that must still
   /// work for anonymous users even if a stale token was cleared.
+  /// Xác định điểm cuối đọc công khai (như danh sách chỗ nghỉ, bài viết, tiện nghi, ngân hàng, tỷ giá) cho phép truy cập ẩn danh khi token cũ hết hạn.
   static bool _isPublicEndpoint(RequestOptions options) {
     if (options.extra['requiresAuth'] == true) return false;
     if (options.extra['publicEndpoint'] == true) return true;
 
     final method = options.method.toUpperCase();
     final path = options.path.toLowerCase();
-
-    if (method == 'POST' && path.startsWith('/api/search/semantic')) {
-      return true;
-    }
 
     if (!_isIdempotentReadMethod(method)) {
       return false;
@@ -482,6 +501,8 @@ class DioClient {
 
   /// Verifies that [options] targets the configured API origin (or a relative API path),
   /// preventing Bearer tokens and refresh cookies from leaking to third-party domains.
+  /// Giải thuật kiểm tra nguồn gốc máy chủ tin cậy (`Origin Trust Check`):
+  /// So khớp tuyệt đối bộ ba `(scheme, host, port)` của yêu cầu với `apiBaseUrl` đã cấu hình nhằm ngăn rò rỉ `Bearer` token và cookie `refreshToken` sang miền bên thứ ba.
   bool isTrustedApiRequest(RequestOptions options) {
     final reqUri = options.uri;
     if (!reqUri.hasAuthority || reqUri.host.trim().isEmpty) {
@@ -509,6 +530,11 @@ class DioClient {
     return reqPort == basePort;
   }
 
+  /// Giải thuật đánh chặn tiền xử lý yêu cầu HTTP (`_handleRequest`):
+  /// 1. Chuẩn hóa `baseUrl`, `path` và tiêu đề JSON; bật `withCredentials = true` trên Flutter Web để trình duyệt tự đính kèm cookie `HttpOnly`.
+  /// 2. Gắn `CancelToken` theo khóa `requestKey` (chống đua kết quả tìm kiếm) hoặc theo phiên đăng nhập.
+  /// 3. Nếu đích đến thuộc nguồn gốc tin cậy (`isTrustedApiRequest`): đính kèm `Authorization: Bearer <token>` (trừ điểm cuối công khai)
+  ///    và trên Native IO đính kèm thêm tiêu đề `Cookie: refreshToken=...` cho các tuyến `/api/auth/*`.
   Future<void> _handleRequest(
     RequestOptions options,
     RequestInterceptorHandler handler,
@@ -612,6 +638,7 @@ class DioClient {
     return handler.next(options);
   }
 
+  /// Đánh chặn hậu xử lý phản hồi HTTP: gỡ theo dõi `CancelToken` đã hoàn tất và đồng bộ cookie `Set-Cookie` / `refreshToken` mới vào `SecureStorageService`.
   Future<void> _handleResponse(
     Response<dynamic> response,
     ResponseInterceptorHandler handler,
@@ -648,6 +675,9 @@ class DioClient {
     return handler.next(response);
   }
 
+  /// Giải thuật xét điều kiện thử lại tự động cho truy vấn đọc bất biến (`GET`/`HEAD`/`OPTIONS`):
+  /// Cấm tuyệt đối thử lại các truy vấn ghi hoặc đường dẫn nhạy cảm (`/api/payments`, `/api/bookings`); chỉ cho phép thử lại khi chưa vượt `maxRetries`
+  /// trước các mã lỗi tạm thời `429`, `502`, `503`, `504` (hoặc `timeout` khi được bật tường minh).
   bool _shouldRetryIdempotentGet(DioException error) {
     final reqOptions = error.requestOptions;
     if (reqOptions.extra['disableRetry'] == true) return false;
@@ -683,6 +713,8 @@ class DioClient {
     return false;
   }
 
+  /// Giải thuật tính độ trễ thử lại theo cấp số nhân (`Exponential Backoff`):
+  /// Ưu tiên tôn trọng giá trị `Retry-After` từ phản hồi máy chủ (nếu có); ngược lại tính `retryBaseDelay * 2^clamp(retryAttempt, 0, 6)` và kẹp trần tại `maxRetryDelay`.
   Duration _computeRetryDelay(DioException error, int retryAttempt) {
     final retryAfterSeconds = _extractRetryAfterSeconds(error.response);
     if (retryAfterSeconds != null && retryAfterSeconds > 0) {
@@ -697,6 +729,11 @@ class DioClient {
     return rawDelay > maxRetryDelay ? maxRetryDelay : rawDelay;
   }
 
+  /// Giải thuật điều phối phục hồi lỗi HTTP 401 và thử lại lũy thừa (`_handleDioError`):
+  /// 1. Khi gặp lỗi `401` trên tuyến cần xác thực và chưa từng thử lại: gọi khóa hợp nhất `_refreshAccessTokenOnce()` để lấy `newToken`.
+  ///    - Nếu làm mới thành công và cùng `_sessionEpoch`: phát lại yêu cầu gốc đúng 1 lần với tiêu đề `Bearer` mới.
+  ///    - Nếu làm mới thất bại nhưng yêu cầu gốc là điểm cuối đọc công khai (`_isPublicEndpoint`) bị lỗi chỉ do đính kèm token cũ: tự động gỡ `Authorization` và gọi lại ẩn danh.
+  /// 2. Khi gặp lỗi tạm thời (`429`/`502`/`503`/`504`) trên truy vấn đọc bất biến: chờ hết khoảng trễ `_computeRetryDelay` (có thể hủy tức thì khi `abortSession`) rồi phát lại với `retryCount + 1`.
   Future<void> _handleDioError(
     DioException error,
     ErrorInterceptorHandler handler,
@@ -837,6 +874,13 @@ class DioClient {
 
   /// Single-flight refresh token lock matching `refreshAccessTokenOnce` in `apiClient.ts`.
   /// Ensures concurrent 401 responses share a single `POST /api/auth/refresh` call.
+  /// Giải thuật khóa làm mới phiên đơn luồng (`Single-Flight Completer Lock` trong `_refreshAccessTokenOnce`):
+  /// 1. Hợp nhất truy vấn đồng thời: Nếu `_refreshCompleter` đang tồn tại, mọi luồng bị lỗi `401` đến sau đều chờ chung trên `_refreshCompleter!.future` thay vì gọi lặp `POST /api/auth/refresh`.
+  /// 2. Khởi tạo khóa `Completer<String?>` mới (gọi `.future.ignore()` để tránh lỗi bất đồng bộ chưa có người nghe), chụp lại mốc `_sessionEpoch` và tạo `CancelToken` riêng.
+  /// 3. Gửi `POST /api/auth/refresh` với các cờ `skipAuthRefresh`, `skipAuthToken`, `disableRetry`: trên Web trình duyệt tự gửi cookie `HttpOnly`; trên Native IO bộ đánh chặn `_handleRequest` tự đính kèm cookie `refreshToken` từ `SecureStorageService`.
+  /// 4. Kiểm tra chống tranh chấp đăng xuất (`_sessionEpoch != epochAtStart`), bóc vỏ bọc dữ liệu qua `unwrapEnvelope` để trích xuất `accessToken` mới (hoặc xoay vòng `refreshToken` qua `_handleResponse`).
+  /// 5. Lưu `accessToken` mới vào `SecureStorageService`, phát thông báo `_notifySessionRefreshed` và đánh thức toàn bộ các luồng đang chờ cùng nhận `newToken`.
+  /// 6. Nhánh suy thoái an toàn khi lỗi: Nếu không phải do người dùng chủ động đăng xuất (`!wasAbortedByLogout`), xóa sạch phiên lưu trữ qua `clearAuthSession()`, phát sự kiện `_notifySessionExpired()` và truyền lỗi xuống các luồng chờ trước khi giải phóng `_refreshCompleter` ở khối `finally`.
   Future<String?> _refreshAccessTokenOnce() async {
     if (_refreshCompleter != null) {
       return _refreshCompleter!.future;
@@ -964,6 +1008,10 @@ class DioClient {
   }
 
   /// Unwraps `{ success, message, data, code, details, errors }` envelope.
+  /// Giải thuật bóc vỏ bọc phản hồi chuẩn `{ success, message, data, code, details, errors }` của Backend:
+  /// - Giải mã JSON nếu thân phản hồi còn ở dạng chuỗi.
+  /// - Nếu `success == false`, phân tích danh sách lỗi từng trường qua `_parseFieldErrors` và ném ngay `ValidationFailure` mang đầy đủ mã lỗi máy chủ.
+  /// - Nếu đối tượng chứa khóa `'data'`, trả về trực tiếp phần tải trọng bên trong `normalizedBody['data']`.
   static dynamic unwrapEnvelope(dynamic responseBody) {
     final normalizedBody = _coerceDecodedJson(responseBody);
     if (normalizedBody is Map<String, dynamic>) {
@@ -988,6 +1036,9 @@ class DioClient {
     return normalizedBody;
   }
 
+  /// Giải thuật giải mã danh sách phân trang tổng quát (`parsePaginated`):
+  /// Tự động bóc vỏ bọc `unwrapEnvelope`, dò mảng phần tử theo tên miền (`items`, `listings`, `bookings`, `users`, `reviews`, `blogs`, `conversations`, `messages`),
+  /// trích xuất siêu dữ liệu `PaginationMeta` và ánh xạ từng bản ghi sang kiểu `T` bất biến.
   static PaginatedResult<T> parsePaginated<T>(
     dynamic responseBody,
     T Function(Map<String, dynamic>) mapper,
@@ -1098,6 +1149,9 @@ class DioClient {
     return null;
   }
 
+  /// Giải thuật phân loại chi tiết lỗi tầng vận chuyển mạng (`_classifyTransportFailure`):
+  /// Đối chiếu thông điệp lỗi socket/hệ điều hành để tách bạch chính xác lỗi chứng chỉ TLS (`CertificateFailure`), lỗi phân giải tên miền (`DnsFailure`),
+  /// lỗi máy chủ từ chối kết nối (`ConnectionRefusedFailure`) và trạng thái thiết bị mất mạng (`OfflineFailure`).
   static NetworkFailure _classifyTransportFailure(DioException error) {
     final combined =
         '${error.message ?? ''} ${error.error ?? ''}'.toLowerCase();
@@ -1138,6 +1192,9 @@ class DioClient {
 
   /// Translates DioException into clean typed AppFailure without converting HTTP errors to success
   /// and without conflating DNS/TLS/timeout/server/serialization failures with device offline.
+  /// Giải thuật ánh xạ ngoại lệ `DioException` và lỗi giải mã sang cây phân cấp lỗi miền `AppFailure`:
+  /// Phân tách rạch ròi lỗi hết thời gian chờ (`TimeoutFailure`), chứng chỉ (`CertificateFailure`), kết nối tầng vận chuyển, hủy yêu cầu (`RequestCancelledFailure`),
+  /// và ánh xạ mã trạng thái HTTP (`401 -> AuthFailure`, `403 -> ForbiddenFailure`, `404 -> NotFoundFailure`, `409 -> ConflictFailure`, `400/422 -> ValidationFailure`, `429 -> RateLimitFailure`, `5xx -> ServerFailure`).
   static AppFailure handleError(dynamic error) {
     if (error is AppFailure) {
       return error;

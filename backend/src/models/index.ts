@@ -1,3 +1,6 @@
+/**
+ * Điểm xuất tập trung (barrel) toàn bộ các mô hình thực thể Sequelize ORM của hệ thống.
+ */
 export { default as Amenity } from "./amenity";
 export { default as AuditLog } from "./audit-log";
 export { default as AvailabilityCalendar } from "./availability-calendar";
@@ -23,7 +26,6 @@ export { default as ImageAnalysisResult } from "./image-analysis-result";
 export { default as ImageTag } from "./image-tag";
 export { default as Listing } from "./listing";
 export { default as ListingAmenity } from "./listing-amenity";
-export { default as ListingEmbedding } from "./listing-embedding";
 export { default as ListingImage } from "./listing-image";
 export { default as ListingRule } from "./listing-rule";
 export { default as Message } from "./message";
@@ -38,8 +40,6 @@ export { default as Report } from "./report";
 export { default as Review } from "./review";
 export { default as ReviewReply } from "./review-reply";
 export { default as SecurityLog } from "./security-log";
-export { default as SearchLog } from "./search-log";
-export { default as SemanticSynonym } from "./semantic-synonym";
 export { default as SocialAccount } from "./social-account";
 export { default as TagTaxonomy } from "./tag-taxonomy";
 export { default as User } from "./user";

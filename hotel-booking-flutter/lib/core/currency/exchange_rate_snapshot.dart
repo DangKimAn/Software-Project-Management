@@ -8,6 +8,12 @@ import 'money_converter.dart';
 /// - Within [defaultFreshMaxAge] (48h) of [sourceUpdatedAt]: fresh (`isStaleAt == false`).
 /// - Between 48h and [defaultMaxStaleAge] (7d): usable as stale (`isStaleAt == true`).
 /// - Beyond 7d: expired (`isExpiredAt == true`) -> MUST NOT be used; fallback to VND.
+/// Bản chụp bất biến đã xác thực của tỷ giá quy đổi chỉ phục vụ hiển thị (`1 VND -> USD / KRW`).
+///
+/// Giải thuật phân tầng tuổi dữ liệu và an toàn tỷ giá:
+/// 1. Trong vòng `defaultFreshMaxAge` (48 giờ) tính từ `sourceUpdatedAt`: dữ liệu tươi mới (`isStaleAt == false`).
+/// 2. Từ trên 48 giờ đến `defaultMaxStaleAge` (7 ngày): vẫn được phép hiển thị kèm cảnh báo tỷ giá cũ (`isStaleAt == true`).
+/// 3. Vượt quá 7 ngày (`isExpiredAt == true`): hết hạn tuyệt đối, bắt buộc quay về hiển thị tiền gốc `VND`.
 class ExchangeRateSnapshot {
   static const Duration defaultFreshMaxAge = Duration(hours: 48);
   static const Duration defaultMaxStaleAge = Duration(days: 7);
@@ -45,6 +51,14 @@ class ExchangeRateSnapshot {
 
   /// Constructs and validates an [ExchangeRateSnapshot], throwing [FormatException]
   /// if any required field, timestamp, or rate fails integrity checks.
+  /// Giải thuật khởi tạo và kiểm định tính toàn vẹn của bản chụp tỷ giá (`ExchangeRateSnapshot.validated`):
+  /// 1. Kiểm tra bất biến miền nghiệp vụ: bắt buộc `baseCurrency` là `'VND'`, cờ `displayOnly == true` và nguồn `source` không rỗng.
+  /// 2. Phân tích số thập phân chính xác qua `ExactDecimal.tryParse` cho tỷ giá `USD` và `KRW`, từ chối giá trị âm, bằng `0` hoặc sai định dạng.
+  /// 3. Kiểm tra biên an toàn chống đảo ngược tỷ giá hoặc dữ liệu hỏng:
+  ///    - `1 VND -> USD` phải nằm trong đoạn `[0.00001, 0.0002]` (tương đương `1 USD` từ `5.000 VND` đến `100.000 VND`).
+  ///    - `1 VND -> KRW` phải nằm trong đoạn `[0.01, 0.25]` (tương đương `1 KRW` từ `4 VND` đến `100 VND`).
+  /// 4. Kiểm tra tính hợp lý của mốc thời gian UTC (`sourceUpdatedAt`, `fetchedAt`): từ chối năm `< 2020` hoặc vượt quá `48` giờ trong tương lai so với `validationNow`.
+  /// 5. Chuẩn hóa chuỗi thập phân về dạng chính tắc (`toPlainDecimalString`) trước khi đóng gói bất biến.
   factory ExchangeRateSnapshot.validated({
     String schemaVersion = '1.0',
     String baseCurrency = 'VND',
@@ -126,6 +140,7 @@ class ExchangeRateSnapshot {
   }
 
   /// Returns the decimal rate string for [currency] (`"1"` for VND).
+  /// Trả về chuỗi hệ số tỷ giá thập phân ứng với `currency` (`"1"` đối với `VND`, hoặc tỷ giá `USD`/`KRW` từ `1 VND`).
   String rateDecimalFor(AppCurrency currency) {
     switch (currency) {
       case AppCurrency.vnd:
@@ -139,6 +154,7 @@ class ExchangeRateSnapshot {
 
   /// True when the snapshot is older than [maxAge] (default 7 days) from [sourceUpdatedAt]
   /// and MUST NOT be used for foreign currency display.
+  /// Kiểm tra bản chụp đã vượt quá ngưỡng hết hạn tối đa `maxAge` (mặc định 7 ngày) kể từ `sourceUpdatedAt` hay chưa.
   bool isExpiredAt(
     DateTime now, {
     Duration maxAge = defaultMaxStaleAge,
@@ -148,6 +164,7 @@ class ExchangeRateSnapshot {
   }
 
   /// True when the snapshot is usable (not expired) at [now].
+  /// Kiểm tra bản chụp còn hiệu lực sử dụng để quy đổi hiển thị ngoại tệ tại thời điểm `now` hay không (`!isExpiredAt`).
   bool isUsableAt(
     DateTime now, {
     Duration maxAge = defaultMaxStaleAge,
@@ -156,6 +173,7 @@ class ExchangeRateSnapshot {
   }
 
   /// True when the snapshot is older than [freshAge] (default 48h) or marked stale by server.
+  /// Kiểm tra bản chụp có bị đánh dấu cũ bởi máy chủ (`serverMarkedStale`) hoặc đã quá ngưỡng tươi mới `freshAge` (mặc định 48 giờ) hay không.
   bool isStaleAt(
     DateTime now, {
     Duration freshAge = defaultFreshMaxAge,
@@ -166,6 +184,7 @@ class ExchangeRateSnapshot {
   }
 
   /// True when the client should trigger a non-blocking background refresh.
+  /// Xác định thời điểm máy khách cần kích hoạt làm mới tỷ giá ngầm không chặn giao diện (mặc định mỗi `3` giờ kể từ `fetchedAt`).
   bool needsBackgroundRefresh(
     DateTime now, {
     Duration refreshInterval = defaultRefreshInterval,
@@ -191,6 +210,11 @@ class ExchangeRateSnapshot {
   String toStorageString() => jsonEncode(toJson());
 
   /// Parses backend API payload (`{ success: true, data: {...} }` or direct map).
+  /// Giải thuật giải mã an toàn dữ liệu tỷ giá động từ phản hồi REST API hoặc chuỗi JSON lưu cục bộ:
+  /// 1. Chấp nhận đầu vào là chuỗi JSON hoặc `Map`, tự động bóc vỏ bọc chuẩn `{ success: true, data: {...} }` của máy chủ nếu có.
+  /// 2. Xác thực bảng `rates`: nếu có khóa `'VND'` thì giá trị chuẩn hóa bắt buộc bằng `'1'`; trích xuất `'USD'` và `'KRW'` (loại trừ kiểu `bool` hoặc `null`).
+  /// 3. Phân tích hai mốc thời gian ISO-8601 `sourceUpdatedAt` và `fetchedAt`, đồng thời kiểm tra cờ `displayOnly` không bị tắt.
+  /// 4. Ủy quyền toàn bộ bước kiểm định biên tỷ giá cho `ExchangeRateSnapshot.validated`; trả về `null` an toàn nếu phát sinh bất kỳ lỗi định dạng nào.
   static ExchangeRateSnapshot? tryParseDynamic(
     dynamic raw, {
     DateTime? validationNow,

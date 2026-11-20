@@ -76,5 +76,21 @@ void main() {
       expect(d2.isAfter(d1), isTrue);
       expect(d1.isAtSameMomentAs(d3), isTrue);
     });
+
+    test(
+        'todayVn anchors strictly to Asia/Ho_Chi_Minh (UTC+7) regardless of host machine timezone',
+        () {
+      // 2026-10-15T16:59:59Z == 2026-10-15T23:59:59+07:00 -> still 2026-10-15 in Vietnam
+      final beforeVnMidnight = BookingDate.todayVn(
+        nowUtc: DateTime.utc(2026, 10, 15, 16, 59, 59),
+      );
+      expect(beforeVnMidnight.toIsoDate(), '2026-10-15');
+
+      // 2026-10-15T17:00:00Z == 2026-10-16T00:00:00+07:00 -> rolled over to 2026-10-16 in Vietnam
+      final afterVnMidnight = BookingDate.todayVn(
+        nowUtc: DateTime.utc(2026, 10, 15, 17, 0, 0),
+      );
+      expect(afterVnMidnight.toIsoDate(), '2026-10-16');
+    });
   });
 }

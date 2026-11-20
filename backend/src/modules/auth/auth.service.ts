@@ -106,8 +106,15 @@ export type IssuedAuthSession = {
     roles: UserRole[];
 };
 
+/**
+ * Chuẩn hóa địa chỉ email về dạng chuẩn tắc chữ thường và cắt bỏ khoảng trắng hai đầu.
+ */
 export const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
+/**
+ * Giải thuật chuẩn hóa số điện thoại Việt Nam:
+ * - Quy đổi đầu số quốc tế `+84` về tiền tố nội địa `0` nhằm đồng nhất khóa định danh trong cơ sở dữ liệu.
+ */
 export const normalizePhone = (value: string) => {
     const input = value.trim();
 
@@ -118,6 +125,10 @@ export const normalizePhone = (value: string) => {
     return input;
 };
 
+/**
+ * Giải thuật chuẩn hóa định danh đăng nhập đa hình (email, số điện thoại hoặc username):
+ * - Phân nhánh theo biểu thức chính quy để đưa về dạng chuẩn tắc duy nhất trước khi truy vấn hoặc băm kiểm toán.
+ */
 export const normalizeIdentifier = (value: string) => {
     const input = value.trim();
 
@@ -132,10 +143,20 @@ export const normalizeIdentifier = (value: string) => {
     return input.toLowerCase();
 };
 
+/**
+ * Kiểm tra chuỗi định danh có khớp định dạng email hợp lệ hay không.
+ */
 export const isEmailIdentifier = (value: string) => emailPattern.test(value.trim());
 
+/**
+ * Kiểm tra chuỗi định danh có khớp định dạng số điện thoại di động Việt Nam (`0...` hoặc `+84...`) hay không.
+ */
 export const isPhoneIdentifier = (value: string) => phonePattern.test(value.trim());
 
+/**
+ * Giải thuật tách chuỗi họ tên đầy đủ thành `firstName` và `lastName`,
+ * cung cấp giá trị dự phòng an toàn khi chuỗi đầu vào rỗng hoặc chỉ có một từ.
+ */
 const splitName = (value: string) => {
     const parts = value.trim().split(/\s+/).filter(Boolean);
 
@@ -159,6 +180,10 @@ const splitName = (value: string) => {
     };
 };
 
+/**
+ * Giải thuật tổng hợp và chuẩn hóa họ tên hiển thị từ dữ liệu đăng ký không đồng nhất
+ * (`name` hoặc cặp `firstName` / `lastName`).
+ */
 const normalizeFullName = (input: RegisterUserInput) => {
     const name = input.name?.trim() || `${input.firstName ?? ""} ${input.lastName ?? ""}`.trim();
     const fallback = splitName(name);
@@ -168,6 +193,11 @@ const normalizeFullName = (input: RegisterUserInput) => {
     return fullName || "Guest User";
 };
 
+/**
+ * Giải thuật sinh chuỗi `username` cơ sở chuẩn hóa:
+ * - Chuyển chữ thường, thay thế chuỗi ký tự ngoài `[a-z0-9]` bằng dấu chấm `.` và cắt dấu chấm thừa ở hai đầu,
+ *   lùi về phần local-part của email hoặc `"guest"` nếu tên không chứa ký tự ASCII hợp lệ.
+ */
 const createBaseUsername = (name: string, email: string) => {
     const fromName = name
         .trim()
@@ -178,12 +208,24 @@ const createBaseUsername = (name: string, email: string) => {
     return fromName || email.split("@")[0].replace(/[^a-z0-9]+/g, ".") || "guest";
 };
 
+/**
+ * Kiểm tra chuỗi vai trò có thuộc tập hợp vai trò hệ thống hợp lệ (`userRoleValues`) hay không.
+ */
 const isValidUserRole = (value: string): value is UserRole =>
     (userRoleValues as readonly string[]).includes(value);
 
+/**
+ * Giải thuật chọn vai trò chính đại diện từ danh sách vai trò của người dùng
+ * theo thứ tự ưu tiên đặc quyền giảm dần (`admin` > `host` > `guest`).
+ */
 const selectPrimaryRole = (roles: UserRole[]) =>
     primaryRolePriority.find((role) => roles.includes(role)) ?? "guest";
 
+/**
+ * Giải thuật phân tích cú pháp chuỗi header `Cookie` HTTP thô:
+ * - Tách cặp `key=value` theo dấu `;`, bảo toàn dấu `=` bên trong giá trị và giải mã `decodeURIComponent`
+ *   có bắt ngoại lệ an toàn đối với chuỗi phần trăm dị dạng.
+ */
 export const parseCookieHeader = (value?: string) => {
     if (!value) {
         return {};
@@ -209,6 +251,12 @@ export const parseCookieHeader = (value?: string) => {
     }, {});
 };
 
+/**
+ * Giải thuật trích xuất JWT Access Token từ request HTTP theo thứ tự ưu tiên:
+ * 1. Header chuẩn `Authorization: Bearer <token>`.
+ * 2. Cookie `auth_token` đã xác thực chữ ký (`signedCookies`) hoặc cookie đã parse (`cookies`).
+ * 3. Phân tích trực tiếp từ header `Cookie` thô.
+ */
 export const extractAuthToken = (req: Request) => {
     const authorization = req.header("authorization");
 
@@ -231,6 +279,12 @@ export const extractAuthToken = (req: Request) => {
     return cookies.auth_token;
 };
 
+/**
+ * Giải thuật trích xuất JWT Refresh Token an toàn theo chính sách cấu hình môi trường:
+ * - Ưu tiên đọc từ HttpOnly Cookie (`signedCookies` -> `cookies` -> header `Cookie` thô).
+ * - Chỉ cho phép đọc dự phòng từ `req.body.refreshToken` hoặc header `x-refresh-token`
+ *   khi cờ môi trường tương ứng (`allowRefreshTokenInBody` / `allowRefreshTokenInHeader`) được bật tường minh.
+ */
 export const extractRefreshToken = (req: Request) => {
     const cookieName = getEnv().refreshCookieName;
     const parsedCookieToken =
@@ -267,6 +321,10 @@ export const extractRefreshToken = (req: Request) => {
     return undefined;
 };
 
+/**
+ * Khởi tạo tùy chọn bảo mật HttpOnly Cookie cho Access Token (`httpOnly`, `secure`, `sameSite`),
+ * ngăn mã JavaScript phía trình duyệt đọc token khi xảy ra XSS.
+ */
 export const buildAuthCookieOptions = (): CookieOptions => ({
     httpOnly: true,
     secure: getEnv().refreshCookieSecure,
@@ -275,6 +333,11 @@ export const buildAuthCookieOptions = (): CookieOptions => ({
     path: "/",
 });
 
+/**
+ * Khởi tạo tùy chọn bảo mật HttpOnly Cookie cho Refresh Token:
+ * - Giới hạn phạm vi đường dẫn (`refreshCookiePath`), bật `httpOnly`, `secure`, `sameSite`
+ *   và kích hoạt ký HMAC cookie (`signed`) khi có `cookieSecret`.
+ */
 export const buildRefreshCookieOptions = (): CookieOptions => ({
     httpOnly: true,
     secure: getEnv().refreshCookieSecure,
@@ -284,6 +347,11 @@ export const buildRefreshCookieOptions = (): CookieOptions => ({
     signed: Boolean(getEnv().cookieSecret),
 });
 
+/**
+ * Giải thuật phân giải và khởi tạo bất biến (Idempotent Upsert) mã định danh vai trò `role_id`:
+ * - Thực thi `INSERT ... ON DUPLICATE KEY UPDATE` để đảm bảo dòng vai trò luôn tồn tại an toàn dưới truy cập đồng thời,
+ *   sau đó truy vấn khóa chính `role_id` trong cùng ngữ cảnh giao dịch (`transaction`).
+ */
 const getRoleId = async (role: UserRole, transaction?: Transaction) => {
     await sequelize.query(
         `
@@ -320,6 +388,11 @@ const getRoleId = async (role: UserRole, transaction?: Transaction) => {
     return Number(roleId);
 };
 
+/**
+ * Giải thuật truy vấn và đồng bộ danh sách vai trò của người dùng từ bảng liên kết `user_role` - `roles`:
+ * - Sắp xếp kết quả trực tiếp bằng `ORDER BY FIELD(r.code, 'admin', 'host', 'guest')`,
+ *   lọc qua type guard hợp lệ và luôn trả về mặc định `["guest"]` nếu tài khoản chưa có bản ghi gán quyền.
+ */
 export const getUserRoles = async (userId: string | number, transaction?: Transaction): Promise<UserRole[]> => {
     const rows = await sequelize.query<{ code: string }>(
         `
@@ -340,6 +413,11 @@ export const getUserRoles = async (userId: string | number, transaction?: Transa
     return roles.length > 0 ? roles : ["guest"];
 };
 
+/**
+ * Giải thuật gán vai trò bất biến (Idempotent Role Assignment) cho người dùng:
+ * - Phân giải `role_id` và chèn vào bảng `user_role` bằng `INSERT IGNORE` trong giao dịch DB,
+ *   đảm bảo gọi lặp lại nhiều lần không gây lỗi trùng khóa chính/khóa duy nhất.
+ */
 export const ensureUserRole = async (
     userId: string | number,
     role: UserRole,
@@ -359,6 +437,10 @@ export const ensureUserRole = async (
     );
 };
 
+/**
+ * Ánh xạ thực thể `UserDocument` sang đối tượng người dùng đã xác thực (`AuthenticatedUser`)
+ * kèm danh sách vai trò thực tế đồng bộ từ bảng phân quyền.
+ */
 export const toAuthenticatedUser = async (user: UserDocument): Promise<AuthenticatedUser> => {
     const roles = await getUserRoles(user._id);
 
@@ -374,6 +456,10 @@ export const toAuthenticatedUser = async (user: UserDocument): Promise<Authentic
     };
 };
 
+/**
+ * Ánh xạ thực thể `UserDocument` sang cấu trúc dữ liệu phản hồi xác thực (`AuthResponseUser`),
+ * tái sử dụng danh sách vai trò truyền vào (nếu có) và suy diễn vai trò chính qua `selectPrimaryRole`.
+ */
 export const toAuthResponseUser = async (
     user: UserDocument,
     roles?: UserRole[],
@@ -394,6 +480,10 @@ export const toAuthResponseUser = async (
     };
 };
 
+/**
+ * Giải thuật tra cứu người dùng đăng nhập đa định danh:
+ * - Chuẩn hóa đầu vào và truy vấn điều kiện hợp (`$or`) trên cả 3 khóa định danh (`email`, `username`, `phone`).
+ */
 export const findUserForLogin = async (identifier: string) => {
     const normalizedIdentifier = normalizeIdentifier(identifier);
 
@@ -406,6 +496,12 @@ export const findUserForLogin = async (identifier: string) => {
     });
 };
 
+/**
+ * Giải thuật cấp phát `username` duy nhất không trùng lặp:
+ * - Nếu người dùng tự chọn `preferredUsername`, kiểm tra tồn tại trực tiếp và ném lỗi `409` nếu đã bị chiếm.
+ * - Nếu sinh tự động, khởi tạo từ `createBaseUsername` rồi tăng tuần tự hậu tố số (`base.1`, `base.2`, ...)
+ *   cho tới khi tìm được giá trị chưa tồn tại trong bảng `users`.
+ */
 const createUniqueUsername = async (name: string, email: string, preferredUsername?: string) => {
     if (preferredUsername?.trim()) {
         const normalizedUsername = preferredUsername.trim().toLowerCase();
@@ -434,6 +530,12 @@ const createUniqueUsername = async (name: string, email: string, preferredUserna
     return candidate;
 };
 
+/**
+ * Giải thuật khởi tạo nguyên tử tài khoản người dùng mạng xã hội (Social OAuth User):
+ * - Sinh `username` duy nhất và mật khẩu ngẫu nhiên băm `bcrypt` không thể đoán trước (`hashRandomPassword`).
+ * - Thực thi trong một giao dịch DB (`sequelize.transaction`) để đảm bảo tính nguyên tử giữa tạo bản ghi `User`,
+ *   đồng bộ vai trò mặc định (`ensureUserRole`) và tạo thông báo chào mừng.
+ */
 export const createSocialUser = async (input: CreateSocialUserInput) => {
     const email = normalizeEmail(input.email);
     const name = input.name.trim() || email.split("@")[0] || "Guest User";
@@ -463,6 +565,12 @@ export const createSocialUser = async (input: CreateSocialUserInput) => {
     });
 };
 
+/**
+ * Giải thuật đăng ký tài khoản cục bộ mới an toàn:
+ * - Chuẩn hóa email/số điện thoại, kiểm tra trùng lặp song song (`Promise.all`) để phản hồi sớm lỗi xung đột `409`.
+ * - Băm mật khẩu bằng `bcrypt` (cost 12) và thực thi giao dịch nguyên tử khởi tạo `User`, gán vai trò `"guest"`
+ *   và ghi thông báo hệ thống.
+ */
 export const registerUser = async (input: RegisterUserInput) => {
     const email = normalizeEmail(input.email);
     const phone = input.phone?.trim() ? normalizePhone(input.phone) : null;
@@ -505,9 +613,19 @@ export const registerUser = async (input: RegisterUserInput) => {
     });
 };
 
+/**
+ * Giải thuật băm ẩn danh định danh bằng `SHA-256`:
+ * - Chuyển chuỗi định danh nhạy cảm (email/số điện thoại) thành mã băm cố định 64 ký tự hex để lưu trữ
+ *   và truy vấn tần suất trong `audit_logs` mà không làm lộ dữ liệu cá nhân thuần (PII).
+ */
 const hashValue = (value: string) =>
     createHash("sha256").update(value).digest("hex");
 
+/**
+ * Giải thuật kiểm tra chốt chặn trạng thái tài khoản trước khi xác thực hoặc làm mới phiên:
+ * - Chỉ cho phép tài khoản ở trạng thái `"active"` tiếp tục; phân loại chính xác mã lỗi HTTP (`403` hoặc `423 Locked`)
+ *   cho các trạng thái bị vô hiệu hóa, khóa, đình chỉ hoặc đã xóa.
+ */
 export const assertUserCanAuthenticate = (user: UserDocument) => {
     switch (user.status) {
         case "active":
@@ -527,6 +645,13 @@ export const assertUserCanAuthenticate = (user: UserDocument) => {
     }
 };
 
+/**
+ * Giải thuật phát hành phiên xác thực mới (Access Token + Refresh Session):
+ * - Kiểm tra trạng thái hoạt động của tài khoản và đồng bộ danh sách vai trò hiện hành.
+ * - Ký Access Token theo vai trò ưu tiên cao nhất, sinh mã phiên ngẫu nhiên `sessionId` (`UUIDv4`)
+ *   và ký Refresh Token tương ứng.
+ * - Chỉ lưu bản băm `HMAC-SHA256` (`hashRefreshToken`) cùng siêu dữ liệu thiết bị/IP vào bảng `refresh_sessions`.
+ */
 export const issueAuthSession = async (
     user: UserDocument,
     input: RequestContext = {},
@@ -560,6 +685,16 @@ export const issueAuthSession = async (
     };
 };
 
+/**
+ * Giải thuật xoay vòng phiên làm mới một lần (Single-Use Refresh Token Rotation) và phát hiện đánh cắp phiên:
+ * 1. Xác thực chữ ký mật mã của `refreshToken` (khóa riêng `jwtRefreshSecret`) và tính bản băm `HMAC-SHA256`.
+ * 2. Mở giao dịch DB kèm khóa bi quan mức dòng (`SELECT ... FOR UPDATE` / `transaction.LOCK.UPDATE`)
+ *    trên bản ghi `RefreshSession` để tuần tự hóa các yêu cầu làm mới đồng thời (chống Race Condition).
+ * 3. Phát hiện tái sử dụng token cũ (Token Reuse Detection / Replay Defense): nếu không còn phiên hợp lệ
+ *    nhưng tìm thấy phiên cùng `sessionId` đã có `revokedAt != null`, hệ thống xác định Refresh Token cũ bị
+ *    phát lại (nghi vấn lộ lọt/đánh cắp token) và lập tức thu hồi toàn bộ các phiên đang hoạt động của `userId` đó.
+ * 4. Thu hồi phiên hiện tại (`revokedAt = new Date()`) và cấp mới nguyên tử cặp Access/Refresh Token kế tiếp.
+ */
 export const refreshAuthSession = async (
     refreshToken: string,
     input: RequestContext = {},
@@ -567,74 +702,109 @@ export const refreshAuthSession = async (
     const payload = verifyRefreshToken(refreshToken);
     const tokenHash = hashRefreshToken(refreshToken);
 
-    return sequelize.transaction(async (transaction) => {
-        const session = await RefreshSession.findOne({
-            where: {
-                sessionId: payload.sessionId,
-                userId: Number(payload.userId),
-                tokenHash,
-                revokedAt: null,
-                expiresAt: {
-                    [Op.gte]: new Date(),
-                },
-            },
+    // Giải thuật cam kết thu hồi toàn diện trước khi ném ngoại lệ 403 (TC-099):
+    // Trả về kết quả phân nhánh để giao dịch Sequelize COMMIT thành công thao tác thu hồi toàn bộ phiên của userId
+    // khi phát hiện phát lại Refresh Token cũ, sau đó mới ngắt cưỡng bức Socket và ném lỗi 403 bên ngoài giao dịch.
+    const txResult = await sequelize.transaction(
+        async (
             transaction,
-            lock: transaction.LOCK.UPDATE,
-        });
-
-        if (!session) {
-            const reusedOrRevokedSession = await RefreshSession.findOne({
+        ): Promise<
+            | { status: "ok"; sessionData: IssuedAuthSession & { user: AuthResponseUser } }
+            | { status: "reuse_detected"; userId: number }
+            | { status: "invalid" }
+        > => {
+            const session = await RefreshSession.findOne({
                 where: {
                     sessionId: payload.sessionId,
                     userId: Number(payload.userId),
+                    tokenHash,
+                    revokedAt: null,
+                    expiresAt: {
+                        [Op.gte]: new Date(),
+                    },
                 },
                 transaction,
                 lock: transaction.LOCK.UPDATE,
             });
 
-            if (reusedOrRevokedSession?.revokedAt) {
-                await RefreshSession.update(
-                    {
-                        revokedAt: new Date(),
+            if (!session) {
+                const reusedOrRevokedSession = await RefreshSession.findOne({
+                    where: {
+                        sessionId: payload.sessionId,
+                        userId: Number(payload.userId),
                     },
-                    {
-                        where: {
-                            userId: Number(payload.userId),
-                            revokedAt: null,
+                    transaction,
+                    lock: transaction.LOCK.UPDATE,
+                });
+
+                if (reusedOrRevokedSession?.revokedAt) {
+                    await RefreshSession.update(
+                        {
+                            revokedAt: new Date(),
                         },
-                        transaction,
-                    },
-                );
+                        {
+                            where: {
+                                userId: Number(payload.userId),
+                                revokedAt: null,
+                            },
+                            transaction,
+                        },
+                    );
+
+                    return {
+                        status: "reuse_detected",
+                        userId: Number(payload.userId),
+                    };
+                }
+
+                return { status: "invalid" };
             }
 
-            throw new ApiError(403, "Invalid or expired refresh token");
-        }
+            const user = await User.findOne({
+                where: {
+                    userId: Number(payload.userId),
+                },
+                transaction,
+            });
 
-        const user = await User.findOne({
-            where: {
-                userId: Number(payload.userId),
-            },
-            transaction,
-        });
+            if (!user) {
+                return { status: "invalid" };
+            }
 
-        if (!user) {
-            throw new ApiError(403, "Invalid or expired refresh token");
-        }
+            assertUserCanAuthenticate(user);
 
-        assertUserCanAuthenticate(user);
+            session.revokedAt = new Date();
+            await session.save({ transaction });
 
-        session.revokedAt = new Date();
-        await session.save({ transaction });
+            const nextSession = await issueAuthSession(user, input, transaction);
 
-        const nextSession = await issueAuthSession(user, input, transaction);
+            return {
+                status: "ok",
+                sessionData: {
+                    ...nextSession,
+                    user: await toAuthResponseUser(user, nextSession.roles),
+                },
+            };
+        },
+    );
 
-        return {
-            ...nextSession,
-            user: await toAuthResponseUser(user, nextSession.roles),
-        };
-    });
+    if (txResult.status === "reuse_detected") {
+        disconnectUserSockets(txResult.userId);
+        throw new ApiError(403, "Invalid or expired refresh token");
+    }
+
+    if (txResult.status === "invalid") {
+        throw new ApiError(403, "Invalid or expired refresh token");
+    }
+
+    return txResult.sessionData;
 };
 
+/**
+ * Giải thuật thu hồi phiên đăng nhập bất biến (Idempotent Session Revocation):
+ * - Tính bản băm `HMAC-SHA256` của Refresh Token và cập nhật `revokedAt` cho các bản ghi chưa thu hồi,
+ *   đảm bảo gọi đăng xuất lặp lại nhiều lần vẫn an toàn và nhất quán.
+ */
 export const revokeRefreshSessionByToken = async (token: string) => {
     await RefreshSession.update(
         {
@@ -649,6 +819,34 @@ export const revokeRefreshSessionByToken = async (token: string) => {
     );
 };
 
+/**
+ * Giải thuật thu hồi toàn bộ các phiên Refresh Token đang hoạt động của một người dùng
+ * và ngắt cưỡng bức kết nối thời gian thực Socket.IO (phục vụ đăng xuất qua Bearer Token hoặc khóa tài khoản).
+ */
+export const revokeAllRefreshSessionsForUser = async (userId: number) => {
+    if (!Number.isInteger(userId) || userId <= 0) {
+        return;
+    }
+
+    await RefreshSession.update(
+        {
+            revokedAt: new Date(),
+        },
+        {
+            where: {
+                userId,
+                revokedAt: null,
+            },
+        },
+    );
+
+    disconnectUserSockets(userId);
+};
+
+/**
+ * Giải thuật che giấu một phần định danh nhận OTP (Data Masking):
+ * - Ẩn ký tự giữa của email hoặc 6 chữ số đầu của số điện thoại để phản hồi giao diện mà không lộ toàn bộ PII.
+ */
 const maskIdentifier = (identifier: string) => {
     if (isEmailIdentifier(identifier)) {
         const [localPart, domain] = identifier.split("@");
@@ -665,12 +863,27 @@ const maskIdentifier = (identifier: string) => {
     return `${identifier.slice(0, 2)}****`;
 };
 
+/**
+ * Đóng gói dữ liệu phản hồi cấp phát OTP chuẩn hóa, chỉ đính kèm `debugOtp` khi cờ môi trường thử nghiệm cho phép.
+ */
 const buildOtpResponse = (identifier: string, otp: string | null, expiresAt: Date) => ({
     maskedDestination: maskIdentifier(identifier),
     expiresAt,
+    resendCooldownSeconds: getEnv().otpResendCooldownSeconds,
     ...(otp && getEnv().authDebugOtp ? { debugOtp: otp } : {}),
 });
 
+/**
+ * Giải thuật cấp phát mã OTP xác thực chống lạm dụng tần suất và chống dò tìm tài khoản (Anti-Enumeration):
+ * 1. Giới hạn tần suất kép: lấy giá trị cực đại giữa số bản ghi `AuthOtpToken` và số bản ghi `audit_logs`
+ *    (tra theo `identifierHash`) trong cửa sổ trượt `otpRateLimitWindowMinutes`, kết hợp kiểm tra thời gian
+ *    chờ gửi lại tối thiểu (`otpResendCooldownSeconds`) để chặn spam SMS/Email.
+ * 2. Chống lộ trạng thái tồn tại tài khoản: với các nhánh không đủ điều kiện nghiệp vụ (`forgot_password`
+ *    cho tài khoản không tồn tại/bị khóa, `sign_up` cho email đã đăng ký, `verify_*` khi thiếu tài khoản),
+ *    vẫn ghi nhật ký kiểm toán và trả về cấu trúc phản hồi giả lập đồng nhất mà không sinh/gửi OTP thật.
+ * 3. Sinh mã OTP ngẫu nhiên mật mã học (`generateOtp`), chỉ lưu bản băm một chiều gắn ngữ cảnh (`hashOtpToken`)
+ *    vào DB và chuyển phát qua dịch vụ thư điện tử.
+ */
 export const issueAuthOtp = async (
     input: IssueOtpInput,
     context: RequestContext = {},
@@ -708,7 +921,19 @@ export const issueAuthOtp = async (
         latestOtp &&
         Date.now() - latestOtp.sentAt.getTime() < getEnv().otpResendCooldownSeconds * 1000
     ) {
-        throw new ApiError(429, "Please wait before requesting another OTP.");
+        const retryAfterSeconds = Math.max(
+            1,
+            Math.ceil(
+                (getEnv().otpResendCooldownSeconds * 1000 - (Date.now() - latestOtp.sentAt.getTime())) /
+                    1000,
+            ),
+        );
+        throw new ApiError(
+            429,
+            `Vui lòng đợi ${retryAfterSeconds} giây trước khi yêu cầu gửi lại mã OTP.`,
+            undefined,
+            { details: { retryAfterSeconds } },
+        );
     }
 
     const user = await findUserForLogin(normalizedIdentifier);
@@ -839,6 +1064,11 @@ export const issueAuthOtp = async (
     return buildOtpResponse(normalizedIdentifier, otp, expiresAt);
 };
 
+/**
+ * Giải thuật so sánh hai chuỗi băm theo thời gian hằng định (Constant-Time Hash Comparison):
+ * - Chuyển hai chuỗi sang `Buffer` UTF-8, kiểm tra độ dài byte bằng nhau trước rồi đối chiếu qua
+ *   nguyên hàm `crypto.timingSafeEqual`, triệt tiêu rò rỉ thông tin từng ký tự qua kênh kề thời gian.
+ */
 const isConstantTimeEqualHash = (storedHash: string, candidateHash: string) => {
     const storedBuf = Buffer.from(String(storedHash), "utf8");
     const candidateBuf = Buffer.from(String(candidateHash), "utf8");
@@ -848,6 +1078,16 @@ const isConstantTimeEqualHash = (storedHash: string, candidateHash: string) => {
     return timingSafeEqual(storedBuf, candidateBuf);
 };
 
+/**
+ * Giải thuật xác thực OTP đặt lại mật khẩu một lần và thu hồi toàn bộ phiên hiện hữu:
+ * 1. Truy xuất mã OTP `forgot_password` mới nhất của người dùng; kiểm tra tính bất biến tiêu thụ một lần
+ *    (`consumedAt` / `usedAt`), hạn hiệu lực (`expiresAt`) và ngưỡng thử sai tối đa (`otpMaxAttempts`) chống vét cạn.
+ * 2. Tăng `attemptCount` và đối chiếu bản băm OTP bằng `isConstantTimeEqualHash` (`timingSafeEqual`);
+ *    nếu sai, lưu ngay lượt thử thất bại xuống DB trước khi từ chối.
+ * 3. Thực thi giao dịch nguyên tử: cập nhật `passwordHash` (`bcrypt`), đánh dấu tiêu thụ OTP, thu hồi toàn bộ
+ *    `RefreshSession` đang hoạt động và ghi `audit_logs`; sau khi commit, hủy toàn bộ FCM device tokens
+ *    và ngắt các kết nối WebSocket đang mở của tài khoản.
+ */
 export const resetPasswordWithOtp = async (
     input: ResetPasswordInput,
     context: RequestContext = {},
@@ -938,6 +1178,12 @@ export const resetPasswordWithOtp = async (
     };
 };
 
+/**
+ * Giải thuật xác thực mã OTP một lần cho số điện thoại (`verify_phone`):
+ * - Kiểm tra trạng thái chưa sử dụng, thời hạn sống và giới hạn số lần nhập sai (`otpMaxAttempts`).
+ * - Đối chiếu bản băm OTP bằng `timingSafeEqual`; khi hợp lệ, cập nhật nguyên tử cờ `isPhoneVerified = true`,
+ *   đánh dấu tiêu thụ OTP và ghi nhật ký kiểm toán trong cùng một giao dịch DB.
+ */
 export const verifyPhoneWithOtp = async (
     input: { identifier: string; otp: string },
     context: RequestContext = {},
@@ -1011,6 +1257,13 @@ export const verifyPhoneWithOtp = async (
         isPhoneVerified: true,
     };
 };
+
+/**
+ * Giải thuật xác thực mã OTP một lần cho địa chỉ email (`verify_email`):
+ * - Ràng buộc định dạng email hợp lệ, kiểm tra trạng thái chưa tiêu thụ, hạn hiệu lực và trần thử sai (`otpMaxAttempts`).
+ * - So sánh thời gian hằng định bản băm OTP qua `timingSafeEqual`; khi khớp, cập nhật nguyên tử
+ *   `isEmailVerified = true`, đánh dấu tiêu thụ OTP một lần và lưu nhật ký kiểm toán.
+ */
 export const verifyEmailWithOtp = async (
     input: { identifier: string; otp: string },
     context: RequestContext = {},
@@ -1090,9 +1343,19 @@ export const verifyEmailWithOtp = async (
         isEmailVerified: true,
     };
 };
+
+/**
+ * Tính mốc thời gian bắt đầu của cửa sổ trượt kiểm soát tần suất đăng nhập sai (`authRateLimitWindowMinutes`).
+ */
 const getLoginFailureWindowStart = () =>
     new Date(Date.now() - getEnv().authRateLimitWindowMinutes * 60 * 1000);
 
+/**
+ * Giải thuật đếm số lần đăng nhập thất bại gần đây trên cửa sổ trượt:
+ * - Chuẩn hóa và băm SHA-256 định danh (`identifierHash`) để đếm các sự kiện `"auth.login.failed"`
+ *   trong bảng `audit_logs` kể từ mốc `getLoginFailureWindowStart()`, hoạt động đồng nhất cho cả tài khoản
+ *   tồn tại lẫn không tồn tại.
+ */
 export const countRecentFailedLoginAttempts = async (identifier: string) =>
     countRecentAuditLogsByIdentifierHash(
         "auth.login.failed",
@@ -1100,9 +1363,20 @@ export const countRecentFailedLoginAttempts = async (identifier: string) =>
         getLoginFailureWindowStart(),
     );
 
+/**
+ * Giải thuật kiểm tra khóa đăng nhập tạm thời chống tấn công vét cạn mật khẩu (Brute-Force Lockout):
+ * - Khóa tạm thời định danh khi tổng số lần thử mật khẩu sai trong cửa sổ trượt chạm hoặc vượt ngưỡng
+ *   `repeatedLoginFailureThreshold` (5 lần).
+ */
 export const isLoginTemporarilyLocked = async (identifier: string) =>
     (await countRecentFailedLoginAttempts(identifier)) >= repeatedLoginFailureThreshold;
 
+/**
+ * Giải thuật ghi nhận sự kiện đăng nhập thất bại và kích hoạt cảnh báo ngưỡng Brute-Force:
+ * - Ghi nhật ký kiểm toán `"auth.login.failed"` gắn với `identifierHash` ẩn danh cùng IP/User-Agent.
+ * - Truy vấn lại tổng số lần thất bại trong cửa sổ trượt hiện hành; nếu chạm ngưỡng `repeatedLoginFailureThreshold`,
+ *   phát sinh thêm bản ghi cảnh báo mức cao `"auth.login.failed_many"` phục vụ giám sát an ninh và khóa tạm thời.
+ */
 export const recordFailedLoginAttempt = async (
     identifier: string,
     context: RequestContext = {},

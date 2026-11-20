@@ -12,6 +12,22 @@ import 'package:hotel_booking_flutter/features/host/presentation/screens/host_on
 import 'package:hotel_booking_flutter/features/host/services/host_file_picker_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// CONFLICT-RESOLVED: Hợp nhất 16 tệp ảnh định danh về nguồn duy nhất backend/tests/fixtures/identity/ thay vì nhân bản trong hotel-booking-flutter/test/fixtures/identity/.
+// Giải thuật phân giải đường dẫn URI đa nền tảng (Cross-Platform Fixture URI Resolution):
+// Xác định tệp ảnh mẫu qua `File.fromUri` tương thích cả khi chạy lệnh kiểm thử từ thư mục con `hotel-booking-flutter/` lẫn thư mục gốc monorepo.
+File _resolveSharedIdentityFixture(String fileName) {
+  final cwdUri = Directory.current.uri;
+  final fromSubproject = File.fromUri(
+    cwdUri.resolve('../backend/tests/fixtures/identity/$fileName'),
+  );
+  if (fromSubproject.existsSync()) {
+    return fromSubproject;
+  }
+  return File.fromUri(
+    cwdUri.resolve('backend/tests/fixtures/identity/$fileName'),
+  );
+}
+
 // =============================================================================
 // TEST DOUBLES & MOCKS
 // =============================================================================
@@ -65,6 +81,9 @@ class _FakeFilePickerService implements HostFilePickerService {
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = 'Chọn tài liệu',
+    // CONFLICT-RESOLVED: Đáp ứng chữ ký `pickKycDocument` hợp nhất gồm cả `imageOnly` và `source`.
+    bool imageOnly = false,
+    HostKycFileSource source = HostKycFileSource.deviceFile,
   }) async =>
       nextFile;
 
@@ -86,7 +105,9 @@ class _FakeFilePickerService implements HostFilePickerService {
 class _FakePermissionService implements HostOnboardingPermissionService {
   @override
   Future<HostKycPermissionResult> requestPermission(
-          HostKycFileSource source) async =>
+    HostKycFileSource source, {
+    BuildContext? context,
+  }) async =>
       const HostKycPermissionResult(status: HostKycPermissionStatus.granted);
 }
 
@@ -361,28 +382,28 @@ void main() {
     });
 
     test('verifies all CI/CD mock fixtures exist', () {
-      final fixtures = [
-        'test/fixtures/identity/mock_cccd_front.jpg',
-        'test/fixtures/identity/mock_cccd_back.jpg',
-        'test/fixtures/identity/mock_cmnd_front.jpg',
-        'test/fixtures/identity/mock_cmnd_back.jpg',
-        'test/fixtures/identity/mock_passport.jpg',
-        'test/fixtures/identity/mock_gplx_front.jpg',
-        'test/fixtures/identity/mock_gplx_back.jpg',
-        'test/fixtures/identity/mock_invalid_utility_bill.jpg',
-        'test/fixtures/identity/mock_cccd_lifetime_elderly.jpg',
-        'test/fixtures/identity/mock_cccd_back_held.jpg',
-        'test/fixtures/identity/mock_cccd_photocopy_bw.jpg',
-        'test/fixtures/identity/mock_cccd_expired.jpg',
-        'test/fixtures/identity/mock_cccd_upside_down.jpg',
-        'test/fixtures/identity/mock_cccd_glare.jpg',
-        'test/fixtures/identity/mock_cccd_front_held.jpg',
+      const fixtureNames = [
+        'mock_cccd_front.jpg',
+        'mock_cccd_back.jpg',
+        'mock_cmnd_front.jpg',
+        'mock_cmnd_back.jpg',
+        'mock_passport.jpg',
+        'mock_gplx_front.jpg',
+        'mock_gplx_back.jpg',
+        'mock_invalid_utility_bill.jpg',
+        'mock_cccd_lifetime_elderly.jpg',
+        'mock_cccd_back_held.jpg',
+        'mock_cccd_photocopy_bw.jpg',
+        'mock_cccd_expired.jpg',
+        'mock_cccd_upside_down.jpg',
+        'mock_cccd_glare.jpg',
+        'mock_cccd_front_held.jpg',
       ];
 
-      for (final fixture in fixtures) {
-        final file = File(fixture);
+      for (final name in fixtureNames) {
+        final file = _resolveSharedIdentityFixture(name);
         expect(file.existsSync(), isTrue,
-            reason: '$fixture must exist for CI/CD');
+            reason: '$name must exist in shared CI/CD identity fixtures');
       }
     });
 
@@ -451,8 +472,9 @@ void main() {
   });
 
   group('Host Onboarding AI CCCD Extraction Widget Tests', () {
-    // Load mock CCCD front image from CI/CD test fixtures with in-memory fallback
-    final mockFixtureFile = File('test/fixtures/identity/mock_cccd_front.jpg');
+    // Load mock CCCD front image from shared CI/CD test fixtures with in-memory fallback
+    final mockFixtureFile =
+        _resolveSharedIdentityFixture('mock_cccd_front.jpg');
     final sampleImageBytes = mockFixtureFile.existsSync()
         ? mockFixtureFile.readAsBytesSync()
         : Uint8List.fromList(<int>[
@@ -547,6 +569,20 @@ void main() {
       );
     }
 
+    Future<void> pickSlotFile(WidgetTester tester, String slotKey) async {
+      final pickBtn = find.byKey(Key('kyc_pick_btn_$slotKey'));
+      await tester.ensureVisible(pickBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(pickBtn);
+      await tester.pumpAndSettle();
+
+      final fileOption = find.byKey(Key('kyc_source_file_$slotKey'));
+      if (fileOption.evaluate().isNotEmpty) {
+        await tester.tap(fileOption);
+        await tester.pumpAndSettle();
+      }
+    }
+
     testWidgets('shows AI scan button after picking CCCD front image',
         (tester) async {
       final fakeRepo = _FakeHostRepository(Dio());
@@ -567,11 +603,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Scroll to pick button and tap
-      final pickBtn = find.byKey(const Key('kyc_pick_btn_identityFront'));
-      await tester.ensureVisible(pickBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityFront');
 
       // Verify "Quét AI CCCD" button appears
       final aiScanBtn = find.byKey(const Key('kyc_ai_scan_btn_identityFront'));
@@ -615,11 +647,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 1. Pick file
-      final pickBtn = find.byKey(const Key('kyc_pick_btn_identityFront'));
-      await tester.ensureVisible(pickBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityFront');
 
       // 2. Click AI scan button
       final aiScanBtn = find.byKey(const Key('kyc_ai_scan_btn_identityFront'));
@@ -678,11 +706,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 1. Pick file
-      final pickBtn = find.byKey(const Key('kyc_pick_btn_identityFront'));
-      await tester.ensureVisible(pickBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityFront');
 
       // 2. Click AI scan button
       final aiScanBtn = find.byKey(const Key('kyc_ai_scan_btn_identityFront'));
@@ -737,11 +761,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 1. Pick file and scan AI
-      final pickBtn = find.byKey(const Key('kyc_pick_btn_identityFront'));
-      await tester.ensureVisible(pickBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityFront');
 
       final aiScanBtn = find.byKey(const Key('kyc_ai_scan_btn_identityFront'));
       await tester.ensureVisible(aiScanBtn);
@@ -807,11 +827,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 1. Pick file
-      final pickBtn = find.byKey(const Key('kyc_pick_btn_identityFront'));
-      await tester.ensureVisible(pickBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityFront');
 
       // 2. Banner warns that AI scan is needed before submission
       expect(
@@ -898,11 +914,7 @@ void main() {
         confidence: 0.98,
       );
 
-      final pickFrontBtn = find.byKey(const Key('kyc_pick_btn_identityFront'));
-      await tester.ensureVisible(pickFrontBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickFrontBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityFront');
 
       final aiScanFrontBtn =
           find.byKey(const Key('kyc_ai_scan_btn_identityFront'));
@@ -922,11 +934,7 @@ void main() {
         mrz: 'IDVNM012345678901<<<<<<<<<<<<<',
       );
 
-      final pickBackBtn = find.byKey(const Key('kyc_pick_btn_identityBack'));
-      await tester.ensureVisible(pickBackBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(pickBackBtn);
-      await tester.pumpAndSettle();
+      await pickSlotFile(tester, 'identityBack');
 
       final aiScanBackBtn =
           find.byKey(const Key('kyc_ai_scan_btn_identityBack'));

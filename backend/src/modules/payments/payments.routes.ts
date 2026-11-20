@@ -1,3 +1,9 @@
+/**
+ * Định tuyến HTTP thanh toán và cổng tiếp nhận callback VNPay/MoMo (`/api/payments`):
+ * - Phân tách rõ nhóm endpoint công khai có xác thực chữ ký mật mã HMAC (`return` và `webhooks` kết hợp `Limiter` + `validate` payload)
+ *   và nhóm endpoint người dùng yêu cầu xác thực JWT (`authenticate`).
+ */
+
 import express from "express";
 import type { RequestHandler } from "express";
 

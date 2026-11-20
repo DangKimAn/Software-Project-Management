@@ -2,6 +2,13 @@ import type { ExchangeRateProviderAdapter, UpstreamQuoteResult } from "./exchang
 import { UpstreamHttpError } from "./exchange-rates.types";
 import { normalizeIsoUtcTimestamp, validateUpstreamQuotes } from "./exchange-rates.validator";
 
+/**
+ * Giải thuật phân tích giá trị header HTTP `Retry-After` (theo chuẩn RFC 9110) sang số giây cần chờ:
+ * - Nếu chuỗi biểu diễn số nguyên không âm hợp lệ (`/^\d+$/` và hữu hạn), trả về trực tiếp số giây đó.
+ * - Nếu chuỗi là ngày giờ chuẩn HTTP-date nằm trong tương lai (`dateMs > nowMs`), quy đổi khoảng chờ
+ *   sang giây theo công thức làm tròn lên: `ceil((dateMs - nowMs) / 1000)`.
+ * - Cơ chế chịu lỗi: Trả về `undefined` khi header rỗng, sai cú pháp hoặc chỉ mốc thời gian quá khứ.
+ */
 export const parseRetryAfterHeader = (headerValue: string | null, nowMs = Date.now()): number | undefined => {
     if (!headerValue) {
         return undefined;
@@ -24,6 +31,9 @@ export const parseRetryAfterHeader = (headerValue: string | null, nowMs = Date.n
 export type FetchLike = typeof fetch;
 
 /**
+ * Bộ chuyển đổi (adapter) nhà cung cấp tỷ giá chính (Primary Provider) sử dụng dữ liệu tham chiếu
+ * Ngân hàng Trung ương Châu Âu (ECB) qua Frankfurter API v2.
+ *
  * Primary upstream FX adapter using ECB-backed Frankfurter API v2:
  * `GET https://api.frankfurter.dev/v2/rates?base=VND&quotes=USD,KRW`
  */
@@ -34,6 +44,10 @@ export class FrankfurterExchangeRateProvider implements ExchangeRateProviderAdap
     private readonly fetchImpl: FetchLike;
     private readonly nowFn: () => number;
 
+    /**
+     * Khởi tạo bộ cung cấp tỷ giá chính với cấu hình URL điểm cuối, giới hạn thời gian chờ HTTP
+     * (`timeoutMs`, mặc định 5000ms), hàm gọi `fetch` và đồng hồ thời gian chuẩn.
+     */
     constructor(options?: {
         endpointUrl?: string;
         timeoutMs?: number;
@@ -46,6 +60,20 @@ export class FrankfurterExchangeRateProvider implements ExchangeRateProviderAdap
         this.nowFn = options?.nowFn ?? Date.now;
     }
 
+    /**
+     * Giải thuật truy xuất và chuẩn hóa tỷ giá VND sang USD/KRW từ Frankfurter API v2:
+     * 1. Giới hạn thời gian chờ (Timeout Guard): Hợp nhất `AbortSignal.timeout(timeoutMs)` với
+     *    `externalSignal` qua `AbortSignal.any` để chủ động hủy yêu cầu mạng vượt quá thời gian cho phép.
+     * 2. Kiểm soát lỗi & hạn mức thượng nguồn: Chuyển hóa sự cố kết nối và mã phản hồi HTTP lỗi
+     *    thành `UpstreamHttpError`, đồng thời đọc chỉ thị `Retry-After` phục vụ chiến lược giãn cách thử lại.
+     * 3. Phân tích đa định dạng phản hồi:
+     *    - Định dạng mảng v2 (`Array`): Lọc các bản ghi có `base === "VND"` và `quote` thuộc `{USD, KRW}`,
+     *      chuẩn hóa ngày hiệu lực qua `normalizeIsoUtcTimestamp` và lấy mốc cũ nhất `oldestSourceMs = min(ts_i)`
+     *      làm `sourceUpdatedAt` bảo thủ nhằm tránh đánh giá quá mức độ mới của gói tỷ giá.
+     *    - Định dạng đối tượng kế thừa (`Object`): Trích xuất trực tiếp `base`, `date` và `rates.{USD, KRW}`.
+     * 4. Kiểm định tính dương hữu hạn: Gọi `validateUpstreamQuotes` để đảm bảo tỷ giá dương hữu hạn
+     *    và nằm trong biên độ kinh tế hợp lý của VND trước khi trả về.
+     */
     async fetchVndQuotes(externalSignal?: AbortSignal): Promise<UpstreamQuoteResult> {
         const timeoutSignal = AbortSignal.timeout(this.timeoutMs);
         const signal = externalSignal ? AbortSignal.any([externalSignal, timeoutSignal]) : timeoutSignal;

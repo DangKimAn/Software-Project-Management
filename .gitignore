@@ -8,7 +8,8 @@ ehthumbs.db
 Thumbs.db
 Desktop.ini
 $RECYCLE.BIN/
-
+Báo cáo
+BAO_CAO_CUOI_KY_HOAN_THIEN
 # IDE and Editor files
 .idea/
 **/.idea/
@@ -41,6 +42,11 @@ docs/ai-fix/
 **/*.md
 *.txt
 **/*.txt
+# CONFLICT-RESOLVED: Gộp quy tắc bỏ qua cả tệp .pdf và .docx trên toàn bộ cây thư mục từ hai nhánh.
+*.pdf
+**/*.pdf
+*.docx
+**/*.docx
 
 # Node.js (Source goc/backend, Source goc/frontend)
 **/node_modules/
@@ -61,7 +67,12 @@ docs/ai-fix/
 **/.env.production.local
 !**/.env.example
 !**/.env.*.example
-goldens
+# Golden test diff failure artifacts (keep master snapshots in test/goldens/ trackable)
+**/test/**/failures/
+
+# Local self-generated QA test suites (DO NOT PUSH TO GITHUB)
+**/qa-auto-*.test.ts
+**/qa_auto_*_test.dart
 
 # Certificates, keys and credentials
 certs/
@@ -100,7 +111,7 @@ Setup Notifications/
 **/doc/api/
 app.*.symbols
 app.*.map.txt
-
+rule.md
 # Android build artifacts & keystores
 **/.gradle/
 **/android/.gradle/

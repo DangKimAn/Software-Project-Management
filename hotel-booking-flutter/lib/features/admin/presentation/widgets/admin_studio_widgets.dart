@@ -4,9 +4,9 @@ import 'package:hotel_booking_flutter/features/admin/presentation/theme/admin_st
 import 'package:hotel_booking_flutter/shared/widgets/app_image.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-/// Frosted glass bar with real [BackdropFilter] blur used exclusively in Admin
-/// for the top studio header and bottom navigation dock.
+/// Thanh nền kính mờ sử dụng `BackdropFilter` thực tế dành riêng cho thanh tiêu đề trên cùng và thanh điều hướng dưới đáy của cổng Quản trị.
 class AdminFrostedSurface extends StatelessWidget {
+  /// Khởi tạo bề mặt kính mờ quản trị với độ làm mờ `sigma` và màu nền `fillColor`.
   const AdminFrostedSurface({
     super.key,
     required this.child,
@@ -26,6 +26,7 @@ class AdminFrostedSurface extends StatelessWidget {
   final List<BoxShadow>? boxShadow;
   final EdgeInsetsGeometry? padding;
 
+  /// Dựng khung kính mờ với viền bo góc và bóng đổ mềm.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -52,9 +53,9 @@ class AdminFrostedSurface extends StatelessWidget {
   }
 }
 
-/// Outer rounded grouped container (matching "Content Generation Activity" and
-/// "Top Creators" sections in the Studio template).
+/// Khung nhóm thẻ Bento bo góc lớn dùng để bao bọc từng phân khu dữ liệu trên cổng Quản trị.
 class AdminStudioGroupCard extends StatelessWidget {
+  /// Khởi tạo khung nhóm thẻ quản trị với tiêu đề `title` và thành phần phụ `trailing`.
   const AdminStudioGroupCard({
     super.key,
     required this.child,
@@ -68,6 +69,7 @@ class AdminStudioGroupCard extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final Widget child;
 
+  /// Dựng khung nhóm thẻ Bento kèm thanh tiêu đề tự động xuống dòng khi không đủ chiều ngang.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -115,8 +117,9 @@ class AdminStudioGroupCard extends StatelessWidget {
   }
 }
 
-/// Pure white rounded inner card floating inside [AdminStudioGroupCard].
+/// Thẻ con nền trắng bo góc nằm bên trong `AdminStudioGroupCard`, hỗ trợ trạng thái đang chọn hoặc cảnh báo.
 class AdminStudioInnerCard extends StatelessWidget {
+  /// Khởi tạo thẻ con quản trị với cờ `selected` và `warningHighlight` tùy chọn.
   const AdminStudioInnerCard({
     super.key,
     required this.child,
@@ -134,6 +137,7 @@ class AdminStudioInnerCard extends StatelessWidget {
   final bool warningHighlight;
   final VoidCallback? onTap;
 
+  /// Dựng thẻ con có hiệu ứng nhấn `InkWell` khi được truyền hàm `onTap`.
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(AdminStudioTokens.cardRadius);
@@ -187,11 +191,9 @@ class AdminStudioInnerCard extends StatelessWidget {
   }
 }
 
-/// 2-column Bento KPI card matching the template's metric cards:
-/// - Top row: subtle thin metric icon + soft borderless circular `↗` badge
-/// - Middle: sleek Medium-weight SF Pro Display figure
-/// - Bottom: Regular muted label
+/// Thẻ chỉ số KPI Bento 2 cột trên bảng điều khiển Quản trị với biểu tượng mảnh, huy hiệu điều hướng tròn và giá trị co giãn chống tràn.
 class AdminStudioKpiCard extends StatelessWidget {
+  /// Khởi tạo thẻ chỉ số KPI quản trị.
   const AdminStudioKpiCard({
     super.key,
     required this.label,
@@ -207,6 +209,7 @@ class AdminStudioKpiCard extends StatelessWidget {
   final String? subtitle;
   final VoidCallback? onTap;
 
+  /// Dựng thẻ chỉ số KPI kèm chú thích phụ `subtitle` nếu có.
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(AdminStudioTokens.cardRadius);
@@ -292,7 +295,9 @@ class AdminStudioKpiCard extends StatelessWidget {
   }
 }
 
+/// Mô tả một mục chọn trong thanh chuyển tab dạng viên thuốc `AdminStudioSegmentedBar`.
 class AdminStudioSegmentItem<T> {
+  /// Khởi tạo mục chọn với giá trị `value`, nhãn `label` và biểu tượng `icon` tùy chọn.
   const AdminStudioSegmentItem({
     required this.value,
     required this.label,
@@ -304,9 +309,9 @@ class AdminStudioSegmentItem<T> {
   final IconData? icon;
 }
 
-/// Symmetrical capsule segmented bar where each option occupies balanced equal
-/// width inside a crisp white pill track.
+/// Thanh chuyển phân đoạn đối xứng dạng viên thuốc nền trắng, chia đều độ rộng cho các mục chọn.
 class AdminStudioSegmentedBar<T> extends StatelessWidget {
+  /// Khởi tạo thanh chuyển phân đoạn với danh sách `items` và giá trị đang chọn `selectedValue`.
   const AdminStudioSegmentedBar({
     super.key,
     required this.items,
@@ -320,6 +325,7 @@ class AdminStudioSegmentedBar<T> extends StatelessWidget {
   final ValueChanged<T>? onSelected;
   final bool expandSegments;
 
+  /// Dựng thanh phân đoạn tự động tắt hoạt ảnh khi thiết bị bật chế độ giảm chuyển động.
   @override
   Widget build(BuildContext context) {
     final pillRadius = BorderRadius.circular(AdminStudioTokens.pillRadius);
@@ -408,9 +414,9 @@ class AdminStudioSegmentedBar<T> extends StatelessWidget {
   }
 }
 
-/// Accessible 48x48 hit-target wrapping a crisp borderless circular icon button
-/// (white circle or solid obsidian black circle, zero border).
+/// Nút bấm biểu tượng tròn không viền đảm bảo vùng nhận chạm trợ năng 48x48dp trên cổng Quản trị.
 class AdminStudioCircleButton extends StatelessWidget {
+  /// Khởi tạo nút biểu tượng tròn quản trị với chú thích trợ năng `tooltip`.
   const AdminStudioCircleButton({
     super.key,
     required this.icon,
@@ -430,6 +436,7 @@ class AdminStudioCircleButton extends StatelessWidget {
   final double iconSize;
   final Color? circleColor;
 
+  /// Dựng nút biểu tượng tròn hỗ trợ trạng thái sáng/tối và vô hiệu hóa.
   @override
   Widget build(BuildContext context) {
     final disabled = onTap == null;
@@ -476,9 +483,9 @@ class AdminStudioCircleButton extends StatelessWidget {
   }
 }
 
-/// Borderless circular avatar displaying either a network image or refined
-/// monochrome initials (avoids `CircleAvatar` per static screen audit rules).
+/// Ảnh đại diện tròn không viền hiển thị ảnh mạng hoặc chữ cái viết tắt tên người dùng (tuân thủ quy tắc không dùng `CircleAvatar`).
 class AdminStudioAvatar extends StatelessWidget {
+  /// Khởi tạo ảnh đại diện quản trị từ tên `name` và đường dẫn `imageUrl` tùy chọn.
   const AdminStudioAvatar({
     super.key,
     required this.name,
@@ -503,6 +510,7 @@ class AdminStudioAvatar extends StatelessWidget {
     return cleaned.characters.first.toUpperCase();
   }
 
+  /// Dựng ảnh đại diện tròn hoặc huy hiệu chữ viết tắt co giãn an toàn.
   @override
   Widget build(BuildContext context) {
     final trimmedUrl = imageUrl?.trim() ?? '';
@@ -520,20 +528,27 @@ class AdminStudioAvatar extends StatelessWidget {
       );
     }
 
+    // Giải thuật co giãn chữ viết tắt (initials) an toàn trong khung tròn cố định khi phóng chữ 1.3x–2.0x.
+    final safePadding = (size * 0.14).clamp(4.0, 8.0);
     return Container(
       width: size,
       height: size,
+      padding: EdgeInsets.all(safePadding),
       decoration: const BoxDecoration(
         color: AdminStudioTokens.softCircle,
         shape: BoxShape.circle,
       ),
       child: Center(
-        child: Text(
-          _extractInitials(name),
-          maxLines: 1,
-          style: AdminStudioTokens.pillText.copyWith(
-            fontSize: size * 0.33,
-            color: AdminStudioTokens.inkPrimary,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            _extractInitials(name),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AdminStudioTokens.pillText.copyWith(
+              fontSize: size * 0.33,
+              color: AdminStudioTokens.inkPrimary,
+            ),
           ),
         ),
       ),
@@ -541,8 +556,9 @@ class AdminStudioAvatar extends StatelessWidget {
   }
 }
 
-/// Borderless filter pill (obsidian active / crisp white inactive).
+/// Nút lọc dạng viên thuốc không viền (nền đen tuyền khi đang chọn, nền trắng khi chưa chọn).
 class AdminStudioFilterPill extends StatelessWidget {
+  /// Khởi tạo nút lọc dạng viên thuốc với nhãn `label` và cờ `selected`.
   const AdminStudioFilterPill({
     super.key,
     required this.label,
@@ -558,6 +574,7 @@ class AdminStudioFilterPill extends StatelessWidget {
   final IconData? icon;
   final Color inactiveFill;
 
+  /// Dựng nút lọc dạng viên thuốc có nhãn trợ năng và hiệu ứng chuyển màu mượt.
   @override
   Widget build(BuildContext context) {
     return Semantics(
@@ -612,5 +629,85 @@ class AdminStudioFilterPill extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Khung chọn dạng viên thuốc (pill dropdown) co giãn chiều cao tự động
+/// khi người dùng tăng cỡ chữ hệ thống (1.3x–2.0x).
+class AdminStudioPillDropdown<T> extends StatelessWidget {
+  const AdminStudioPillDropdown({
+    super.key,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.minHeight = 40,
+    this.width,
+    this.maxWidth,
+    this.isExpanded = true,
+    this.fillColor = Colors.white,
+    this.border,
+    this.boxShadow = AdminStudioTokens.cardShadow,
+    this.padding = const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+    this.textStyle,
+  });
+
+  final T value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?>? onChanged;
+  final double minHeight;
+  final double? width;
+  final double? maxWidth;
+  final bool isExpanded;
+  final Color fillColor;
+  final BoxBorder? border;
+  final List<BoxShadow>? boxShadow;
+  final EdgeInsetsGeometry padding;
+  final TextStyle? textStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    // Giải thuật khung lọc Dropdown co giãn theo chiều dọc (minHeight) và chiều ngang (IntrinsicWidth + isExpanded) chống cắt/tràn chữ ở tỷ lệ font 1.3x–2.0x.
+    final pill = Container(
+      width: width,
+      constraints: BoxConstraints(
+        minHeight: minHeight,
+        maxWidth: maxWidth ?? double.infinity,
+      ),
+      padding: padding,
+      alignment: Alignment.centerLeft,
+      decoration: BoxDecoration(
+        color: fillColor,
+        borderRadius: BorderRadius.circular(AdminStudioTokens.pillRadius),
+        border: border,
+        boxShadow: boxShadow,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isExpanded: true,
+          isDense: true,
+          icon: Padding(
+            padding: EdgeInsets.only(left: isExpanded ? 0 : 5),
+            child: const Icon(
+              LucideIcons.chevronDown,
+              size: 14,
+              color: AdminStudioTokens.iconMuted,
+            ),
+          ),
+          style: textStyle ??
+              AdminStudioTokens.pillText.copyWith(
+                fontWeight: FontWeight.w400,
+                color: AdminStudioTokens.inkPrimary,
+              ),
+          items: items,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+
+    if (isExpanded || width != null) {
+      return pill;
+    }
+    return IntrinsicWidth(child: pill);
   }
 }

@@ -57,19 +57,33 @@ let cachedSender: FcmMulticastSender | null | undefined;
 let customSenderForTesting: FcmMulticastSender | null = null;
 let loggedMissingConfig = false;
 
+/**
+ * Tiêm bộ gửi multicast FCM giả lập phục vụ kiểm thử đơn vị cô lập.
+ */
 export const setFcmMulticastSenderForTesting = (sender: FcmMulticastSender | null) => {
     customSenderForTesting = sender;
 };
 
+/**
+ * Đặt lại bộ nhớ đệm trình gửi FCM và cờ ghi log cấu hình phục vụ môi trường kiểm thử.
+ */
 export const resetFcmServiceCacheForTesting = () => {
     cachedSender = undefined;
     customSenderForTesting = null;
     loggedMissingConfig = false;
 };
 
+/**
+ * Giải thuật băm định danh thiết bị một chiều bằng `SHA-256`:
+ * - Tạo khóa chỉ mục độ dài cố định 64 ký tự hex (`tokenHash`) từ chuỗi FCM token dài để tra cứu duy nhất
+ *   và thực thi ràng buộc chống trùng lặp nhanh chóng trong cơ sở dữ liệu.
+ */
 export const hashDeviceToken = (rawToken: string): string =>
     createHash("sha256").update(rawToken.trim(), "utf8").digest("hex");
 
+/**
+ * Chuẩn hóa tên nền tảng thiết bị đầu cuối về tập giá trị hợp lệ (`"ios"`, `"web"`, mặc định `"android"`).
+ */
 const normalizePlatform = (raw: string | null | undefined): DevicePlatform => {
     const lower = (raw ?? "").trim().toLowerCase();
     if (lower === "ios") return "ios";
@@ -77,6 +91,10 @@ const normalizePlatform = (raw: string | null | undefined): DevicePlatform => {
     return "android";
 };
 
+/**
+ * Giải thuật kiểm tra tính hợp lệ hình thức của chuỗi FCM registration token:
+ * - Ràng buộc kiểu chuỗi, độ dài trong khoảng `[20, 512]` ký tự và không chứa khoảng trắng hay ký tự xuống dòng.
+ */
 const validateFcmToken = (rawToken: unknown): string => {
     if (typeof rawToken !== "string") {
         throw new ApiError(400, "FCM device token is required");
@@ -100,6 +118,11 @@ type RawServiceAccount = {
     privateKey?: string;
 };
 
+/**
+ * Giải thuật phân tích chứng chỉ dịch vụ Firebase (`ServiceAccount`) hỗ trợ đa định dạng:
+ * - Tự động nhận diện chuỗi JSON thuần hoặc chuỗi mã hóa Base64, chuẩn hóa khóa riêng PEM (`\\n` -> `\n`)
+ *   và trích xuất bộ ba `projectId`, `clientEmail`, `privateKey`.
+ */
 const parseServiceAccountJson = (rawContent: string): ServiceAccount | null => {
     const trimmed = rawContent.trim();
     if (!trimmed) return null;
@@ -130,6 +153,12 @@ const parseServiceAccountJson = (rawContent: string): ServiceAccount | null => {
     };
 };
 
+/**
+ * Giải thuật phân giải thông tin xác thực Firebase Admin theo thứ tự ưu tiên:
+ * 1. Biến môi trường nội tuyến `FIREBASE_SERVICE_ACCOUNT_JSON` (JSON hoặc Base64).
+ * 2. Đường dẫn tệp `FIREBASE_SERVICE_ACCOUNT_PATH` hoặc đường dẫn mặc định `./secrets/firebase-service-account.json`
+ *    (ngoại trừ môi trường `test`).
+ */
 const resolveServiceAccount = (): ServiceAccount | null => {
     const env = getEnv();
 
@@ -172,6 +201,10 @@ const resolveServiceAccount = (): ServiceAccount | null => {
     }
 };
 
+/**
+ * Giải thuật khởi tạo lười và lưu đệm đơn bản (Lazy Singleton) trình gửi `sendEachForMulticast` của Firebase Admin SDK,
+ * tự động tái sử dụng instance ứng dụng theo tên định danh `FIREBASE_APP_NAME` và suy giảm êm (graceful degradation) khi thiếu cấu hình.
+ */
 const getOrCreateMulticastSender = (): FcmMulticastSender | null => {
     if (customSenderForTesting) {
         return customSenderForTesting;
@@ -243,6 +276,12 @@ const SENSITIVE_PUSH_DATA_KEYS = new Set([
     "bankaccountnumber",
 ]);
 
+/**
+ * Giải thuật lọc đệ quy dữ liệu đính kèm thông báo đẩy (PII & Secret Redaction):
+ * - Chuẩn hóa tên khóa (bỏ `_`, `-`, chuyển chữ thường) và loại bỏ hoàn toàn các trường nhạy cảm thuộc
+ *   `SENSITIVE_PUSH_DATA_KEYS` (email, số điện thoại, OTP, mật khẩu, token, CCCD, số tài khoản ngân hàng)
+ *   trước khi chuyển qua hạ tầng FCM bên thứ ba.
+ */
 const sanitizePushDataRecord = (input: Record<string, unknown>): Record<string, unknown> => {
     const cleaned: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(input)) {
@@ -259,6 +298,11 @@ const sanitizePushDataRecord = (input: Record<string, unknown>): Record<string, 
     return cleaned;
 };
 
+/**
+ * Giải thuật giới hạn số lượng thiết bị hoạt động tối đa trên mỗi người dùng (LRU Device Token Cap):
+ * - Sắp xếp các token đang hoạt động giảm dần theo `lastSeenAt` và tự động hủy kích hoạt phần vượt quá
+ *   ngưỡng `MAX_ACTIVE_DEVICE_TOKENS_PER_USER` (20 thiết bị) để chống phình đại danh sách multicast.
+ */
 const pruneExcessUserDeviceTokens = async (userId: number) => {
     if (getEnv().nodeEnv === "test" && !Object.prototype.hasOwnProperty.call(UserDeviceToken, "findAll")) {
         return;
@@ -298,6 +342,10 @@ const pruneExcessUserDeviceTokens = async (userId: number) => {
     }
 };
 
+/**
+ * Giải thuật thu hồi toàn bộ FCM device tokens đang hoạt động của một tài khoản
+ * (dùng khi đặt lại mật khẩu, khóa tài khoản hoặc thu hồi phiên diện rộng).
+ */
 export const deactivateAllUserDeviceTokens = async (userId: number): Promise<number> => {
     if (!Number.isInteger(userId) || userId < 1) {
         return 0;
@@ -327,6 +375,12 @@ export const deactivateAllUserDeviceTokens = async (userId: number): Promise<num
     }
 };
 
+/**
+ * Giải thuật đăng ký hoặc cập nhật bất biến (Idempotent Upsert) FCM device token chống Race Condition:
+ * - Tra cứu theo bản băm `tokenHash` (`SHA-256`) để kích hoạt lại và chuyển quyền sở hữu thiết bị về `userId` hiện tại.
+ * - Nếu hai yêu cầu đăng ký cùng một token chạy song song gây `UniqueConstraintError`, tự động truy vấn lại bản ghi vừa thắng
+ *   để cập nhật tiếp mà không làm lỗi yêu cầu của client, sau đó cắt tỉa các thiết bị cũ vượt ngưỡng.
+ */
 export const registerUserDeviceToken = async (input: RegisterDeviceTokenInput) => {
     if (!Number.isInteger(input.userId) || input.userId < 1) {
         throw new ApiError(401, "Unauthorized");
@@ -408,6 +462,9 @@ export const registerUserDeviceToken = async (input: RegisterDeviceTokenInput) =
     }
 };
 
+/**
+ * Giải thuật hủy đăng ký bất biến FCM device token của người dùng hiện tại theo khóa kết hợp `(userId, tokenHash)`.
+ */
 export const unregisterUserDeviceToken = async (params: {
     userId: number;
     token: unknown;
@@ -437,6 +494,10 @@ export const unregisterUserDeviceToken = async (params: {
     };
 };
 
+/**
+ * Giải thuật đóng gói bản đồ dữ liệu phẳng kiểu chuỗi (`Record<string, string>`) tuân thủ đặc tả FCM Data Payload,
+ * kết hợp lọc bỏ trường nhạy cảm qua `sanitizePushDataRecord` và tuần tự hóa JSON an toàn cho cấu trúc lồng nhau.
+ */
 const buildStringDataMap = (payload: PushNotificationPayload): Record<string, string> => {
     const out: Record<string, string> = {};
 
@@ -474,6 +535,14 @@ const buildStringDataMap = (payload: PushNotificationPayload): Record<string, st
     return out;
 };
 
+/**
+ * Giải thuật phát tán thông báo đẩy đa thiết bị theo lô (Chunked Multicast Dispatch & Dead-Token Self-Healing):
+ * 1. Kiểm tra trạng thái hoạt động của tài khoản đích; nếu tài khoản đã bị khóa/vô hiệu hóa, tự động thu hồi toàn bộ device tokens và dừng gửi.
+ * 2. Phân tách danh sách đích thành FCM registration tokens chuẩn và Firebase Installation IDs (`fids`),
+ *    chia nhỏ theo lô tối đa `FCM_MULTICAST_BATCH_SIZE` (500 đích/lần) theo giới hạn cứng của FCM API.
+ * 3. Đối soát từng phần tử kết quả trả về: tự động thu thập các `tokenHash` gặp lỗi hết hạn/hủy đăng ký vĩnh viễn
+ *    (`PERMANENT_INVALID_TOKEN_CODES`) để đánh dấu `isActive = false`, tự làm sạch danh sách thiết bị rác.
+ */
 export const sendPushToUser = async (
     userId: number,
     payload: PushNotificationPayload,

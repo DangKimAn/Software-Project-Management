@@ -6,6 +6,7 @@ import { getEnv } from "../config/env";
 import { logger } from "../config/logger";
 import Conversation from "../models/conversation";
 import ConversationParticipant from "../models/conversation-participant";
+import Message from "../models/message";
 import User from "../models/user";
 import {
     assertUserCanAuthenticate,
@@ -77,6 +78,9 @@ const debugSocket = (...args: unknown[]) => {
     }
 };
 
+/**
+ * Giải thuật xác định danh sách Origin hợp lệ cho kết nối thời gian thực Socket.IO.
+ */
 const getSocketCorsOrigin = () => {
     const env = getEnv();
 
@@ -93,6 +97,9 @@ const getSocketCorsOrigin = () => {
     return env.corsOrigins;
 };
 
+/**
+ * Giải thuật trích xuất JWT Access Token trong bắt tay kết nối Socket.IO (`handshake.auth.token` hoặc `Authorization` header).
+ */
 const extractSocketToken = (socket: Socket) => {
     const authToken = socket.handshake.auth?.token;
 
@@ -121,6 +128,10 @@ const extractRawConversationId = (payload: unknown): unknown => {
     return undefined;
 };
 
+/**
+ * Giải thuật xác thực bắt tay kết nối WebSocket/Socket.IO:
+ * - Xác minh chữ ký JWT, đối chiếu trạng thái người dùng trên CSDL và lưu mốc hết hạn `tokenExp` vào `socket.data` để tái kiểm tra khi tham gia phòng.
+ */
 const authenticateSocket = async (socket: AuthenticatedSocket, next: (error?: Error) => void) => {
     try {
         const token = extractSocketToken(socket);
@@ -150,6 +161,9 @@ const authenticateSocket = async (socket: AuthenticatedSocket, next: (error?: Er
     }
 };
 
+/**
+ * Giải thuật tái xác thực phiên Socket đang mở nhằm chặn kết nối có token đã hết hạn hoặc tài khoản vừa bị khóa sau thời điểm bắt tay.
+ */
 const assertSocketSessionStillActive = async (socket: AuthenticatedSocket, userId: number) => {
     const tokenExp = socket.data.tokenExp;
     if (typeof tokenExp === "number" && tokenExp * 1000 <= Date.now()) {
@@ -171,6 +185,9 @@ const assertSocketSessionStillActive = async (socket: AuthenticatedSocket, userI
     return true;
 };
 
+/**
+ * Giải thuật kiểm tra quyền thành viên phòng hội thoại trên kênh Socket (chống nghe lén hội thoại IDOR).
+ */
 const assertSocketConversationParticipant = async (
     socket: AuthenticatedSocket,
     conversationId: number,
@@ -210,6 +227,9 @@ const assertSocketConversationParticipant = async (
     return Boolean(participant);
 };
 
+/**
+ * Giải thuật khởi tạo máy chủ Socket.IO thời gian thực kèm hạn mức bộ đệm gói tin (64KB) và bộ đếm hạn ngạch sự kiện mỗi cửa sổ 10 giây.
+ */
 export const initializeSocket = (server: HttpServer) => {
     io = new SocketIOServer(server, {
         maxHttpBufferSize: SOCKET_MAX_HTTP_BUFFER_SIZE,
@@ -317,13 +337,112 @@ export const initializeSocket = (server: HttpServer) => {
                 authenticatedSocket.leave(conversationRoom(conversationId));
             }
         });
+
+        // Giải thuật phát sóng trạng thái đang gõ phím (typing indicator) thời gian thực giữa hai thành viên hội thoại (TC-057):
+        authenticatedSocket.on("conversation:typing", (payload?: unknown) => {
+            if (!consumeEventQuota()) {
+                return;
+            }
+
+            const record =
+                typeof payload === "object" && payload !== null
+                    ? (payload as { conversationId?: unknown; isTyping?: unknown })
+                    : {};
+            const conversationId = Number(record.conversationId);
+            const isTyping = Boolean(record.isTyping);
+
+            if (!Number.isInteger(conversationId) || conversationId < 1) {
+                return;
+            }
+
+            void (async () => {
+                const allowed = await assertSocketConversationParticipant(
+                    authenticatedSocket,
+                    conversationId,
+                    Number(user.id),
+                );
+                if (!allowed) {
+                    return;
+                }
+                authenticatedSocket.to(conversationRoom(conversationId)).emit("conversation:typing", {
+                    conversationId,
+                    userId: Number(user.id),
+                    isTyping,
+                });
+            })().catch((error) => {
+                logger.warn("Failed to relay conversation:typing event", {
+                    userId: user.id,
+                    conversationId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            });
+        });
+
+        // Giải thuật đồng bộ biểu cảm tin nhắn (message:reaction) có kiểm tra thành viên hội thoại và quyền truy cập tin nhắn (TC-057):
+        authenticatedSocket.on("message:reaction", (payload?: unknown) => {
+            if (!consumeEventQuota()) {
+                return;
+            }
+
+            const record =
+                typeof payload === "object" && payload !== null
+                    ? (payload as { conversationId?: unknown; messageId?: unknown; reaction?: unknown })
+                    : {};
+            const conversationId = Number(record.conversationId);
+            const messageId = Number(record.messageId);
+            const reaction =
+                typeof record.reaction === "string" && record.reaction.trim().length > 0
+                    ? record.reaction.trim().slice(0, 32)
+                    : null;
+
+            if (!Number.isInteger(conversationId) || conversationId < 1 || !Number.isInteger(messageId) || messageId < 1) {
+                return;
+            }
+
+            void (async () => {
+                const allowed = await assertSocketConversationParticipant(
+                    authenticatedSocket,
+                    conversationId,
+                    Number(user.id),
+                );
+                if (!allowed) {
+                    return;
+                }
+                const targetMessage = await Message.findOne({
+                    where: {
+                        messageId,
+                        conversationId,
+                    },
+                });
+                if (!targetMessage) {
+                    return;
+                }
+                io?.to(conversationRoom(conversationId)).emit("message:reaction", {
+                    conversationId,
+                    messageId,
+                    userId: Number(user.id),
+                    reaction,
+                });
+            })().catch((error) => {
+                logger.warn("Failed to relay message:reaction event", {
+                    userId: user.id,
+                    conversationId,
+                    messageId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            });
+        });
     });
 
     return io;
 };
 
+/** Trả về thể hiện máy chủ Socket.IO hiện hành (nếu đã khởi tạo). */
 export const getSocketServer = () => io;
 
+/**
+ * Giải thuật ngắt cưỡng bức toàn bộ kết nối Socket đang mở của một người dùng khi tài khoản bị thu hồi quyền hoặc khóa khẩn cấp.
+ */
 export const disconnectUserSockets = (userId: string | number) => {
     if (!io) {
         return;
@@ -332,6 +451,9 @@ export const disconnectUserSockets = (userId: string | number) => {
     io.in(userRoom(userId)).disconnectSockets(true);
 };
 
+/**
+ * Giải thuật phát sóng tin nhắn mới (`message:new`) tới phòng hội thoại và phòng cá nhân của người nhận nhưng loại trừ người gửi để tránh nhân đôi bản ghi phía client.
+ */
 export const emitMessageNew = (payload: MessageNewPayload) => {
     if (!io) {
         return;
@@ -353,6 +475,9 @@ export const emitMessageNew = (payload: MessageNewPayload) => {
         });
 };
 
+/**
+ * Giải thuật đẩy thông báo thời gian thực (`notification:new`) tới phòng cá nhân của người nhận.
+ */
 export const emitNotificationNew = (userId: string | number, payload: NotificationNewPayload) => {
     if (!io) {
         return;

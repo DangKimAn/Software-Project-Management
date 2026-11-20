@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -7,19 +8,27 @@ import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+// CONFLICT-RESOLVED: Bổ sung danh mục ngân hàng Việt Nam từ develop để phục vụ biểu mẫu hoàn tiền khi hủy đơn đã thanh toán.
+import '../../../../core/constants/vietnam_banks.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../host/domain/host_models.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_loading.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
-import '../../../reviews/presentation/widgets/review_list_widget.dart';
 import '../../domain/entities/booking.dart';
 import '../view_models/trips_view_model.dart';
 
-/// Complete port of `Source goc/frontend/src/views/pages/Trips/index.tsx` (`TripHistoryList`, `TripHistoryCard`, `ReviewModal`).
+/// Màn hình quản lý danh sách chuyến đi cá nhân của khách hàng (`/account/trips`).
+///
+/// Phân tách lịch sử đặt phòng thành 3 phân nhóm (`Sắp tới`, `Hoàn tất`, `Đã hủy`), tự động làm mới nền
+/// mỗi 60 giây, hiển thị đếm ngược giữ chỗ cho đơn chờ thanh toán, cho phép xem chi tiết bóc tách chi phí,
+/// hủy đặt phòng hợp lệ kèm lý do và gửi đánh giá sao sau khi hoàn thành kỳ nghỉ.
 class TripsScreen extends ConsumerStatefulWidget {
+  /// Khởi tạo `TripsScreen`.
   const TripsScreen({super.key});
 
   @override
@@ -31,6 +40,31 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
   late final TabController _tabController;
   final Set<String> _expandedBookingIds = {};
   Timer? _autoRefreshTimer;
+  Timer? _holdCountdownTimer;
+
+  // Giải thuật đồng bộ nhịp đếm ngược 1 giây cho các đơn giữ chỗ chờ thanh toán:
+  // Chỉ bật bộ đếm khi danh sách thực sự có đơn `pending_payment` còn hạn > 0 giây và tự hủy ngay khi hết đơn chờ,
+  // giúp giao diện đếm ngược mượt theo thời gian thực mà không tiêu tốn CPU khi không có đơn giữ chỗ.
+  void _syncHoldCountdownTimer(List<Booking> bookings) {
+    final hasActiveHold = bookings.any(
+      (b) =>
+          b.effectiveStatus == 'pending_payment' &&
+          b.computeRemainingPaymentSeconds() > 0,
+    );
+    if (hasActiveHold && _holdCountdownTimer == null) {
+      _holdCountdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted) {
+          _holdCountdownTimer?.cancel();
+          _holdCountdownTimer = null;
+          return;
+        }
+        setState(() {});
+      });
+    } else if (!hasActiveHold && _holdCountdownTimer != null) {
+      _holdCountdownTimer?.cancel();
+      _holdCountdownTimer = null;
+    }
+  }
 
   @override
   void initState() {
@@ -46,9 +80,26 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
 
   @override
   void dispose() {
+    _holdCountdownTimer?.cancel();
     _autoRefreshTimer?.cancel();
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleMessageHost(Booking booking) async {
+    if (booking.listingId.isEmpty) return;
+    try {
+      final convId =
+          await ref.read(tripsActionsViewModelProvider).openHostConversation(
+                listingId: booking.listingId,
+                bookingId: booking.id,
+              );
+      if (!mounted) return;
+      context.go('/tin-nhan?conversationId=$convId');
+    } catch (_) {
+      if (!mounted) return;
+      context.go('/tin-nhan');
+    }
   }
 
   String _formatHoldCountdown(int seconds) {
@@ -57,77 +108,541 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
     return '$mins:$secs';
   }
 
+  // Giải thuật xác nhận và thực thi hủy đặt phòng từ phía khách hàng (`_handleCancelBooking`):
+  // Kiểm tra điều kiện `booking.canCancel`, mở hộp thoại bắt buộc nhập lý do hủy và ủy quyền qua `TripsActionsViewModel.cancelBooking`.
   Future<void> _handleCancelBooking(Booking booking) async {
     if (!booking.canCancel) return;
 
     final locale = ref.read(localeProvider);
     final isEn = locale.startsWith('en');
     final isKo = locale.startsWith('ko');
+    final formatter = ref.read(moneyFormatterProvider);
 
     final reasonController = TextEditingController();
+    final bankNameController = TextEditingController();
+    final accountNumberController = TextEditingController();
+    final accountNameController = TextEditingController();
+    VietnamBank? selectedBank;
+    bool hasValidated = false;
+
+    String? validateReason() {
+      final text = reasonController.text.trim();
+      if (text.isEmpty) {
+        return isEn
+            ? 'Cancellation reason is required'
+            : (isKo ? '취소 사유를 입력해주세요' : 'Vui lòng nhập lý do hủy phòng');
+      }
+      if (text.length < 5) {
+        return isEn
+            ? 'Reason must be at least 5 characters'
+            : (isKo ? '취소 사유는 5자 이상이어야 합니다' : 'Lý do hủy tối thiểu 5 ký tự');
+      }
+      return null;
+    }
+
+    String? validateBank() {
+      if (!booking.isPaid) return null;
+      if (selectedBank == null && bankNameController.text.trim().isEmpty) {
+        return isEn
+            ? 'Please select a receiving bank'
+            : (isKo ? '입금받을 은행을 선택해주세요' : 'Vui lòng chọn ngân hàng nhận tiền');
+      }
+      return null;
+    }
+
+    String? validateAccountNumber() {
+      if (!booking.isPaid) return null;
+      final text = accountNumberController.text.trim();
+      if (text.isEmpty) {
+        return isEn
+            ? 'Account number is required'
+            : (isKo ? '계좌번호를 입력해주세요' : 'Vui lòng nhập số tài khoản');
+      }
+      if (!RegExp(r'^\d{10,12}$').hasMatch(text)) {
+        return isEn
+            ? 'Account number must be 10 to 12 digits'
+            : (isKo
+                ? '계좌번호는 10~12자리 숫자여야 합니다'
+                : 'Số tài khoản phải gồm 10 đến 12 chữ số');
+      }
+      return null;
+    }
+
+    String? validateAccountName() {
+      if (!booking.isPaid) return null;
+      final text = accountNameController.text.trim();
+      if (text.isEmpty) {
+        return isEn
+            ? 'Account owner name is required'
+            : (isKo ? '예금주명을 입력해주세요' : 'Vui lòng nhập tên chủ tài khoản');
+      }
+      if (RegExp(r'[0-9]').hasMatch(text)) {
+        return isEn
+            ? 'Name cannot contain numbers'
+            : (isKo
+                ? '예금주명에 숫자를 포함할 수 없습니다'
+                : 'Tên chủ tài khoản không được chứa chữ số');
+      }
+      if (text.length < 3) {
+        return isEn
+            ? 'Name must be at least 3 characters'
+            : (isKo
+                ? '예금주명은 3자 이상이어야 합니다'
+                : 'Tên chủ tài khoản tối thiểu 3 ký tự');
+      }
+      return null;
+    }
+
     final shouldCancel = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEn ? 'Cancel booking' : (isKo ? '예약 취소' : 'Hủy đặt phòng')),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isEn
-                    ? 'Are you sure you want to cancel your booking at "${booking.propertyName}"?'
-                    : (isKo
-                        ? '"${booking.propertyName}" 예약을 취소하시겠습니까?'
-                        : 'Bạn có chắc chắn muốn hủy đặt phòng tại "${booking.propertyName}"?'),
-                style: AppTypography.body,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setModalState) {
+          return AlertDialog(
+            title: Text(
+                isEn ? 'Cancel booking' : (isKo ? '예약 취소' : 'Hủy đặt phòng')),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isEn
+                        ? 'Are you sure you want to cancel your booking at "${booking.propertyName}"?'
+                        : (isKo
+                            ? '"${booking.propertyName}" 예약을 취소하시겠습니까?'
+                            : 'Bạn có chắc chắn muốn hủy đặt phòng tại "${booking.propertyName}"?'),
+                    style: AppTypography.body,
+                  ),
+                  const SizedBox(height: AppSpacing.s16),
+                  TextField(
+                    controller: reasonController,
+                    maxLines: 2,
+                    inputFormatters: [
+                      LengthLimitingTextInputFormatter(250),
+                    ],
+                    onChanged: (_) {
+                      if (hasValidated) setModalState(() {});
+                    },
+                    style: const TextStyle(fontSize: 13, height: 1.3),
+                    decoration: InputDecoration(
+                      labelText: isEn
+                          ? 'Cancellation reason (required)'
+                          : (isKo ? '취소 사유 (필수)' : 'Lý do hủy (bắt buộc)'),
+                      hintText: isEn
+                          ? 'Change of personal plans, work schedule...'
+                          : (isKo
+                              ? '개인 일정 변경...'
+                              : 'Thay đổi kế hoạch cá nhân, bận việc...'),
+                      isDense: true,
+                      errorText: hasValidated ? validateReason() : null,
+                      errorMaxLines: 2,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppColors.border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppColors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(
+                            color: AppColors.textStrong, width: 1.5),
+                      ),
+                      errorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppColors.error),
+                      ),
+                      focusedErrorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(
+                            color: AppColors.error, width: 1.5),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                  if (booking.isPaid) ...[
+                    const SizedBox(height: AppSpacing.s16),
+                    Builder(
+                      builder: (_) {
+                        final refundEst = booking.estimatePolicyRefund();
+                        final policyTitle = switch (refundEst.policyKey) {
+                          'flexible' => isEn
+                              ? 'Flexible policy'
+                              : (isKo ? '유연 환불 정책' : 'Chính sách Linh hoạt'),
+                          'strict' => isEn
+                              ? 'Strict policy'
+                              : (isKo ? '엄격 환불 정책' : 'Chính sách Nghiêm ngặt'),
+                          _ => isEn
+                              ? 'Moderate policy'
+                              : (isKo ? '보통 환불 정책' : 'Chính sách Trung bình'),
+                        };
+                        return Container(
+                          padding: const EdgeInsets.all(AppSpacing.s12),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceBase,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    policyTitle,
+                                    style: AppTypography.caption.copyWith(
+                                      color: AppColors.textStrong,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${refundEst.refundPct}%',
+                                    style: AppTypography.caption.copyWith(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    isEn
+                                        ? 'Estimated refund:'
+                                        : (isKo
+                                            ? '환불 예상 금액:'
+                                            : 'Số tiền hoàn dự kiến:'),
+                                    style: AppTypography.caption.copyWith(
+                                      color: AppColors.textMuted,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        formatter.formatExactVnd(
+                                          refundEst.estimatedRefundVnd,
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                      if (formatter
+                                          .effectiveCurrency.isForeign) ...[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '≈ ${formatter.format(refundEst.estimatedRefundVnd).formatted}',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: AppColors.textMuted,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8),
+                                child:
+                                    Divider(height: 1, color: AppColors.border),
+                              ),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(
+                                    LucideIcons.shieldCheck,
+                                    size: 16,
+                                    color: AppColors.textStrong,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      isEn
+                                          ? 'This booking was paid. Please provide your bank details so Admin can review and disburse your refund via Napas 24/7.'
+                                          : (isKo
+                                              ? '결제 완료된 예약입니다. 관리자가 검토 후 Napas 24/7로 송금할 수 있도록 계좌 정보를 입력해주세요.'
+                                              : 'Đơn này đã thanh toán. Vui lòng cung cấp số tài khoản ngân hàng để Admin duyệt và hoàn tiền tự động qua Napas 24/7.'),
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textStrong,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.s12),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await _showBankPickerDialog(
+                          context,
+                          currentSelection: selectedBank,
+                          isEn: isEn,
+                        );
+                        if (picked != null) {
+                          setModalState(() {
+                            selectedBank = picked;
+                            bankNameController.text =
+                                '${picked.shortName} (${picked.code})';
+                          });
+                          if (hasValidated) setModalState(() {});
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: IgnorePointer(
+                        child: TextField(
+                          controller: bankNameController,
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            labelText: isEn
+                                ? 'Bank name (required)'
+                                : 'Tên ngân hàng (bắt buộc)',
+                            hintText: isEn
+                                ? 'Select bank (e.g. MB, VCB, Techcombank...)'
+                                : 'Chọn ngân hàng (VD: MB, VCB, Techcombank...)',
+                            isDense: true,
+                            errorText: hasValidated ? validateBank() : null,
+                            errorMaxLines: 2,
+                            prefixIcon: selectedBank != null
+                                ? Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: _BankLogoWidget(
+                                      bank: selectedBank!,
+                                      size: 22,
+                                    ),
+                                  )
+                                : const Icon(
+                                    LucideIcons.building2,
+                                    size: 18,
+                                    color: AppColors.textMuted,
+                                  ),
+                            suffixIcon: bankNameController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(LucideIcons.x,
+                                        size: 16, color: AppColors.textMuted),
+                                    onPressed: () {
+                                      setModalState(() {
+                                        bankNameController.clear();
+                                        selectedBank = null;
+                                      });
+                                      if (hasValidated) setModalState(() {});
+                                    },
+                                  )
+                                : const Icon(
+                                    LucideIcons.chevronDown,
+                                    size: 18,
+                                    color: AppColors.textMuted,
+                                  ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide:
+                                  const BorderSide(color: AppColors.border),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide:
+                                  const BorderSide(color: AppColors.border),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(
+                                  color: AppColors.textStrong, width: 1.5),
+                            ),
+                            errorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide:
+                                  const BorderSide(color: AppColors.error),
+                            ),
+                            focusedErrorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(
+                                  color: AppColors.error, width: 1.5),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s8),
+                    TextField(
+                      controller: accountNumberController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(12),
+                      ],
+                      onChanged: (_) {
+                        if (hasValidated) setModalState(() {});
+                      },
+                      decoration: InputDecoration(
+                        labelText: isEn
+                            ? 'Account number (10 - 12 digits)'
+                            : 'Số tài khoản (10 - 12 số)',
+                        hintText: isEn ? 'e.g. 0987654321' : 'VD: 0987654321',
+                        helperText: isEn
+                            ? 'Required: 10 to 12 digits'
+                            : 'Bắt buộc: 10 đến 12 chữ số',
+                        errorText:
+                            hasValidated ? validateAccountNumber() : null,
+                        errorMaxLines: 2,
+                        isDense: true,
+                        prefixIcon: const Icon(
+                          LucideIcons.creditCard,
+                          size: 18,
+                          color: AppColors.textMuted,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                              color: AppColors.textStrong, width: 1.5),
+                        ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: AppColors.error),
+                        ),
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                              color: AppColors.error, width: 1.5),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s8),
+                    TextField(
+                      controller: accountNameController,
+                      textCapitalization: TextCapitalization.characters,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.deny(RegExp(r'[0-9]')),
+                        TextInputFormatter.withFunction(
+                          (oldValue, newValue) => TextEditingValue(
+                            text: newValue.text.toUpperCase(),
+                            selection: newValue.selection,
+                          ),
+                        ),
+                        LengthLimitingTextInputFormatter(50),
+                      ],
+                      onChanged: (_) {
+                        if (hasValidated) setModalState(() {});
+                      },
+                      decoration: InputDecoration(
+                        labelText: isEn
+                            ? 'Account owner name (no numbers)'
+                            : 'Tên chủ tài khoản (không chứa số)',
+                        hintText:
+                            isEn ? 'e.g. NGUYEN VAN A' : 'VD: NGUYEN VAN A',
+                        helperText: isEn
+                            ? 'Required: Letters only (auto-uppercase)'
+                            : 'Bắt buộc: Chỉ chữ cái (tự động in hoa)',
+                        errorText: hasValidated ? validateAccountName() : null,
+                        errorMaxLines: 2,
+                        isDense: true,
+                        prefixIcon: const Icon(
+                          LucideIcons.user,
+                          size: 18,
+                          color: AppColors.textMuted,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                              color: AppColors.textStrong, width: 1.5),
+                        ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: AppColors.error),
+                        ),
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                              color: AppColors.error, width: 1.5),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: AppSpacing.s16),
-              TextField(
-                controller: reasonController,
-                maxLines: 1,
-                style: const TextStyle(fontSize: 13, height: 1.2),
-                decoration: InputDecoration(
-                  labelText: isEn
-                      ? 'Cancellation reason (required)'
-                      : (isKo ? '취소 사유 (필수)' : 'Lý do hủy (bắt buộc)'),
-                  hintText: isEn
-                      ? 'Change of personal plans...'
-                      : (isKo ? '개인 일정 변경...' : 'Thay đổi kế hoạch cá nhân...'),
-                  isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(
+                    isEn ? 'Keep booking' : (isKo ? '예약 유지' : 'Giữ đặt phòng')),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
+                onPressed: () {
+                  setModalState(() {
+                    hasValidated = true;
+                  });
+                  final hasError = validateReason() != null ||
+                      validateBank() != null ||
+                      validateAccountNumber() != null ||
+                      validateAccountName() != null;
+                  if (hasError) return;
+                  Navigator.of(ctx).pop(true);
+                },
+                child: Text(isEn
+                    ? 'Confirm cancellation'
+                    : (isKo ? '취소 확인' : 'Xác nhận hủy')),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(isEn ? 'Keep booking' : (isKo ? '예약 유지' : 'Giữ đặt phòng')),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
-            onPressed: () {
-              if (reasonController.text.trim().isEmpty) return;
-              Navigator.of(ctx).pop(true);
-            },
-            child: Text(isEn ? 'Confirm cancellation' : (isKo ? '취소 확인' : 'Xác nhận hủy')),
-          ),
-        ],
+          );
+        },
       ),
     );
 
     if (shouldCancel == true && mounted) {
       try {
-        final repo = ref.read(bookingRepositoryProvider);
-        await repo.cancelBooking(
-          bookingId: booking.id,
-          reason: reasonController.text.trim(),
-        );
-        ref.invalidate(myBookingsProvider);
-        ref.invalidate(bookingDetailProvider(booking.id));
+        // CONFLICT-RESOLVED: Ủy quyền hủy đơn qua TripsActionsViewModel (chuẩn MVVM của HEAD) kèm thông tin tài khoản hoàn tiền từ develop.
+        await ref.read(tripsActionsViewModelProvider).cancelBooking(
+              bookingId: booking.id,
+              reason: reasonController.text.trim(),
+              bankName: bankNameController.text.trim(),
+              accountNumber: accountNumberController.text.trim(),
+              accountName: accountNameController.text.trim(),
+            );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -157,137 +672,30 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
     }
   }
 
+  // Giải thuật thu thập số sao (`1..5`) và nhận xét thực tế (tối thiểu 5 ký tự) cho chuyến đi đã hoàn tất (`_openReviewModal`).
   Future<void> _openReviewModal(Booking booking) async {
     final locale = ref.read(localeProvider);
     final isEn = locale.startsWith('en');
     final isKo = locale.startsWith('ko');
 
-    int selectedRating = 5;
-    final commentCtrl = TextEditingController();
-
-    final submitted = await showDialog<bool>(
+    final reviewResult = await showDialog<({int rating, String comment})>(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return AlertDialog(
-              title: Text(isEn
-                  ? 'Review your stay at ${booking.propertyName}'
-                  : (isKo
-                      ? '${booking.propertyName} 숙박 후기 작성'
-                      : 'Đánh giá kỳ nghỉ tại ${booking.propertyName}')),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isEn
-                          ? 'Your rating:'
-                          : (isKo ? '만족도 평가:' : 'Mức độ hài lòng của bạn:'),
-                      style:
-                          const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: 4,
-                      children: List.generate(5, (index) {
-                        final starVal = index + 1;
-                        final isSelected = starVal <= selectedRating;
-                        return InkWell(
-                          onTap: () =>
-                              setModalState(() => selectedRating = starVal),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              minWidth: 48,
-                              minHeight: 48,
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 4,
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    LucideIcons.star,
-                                    size: 22,
-                                    color: isSelected
-                                        ? AppColors.iconStrong
-                                        : AppColors.textMuted,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '$starVal★',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: isSelected
-                                          ? FontWeight.w800
-                                          : FontWeight.w400,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: commentCtrl,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: isEn
-                            ? 'Share your experience *'
-                            : (isKo
-                                ? '실제 이용 후기를 공유해 주세요 *'
-                                : 'Chia sẻ trải nghiệm thực tế của bạn *'),
-                        hintText: isEn
-                            ? 'Villa space, swimming pool, host support...'
-                            : (isKo
-                                ? '숙소 공간, 수영장, 호스트의 응대 등...'
-                                : 'Không gian biệt thự, hồ bơi, sự hỗ trợ của chủ nhà...'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(false),
-                  child: Text(isEn ? 'Close' : (isKo ? '닫기' : 'Đóng')),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    if (commentCtrl.text.trim().length < 5) return;
-                    Navigator.of(ctx).pop(true);
-                  },
-                  child: Text(isEn
-                      ? 'Submit review'
-                      : (isKo ? '후기 등록' : 'Gửi đánh giá')),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      // CONFLICT-RESOLVED: Dùng _ReviewModalDialog tách biệt có hỗ trợ đa ngôn ngữ từ develop và truyền đủ listingId cho TripsActionsViewModel của HEAD.
+      builder: (ctx) => _ReviewModalDialog(
+        booking: booking,
+        isEn: isEn,
+        isKo: isKo,
+      ),
     );
 
-    if (submitted == true && mounted) {
+    if (reviewResult != null && mounted) {
       try {
-        await ref.read(reviewRepositoryProvider).createReview(
+        await ref.read(tripsActionsViewModelProvider).submitStayReview(
               bookingId: booking.id,
-              rating: selectedRating,
-              comment: commentCtrl.text.trim(),
+              listingId: booking.listingId,
+              rating: reviewResult.rating,
+              comment: reviewResult.comment,
             );
-        ref.invalidate(myBookingsProvider);
-        if (booking.listingId.isNotEmpty) {
-          ref.invalidate(listingReviewsProvider(booking.listingId));
-        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -322,9 +730,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
         backgroundColor: AppColors.surfaceBase,
         body: Column(
           children: [
-            const AppSearchHeader(
-              currentPath: '/account/trips',
-            ),
+            const AppSearchHeader(currentPath: '/account/trips'),
             Expanded(
               child: SafeArea(
                 top: false,
@@ -343,7 +749,9 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                         Text(
                           isEn
                               ? 'Log in to view trips'
-                              : (isKo ? '로그인하여 여행 확인' : 'Đăng nhập để xem chuyến đi'),
+                              : (isKo
+                                  ? '로그인하여 여행 확인'
+                                  : 'Đăng nhập để xem chuyến đi'),
                           style: AppTypography.sectionHeading,
                           textAlign: TextAlign.center,
                         ),
@@ -382,9 +790,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
       backgroundColor: AppColors.surfaceBase,
       body: Column(
         children: [
-          const AppSearchHeader(
-            currentPath: '/account/trips',
-          ),
+          const AppSearchHeader(currentPath: '/account/trips'),
           Material(
             color: AppColors.surfaceBase,
             child: TabBar(
@@ -408,12 +814,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
               top: false,
               child: bookingsAsync.when(
                 loading: () => Center(
-                    child: AppLoading(
-                        message: isEn
-                            ? 'Loading trips...'
-                            : (isKo
-                                ? '여행 일정을 불러오는 중...'
-                                : 'Đang tải lịch trình...'))),
+                    child: AppLoading(message: context.l10n.loadingTrips)),
                 error: (err, _) => Center(
                   child: AppErrorView(
                     message: err.toString().replaceFirst('Exception: ', ''),
@@ -461,19 +862,24 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                   return TabBarView(
                     controller: _tabController,
                     children: [
-                      _buildBookingList(
-                        bookings: activeBookings,
-                        emptyTitle: isEn
-                            ? 'No upcoming trips'
-                            : (isKo
-                                ? '예정된 여행이 없습니다'
-                                : 'Chưa có chuyến đi sắp tới'),
-                        emptyDescription: isEn
-                            ? 'You have no upcoming vacations. Explore and book a villa now!'
-                            : (isKo
-                                ? '예정된 여행이 없습니다. 지금 빌라를 둘러보고 예약해보세요!'
-                                : 'Bạn chưa có kỳ nghỉ nào sắp diễn ra. Hãy khám phá và đặt villa ngay!'),
-                        locale: locale,
+                      Builder(
+                        builder: (_) {
+                          _syncHoldCountdownTimer(activeBookings);
+                          return _buildBookingList(
+                            bookings: activeBookings,
+                            emptyTitle: isEn
+                                ? 'No upcoming trips'
+                                : (isKo
+                                    ? '예정된 여행이 없습니다'
+                                    : 'Chưa có chuyến đi sắp tới'),
+                            emptyDescription: isEn
+                                ? 'You have no upcoming vacations. Explore and book a villa now!'
+                                : (isKo
+                                    ? '예정된 여행이 없습니다. 지금 빌라를 둘러보고 예약해보세요!'
+                                    : 'Bạn chưa có kỳ nghỉ nào sắp diễn ra. Hãy khám phá và đặt villa ngay!'),
+                            locale: locale,
+                          );
+                        },
                       ),
                       _buildBookingList(
                         bookings: completedBookings,
@@ -527,9 +933,8 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
       return AppEmptyView(
         title: emptyTitle,
         description: emptyDescription,
-        actionText: isEn
-            ? 'Explore villas'
-            : (isKo ? '빌라 둘러보기' : 'Khám phá villa'),
+        actionText:
+            isEn ? 'Explore villas' : (isKo ? '빌라 둘러보기' : 'Khám phá villa'),
         onAction: () => context.go('/'),
       );
     }
@@ -557,16 +962,33 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
       booking.totalAmount,
       context: MoneyDisplayContext.breakdown,
     );
-    final isRefundStatus = booking.effectiveStatus == 'refund_pending' ||
-        booking.effectiveStatus == 'refunded';
+    // Giải thuật phân loại màu sắc & biểu tượng huy hiệu trạng thái trên thẻ chuyến đi:
+    // Suy xuất trực tiếp từ `booking.effectiveStatus` thay vì `booking.status` thô
+    // để `completed`/`checked_out` mang sắc xanh thành công, còn `refunded`/`refund_pending`
+    // mang sắc trung tính/hổ phách thông tin thay vì đỏ báo lỗi.
+    // CONFLICT-RESOLVED: Tránh hiển thị nhầm huy hiệu đỏ lỗi cho đơn hoàn tiền hoặc hổ phách cho đơn đã trả phòng.
+    final effStatus = booking.effectiveStatus;
+    final isRefundStatus =
+        effStatus == 'refund_pending' || effStatus == 'refunded';
     Color badgeText = const Color(0xFFB45309);
-    if (booking.status == 'paid' ||
-        booking.status == 'confirmed' ||
-        booking.status == 'checked_in' ||
-        booking.status == 'completed') {
+    // CONFLICT-RESOLVED: Giữ biểu tượng badgeIcon theo effectiveStatus của HEAD kết hợp phân màu trạng thái rõ ràng.
+    IconData badgeIcon = LucideIcons.clock;
+    if (effStatus == 'paid' ||
+        effStatus == 'confirmed' ||
+        effStatus == 'checked_in' ||
+        effStatus == 'checked_out' ||
+        effStatus == 'completed') {
       badgeText = const Color(0xFF047857);
+      badgeIcon = LucideIcons.circleCheck;
+    } else if (effStatus == 'refunded') {
+      badgeText = AppColors.textSecondary;
+      badgeIcon = LucideIcons.rotateCcw;
+    } else if (effStatus == 'refund_pending') {
+      badgeText = const Color(0xFFB45309);
+      badgeIcon = LucideIcons.refreshCw;
     } else if (booking.isCancelled) {
       badgeText = AppColors.errorRed;
+      badgeIcon = LucideIcons.circleX;
     }
 
     final isExpanded = _expandedBookingIds.contains(booking.id);
@@ -602,8 +1024,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
                       child: Text(
@@ -615,13 +1036,24 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                     ),
                     const SizedBox(width: 8),
                     Flexible(
-                      child: Text(
-                        booking.statusDisplayFor(locale),
-                        textAlign: TextAlign.right,
-                        style: AppTypography.caption.copyWith(
-                          color: badgeText,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      // CONFLICT-RESOLVED: Kết hợp biểu tượng trạng thái badgeIcon của HEAD với nhãn đa ngôn ngữ statusDisplayFor(locale) từ develop.
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Icon(badgeIcon, size: 13, color: badgeText),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              booking.statusDisplayFor(locale),
+                              textAlign: TextAlign.right,
+                              style: AppTypography.caption.copyWith(
+                                color: badgeText,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -672,10 +1104,14 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                     () {
                       final nightsText = isEn
                           ? '${booking.nights} ${booking.nights == 1 ? "night" : "nights"}'
-                          : (isKo ? '${booking.nights}박' : '${booking.nights} đêm');
+                          : (isKo
+                              ? '${booking.nights}박'
+                              : '${booking.nights} đêm');
                       final guestsText = isEn
                           ? '${booking.guestCount} ${booking.guestCount == 1 ? "guest" : "guests"}'
-                          : (isKo ? '${booking.guestCount}명' : '${booking.guestCount} khách');
+                          : (isKo
+                              ? '${booking.guestCount}명'
+                              : '${booking.guestCount} khách');
                       return Text(
                         '$nightsText • $guestsText',
                         style: AppTypography.caption
@@ -685,7 +1121,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                   ],
                 ),
 
-                if (booking.status == 'pending_payment') ...[
+                if (effStatus == 'pending_payment') ...[
                   const SizedBox(height: 6),
                   Row(
                     children: [
@@ -742,66 +1178,79 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                           ),
                         ),
                         const SizedBox(height: 6),
+                        // CONFLICT-RESOLVED: Sử dụng nhãn đa ngôn ngữ và bộ định dạng đa tiền tệ MoneyDisplayContext.breakdown từ develop.
                         _DetailItemRow(
                           label: isEn
                               ? 'Room rate (${booking.nights} ${booking.nights == 1 ? "night" : "nights"})'
                               : (isKo
                                   ? '숙박 요금 (${booking.nights}박)'
                                   : 'Tiền phòng (${booking.nights} đêm)'),
-                          value: formatter.format(
-                            pb.baseNightsAmount,
-                            context: MoneyDisplayContext.breakdown,
-                          ).formatted,
+                          value: formatter
+                              .format(
+                                pb.baseNightsAmount,
+                                context: MoneyDisplayContext.breakdown,
+                              )
+                              .formatted,
                         ),
                         if (pb.weekendSurchargeAmount > 0)
                           _DetailItemRow(
                             label: isEn
                                 ? 'Weekend surcharge'
                                 : (isKo ? '주말 할증료' : 'Phụ thu cuối tuần'),
-                            value: formatter.format(
-                              pb.weekendSurchargeAmount,
-                              context: MoneyDisplayContext.breakdown,
-                            ).formatted,
+                            value: formatter
+                                .format(
+                                  pb.weekendSurchargeAmount,
+                                  context: MoneyDisplayContext.breakdown,
+                                )
+                                .formatted,
                           ),
                         if (pb.extraGuestFeeAmount > 0)
                           _DetailItemRow(
                             label: isEn
                                 ? 'Extra guest fee'
                                 : (isKo ? '추가 인원 요금' : 'Phụ thu khách thêm'),
-                            value: formatter.format(
-                              pb.extraGuestFeeAmount,
-                              context: MoneyDisplayContext.breakdown,
-                            ).formatted,
+                            value: formatter
+                                .format(
+                                  pb.extraGuestFeeAmount,
+                                  context: MoneyDisplayContext.breakdown,
+                                )
+                                .formatted,
                           ),
                         if (pb.surchargeAmount > 0)
                           _DetailItemRow(
                             label: isEn
                                 ? 'Standard surcharge'
                                 : (isKo ? '고정 추가 요금' : 'Phụ thu cố định'),
-                            value: formatter.format(
-                              pb.surchargeAmount,
-                              context: MoneyDisplayContext.breakdown,
-                            ).formatted,
+                            value: formatter
+                                .format(
+                                  pb.surchargeAmount,
+                                  context: MoneyDisplayContext.breakdown,
+                                )
+                                .formatted,
                           ),
                         if (pb.cleaningFee > 0)
                           _DetailItemRow(
                             label: isEn
                                 ? 'Cleaning fee'
                                 : (isKo ? '청소비' : 'Phí vệ sinh'),
-                            value: formatter.format(
-                              pb.cleaningFee,
-                              context: MoneyDisplayContext.breakdown,
-                            ).formatted,
+                            value: formatter
+                                .format(
+                                  pb.cleaningFee,
+                                  context: MoneyDisplayContext.breakdown,
+                                )
+                                .formatted,
                           ),
                         if (pb.serviceFee > 0)
                           _DetailItemRow(
                             label: isEn
                                 ? 'Service fee'
                                 : (isKo ? '서비스 수수료' : 'Phí dịch vụ'),
-                            value: formatter.format(
-                              pb.serviceFee,
-                              context: MoneyDisplayContext.breakdown,
-                            ).formatted,
+                            value: formatter
+                                .format(
+                                  pb.serviceFee,
+                                  context: MoneyDisplayContext.breakdown,
+                                )
+                                .formatted,
                           ),
                         if (pb.discountAmount > 0)
                           _DetailItemRow(
@@ -820,6 +1269,20 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                               context: MoneyDisplayContext.breakdown,
                             ),
                           ),
+                        if (booking.hostName != null &&
+                            booking.hostName!.trim().isNotEmpty)
+                          _DetailItemRow(
+                            label: isEn ? 'Host' : (isKo ? '호스트' : 'Chủ nhà'),
+                            value: booking.hostName!.trim(),
+                          ),
+                        if (booking.hostPhone != null &&
+                            booking.hostPhone!.trim().isNotEmpty)
+                          _DetailItemRow(
+                            label: isEn
+                                ? 'Host phone'
+                                : (isKo ? '호스트 연락처' : 'Liên hệ chủ nhà'),
+                            value: booking.hostPhone!.trim(),
+                          ),
                         if (booking.specialRequests != null &&
                             booking.specialRequests!.isNotEmpty)
                           Padding(
@@ -836,8 +1299,11 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                               ),
                             ),
                           ),
-                        if (booking.cancellationReasonDisplayFor(locale) != null &&
-                            booking.cancellationReasonDisplayFor(locale)!.isNotEmpty)
+                        if (booking.cancellationReasonDisplayFor(locale) !=
+                                null &&
+                            booking
+                                .cancellationReasonDisplayFor(locale)!
+                                .isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
@@ -863,13 +1329,14 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      isEn
-                          ? 'Total payment'
-                          : (isKo ? '총 결제 금액' : 'Tổng thanh toán'),
-                      style: AppTypography.caption.copyWith(
-                          color: AppColors.textMuted,
-                          fontWeight: FontWeight.w400)),
+                        isEn
+                            ? 'Total payment'
+                            : (isKo ? '총 결제 금액' : 'Tổng thanh toán'),
+                        style: AppTypography.caption.copyWith(
+                            color: AppColors.textMuted,
+                            fontWeight: FontWeight.w400)),
                     const SizedBox(height: 4),
+                    // CONFLICT-RESOLVED: Hiển thị tổng tiền định dạng đa tiền tệ từ develop kèm chú thích quy đổi VND bên dưới.
                     Text(totalResult.formatted,
                         style: AppTypography.cardTitle
                             .copyWith(color: AppColors.primary)),
@@ -976,6 +1443,23 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                                 ),
                               ],
                             )),
+                        if (booking.isActive && booking.listingId.isNotEmpty)
+                          OutlinedButton.icon(
+                            key: ValueKey<String>('message_host_${booking.id}'),
+                            style: secondaryStyle,
+                            onPressed: () => _handleMessageHost(booking),
+                            icon: const Icon(
+                              LucideIcons.messageSquare,
+                              size: 15,
+                              color: AppColors.iconStrong,
+                            ),
+                            label: Text(
+                              isEn
+                                  ? 'Message host'
+                                  : (isKo ? '호스트 문의' : 'Nhắn tin chủ nhà'),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                         if (booking.canCancel)
                           TextButton(
                               style: TextButton.styleFrom(
@@ -1064,6 +1548,524 @@ class _DetailItemRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ReviewModalDialog extends StatefulWidget {
+  final Booking booking;
+  final bool isEn;
+  final bool isKo;
+
+  const _ReviewModalDialog({
+    required this.booking,
+    required this.isEn,
+    required this.isKo,
+  });
+
+  @override
+  State<_ReviewModalDialog> createState() => _ReviewModalDialogState();
+}
+
+class _ReviewModalDialogState extends State<_ReviewModalDialog> {
+  int _selectedRating = 5;
+  late final TextEditingController _commentCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _commentCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _commentCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
+      title: Text(
+        widget.isEn
+            ? 'Review your stay at ${widget.booking.propertyName}'
+            : (widget.isKo
+                ? '${widget.booking.propertyName} 숙박 후기 작성'
+                : 'Đánh giá kỳ nghỉ tại ${widget.booking.propertyName}'),
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.isEn
+                  ? 'Your rating:'
+                  : (widget.isKo ? '만족도 평가:' : 'Mức độ hài lòng của bạn:'),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (index) {
+                final starVal = index + 1;
+                final isSelected = starVal <= _selectedRating;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => setState(() => _selectedRating = starVal),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          LucideIcons.star,
+                          size: 24,
+                          color: isSelected
+                              ? const Color(0xFFFFB800)
+                              : const Color(0xFFD1D5DB),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$starVal',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight:
+                                isSelected ? FontWeight.w700 : FontWeight.w400,
+                            color: isSelected
+                                ? const Color(0xFFD97706)
+                                : AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _commentCtrl,
+              minLines: 1,
+              maxLines: 5,
+              scrollPadding: const EdgeInsets.only(bottom: 60),
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                labelText: widget.isEn
+                    ? 'Share your experience *'
+                    : (widget.isKo
+                        ? '실제 이용 후기를 공유해 주세요 *'
+                        : 'Chia sẻ trải nghiệm thực tế của bạn *'),
+                labelStyle: const TextStyle(fontSize: 13),
+                hintText: widget.isEn
+                    ? 'Villa space, swimming pool, host support...'
+                    : (widget.isKo
+                        ? '숙소 공간, 수영장, 호스트의 응대 등...'
+                        : 'Không gian biệt thự, hồ bơi, sự hỗ trợ của chủ nhà...'),
+                hintStyle: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textMuted,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                widget.isEn ? 'Close' : (widget.isKo ? '닫기' : 'Đóng'),
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
+                ),
+              ),
+              onPressed: () {
+                if (_commentCtrl.text.trim().length < 5) return;
+                Navigator.of(context).pop((
+                  rating: _selectedRating,
+                  comment: _commentCtrl.text.trim(),
+                ));
+              },
+              child: Text(
+                widget.isEn
+                    ? 'Submit review'
+                    : (widget.isKo ? '후기 등록' : 'Gửi đánh giá'),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Compact widget that renders a bank logo with high reliability:
+/// 1. Tries bundled local asset  (instant, offline)
+/// 2. Falls back to VietQR CDN network URL with custom headers
+/// 3. Falls back to vector  if unavailable
+class _BankLogoWidget extends StatelessWidget {
+  final VietnamBank bank;
+  final double size;
+
+  const _BankLogoWidget({
+    required this.bank,
+    this.size = 28,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final assetPath = 'assets/images/banks/${bank.code.toLowerCase()}.png';
+    return Image.asset(
+      assetPath,
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) {
+        if (bank.logo != null && bank.logo!.isNotEmpty) {
+          // CONFLICT-RESOLVED: Thay Image.network trực tiếp bằng AppImage theo chuẩn FLUTTER_RULES.md.
+          return SizedBox(
+            width: size,
+            height: size,
+            child: AppImage(
+              url: bank.logo!,
+              fit: BoxFit.contain,
+            ),
+          );
+        }
+        return Icon(
+          LucideIcons.building2,
+          size: size * 0.75,
+          color: AppColors.textStrong,
+        );
+      },
+    );
+  }
+}
+
+/// Displays bank picker as a centered modal Dialog on the root navigator,
+/// ensuring it renders directly ON TOP of the Cancel Booking dialog.
+Future<VietnamBank?> _showBankPickerDialog(
+  BuildContext context, {
+  VietnamBank? currentSelection,
+  required bool isEn,
+}) {
+  return showDialog<VietnamBank>(
+    context: context,
+    useRootNavigator: true,
+    barrierDismissible: true,
+    builder: (modalCtx) => _BankPickerDialog(
+      currentSelection: currentSelection,
+      isEn: isEn,
+    ),
+  );
+}
+
+class _BankPickerDialog extends StatefulWidget {
+  final VietnamBank? currentSelection;
+  final bool isEn;
+
+  const _BankPickerDialog({
+    this.currentSelection,
+    required this.isEn,
+  });
+
+  @override
+  State<_BankPickerDialog> createState() => _BankPickerDialogState();
+}
+
+class _BankPickerDialogState extends State<_BankPickerDialog> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEn = widget.isEn;
+    final filteredBanks = kDefaultVietnamBanks.where((b) {
+      if (_query.isEmpty) return true;
+      final q = _query.toLowerCase();
+      return b.code.toLowerCase().contains(q) ||
+          b.shortName.toLowerCase().contains(q) ||
+          b.name.toLowerCase().contains(q) ||
+          (b.bin != null && b.bin!.contains(q));
+    }).toList();
+
+    return Dialog(
+      backgroundColor: AppColors.surfaceBase,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: 440,
+          maxHeight: 560,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 10, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      isEn ? 'Select bank' : 'Chọn ngân hàng',
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textStrong,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.x,
+                        size: 20, color: AppColors.textStrong),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+              child: TextField(
+                controller: _searchCtrl,
+                autofocus: false,
+                onChanged: (val) => setState(() => _query = val.trim()),
+                decoration: InputDecoration(
+                  hintText: isEn
+                      ? 'Search bank (e.g. MB, VCB, Techcombank...)'
+                      : 'Tìm ngân hàng (VD: MB, VCB, Techcombank...)',
+                  hintStyle:
+                      const TextStyle(fontSize: 13, color: AppColors.textMuted),
+                  prefixIcon: const Icon(LucideIcons.search,
+                      size: 18, color: AppColors.textMuted),
+                  suffixIcon: _query.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(LucideIcons.x,
+                              size: 16, color: AppColors.textMuted),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            setState(() => _query = '');
+                          },
+                        )
+                      : null,
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(
+                        color: AppColors.textStrong, width: 1.5),
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            Expanded(
+              child: filteredBanks.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.searchX,
+                                size: 36, color: AppColors.textMuted),
+                            const SizedBox(height: 10),
+                            Text(
+                              isEn
+                                  ? 'No matching banks found'
+                                  : 'Không tìm thấy ngân hàng phù hợp',
+                              style: const TextStyle(
+                                  fontSize: 14, color: AppColors.textMuted),
+                            ),
+                            if (_query.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  side:
+                                      const BorderSide(color: AppColors.border),
+                                ),
+                                onPressed: () {
+                                  Navigator.of(context).pop(VietnamBank(
+                                    code: _query.toUpperCase(),
+                                    name: _query,
+                                    shortName: _query,
+                                  ));
+                                },
+                                icon: const Icon(LucideIcons.check,
+                                    size: 16, color: AppColors.textStrong),
+                                label: Text(
+                                  isEn ? 'Use "$_query"' : 'Sử dụng "$_query"',
+                                  style: const TextStyle(
+                                      color: AppColors.textStrong),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    )
+                  : Scrollbar(
+                      controller: _scrollController,
+                      thumbVisibility: true,
+                      child: ListView.separated(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        itemCount: filteredBanks.length,
+                        separatorBuilder: (_, __) => const Divider(
+                            height: 1, indent: 64, color: AppColors.border),
+                        itemBuilder: (ctx, index) {
+                          final bank = filteredBanks[index];
+                          final isSelected =
+                              widget.currentSelection?.code == bank.code;
+                          return InkWell(
+                            onTap: () => Navigator.of(context).pop(bank),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceBase,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? AppColors.primary
+                                            : AppColors.border,
+                                      ),
+                                    ),
+                                    child:
+                                        _BankLogoWidget(bank: bank, size: 28),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '${bank.shortName} (${bank.code})',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: isSelected
+                                                ? AppColors.primary
+                                                : AppColors.textStrong,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          bank.name,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.textMuted,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (isSelected)
+                                    const Icon(
+                                      LucideIcons.check,
+                                      size: 18,
+                                      color: AppColors.primary,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

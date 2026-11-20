@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý phiên làm mới xác thực (Refresh Token) lưu mã băm, gia đình phiên để phát hiện đánh cắp và thu hồi tức thời.
+ */
 import {
     CreationOptional,
     DataTypes,

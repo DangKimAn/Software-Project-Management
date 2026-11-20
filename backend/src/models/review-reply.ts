@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu phản hồi chính thức của chủ nhà đối với đánh giá lưu trú từ khách hàng.
+ */
 import {
     CreationOptional,
     DataTypes,

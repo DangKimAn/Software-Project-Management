@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý cấu hình tích hợp, khóa phân tán và con trỏ đồng bộ Google Sheets của từng chủ nhà.
+ */
 import {
     CreationOptional,
     DataTypes,

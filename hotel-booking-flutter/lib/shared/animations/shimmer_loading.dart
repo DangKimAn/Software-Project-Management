@@ -2,19 +2,32 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_radii.dart';
 
+/// Khung xương tải dữ liệu tĩnh chuẩn thiết kế tối giản (không dùng dải chuyển màu hay nhấp nháy vô tận)
+/// và tự động ẩn nội dung giả khỏi trình đọc màn hình bằng `ExcludeSemantics`.
+///
 /// Static semantic skeleton: no gradient, halo, or perpetual animation.
 /// The name remains compatible with existing callers.
 class ShimmerLoading extends StatelessWidget {
+  /// Cây giao diện khung xương hiển thị trong lúc chờ dữ liệu.
   final Widget child;
+
+  /// Khởi tạo vùng khung xương tĩnh loại trừ khỏi cây ngữ nghĩa trợ năng.
   const ShimmerLoading({super.key, required this.child});
+
+  /// Bọc `child` trong `ExcludeSemantics` để trình đọc màn hình không đọc các hộp giữ chỗ vô nghĩa.
   @override
   Widget build(BuildContext context) => ExcludeSemantics(child: child);
 }
 
+/// Thẻ khung xương giữ chỗ khớp chính xác tỷ lệ khung ảnh `4:3` và nhịp bố cục của `PropertyCard`
+/// nhằm triệt tiêu hiện tượng nhảy bố cục (CLS) khi danh sách villa tải xong.
+///
 /// A luxury placeholder skeleton card matching the exact dimensions of PropertyCard.
 class ShimmerPropertyCard extends StatelessWidget {
+  /// Khởi tạo thẻ khung xương giữ chỗ cho thẻ bất động sản.
   const ShimmerPropertyCard({super.key});
 
+  /// Dựng bố cục khung ảnh `4:3`, dòng tiêu đề, vị trí, thông số và giá tiền bằng màu nền tĩnh `AppColors.skeleton`.
   @override
   Widget build(BuildContext context) {
     return ShimmerLoading(

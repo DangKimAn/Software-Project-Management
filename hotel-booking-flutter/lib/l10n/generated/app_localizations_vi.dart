@@ -133,16 +133,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get searchSortRatingDesc => 'Đánh giá cao nhất';
 
   @override
-  String get aiSearchTitle => 'Tìm kiếm thông minh bằng AI';
-
-  @override
-  String get aiSearchPlaceholder =>
-      'Mô tả kỳ nghỉ mong muốn (VD: Villa sát biển Bãi Sau cho 15 người có hồ bơi nước mặn, BBQ)...';
-
-  @override
-  String get aiSearchAction => 'Tìm bằng AI';
-
-  @override
   String get navDiscover => 'Khám phá';
 
   @override
@@ -441,6 +431,22 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get loadingFavorites => 'Đang tải danh sách yêu thích...';
+
+  @override
+  String get loadingTrips => 'Đang tải lịch trình...';
+
+  @override
+  String get loadingPaymentInfo => 'Đang tải thông tin thanh toán đặt phòng...';
+
+  @override
+  String get guestPaymentConnectingGateway => 'Đang kết nối cổng thanh toán...';
+
+  @override
+  String get guestPaymentBookingNotFoundTitle => 'Không tìm thấy đơn đặt phòng';
+
+  @override
+  String get guestPaymentBookingNotFoundMessage =>
+      'Đơn đặt phòng không tồn tại hoặc đã hết hạn.';
 
   @override
   String get emptyList => 'Không tìm thấy villa nào phù hợp';
@@ -941,7 +947,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get footerSocial => 'Mạng xã hội';
 
   @override
-  String get footerCopyright => '© Bản quyền thuộc về Villa Vũng Tàu 2026';
+  String get footerCopyright =>
+      '© 2026 The Palm Villa Vũng Tàu. Bảo lưu mọi quyền.';
 
   @override
   String get settingsAvatarUpdateTitle => 'Cập nhật ảnh đại diện';
@@ -1798,4 +1805,1150 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get spaceOther => 'Không gian khác';
+
+  @override
+  String get blogAllArticles => 'Tất cả bài viết';
+
+  @override
+  String get blogShareTooltip => 'Chia sẻ bài viết';
+
+  @override
+  String get blogShareInvalidLink =>
+      'Liên kết bài viết không hợp lệ để chia sẻ.';
+
+  @override
+  String get blogShareSuccess => 'Đã sao chép liên kết bài viết vào bộ nhớ tạm';
+
+  @override
+  String get blogShareFailure =>
+      'Không thể sao chép liên kết bài viết trên thiết bị này.';
+
+  @override
+  String get blogNotFoundTitle => 'Không tìm thấy bài viết';
+
+  @override
+  String get blogNotFoundDescription =>
+      'Bài viết có thể đã được gỡ hoặc đường dẫn không chính xác.';
+
+  @override
+  String get blogBackToBlog => 'Quay lại Cẩm nang';
+
+  @override
+  String get blogLoadingArticle => 'Đang tải bài viết...';
+
+  @override
+  String get blogRelatedArticlesBadge => 'BÀI VIẾT LIÊN QUAN';
+
+  @override
+  String get blogRelatedArticlesTitle => 'Gợi ý đọc tiếp';
+
+  @override
+  String get blogViewAllArticles => 'Xem tất cả bài viết';
+
+  @override
+  String blogReadMinutes(int minutes) {
+    return '$minutes phút đọc';
+  }
+
+  @override
+  String get blogDefaultAuthor => 'Ban biên tập The Palm';
+
+  @override
+  String get blogListBadge => 'CẨM NANG LƯU TRÚ VŨNG TÀU';
+
+  @override
+  String get blogListHeroTitle =>
+      'Kinh nghiệm lưu trú, lịch trình & bí quyết đặt Villa biển Vũng Tàu';
+
+  @override
+  String get blogSearchHint => 'Tìm bài viết cẩm nang Vũng Tàu...';
+
+  @override
+  String get blogClearSearchTooltip => 'Xóa từ khóa tìm kiếm';
+
+  @override
+  String get blogCategoryAll => 'Tất cả';
+
+  @override
+  String get blogCategoryTravelGuide => 'Cẩm nang du lịch';
+
+  @override
+  String get blogCategoryReviews => 'Đánh giá Villa & Homestay';
+
+  @override
+  String get blogCategoryTripGuide => 'Cẩm nang chuyến đi';
+
+  @override
+  String get blogCategoryBookingTips => 'Kinh nghiệm đặt phòng';
+
+  @override
+  String get blogCategoryLocalDiscovery => 'Khám phá địa phương';
+
+  @override
+  String get blogCategoryStayTips => 'Mẹo lưu trú';
+
+  @override
+  String get blogCategoryNearBeach => 'Villa gần biển';
+
+  @override
+  String get blogCategoryBookingChecklist => 'Checklist đặt phòng';
+
+  @override
+  String get blogEmptyTitle => 'Chưa có bài viết phù hợp';
+
+  @override
+  String get blogEmptyDescription =>
+      'Hãy thử chọn chuyên mục khác hoặc từ khóa khác.';
+
+  @override
+  String get blogClearFilters => 'Xóa bộ lọc';
+
+  @override
+  String get blogLoadingList => 'Đang tải danh sách bài viết...';
+
+  @override
+  String get blogPaginationPrev => 'Trang trước';
+
+  @override
+  String get blogPaginationNext => 'Trang sau';
+
+  @override
+  String blogPaginationPage(int page) {
+    return 'Trang $page';
+  }
+
+  @override
+  String get footerSupportTitle => 'Hỗ trợ';
+
+  @override
+  String get footerLinkBookingGuide => 'Hướng dẫn đặt phòng';
+
+  @override
+  String get footerLinkCancellationPolicy => 'Chính sách hủy phòng';
+
+  @override
+  String get footerLinkComplaintsFeedback => 'Khiếu nại & Góp ý';
+
+  @override
+  String get footerLinkFaq => 'Câu hỏi thường gặp (FAQ)';
+
+  @override
+  String get footerExploreTitle => 'Khám phá & Dịch vụ';
+
+  @override
+  String get footerLinkAboutUs => 'Về chúng tôi';
+
+  @override
+  String get footerLinkExploreVungTau => 'Khám phá Vũng Tàu';
+
+  @override
+  String get footerLinkTravelGuide => 'Cẩm nang du lịch';
+
+  @override
+  String get footerLinkAddonServices => 'Dịch vụ đi kèm';
+
+  @override
+  String get footerLinkMemberOffers => 'Ưu đãi thành viên';
+
+  @override
+  String get footerContactTitle => 'Liên hệ';
+
+  @override
+  String footerHotlineLabel(String phone) {
+    return 'Hotline: $phone';
+  }
+
+  @override
+  String get footerOnlineConsultLink => 'Liên hệ tư vấn trực tuyến';
+
+  @override
+  String footerAddressLabel(String address) {
+    return 'Địa chỉ: $address';
+  }
+
+  @override
+  String footerEmailLabel(String email) {
+    return 'Email: $email';
+  }
+
+  @override
+  String get footerEmailSubject => 'Liên hệ đặt phòng The Palm Villa Vũng Tàu';
+
+  @override
+  String get footerSocialTitle => 'Social';
+
+  @override
+  String get supportGuideStep1Title =>
+      'Tìm kiếm theo phân khu & lịch trống thực tế';
+
+  @override
+  String get supportGuideStep1Desc =>
+      'Chọn phân khu biển tại Vũng Tàu (Bãi Sau, Bãi Trước, Chí Linh, Long Cung), khoảng ngày lưu trú [Nhận phòng, Trả phòng) và tổng số khách đoàn để lọc đúng các căn biệt thự đang mở lịch.';
+
+  @override
+  String get supportGuideStep2Title =>
+      'Kiểm tra bảng giá theo đêm & áp dụng mã ưu đãi';
+
+  @override
+  String get supportGuideStep2Desc =>
+      'Xem chi tiết thông số biệt thự (phòng ngủ, giường, WC, khoảng cách biển), bảng giá từng đêm ngày thường / cuối tuần, phụ thu khách vượt tiêu chuẩn (nếu có) và nhập mã ưu đãi hợp lệ.';
+
+  @override
+  String get supportGuideStep3Title => 'Khóa lịch giữ chỗ tạm thời 15 phút';
+
+  @override
+  String get supportGuideStep3Desc =>
+      'Ngay khi tạo đơn đặt phòng, hệ thống tự động khóa khoảng ngày lưu trú trong 15 phút (trạng thái Chờ thanh toán) để bảo vệ bạn khỏi tình trạng trùng lịch với đoàn khách khác.';
+
+  @override
+  String get supportGuideStep4Title =>
+      'Thanh toán trực tuyến & nhận xác nhận lưu trú';
+
+  @override
+  String get supportGuideStep4Desc =>
+      'Hoàn tất thanh toán qua cổng thanh toán được hỗ trợ (VNPay, MoMo hoặc VietQR) trong thời gian giữ chỗ. Theo dõi trạng thái đơn và nhắn tin trực tiếp với Chủ nhà ngay tại mục Chuyến đi.';
+
+  @override
+  String get supportCancelFlexName => 'Chính sách Linh hoạt (Flexible)';
+
+  @override
+  String get supportCancelFlexBadge => 'Hoàn 100% trước 24 giờ';
+
+  @override
+  String get supportCancelFlexRule1 =>
+      'Hủy trước thời điểm nhận phòng từ đủ 24 giờ trở lên: hoàn 100% tổng số tiền đã thanh toán.';
+
+  @override
+  String get supportCancelFlexRule2 =>
+      'Hủy trong vòng dưới 24 giờ trước giờ nhận phòng: không áp dụng hoàn tiền.';
+
+  @override
+  String get supportCancelModName => 'Chính sách Trung bình (Moderate)';
+
+  @override
+  String get supportCancelModBadge => 'Hoàn 100% trước 5 ngày';
+
+  @override
+  String get supportCancelModRule1 =>
+      'Hủy trước thời điểm nhận phòng từ đủ 5 ngày (120 giờ) trở lên: hoàn 100% tổng số tiền đã thanh toán.';
+
+  @override
+  String get supportCancelModRule2 =>
+      'Hủy trong khoảng từ đủ 24 giờ đến dưới 5 ngày (120 giờ): hoàn 50% tổng số tiền đã thanh toán.';
+
+  @override
+  String get supportCancelModRule3 =>
+      'Hủy trong vòng dưới 24 giờ trước giờ nhận phòng: không áp dụng hoàn tiền.';
+
+  @override
+  String get supportCancelStrictName => 'Chính sách Nghiêm ngặt (Strict)';
+
+  @override
+  String get supportCancelStrictBadge => 'Hoàn 50% trước 7 ngày';
+
+  @override
+  String get supportCancelStrictRule1 =>
+      'Hủy trước thời điểm nhận phòng từ đủ 7 ngày (168 giờ) trở lên: hoàn 50% tổng số tiền đã thanh toán.';
+
+  @override
+  String get supportCancelStrictRule2 =>
+      'Hủy trong vòng dưới 7 ngày (168 giờ) trước giờ nhận phòng: không áp dụng hoàn tiền.';
+
+  @override
+  String get supportComplaintStep1Title =>
+      'Gửi phản ánh kèm mã đơn hoặc mã chỗ nghỉ';
+
+  @override
+  String get supportComplaintStep1Desc =>
+      'Đăng nhập tài khoản và gửi báo cáo trực tuyến kèm mã đơn đặt phòng (Booking ID) hoặc mã biệt thự (Listing ID), nêu rõ vấn đề thực tế cần đối soát.';
+
+  @override
+  String get supportComplaintStep2Title =>
+      'Đối soát lịch sử lưu trú & luồng thanh toán';
+
+  @override
+  String get supportComplaintStep2Desc =>
+      'Bộ phận Kiểm duyệt & An toàn (Trust & Safety) kiểm tra nhật ký trạng thái đơn, lịch sử trao đổi tin nhắn trên ứng dụng và chứng từ thanh toán độc lập.';
+
+  @override
+  String get supportComplaintStep3Title =>
+      'Phản hồi kết quả & bảo vệ quyền lợi khách hàng';
+
+  @override
+  String get supportComplaintStep3Desc =>
+      'Kết quả xử lý được cập nhật minh bạch vào trạng thái báo cáo (Đã giải quyết / Từ chối kèm lý do) và kích hoạt quy trình hoàn tiền nếu Chủ nhà vi phạm cam kết.';
+
+  @override
+  String get supportFaqCatAll => 'Tất cả';
+
+  @override
+  String get supportFaqCatBooking => 'Đặt phòng & Lịch trống';
+
+  @override
+  String get supportFaqCatPayment => 'Thanh toán & Hoàn tiền';
+
+  @override
+  String get supportFaqCatAmenities => 'Tiện ích & Nội quy';
+
+  @override
+  String get supportFaqCatHost => 'Đối tác Chủ nhà';
+
+  @override
+  String get supportFaq1Q => 'Số đêm lưu trú được hệ thống tính như thế nào?';
+
+  @override
+  String get supportFaq1A =>
+      'Hệ thống áp dụng mô hình đêm lưu trú nửa mở [Nhận phòng, Trả phòng) theo múi giờ Việt Nam (Asia/Ho_Chi_Minh). Ví dụ chọn nhận phòng ngày 15 và trả phòng ngày 17 sẽ gồm 2 đêm ở (đêm 15 và đêm 16); ngày 17 là ngày trả phòng.';
+
+  @override
+  String get supportFaq2Q =>
+      'Tại sao đơn đặt phòng có thời gian giữ chỗ 15 phút?';
+
+  @override
+  String get supportFaq2A =>
+      'Mỗi căn biệt thự nguyên căn là tài sản đơn chiếc. Khi bạn tạo đơn, hệ thống khóa ngày lưu trú trong 15 phút để không ai khác đặt trùng trong lúc bạn thao tác thanh toán. Quá 15 phút chưa thanh toán, khóa ngày sẽ tự động giải phóng.';
+
+  @override
+  String get supportFaq3Q =>
+      'Giá cuối tuần và phụ thu đoàn đông được tính ra sao?';
+
+  @override
+  String get supportFaq3A =>
+      'Bảng giá từng đêm (ngày thường, thứ Bảy/cuối tuần), phí dọn dẹp và phụ thu khách vượt mức tiêu chuẩn đều lấy trực tiếp từ cấu hình đã kiểm duyệt của từng căn biệt thự và hiển thị minh bạch trước khi bạn xác nhận đặt phòng.';
+
+  @override
+  String get supportFaq4Q =>
+      'Tôi có thể thanh toán bằng những phương thức nào?';
+
+  @override
+  String get supportFaq4A =>
+      'Hệ thống hỗ trợ thanh toán trực tuyến qua cổng VNPay, ví MoMo và chuyển khoản mã VietQR. Mọi giao dịch đều được đối soát tự động và cập nhật tức thời vào mục Chuyến đi.';
+
+  @override
+  String get supportFaq5Q =>
+      'Khi hủy phòng hợp lệ hoặc Chủ nhà từ chối đơn, tôi nhận lại tiền bằng cách nào?';
+
+  @override
+  String get supportFaq5A =>
+      'Nếu đơn đã thanh toán được hủy trong khung giờ hoàn tiền của căn biệt thự (hoặc bị Chủ nhà hủy/từ chối — hoàn 100%), hệ thống tự động khởi tạo yêu cầu hoàn tiền riêng biệt để bộ phận tài chính đối soát hoàn trả về tài khoản/kênh thanh toán của bạn.';
+
+  @override
+  String get supportFaq6Q =>
+      'Tôi có thể trao đổi trực tiếp với Chủ nhà trước khi đặt không?';
+
+  @override
+  String get supportFaq6A =>
+      'Có. Tại trang chi tiết từng biệt thự, bạn có thể bấm Nhắn tin cho Host hoặc kết nối qua kênh tư vấn Zalo OA / Hotline tại trang Liên hệ để hỏi rõ về hồ bơi, bếp BBQ hoặc chỗ đậu xe đoàn.';
+
+  @override
+  String get supportFaq7Q =>
+      'Làm thế nào để đăng ký cho thuê biệt thự trên The Palm Villa?';
+
+  @override
+  String get supportFaq7A =>
+      'Bạn truy cập mục Trở thành Host trên thanh điều hướng hoặc chân trang, hoàn tất hồ sơ xác thực danh tính (KYC CCCD) và thông tin chỗ nghỉ. Sau khi Quản trị viên phê duyệt, bạn có thể quản lý lịch 30 ngày và đồng bộ hai chiều với Google Sheets.';
+
+  @override
+  String get supportZoneBaiSauName => 'Phân khu Bãi Sau (Thùy Vân – Thi Sách)';
+
+  @override
+  String get supportZoneBaiSauHint =>
+      'Bờ biển dài, sôi động, thuận tiện đi bộ ra bãi tắm';
+
+  @override
+  String get supportZoneBaiSauHighlight =>
+      'Tập trung nhiều biệt thự hồ bơi riêng diện tích lớn cho nhóm bạn và gia đình, gần trục đường Thùy Vân, Thi Sách, Võ Thị Sáu.';
+
+  @override
+  String get supportZoneBaiTruocName =>
+      'Phân khu Bãi Trước (Trần Phú – Quang Trung)';
+
+  @override
+  String get supportZoneBaiTruocHint =>
+      'Ngắm hoàng hôn biển trực diện, gần trung tâm ẩm thực';
+
+  @override
+  String get supportZoneBaiTruocHighlight =>
+      'Không gian biệt thự nghỉ dưỡng hướng biển Trần Phú yên tĩnh, tầm nhìn hoàng hôn thoáng đãng và di chuyển thuận tiện tới công viên Bãi Trước.';
+
+  @override
+  String get supportZoneChiLinhName => 'Phân khu Chí Linh';
+
+  @override
+  String get supportZoneChiLinhHint =>
+      'Khu nghỉ dưỡng biệt lập, an ninh, bãi tắm riêng tư';
+
+  @override
+  String get supportZoneChiLinhHighlight =>
+      'Phù hợp đoàn gia đình nhiều thế hệ hoặc nhóm công ty yêu thích không gian xanh mát, yên tĩnh và bãi biển sạch thoáng.';
+
+  @override
+  String get supportZoneLongCungName => 'Phân khu Long Cung – Thủy Tiên';
+
+  @override
+  String get supportZoneLongCungHint =>
+      'Quần thể biệt thự nghỉ dưỡng sát biển cho đoàn đông';
+
+  @override
+  String get supportZoneLongCungHighlight =>
+      'Nổi bật với các căn biệt thự sân vườn rộng, hồ bơi riêng và khu tổ chức tiệc nướng BBQ ngoài trời gần bãi tắm Long Cung.';
+
+  @override
+  String get supportAddonPoolTitle => 'Hồ bơi riêng tại biệt thự';
+
+  @override
+  String get supportAddonPoolDesc =>
+      'Không gian hồ bơi riêng tư ngay trong khuôn viên căn biệt thự, phù hợp thư giãn cùng gia đình và nhóm bạn.';
+
+  @override
+  String get supportAddonPoolNote =>
+      'Có sẵn theo thông số công bố của từng căn biệt thự.';
+
+  @override
+  String get supportAddonBbqTitle => 'Khu vực bếp nướng BBQ sân vườn';
+
+  @override
+  String get supportAddonBbqDesc =>
+      'Trang bị khu vực nướng ngoài trời, bàn ghế sân vườn và dụng cụ bếp cơ bản phục vụ tiệc tối ấm cúng.';
+
+  @override
+  String get supportAddonBbqNote =>
+      'Trao đổi trước với Chủ nhà về than nướng hoặc hỗ trợ dọn rửa.';
+
+  @override
+  String get supportAddonKitchenTitle => 'Bếp nấu tiêu chuẩn gia đình';
+
+  @override
+  String get supportAddonKitchenDesc =>
+      'Đầy đủ tủ lạnh, bếp nấu, nồi chảo và bát đĩa để đoàn tự chuẩn bị hải sản tươi sống mua tại chợ địa phương.';
+
+  @override
+  String get supportAddonKitchenNote =>
+      'Vui lòng giữ vệ sinh khu bếp theo nội quy từng chỗ nghỉ.';
+
+  @override
+  String get supportAddonKaraokeTitle => 'Phòng giải trí & Âm thanh Karaoke';
+
+  @override
+  String get supportAddonKaraokeDesc =>
+      'Hệ thống loa giải trí hoặc phòng sinh hoạt chung tại các căn biệt thự có gắn nhãn tiện nghi Karaoke.';
+
+  @override
+  String get supportAddonKaraokeNote =>
+      'Tuân thủ khung giờ yên tĩnh khu dân cư (trước 22:00).';
+
+  @override
+  String get supportAddonParkingTitle => 'Chỗ đậu xe ô tô & xe đoàn an toàn';
+
+  @override
+  String get supportAddonParkingDesc =>
+      'Sân đậu xe trong khuôn viên hoặc đường nội khu rộng rãi thuận tiện cho ô tô cá nhân và xe du lịch 7–29 chỗ.';
+
+  @override
+  String get supportAddonParkingNote =>
+      'Kiểm tra sức chứa xe cụ thể trong phần mô tả chi tiết villa.';
+
+  @override
+  String get supportAddonBeachTitle => 'Vị trí gần bãi tắm biển';
+
+  @override
+  String get supportAddonBeachDesc =>
+      'Các căn biệt thự có khoảng cách thực tế tới bãi tắm được công bố rõ ràng bằng đơn vị mét ngay trên thẻ thông tin.';
+
+  @override
+  String get supportAddonBeachNote =>
+      'Lọc nhanh các căn sát biển chỉ với một chạm bên dưới.';
+
+  @override
+  String get supportExploreZoneAction => 'Xem biệt thự khu vực này';
+
+  @override
+  String supportServiceNotePrefix(String note) {
+    return 'Lưu ý: $note';
+  }
+
+  @override
+  String get supportFilterByAmenityAction => 'Lọc villa có tiện ích này';
+
+  @override
+  String get supportFaqSearchHint =>
+      'Tìm câu hỏi theo từ khóa (ví dụ: giữ chỗ, hoàn tiền)...';
+
+  @override
+  String get supportFaqClearSearchTooltip => 'Xóa từ khóa';
+
+  @override
+  String get supportFaqEmptyResult =>
+      'Không tìm thấy câu hỏi phù hợp với từ khóa hiện tại. Vui lòng thử từ khóa khác hoặc liên hệ trực tiếp đội ngũ tư vấn.';
+
+  @override
+  String get supportBookingGuideEyebrow => 'Hỗ trợ đặt phòng';
+
+  @override
+  String get supportBookingGuideTitle => 'Hướng dẫn đặt biệt thự nguyên căn';
+
+  @override
+  String get supportBookingGuideSubtitle =>
+      'Quy trình đặt chỗ 4 bước minh bạch với cơ chế khóa lịch 15 phút chống trùng phòng và đối soát thanh toán trực tuyến tức thời.';
+
+  @override
+  String get supportBookingGuideNoteTitle => 'Lưu ý khi nhận và trả phòng';
+
+  @override
+  String get supportBookingGuideNoteBody =>
+      'Mọi đơn đặt đều tính theo đêm lưu trú [Nhận phòng, Trả phòng) theo múi giờ Việt Nam. Trước khi khởi hành, bạn có thể nhắn tin trực tiếp với Chủ nhà trong mục Tin nhắn để thống nhất giờ đón đoàn và danh sách xe.';
+
+  @override
+  String get supportBookingGuideCtaTitle =>
+      'Sẵn sàng tìm căn biệt thự phù hợp cho đoàn của bạn?';
+
+  @override
+  String get supportBookingGuideCtaDesc =>
+      'Tra cứu ngay danh sách biệt thự đang mở lịch trống kèm giá niêm yết theo đêm tại Vũng Tàu.';
+
+  @override
+  String get supportBookingGuidePrimaryAction => 'Tìm biệt thự ngay';
+
+  @override
+  String get supportBookingGuideSecondaryAction => 'Liên hệ tư vấn';
+
+  @override
+  String get supportCancelEyebrow => 'Chính sách lưu trú & hoàn tiền';
+
+  @override
+  String get supportCancelTitle => 'Chính sách hủy phòng & Hoàn tiền';
+
+  @override
+  String get supportCancelSubtitle =>
+      'Tỷ lệ hoàn tiền được hệ thống tính tự động dựa trên loại chính sách công bố của từng căn biệt thự và số giờ còn lại trước ngày nhận phòng.';
+
+  @override
+  String get supportCancelHostProtectTitle =>
+      'Bảo vệ khách lưu trú 100% khi Chủ nhà hủy đơn';
+
+  @override
+  String get supportCancelHostProtectBody =>
+      'Trong trường hợp đơn đã thanh toán bị Chủ nhà từ chối hoặc chủ động hủy, hệ thống tự động tạo lệnh hoàn 100% giá trị thanh toán không phụ thuộc bậc chính sách. Các đơn giữ chỗ chưa thanh toán sẽ tự hủy miễn phí sau 15 phút.';
+
+  @override
+  String get supportCancelCtaTitle =>
+      'Kiểm tra trạng thái đơn hoặc yêu cầu hủy phòng';
+
+  @override
+  String get supportCancelCtaDesc =>
+      'Truy cập mục Chuyến đi để xem chính sách áp dụng riêng cho đơn đặt phòng của bạn hoặc liên hệ bộ phận hỗ trợ.';
+
+  @override
+  String get supportCancelPrimaryAction => 'Xem Chuyến đi của tôi';
+
+  @override
+  String get supportCancelSecondaryAction => 'Câu hỏi thường gặp';
+
+  @override
+  String get supportComplaintsEyebrow => 'An toàn & Minh bạch';
+
+  @override
+  String get supportComplaintsTitle => 'Khiếu nại, Báo cáo & Góp ý dịch vụ';
+
+  @override
+  String get supportComplaintsSubtitle =>
+      'Mọi phản ánh về chất lượng biệt thự, sai lệch thông tin tin đăng hoặc thái độ phục vụ đều được ghi vết và đối soát độc lập.';
+
+  @override
+  String get supportComplaintsCtaTitle =>
+      'Cần hỗ trợ khẩn cấp trong thời gian đang lưu trú?';
+
+  @override
+  String get supportComplaintsCtaDesc =>
+      'Kết nối trực tiếp qua Hotline hoặc Zalo OA tại văn phòng Vũng Tàu (08:00 – 22:00) để được hỗ trợ ngay.';
+
+  @override
+  String get supportComplaintsPrimaryAction => 'Mở trang Liên hệ';
+
+  @override
+  String get supportComplaintsSecondaryAction => 'Tin nhắn với Host';
+
+  @override
+  String get supportFaqEyebrow => 'Trung tâm giải đáp';
+
+  @override
+  String get supportFaqPageTitle => 'Câu hỏi thường gặp (FAQ)';
+
+  @override
+  String get supportFaqSubtitle =>
+      'Giải đáp nhanh các thắc mắc về cách tính đêm lưu trú, khóa lịch 15 phút, phương thức thanh toán, hoàn tiền và đăng ký đối tác Chủ nhà.';
+
+  @override
+  String get supportFaqCtaTitle => 'Chưa tìm thấy câu trả lời bạn cần?';
+
+  @override
+  String get supportFaqCtaDesc =>
+      'Đội ngũ tư vấn tại 28 Thi Sách, TP. Vũng Tàu luôn sẵn sàng giải đáp chi tiết theo nhu cầu riêng của đoàn.';
+
+  @override
+  String get supportFaqPrimaryAction => 'Liên hệ tư vấn trực tuyến';
+
+  @override
+  String get supportFaqSecondaryAction => 'Xem hướng dẫn đặt phòng';
+
+  @override
+  String get supportAboutEyebrow => 'Về The Palm Villa';
+
+  @override
+  String get supportAboutTitle =>
+      'Nền tảng đặt biệt thự nghỉ dưỡng nguyên căn tại Vũng Tàu';
+
+  @override
+  String get supportAboutSubtitle =>
+      'Kết nối trực tiếp du khách với hệ thống biệt thự nghỉ dưỡng đã qua kiểm duyệt thực tế và xác thực danh tính Chủ nhà (KYC) tại TP. Vũng Tàu.';
+
+  @override
+  String get supportAboutPillar1Title =>
+      'Chỗ nghỉ kiểm duyệt & Host xác thực KYC';
+
+  @override
+  String get supportAboutPillar1Body =>
+      'Mọi hồ sơ đối tác Chủ nhà đều trải qua bước xác minh danh tính và kiểm duyệt thông tin, hình ảnh thực tế trước khi mở lịch đón khách.';
+
+  @override
+  String get supportAboutPillar2Title =>
+      'Khóa lịch chống đặt trùng (Zero Double-Booking)';
+
+  @override
+  String get supportAboutPillar2Body =>
+      'Cơ chế khóa ngày mức giao dịch ngay khi tạo đơn giúp bảo vệ tuyệt đối lịch lưu trú của đoàn trong suốt thời gian thanh toán.';
+
+  @override
+  String get supportAboutPillar3Title => 'Giá niêm yết minh bạch theo từng đêm';
+
+  @override
+  String get supportAboutPillar3Body =>
+      'Hiển thị rõ giá ngày thường, giá cuối tuần, phí vệ sinh và phụ thu khách vượt tiêu chuẩn từ dữ liệu máy chủ trước khi thanh toán.';
+
+  @override
+  String get supportAboutCtaTitle => 'Đồng hành cùng The Palm Villa';
+
+  @override
+  String get supportAboutCtaDesc =>
+      'Khám phá các căn biệt thự đang mở lịch hoặc đăng ký trở thành đối tác Chủ nhà để quản lý lịch và doanh thu minh bạch.';
+
+  @override
+  String get supportAboutPrimaryAction => 'Khám phá nơi lưu trú';
+
+  @override
+  String get supportAboutSecondaryAction => 'Trở thành Host';
+
+  @override
+  String get supportExploreVtEyebrow => 'Bản đồ phân khu nghỉ dưỡng';
+
+  @override
+  String get supportExploreVtTitle =>
+      'Khám phá Vũng Tàu theo từng phân khu biển';
+
+  @override
+  String get supportExploreVtSubtitle =>
+      'Mỗi phân khu tại Vũng Tàu mang một nét trải nghiệm riêng. Chọn khu vực phù hợp với lịch trình của đoàn để lọc ngay các căn biệt thự thực tế.';
+
+  @override
+  String get supportExploreVtCtaTitle =>
+      'Kết hợp lịch trình ăn chơi & kinh nghiệm đi biển';
+
+  @override
+  String get supportExploreVtCtaDesc =>
+      'Tham khảo thêm các bài viết cẩm nang du lịch địa phương để lên kế hoạch trọn vẹn cho kỳ nghỉ tại Vũng Tàu.';
+
+  @override
+  String get supportExploreVtPrimaryAction => 'Đọc Cẩm nang du lịch';
+
+  @override
+  String get supportExploreVtSecondaryAction => 'Mở bản đồ tìm kiếm';
+
+  @override
+  String get supportAddonEyebrow => 'Tiện nghi & Trải nghiệm';
+
+  @override
+  String get supportAddonTitle => 'Tiện ích biệt thự & Dịch vụ lưu trú đi kèm';
+
+  @override
+  String get supportAddonSubtitle =>
+      'Tổng hợp các nhóm tiện nghi đặc trưng của biệt thự nguyên căn và cách trao đổi nhu cầu chuẩn bị tiệc BBQ, đậu xe đoàn cùng Chủ nhà.';
+
+  @override
+  String get supportAddonNoteTitle =>
+      'Cách đặt dịch vụ hoặc yêu cầu chuẩn bị trước giờ nhận phòng';
+
+  @override
+  String get supportAddonNoteBody =>
+      'Mỗi căn biệt thự có cấu hình tiện nghi và quy định phụ thu khách đoàn riêng được niêm yết công khai. Sau khi chọn căn ưng ý, bạn có thể nhấn Nhắn tin cho Host ngay trên trang chi tiết để xác nhận các nhu cầu riêng.';
+
+  @override
+  String get supportAddonCtaTitle =>
+      'Tìm biệt thự có đầy đủ hồ bơi riêng & sân BBQ?';
+
+  @override
+  String get supportAddonCtaDesc =>
+      'Sử dụng bộ lọc đa tiêu chí trên trang Tìm kiếm để chọn chính xác các tiện ích đoàn của bạn mong muốn.';
+
+  @override
+  String get supportAddonPrimaryAction => 'Mở bộ lọc nơi lưu trú';
+
+  @override
+  String get supportAddonSecondaryAction => 'Liên hệ tư vấn đoàn';
+
+  @override
+  String get supportMemberEyebrow => 'Quyền lợi tài khoản';
+
+  @override
+  String get supportMemberTitle => 'Ưu đãi thành viên & Mã giảm giá đặt phòng';
+
+  @override
+  String get supportMemberSubtitle =>
+      'Đăng ký tài khoản thành viên miễn phí để áp dụng mã ưu đãi trực tiếp khi đặt biệt thự, đồng bộ danh sách yêu thích và quản lý lịch sử chuyến đi.';
+
+  @override
+  String get supportMemberNote1Title =>
+      'Sử dụng Mã giảm giá (Coupon) trực tiếp khi đặt phòng';
+
+  @override
+  String get supportMemberNote1Body =>
+      'Thành viên đã đăng nhập có thể áp dụng mã ưu đãi theo phần trăm (%) hoặc số tiền cố định trên trang chi tiết biệt thự. Hệ thống tự động kiểm tra hạn dùng, giá trị đơn tối thiểu và số lượt sử dụng của từng tài khoản.';
+
+  @override
+  String get supportMemberNote2Title =>
+      'Đồng bộ Danh sách yêu thích & Theo dõi Chuyến đi thời gian thực';
+
+  @override
+  String get supportMemberNote2Body =>
+      'Lưu lại các căn biệt thự ưng ý trên mọi thiết bị, nhận thông báo trạng thái đơn tức thời và nhắn tin trực tiếp với Chủ nhà không qua trung gian.';
+
+  @override
+  String get supportMemberCtaTitle =>
+      'Áp dụng ưu đãi cho kỳ nghỉ sắp tới tại Vũng Tàu';
+
+  @override
+  String get supportMemberCtaDesc =>
+      'Chọn căn biệt thự yêu thích, kiểm tra giá niêm yết theo đêm và nhập mã giảm giá ngay tại bước xác nhận đặt phòng.';
+
+  @override
+  String get supportMemberPrimaryAction => 'Tìm biệt thự đang mở lịch';
+
+  @override
+  String get supportMemberSecondaryAction => 'Danh sách yêu thích';
+
+  @override
+  String get supportReportTargetBooking => 'Đơn đặt phòng (Mã Booking)';
+
+  @override
+  String get supportReportTargetListing => 'Chỗ nghỉ / Biệt thự (Mã Villa)';
+
+  @override
+  String get supportReportTargetReview => 'Đánh giá lưu trú (Mã Review)';
+
+  @override
+  String get supportReportTargetUser => 'Tài khoản người dùng (Mã User)';
+
+  @override
+  String get supportReportSuccessMessage =>
+      'Đã ghi nhận phản ánh thành công. Bộ phận Kiểm duyệt & An toàn sẽ đối soát và phản hồi sớm nhất.';
+
+  @override
+  String get supportReportErrorFallback =>
+      'Không thể gửi phản ánh lúc này. Vui lòng thử lại.';
+
+  @override
+  String get supportReportStatusResolved => 'Đã giải quyết';
+
+  @override
+  String get supportReportStatusRejected => 'Đã từ chối';
+
+  @override
+  String get supportReportStatusOpen => 'Đang xử lý';
+
+  @override
+  String get supportReportGuestCardTitle =>
+      'Gửi báo cáo & khiếu nại trực tuyến';
+
+  @override
+  String get supportReportGuestCardBody =>
+      'Để đảm bảo tính xác thực và đối soát đúng mã đơn đặt phòng, vui lòng đăng nhập tài khoản trước khi gửi phản ánh trực tuyến hoặc kết nối nhanh qua trang Liên hệ.';
+
+  @override
+  String get supportReportLoginAction => 'Đăng nhập để gửi phản ánh';
+
+  @override
+  String get supportReportDirectContactAction => 'Mở kênh Liên hệ trực tiếp';
+
+  @override
+  String get supportReportAuthCardTitle =>
+      'Gửi phản ánh / báo cáo tới bộ phận Kiểm duyệt';
+
+  @override
+  String get supportReportAuthCardSubtitle =>
+      'Thông tin phản ánh được lưu vết trực tiếp để Quản trị viên kiểm tra và phản hồi minh bạch.';
+
+  @override
+  String get supportReportTargetGroupLabel => 'Nhóm đối tượng phản ánh';
+
+  @override
+  String get supportReportTargetIdLabel =>
+      'Mã định danh số (ví dụ: mã đơn 102 hoặc mã villa 15)';
+
+  @override
+  String get supportReportTargetIdError =>
+      'Vui lòng nhập mã số nguyên dương hợp lệ';
+
+  @override
+  String get supportReportReasonLabel => 'Tiêu đề khiếu nại / góp ý';
+
+  @override
+  String get supportReportReasonEmptyError => 'Vui lòng nhập tiêu đề phản ánh';
+
+  @override
+  String get supportReportReasonMaxError => 'Tối đa 255 ký tự';
+
+  @override
+  String get supportReportDescLabel => 'Mô tả chi tiết sự việc (tùy chọn)';
+
+  @override
+  String get supportReportSubmittingLabel => 'Đang gửi phản ánh...';
+
+  @override
+  String get supportReportSubmitAction => 'Gửi phản ánh';
+
+  @override
+  String supportReportRecentTitle(int count) {
+    return 'Phản ánh gần đây của bạn ($count)';
+  }
+
+  @override
+  String get supportCouponEmptyError => 'Vui lòng nhập mã ưu đãi cần kiểm tra.';
+
+  @override
+  String supportCouponValidStatus(String code, String discount) {
+    return 'Mã $code hợp lệ — ước tính giảm $discount cho đơn tạm tính.';
+  }
+
+  @override
+  String get supportCouponInvalidFallback =>
+      'Mã ưu đãi chưa đủ điều kiện hoặc đã hết hạn.';
+
+  @override
+  String get supportCouponCheckError => 'Không thể kiểm tra mã ưu đãi lúc này.';
+
+  @override
+  String get supportCouponCardTitle => 'Tra cứu hiệu lực Mã ưu đãi (Coupon)';
+
+  @override
+  String get supportCouponGuestHint =>
+      'Đăng nhập tài khoản thành viên để kiểm tra trực tiếp hiệu lực mã giảm giá theo giá trị đơn dự kiến hoặc áp dụng ngay tại bước đặt biệt thự.';
+
+  @override
+  String get supportCouponAuthHint =>
+      'Nhập mã ưu đãi bạn đang có và giá trị đơn lưu trú dự kiến (VNĐ) để kiểm tra điều kiện áp dụng trực tiếp từ hệ thống.';
+
+  @override
+  String get supportCouponLoginAction => 'Đăng nhập thành viên';
+
+  @override
+  String get supportCouponRegisterAction => 'Tạo tài khoản miễn phí';
+
+  @override
+  String get supportCouponCodeInputLabel => 'Mã ưu đãi (ví dụ: PALM2026)';
+
+  @override
+  String get supportCouponAmountInputLabel => 'Giá trị đơn tạm tính (VNĐ)';
+
+  @override
+  String get supportCouponCheckingLabel => 'Đang kiểm tra...';
+
+  @override
+  String get supportCouponCheckAction => 'Kiểm tra mã ưu đãi';
+
+  @override
+  String get homeEmptyApprovedVillas =>
+      'Hiện chưa có căn biệt thự nào đã được phê duyệt trên hệ thống.';
+
+  @override
+  String homeApprovedVillasCountTitle(int count) {
+    return 'Danh sách chỗ nghỉ đã duyệt ($count)';
+  }
+
+  @override
+  String get homePrevVillaTooltip => 'Căn trước';
+
+  @override
+  String get homeNextVillaTooltip => 'Căn tiếp theo';
+
+  @override
+  String get homeFavoriteAdd => 'Lưu vào yêu thích';
+
+  @override
+  String get homeFavoriteRemove => 'Bỏ khỏi yêu thích';
+
+  @override
+  String homeCardSpecsSummary(int bedrooms, int guests) {
+    return '$bedrooms PN · Tối đa $guests khách';
+  }
+
+  @override
+  String get searchFilterBtn => 'Bộ lọc';
+
+  @override
+  String searchFilterActiveBtn(int count) {
+    return 'Bộ lọc ($count)';
+  }
+
+  @override
+  String get searchShowMapBtn => 'Hiện bản đồ';
+
+  @override
+  String get searchHideMapBtn => 'Ẩn bản đồ';
+
+  @override
+  String get searchClearAllBtn => 'Xóa tất cả';
+
+  @override
+  String searchFoundStaysCount(int count) {
+    return 'Tìm thấy $count chỗ nghỉ tại Vũng Tàu';
+  }
+
+  @override
+  String favoritesSavedCountSubtitle(int count) {
+    return '$count căn biệt thự đã lưu';
+  }
+
+  @override
+  String get favoritesSyncOfflineNotice =>
+      'Không thể đồng bộ máy chủ — đang hiển thị danh sách lưu trên thiết bị.';
+
+  @override
+  String favoritesInvalidCountNotice(int count) {
+    return 'Có $count chỗ nghỉ không còn mở lịch nhận khách.';
+  }
+
+  @override
+  String get favoritesExploreAction => 'Khám phá biệt thự';
+
+  @override
+  String get contactEyebrow => 'HỖ TRỢ TRỰC TIẾP VŨNG TÀU';
+
+  @override
+  String get contactBrowseVillas => 'Xem danh sách Villa';
+
+  @override
+  String get contactHeroTitle => 'Liên hệ đội ngũ tư vấn & vận hành lưu trú';
+
+  @override
+  String get contactHeroSubtitle =>
+      'Hỗ trợ kiểm tra lịch trống, tư vấn chọn căn theo đoàn và giải đáp thông tin lưu trú tại TP. Vũng Tàu.';
+
+  @override
+  String get contactHotlineTitle => 'Hotline & Zalo tư vấn';
+
+  @override
+  String get contactVerifiedBadge => 'Đã xác minh cấu hình';
+
+  @override
+  String get contactCallNow => 'Gọi ngay';
+
+  @override
+  String get contactCopyHotlineTooltip => 'Sao chép số Hotline';
+
+  @override
+  String get contactCopiedHotline => 'Đã sao chép số Hotline vào bộ nhớ tạm';
+
+  @override
+  String get contactOpenZalo => 'Nhắn Zalo OA';
+
+  @override
+  String get contactOfficeTitle => 'Văn phòng đón tiếp tại Vũng Tàu';
+
+  @override
+  String get contactMapAction => 'Xem bản đồ đường đi';
+
+  @override
+  String get contactEmailTitle => 'Hòm thư hỗ trợ & đối soát';
+
+  @override
+  String get contactSameDayReply => 'Phản hồi trong ngày';
+
+  @override
+  String get contactSendEmail => 'Gửi Email hỗ trợ';
+
+  @override
+  String get contactCopyEmailTooltip => 'Sao chép địa chỉ Email';
+
+  @override
+  String get contactCopiedEmail => 'Đã sao chép địa chỉ Email vào bộ nhớ tạm';
+
+  @override
+  String get authWelcomeBack => 'Chào mừng trở lại';
+
+  @override
+  String get authLoginSubtitle =>
+      'Đăng nhập để xem kỳ nghỉ và quản lý chuyến đi của bạn tại The Palm Villa.';
+
+  @override
+  String get authIdentifierLabel => 'Email hoặc số điện thoại';
+
+  @override
+  String get authIdentifierHint => 'Nhập email hoặc số điện thoại Việt Nam';
+
+  @override
+  String get authPasswordLabel => 'Mật khẩu';
+
+  @override
+  String get authPasswordHint => 'Nhập mật khẩu';
+
+  @override
+  String get authShowPasswordTooltip => 'Hiện mật khẩu';
+
+  @override
+  String get authHidePasswordTooltip => 'Ẩn mật khẩu';
+
+  @override
+  String get authRememberMe => 'Ghi nhớ đăng nhập';
+
+  @override
+  String get authSigningIn => 'Đang đăng nhập...';
+
+  @override
+  String get authOrDivider => 'HOẶC';
+
+  @override
+  String get authGoogleLoginBtn => 'Đăng nhập với Google';
+
+  @override
+  String get authNoAccountYet => 'Chưa có tài khoản?';
+
+  @override
+  String get authRegisterBtn => 'Đăng ký';
+
+  @override
+  String get authCreateAccountTitle => 'Tạo tài khoản mới';
+
+  @override
+  String get authRegisterSubtitle =>
+      'Trải nghiệm đặt phòng villa nghỉ dưỡng đẳng cấp và nhận ưu đãi độc quyền.';
+
+  @override
+  String get authFullNameLabel => 'Họ và tên';
+
+  @override
+  String get authFullNameHint => 'Nhập họ và tên';
+
+  @override
+  String get authPhoneRequiredLabel => 'Số điện thoại *';
+
+  @override
+  String get authPhoneHint => 'Nhập số điện thoại Việt Nam (vd: 0901234567)';
+
+  @override
+  String get authEmailRequiredLabel => 'Email *';
+
+  @override
+  String get authEmailHint => 'Nhập địa chỉ email';
+
+  @override
+  String get authPasswordCreateHint =>
+      'Tạo mật khẩu (tối thiểu 8 ký tự, gồm chữ và số)';
+
+  @override
+  String get authConfirmPasswordLabel => 'Xác nhận mật khẩu *';
+
+  @override
+  String get authConfirmPasswordHint => 'Nhập lại mật khẩu vừa tạo';
+
+  @override
+  String authPasswordStrengthLabel(String level) {
+    return 'Độ mạnh mật khẩu: $level';
+  }
+
+  @override
+  String get authStrengthWeak => 'Yếu';
+
+  @override
+  String get authStrengthFair => 'Trung bình';
+
+  @override
+  String get authStrengthGood => 'Khá';
+
+  @override
+  String get authStrengthStrong => 'Mạnh';
+
+  @override
+  String get authTermsAgreement =>
+      'Tôi đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của The Palm Villa';
+
+  @override
+  String get authTermsRequiredError =>
+      'Vui lòng đồng ý với Điều khoản dịch vụ và Chính sách bảo mật';
+
+  @override
+  String get authCreatingAccount => 'Đang tạo tài khoản...';
+
+  @override
+  String get authAlreadyHaveAccount => 'Bạn đã có tài khoản?';
+
+  @override
+  String get authForgotQuestionTitle => 'Quên mật khẩu?';
+
+  @override
+  String get authOtpVerifyTitle => 'Xác thực mã OTP';
+
+  @override
+  String get authPasswordChangedTitle => 'Đổi mật khẩu thành công';
+
+  @override
+  String get authForgotRequestSubtitle =>
+      'Nhập email hoặc số điện thoại đã đăng ký để nhận mã xác thực khôi phục mật khẩu.';
+
+  @override
+  String get authForgotOtpSubtitle =>
+      'Nhập 6 chữ số OTP và thiết lập mật khẩu mới.';
+
+  @override
+  String get authForgotSuccessSubtitle =>
+      'Mật khẩu của bạn đã được cập nhật an toàn.';
+
+  @override
+  String get authSendOtpButton => 'Gửi mã xác thực';
+
+  @override
+  String authOtpSentTo(String target) {
+    return 'Mã OTP đã gửi tới: $target';
+  }
+
+  @override
+  String get authOtpSixDigitsLabel => 'Mã OTP gồm 6 chữ số';
+
+  @override
+  String get authNewPasswordLabel => 'Mật khẩu mới';
+
+  @override
+  String authResendOtpCountdown(String seconds) {
+    return 'Gửi lại sau 00:$seconds';
+  }
+
+  @override
+  String get authResendOtpButton => 'Gửi lại mã OTP';
+
+  @override
+  String get authConfirmOtpButton => 'Xác nhận mã OTP';
+
+  @override
+  String get authOtpSuccessBanner =>
+      'Mã OTP đã được xác thực và mật khẩu mới đã sẵn sàng sử dụng.';
+
+  @override
+  String get authBackToLoginButton => 'Quay lại đăng nhập';
+
+  @override
+  String get adminTabFinance => 'Tài chính & Chi trả';
+
+  @override
+  String get adminTabBlog => 'Cẩm nang Blog';
+
+  @override
+  String get adminTabTrustSafety => 'Báo cáo & Khiếu nại';
 }

@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+// CONFLICT-RESOLVED: Tách tầng gọi API/FilePicker/Draft sang `HostOnboardingViewModel` và loại bỏ Emoji chức năng theo FLUTTER_RULES.md Mục 2 & Mục 6.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,10 +9,9 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
-import '../../data/host_repository.dart';
 import '../../domain/host_models.dart';
 import '../../onboarding/host_onboarding_services.dart';
-import '../../services/host_file_picker_service.dart';
+import '../view_models/host_onboarding_view_model.dart';
 
 export '../../onboarding/host_onboarding_services.dart';
 
@@ -108,8 +107,11 @@ class _TroThanhHostLandingScreenState
     });
 
     try {
-      final repo = ref.read(hostOnboardingApiProvider);
+      final repo = ref.read(hostOnboardingViewModelProvider);
       final record = await repo.getMyApplicationRecord();
+      if (record?.status == HostApplicationStatus.approved) {
+        await repo.refreshApprovedHostSession();
+      }
       if (!mounted) return;
       setState(() {
         _existingRecord = record;
@@ -374,7 +376,10 @@ class _TroThanhHostLandingScreenState
         key: const Key('host_landing_login_btn'),
         icon: LucideIcons.logIn,
         label: 'Đăng nhập để đăng ký Host',
-        onPressed: () => _navigateToRoute(context, '/dang-nhap'),
+        onPressed: () => _navigateToRoute(
+          context,
+          '/dang-nhap?redirectTo=%2Ftro-thanh-host%2Fdang-ky',
+        ),
       );
     } else if (isAlreadyHost) {
       primaryCta = _PillCtaButton.primary(
@@ -962,7 +967,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
     // 1. Restore consent-gated local draft first (never restores unconsented PII)
     try {
-      final draftService = ref.read(hostOnboardingDraftServiceProvider);
+      final draftService = ref.read(hostOnboardingViewModelProvider);
       final draft = await draftService.loadDraft();
       if (draft != null && mounted) {
         _profileType = draft.profileType;
@@ -995,7 +1000,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
     // 2. Fetch existing application from backend API
     try {
-      final repo = ref.read(hostOnboardingApiProvider);
+      final repo = ref.read(hostOnboardingViewModelProvider);
       final existing = await repo.getMyApplicationRecord();
       if (!mounted) return;
       if (existing != null && existing.status != HostApplicationStatus.none) {
@@ -1056,7 +1061,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
   Future<void> _persistDraftSafely() async {
     try {
-      final draftService = ref.read(hostOnboardingDraftServiceProvider);
+      final draftService = ref.read(hostOnboardingViewModelProvider);
       await draftService.saveDraft(
         profileType: _profileType,
         documentType: _documentType,
@@ -1075,7 +1080,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
   Future<void> _handleClearDraft() async {
     try {
-      final draftService = ref.read(hostOnboardingDraftServiceProvider);
+      final draftService = ref.read(hostOnboardingViewModelProvider);
       await draftService.clearDraft();
     } catch (_) {}
     if (!mounted) return;
@@ -1154,14 +1159,12 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
     });
 
     try {
-      final repository = ref.read(hostRepositoryProvider);
-      final HostIdentityAiResult result = await repository
-          .analyzeIdentityCard(
-            bytes: file.bytes,
-            filename: file.name,
-            mimeType: file.mimeType,
-          )
-          .timeout(const Duration(seconds: 25));
+      final HostIdentityAiResult result =
+          await ref.read(hostOnboardingViewModelProvider).analyzeIdentityCard(
+                bytes: file.bytes,
+                filename: file.name,
+                mimeType: file.mimeType,
+              );
 
       if (!mounted) return;
 
@@ -1170,8 +1173,8 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
             ? result.warnings.first
             : 'Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ.';
         final errText = isFront
-            ? '❌ Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ ($reason). Vui lòng tải lên ảnh chụp giấy tờ tùy thân gốc.'
-            : '❌ Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ ($reason). Vui lòng tải lên ảnh chụp mặt sau CCCD gốc.';
+            ? 'Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ ($reason). Vui lòng tải lên ảnh chụp giấy tờ tùy thân gốc.'
+            : 'Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ ($reason). Vui lòng tải lên ảnh chụp mặt sau CCCD gốc.';
         setState(() {
           if (isFront) {
             _aiFrontResult = result;
@@ -1183,14 +1186,71 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
             _aiBackError = errText;
           }
           _errorMessage =
-              '❌ Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ. Vui lòng tải lên ảnh chụp giấy tờ tùy thân gốc.';
+              'Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ. Vui lòng tải lên ảnh chụp giấy tờ tùy thân gốc.';
         });
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '❌ Tệp không hợp lệ: $reason',
+              'Tệp không hợp lệ: $reason',
             ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      // Giải thuật kiểm định độ nét và nhận diện mặt trước/mặt sau CCCD từ kết quả AI OCR:
+      // Chặn tệp ảnh bị mờ, lóa sáng, mất góc (`!result.isClear`) hoặc không xác định được mặt thẻ (`side == 'unknown'`) khi tải CCCD 2 mặt.
+      if (!result.isClear) {
+        final blurDetail =
+            result.warnings.isNotEmpty ? ' (${result.warnings.first})' : '';
+        final errText =
+            'Ảnh giấy tờ bị mờ, lóa sáng hoặc mất góc$blurDetail. Vui lòng chụp lại ảnh rõ nét đủ 4 góc.';
+        setState(() {
+          if (isFront) {
+            _aiFrontResult = result;
+            _analyzingFront = false;
+            _aiFrontError = errText;
+          } else {
+            _aiBackResult = result;
+            _analyzingBack = false;
+            _aiBackError = errText;
+          }
+          _errorMessage = errText;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errText),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      if (_documentType.requiresFrontAndBack &&
+          slotKey != 'identitySingle' &&
+          result.side == 'unknown') {
+        final errText = isFront
+            ? 'Không nhận diện được mặt trước CCCD (có ảnh chân dung và số định danh). Vui lòng chụp rõ mặt trước.'
+            : 'Không nhận diện được mặt sau CCCD (có chip điện tử và dãy mã MRZ). Vui lòng chụp rõ mặt sau.';
+        setState(() {
+          if (isFront) {
+            _aiFrontResult = result;
+            _analyzingFront = false;
+            _aiFrontError = errText;
+          } else {
+            _aiBackResult = result;
+            _analyzingBack = false;
+            _aiBackError = errText;
+          }
+          _errorMessage = errText;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errText),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -1201,7 +1261,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
       // Check side mismatch (e.g. uploaded back image into front slot, or front into back slot)
       if (isFront && result.side == 'back') {
         const errText =
-            '❌ Bạn đã tải lên mặt sau thay vì mặt trước. Vui lòng tải lên ảnh mặt trước CCCD có ảnh chân dung.';
+            'Bạn đã tải lên mặt sau thay vì mặt trước. Vui lòng tải lên ảnh mặt trước CCCD có ảnh chân dung.';
         setState(() {
           _aiFrontResult = result;
           _analyzingFront = false;
@@ -1220,7 +1280,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
       if (!isFront && result.side == 'front') {
         const errText =
-            '❌ Bạn đã tải lên mặt trước thay vì mặt sau. Vui lòng tải lên ảnh mặt sau CCCD (có chip và mã MRZ).';
+            'Bạn đã tải lên mặt trước thay vì mặt sau. Vui lòng tải lên ảnh mặt sau CCCD (có chip và mã MRZ).';
         setState(() {
           _aiBackResult = result;
           _analyzingBack = false;
@@ -1292,7 +1352,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
       final backId = _aiBackResult!.effectiveIdNumber;
       if (frontId != null && backId != null && frontId != backId) {
         final errText =
-            '❌ Số CCCD mặt sau ($backId) không trùng khớp với mặt trước ($frontId). Vui lòng tải lên đúng 2 mặt của cùng một thẻ CCCD.';
+            'Số CCCD mặt sau ($backId) không trùng khớp với mặt trước ($frontId). Vui lòng tải lên đúng 2 mặt của cùng một thẻ CCCD.';
         _aiBackError = errText;
         _errorMessage = errText;
         _slotErrors['identityBack'] =
@@ -1346,8 +1406,12 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
 
     // 1. Check appropriate device/camera/media permission
     try {
-      final permissionService = ref.read(hostOnboardingPermissionProvider);
-      final permResult = await permissionService.requestPermission(source);
+      // CONFLICT-RESOLVED: Gọi qua `hostOnboardingViewModelProvider` đúng chuẩn MVVM đồng thời chuyển tiếp `context` cho hộp thoại xin quyền từ `origin/develop`.
+      final permissionService = ref.read(hostOnboardingViewModelProvider);
+      final permResult = await permissionService.requestPermission(
+        source,
+        context: context,
+      );
       if (!mounted) return;
       if (!permResult.isGranted) {
         final msg = permResult.messageVi ??
@@ -1369,15 +1433,23 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
     }
 
     // 2. Pick real file via HostFilePickerService
+    // Giải thuật phân nhánh chọn chứng từ KYC: giấy tờ định danh chỉ nhận ảnh (JPG, PNG, WebP); giấy phép kinh doanh hỗ trợ thêm PDF.
+    // CONFLICT-RESOLVED: Chặn chọn PDF cho CCCD/Hộ chiếu/GPLX để khớp bộ lọc image/* của Backend.
+    final isIdentitySlot = slotKey != 'businessLicense';
     try {
-      final picker = ref.read(hostFilePickerProvider);
+      final picker = ref.read(hostOnboardingViewModelProvider);
       final file = await picker.pickKycDocument(
         context: context,
         title: slotLabel,
+        // CONFLICT-RESOLVED: Truyền đồng thời `imageOnly: isIdentitySlot` và `source: source` để vừa hỗ trợ chụp camera/thư viện vừa chặn PDF cho giấy tờ tùy thân.
+        imageOnly: isIdentitySlot,
+        source: source,
       );
       if (file == null || !mounted) return;
 
-      final validationErr = HostOnboardingValidator.validatePickedFile(file);
+      final validationErr = isIdentitySlot
+          ? HostOnboardingValidator.validateIdentityPickedFile(file)
+          : HostOnboardingValidator.validatePickedFile(file);
       if (validationErr != null) {
         setState(() {
           _slotErrors[slotKey] = validationErr;
@@ -1435,7 +1507,9 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
       _slotProgress[slotKey] = 0.25;
     });
 
-    final fileErr = HostOnboardingValidator.validatePickedFile(currentFile);
+    final fileErr = slotKey != 'businessLicense'
+        ? HostOnboardingValidator.validateIdentityPickedFile(currentFile)
+        : HostOnboardingValidator.validatePickedFile(currentFile);
     if (fileErr != null) {
       if (!mounted) return;
       setState(() {
@@ -1636,7 +1710,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
             _aiIdentityResult!.documentType == 'unknown')) {
       setState(() {
         _errorMessage =
-            '❌ Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ. Vui lòng tải lên ảnh chụp giấy tờ tùy thân gốc.';
+            'Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ. Vui lòng tải lên ảnh chụp giấy tờ tùy thân gốc.';
         _slotErrors['identityFront'] =
             'Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ.';
       });
@@ -1649,7 +1723,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
             _aiBackResult!.documentType == 'unknown')) {
       setState(() {
         _errorMessage =
-            '❌ Tệp mặt sau không phải là CCCD hợp lệ. Vui lòng tải lên ảnh chụp mặt sau CCCD gốc.';
+            'Tệp mặt sau không phải là CCCD hợp lệ. Vui lòng tải lên ảnh chụp mặt sau CCCD gốc.';
         _slotErrors['identityBack'] = 'Tệp tải lên không phải là CCCD hợp lệ.';
       });
       await _persistDraftSafely();
@@ -1664,7 +1738,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
       final backId = _aiBackResult!.effectiveIdNumber;
       if (frontId != null && backId != null && frontId != backId) {
         final errText =
-            '❌ Số CCCD mặt sau ($backId) không trùng khớp với mặt trước ($frontId). Vui lòng tải lên đúng 2 mặt của cùng một thẻ CCCD.';
+            'Số CCCD mặt sau ($backId) không trùng khớp với mặt trước ($frontId). Vui lòng tải lên đúng 2 mặt của cùng một thẻ CCCD.';
         setState(() {
           _errorMessage = errText;
           _aiBackError = errText;
@@ -1706,7 +1780,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
     });
 
     try {
-      final repo = ref.read(hostOnboardingApiProvider);
+      final repo = ref.read(hostOnboardingViewModelProvider);
       final submitted = await repo.submitKycApplication(
         dto,
         onSendProgress: (sent, total) {
@@ -1740,9 +1814,9 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
         documents: submitted.documents,
       );
 
-      ref.read(hostLastSubmittedApplicationProvider.notifier).state =
-          safeRecord;
-      await ref.read(hostOnboardingDraftServiceProvider).clearDraft();
+      final onboardingVm = ref.read(hostOnboardingViewModelProvider);
+      onboardingVm.setLastSubmittedApplication(safeRecord);
+      await onboardingVm.clearDraft();
       HostOnboardingLogSanitizer.logInfo(
         'Host KYC application submitted with status=${safeStatus.apiValue}',
       );
@@ -1848,8 +1922,10 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                 ],
               ),
               const SizedBox(height: AppSpacing.s4),
-              const Text(
-                'Hỗ trợ JPG, PNG, WebP hoặc PDF rõ nét.',
+              Text(
+                slotKey != 'businessLicense'
+                    ? 'Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP rõ nét (không hỗ trợ PDF).'
+                    : 'Hỗ trợ JPG, PNG, WebP hoặc PDF rõ nét.',
                 style: AppTypography.bodyMuted,
               ),
               const SizedBox(height: AppSpacing.s16),
@@ -1873,9 +1949,15 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
               const SizedBox(height: AppSpacing.s8),
               _SourceOptionTile(
                 key: Key('kyc_source_file_$slotKey'),
-                icon: LucideIcons.fileText,
-                title: 'Chọn tệp PDF / Tài liệu từ thiết bị',
-                subtitle: 'Tệp chứng từ PDF hoặc hình ảnh đã lưu trên máy',
+                icon: slotKey != 'businessLicense'
+                    ? LucideIcons.folderOpen
+                    : LucideIcons.fileText,
+                title: slotKey != 'businessLicense'
+                    ? 'Chọn tệp ảnh từ thiết bị'
+                    : 'Chọn tệp PDF / Tài liệu từ thiết bị',
+                subtitle: slotKey != 'businessLicense'
+                    ? 'Tệp ảnh JPG, PNG hoặc WebP đã lưu trên máy'
+                    : 'Tệp chứng từ PDF hoặc hình ảnh đã lưu trên máy',
                 onTap: () => Navigator.of(sheetContext)
                     .pop(HostKycFileSource.deviceFile),
               ),
@@ -2206,7 +2288,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                                           .contains('không trùng khớp'))
                                   ? _aiBackError!
                                   : (isInvalid || hasAiError)
-                                      ? '❌ Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ. Vui lòng tải lên ảnh chụp giấy tờ tùy thân gốc.'
+                                      ? 'Tệp tải lên không phải là CCCD/Hộ chiếu hợp lệ. Vui lòng tải lên ảnh chụp giấy tờ tùy thân gốc.'
                                       : 'Vui lòng bấm "Quét AI CCCD" để kiểm tra tính hợp lệ của giấy tờ trước khi gửi hồ sơ.';
 
                               return Padding(
@@ -2706,7 +2788,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
           ),
           const SizedBox(height: AppSpacing.s4),
           const Text(
-            'JPG, PNG, WebP hoặc PDF rõ nét.',
+            'Giấy tờ định danh: ảnh JPG, PNG, WebP rõ nét (Giấy phép KD hỗ trợ thêm PDF).',
             style: AppTypography.caption,
           ),
           const SizedBox(height: AppSpacing.s12),
@@ -2743,7 +2825,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
           if (_documentType == HostDocumentType.passport) ...[
             _buildFileSlotCard(
               slotKey: 'identitySingle',
-              title: 'Ảnh / PDF Hộ chiếu *',
+              title: 'Ảnh Hộ chiếu (Passport) *',
               subtitle: 'Trang thông tin có ảnh rõ nét.',
               pickedFile: _identitySingle,
             ),
@@ -2801,7 +2883,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
         borderRadius: BorderRadius.circular(16),
         onTap: (_submitting || isLocked || pickedFile != null)
             ? null
-            : () => _pickFileForSlot(
+            : () => _openFileSourceBottomSheet(
                   slotKey: slotKey,
                   slotLabel: title,
                 ),
@@ -2991,7 +3073,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                           label: 'Chọn lại',
                           onPressed: _submitting
                               ? null
-                              : () => _pickFileForSlot(
+                              : () => _openFileSourceBottomSheet(
                                     slotKey: slotKey,
                                     slotLabel: title,
                                   ),
@@ -3388,7 +3470,7 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
                 const SizedBox(width: AppSpacing.s8),
                 Expanded(
                   child: Text(
-                    '❌ Không trùng khớp số CCCD với mặt trước',
+                    'Không trùng khớp số CCCD với mặt trước',
                     style: AppTypography.bodyMedium.copyWith(
                       fontWeight: FontWeight.w700,
                       color: const Color(0xFF991B1B),
@@ -3433,8 +3515,8 @@ class _DangKyHostScreenState extends ConsumerState<DangKyHostScreen> {
               Expanded(
                 child: Text(
                   frontId != null && backId != null && frontId == backId
-                      ? '✓ Mặt sau CCCD hợp lệ (Khớp số CCCD)'
-                      : '✓ Mặt sau CCCD hợp lệ',
+                      ? 'Mặt sau CCCD hợp lệ (Khớp số CCCD)'
+                      : 'Mặt sau CCCD hợp lệ',
                   style: AppTypography.bodyMedium.copyWith(
                     fontWeight: FontWeight.w700,
                     color: const Color(0xFF166534),
@@ -3696,7 +3778,8 @@ class TrangThaiHostScreen extends ConsumerStatefulWidget {
       _TrangThaiHostScreenState();
 }
 
-class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
+class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen>
+    with WidgetsBindingObserver {
   bool _loading = true;
   bool _cancelling = false;
   HostOnboardingClassifiedError? _classifiedError;
@@ -3705,9 +3788,23 @@ class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _fetchStatus();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted && !_loading) {
+      _fetchStatus();
+    }
   }
 
   Future<void> _fetchStatus() async {
@@ -3717,10 +3814,11 @@ class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
     });
 
     try {
-      final repo = ref.read(hostOnboardingApiProvider);
+      final repo = ref.read(hostOnboardingViewModelProvider);
       final record = await repo.getMyApplicationRecord();
       if (!mounted) return;
-      final fallbackSubmitted = ref.read(hostLastSubmittedApplicationProvider);
+      final fallbackSubmitted =
+          ref.read(hostOnboardingViewModelProvider).lastSubmittedApplication;
       HostApplicationRecord? effectiveRecord = record ?? fallbackSubmitted;
       if (effectiveRecord != null &&
           fallbackSubmitted != null &&
@@ -3728,6 +3826,10 @@ class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
           (effectiveRecord.reviewedAt == null ||
               effectiveRecord.reviewedAt!.trim().isEmpty)) {
         effectiveRecord = fallbackSubmitted;
+      }
+      if (effectiveRecord?.status == HostApplicationStatus.approved) {
+        await repo.refreshApprovedHostSession();
+        if (!mounted) return;
       }
       setState(() {
         _record = effectiveRecord;
@@ -3743,7 +3845,8 @@ class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
         'Failed to fetch host status on TrangThaiHostScreen',
         error: e,
       );
-      final fallbackSubmitted = ref.read(hostLastSubmittedApplicationProvider);
+      final fallbackSubmitted =
+          ref.read(hostOnboardingViewModelProvider).lastSubmittedApplication;
       setState(() {
         _classifiedError = classified;
         _record ??= fallbackSubmitted;
@@ -3813,10 +3916,7 @@ class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
     });
 
     try {
-      final repo = ref.read(hostOnboardingApiProvider);
-      await repo.cancelApplication();
-
-      ref.read(hostLastSubmittedApplicationProvider.notifier).state = null;
+      await ref.read(hostOnboardingViewModelProvider).cancelApplication();
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3835,11 +3935,9 @@ class _TrangThaiHostScreenState extends ConsumerState<TrangThaiHostScreen> {
         SnackBar(
           key: const Key('cancel_application_error_snackbar'),
           content: Text(
-            e is DioException &&
-                    e.response?.data is Map &&
-                    (e.response!.data as Map)['message'] != null
-                ? (e.response!.data as Map)['message'].toString()
-                : 'Không thể hủy đơn đăng ký. Vui lòng thử lại sau.',
+            ref
+                .read(hostOnboardingViewModelProvider)
+                .extractCancelErrorMessage(e),
           ),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,

@@ -136,7 +136,8 @@ const _guestUser = User(
 
 class _FakeLocaleNotifier extends LocaleNotifier {
   _FakeLocaleNotifier([String initial = 'vi'])
-      : super(PreferencesService.inMemory({AppConstants.storageLocaleKey: initial})) {
+      : super(PreferencesService.inMemory(
+            {AppConstants.storageLocaleKey: initial})) {
     state = initial;
   }
 }
@@ -1176,7 +1177,8 @@ void main() {
             await tester.pumpWidget(
               ProviderScope(
                 overrides: [
-                  localeProvider.overrideWith((ref) => _FakeLocaleNotifier('vi')),
+                  localeProvider
+                      .overrideWith((ref) => _FakeLocaleNotifier('vi')),
                   dioClientProvider.overrideWithValue(client),
                   socketServiceProvider.overrideWithValue(socketService),
                   authNotifierProvider.overrideWith((_) => authNotifier),
@@ -1386,10 +1388,14 @@ void main() {
         // Long-press incoming bubble -> opens Messenger reaction picker
         await tester.longPress(find.text('Xin chào bạn!'));
         await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('reaction_picker_701')), findsOneWidget);
-        await tester.tap(find.byKey(const ValueKey('reaction_❤️_701')));
+        expect(
+            find.byKey(const ValueKey('reaction_picker_701')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('reaction_heart_701')));
         await tester.pumpAndSettle();
-        expect(find.text('❤️'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('reaction_badge_heart_701')),
+          findsOneWidget,
+        );
 
         socketService.dispose();
       },

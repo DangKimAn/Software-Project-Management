@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP dịch vụ AI đánh giá hình ảnh chỗ ở cho chủ nhà và quản trị viên:
+ * - Áp dụng middleware xác thực (`authenticate`), phân quyền vai trò (`host`/`admin`) và bộ giới hạn tốc độ gọi mô hình thị giác máy tính.
+ */
+
 import express from "express";
 import { body, param, query } from "express-validator";
 
@@ -93,6 +98,11 @@ router.post(
             .isBoolean()
             .withMessage("force must be boolean")
             .toBoolean(),
+        query("limit")
+            .optional()
+            .isInt({ min: 1, max: 10 })
+            .withMessage("limit must be between 1 and 10")
+            .toInt(),
     ],
     analyzeAllListingImages,
 );

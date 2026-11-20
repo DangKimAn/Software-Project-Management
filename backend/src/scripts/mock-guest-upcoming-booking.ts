@@ -14,8 +14,12 @@ import {
 import { getNextSequence } from "../models/counter";
 import { getMyBookings } from "../modules/bookings/bookings.service";
 
+/**
+ * Khởi tạo dữ liệu mô phỏng kỳ nghỉ sắp tới cho tài khoản khách thử nghiệm ở môi trường phát triển:
+ * Sinh bản ghi đặt phòng đã xác nhận, thanh toán VNPAY, khóa ngày lưu trú, lịch sử FSM, khách đi cùng và thông báo.
+ */
 async function mockUpcomingBooking() {
-    console.info("🚀 Starting mock upcoming booking for guest@gmail.com...");
+    console.info("Starting mock upcoming booking for guest@gmail.com...");
 
     const guestUser = await User.findOne({ where: { email: "guest@gmail.com" } });
     if (!guestUser) {
@@ -279,7 +283,7 @@ async function mockUpcomingBooking() {
     console.info("Created confirmation notification");
 
     // Verify through service
-    console.info("\n🔍 Verifying via getMyBookings service...");
+    console.info("\nVerifying via getMyBookings service...");
     const myBookingsResult = await getMyBookings(
         {
             id: String(guestUser.userId),
@@ -291,7 +295,7 @@ async function mockUpcomingBooking() {
 
     const mockedTrip = myBookingsResult.items.find((b: any) => b.bookingId === bookingId);
     console.info("--------------------------------------------------");
-    console.info("🎉 Mocked booking verified successfully:");
+    console.info("Mocked booking verified successfully:");
     console.info(`- Booking ID: #${mockedTrip?.bookingId}`);
     console.info(`- Villa: ${mockedTrip?.listingTitle}`);
     console.info(`- Check-in: ${mockedTrip?.checkInDate} (14:00)`);
@@ -307,7 +311,7 @@ async function mockUpcomingBooking() {
 }
 
 mockUpcomingBooking().catch(async (error) => {
-    console.error("❌ Failed to mock booking:", error);
+    console.error("Failed to mock booking:", error);
     await sequelize.close();
     process.exit(1);
 });

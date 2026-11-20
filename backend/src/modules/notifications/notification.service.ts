@@ -72,6 +72,9 @@ const maxPageLimit = 50;
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 
+/**
+ * Giải thuật định dạng giá trị tiền tệ sang chuỗi hiển thị chuẩn `vi-VN` (làm tròn đến đơn vị nguyên, không chữ số thập phân lẻ).
+ */
 const formatMoney = (value: unknown, currency = "VND") =>
     new Intl.NumberFormat("vi-VN", {
         style: "currency",
@@ -79,9 +82,16 @@ const formatMoney = (value: unknown, currency = "VND") =>
         maximumFractionDigits: 0,
     }).format(toNumber(value));
 
+/**
+ * Giải thuật định dạng mốc ngày/giờ sang chuỗi lịch địa phương `vi-VN` (`DD/MM/YYYY`).
+ */
 const formatDate = (value: Date | string | null | undefined) =>
     value ? new Intl.DateTimeFormat("vi-VN").format(new Date(value)) : "";
 
+/**
+ * Giải thuật mã hóa thực thể HTML (HTML Entity Encoding) cho 5 ký tự nhạy cảm (`&`, `<`, `>`, `"`, `'`)
+ * nhằm ngăn chặn tấn công HTML/XSS Injection khi nhúng dữ liệu động vào thân email HTML.
+ */
 const escapeHtml = (value: unknown) =>
     String(value ?? "")
         .replace(/&/g, "&amp;")
@@ -90,6 +100,10 @@ const escapeHtml = (value: unknown) =>
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
 
+/**
+ * Giải thuật chuẩn hóa hậu tương thích tên thương hiệu trong nội dung thông báo:
+ * Quy đổi tự động các biến thể tên thương hiệu cũ về chuẩn hiện hành `"The Palm Villa"` và `"The Palm Luxury"`.
+ */
 export const normalizeNotificationBrandText = (value: string | null | undefined): string | null => {
     if (value === null || value === undefined) {
         return null;
@@ -100,6 +114,9 @@ export const normalizeNotificationBrandText = (value: string | null | undefined)
         .replace(/MinhThanh\s+Luxury/gi, "The Palm Luxury");
 };
 
+/**
+ * Giải thuật kết xuất mẫu email HTML chuẩn giao diện thương hiệu có nhúng CID logo và tự động thoát mã độc HTML (`escapeHtml`) cho tiêu đề cùng từng dòng nội dung.
+ */
 const buildEmailHtml = (title: string, lines: Array<string | null | undefined>) => `
     <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:600px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px;background-color:#ffffff;">
       <div style="text-align:center;margin-bottom:20px;">
@@ -126,6 +143,10 @@ const listingAddress = (listing: ListingDocument | null) =>
         .filter(Boolean)
         .join(", ");
 
+/**
+ * Giải thuật trì hoãn tác vụ phát tán ngoại vi (Socket.IO, FCM Push, SMTP Email) sang sau thời điểm giao dịch CSDL `commit` thành công:
+ * Đảm bảo tính nhất quán sự kiện — không phát nhầm thông báo ra ngoài nếu giao dịch nghiệp vụ chính bị `rollback`.
+ */
 const runAfterCommit = (transaction: Transaction | undefined, callback: () => Promise<void>) => {
     if (transaction) {
         transaction.afterCommit(() => {
@@ -137,6 +158,9 @@ const runAfterCommit = (transaction: Transaction | undefined, callback: () => Pr
     void callback();
 };
 
+/**
+ * Giải thuật tuần tự hóa bản ghi `NotificationLog` sang DTO hộp thư thông báo, suy diễn trạng thái đã đọc (`isRead`) và phạm vi quản trị (`forAdmin`).
+ */
 const serializeNotification = (notification: NotificationLog) => ({
     id: Number(notification.notificationLogId),
     notificationLogId: Number(notification.notificationLogId),
@@ -172,6 +196,10 @@ const serializeLookupError = (error: unknown) => {
     };
 };
 
+/**
+ * Giải thuật bọc truy vấn ngữ cảnh thông báo chịu lỗi (fault-tolerant lookup):
+ * Bắt và ghi log cảnh báo mọi lỗi truy vấn thực thể liên quan, trả về `null` để không làm gián đoạn luồng giao dịch chính.
+ */
 const safeNotificationLookup = async <T>(
     label: string,
     metadata: Record<string, unknown>,
@@ -189,6 +217,9 @@ const safeNotificationLookup = async <T>(
     }
 };
 
+/**
+ * Giải thuật phát sự kiện thông báo thời gian thực qua Socket.IO tới kênh riêng của người dùng `userId`.
+ */
 const emitCreatedNotification = (userId: number, notification: NotificationLog) => {
     emitNotificationNew(userId, {
         id: Number(notification.notificationLogId),
@@ -205,6 +236,9 @@ const emitCreatedNotification = (userId: number, notification: NotificationLog) 
     });
 };
 
+/**
+ * Giải thuật chuyển phát email qua SMTP và cập nhật trạng thái đối soát vào `NotificationLog` (`sent` kèm `providerMessageId` hoặc `failed` kèm `errorMessage`).
+ */
 const dispatchEmail = async (notification: NotificationLog, email: EmailContent) => {
     try {
         const result = await sendMail(email);
@@ -232,6 +266,12 @@ const dispatchEmail = async (notification: NotificationLog, email: EmailContent)
     }
 };
 
+/**
+ * Giải thuật tạo thông báo In-App khử trùng lặp theo khóa sự kiện và fan-out đa kênh (Socket.IO + FCM Push):
+ * - Chèn bản ghi `NotificationLog` với khóa duy nhất tổ hợp `(eventType, targetType, targetId, recipient = "user:<userId>")`.
+ * - Nếu chạm ràng buộc duy nhất (`UniqueConstraintError`), bỏ qua êm thấm để đảm bảo tính lũy đẳng (idempotent) khi sự kiện phát lại.
+ * - Sau khi giao dịch `commit`, đồng thời đẩy sự kiện realtime qua WebSocket (`emitCreatedNotification`) và gửi thông báo đẩy thiết bị di động (`sendPushToUser`).
+ */
 const createInAppNotificationOnce = async (
     input: Omit<NotifyInput, "recipients">,
     recipient: NotificationRecipient,
@@ -285,6 +325,11 @@ const createInAppNotificationOnce = async (
     }
 };
 
+/**
+ * Giải thuật tạo và chuyển phát thông báo Email khử trùng lặp theo khóa sự kiện:
+ * Ghi nhận `NotificationLog` ở trạng thái `pending` theo khóa `(eventType, targetType, targetId, recipient = email)` để chặn gửi thư lặp,
+ * và kích hoạt gửi SMTP bất đồng bộ qua `runAfterCommit`.
+ */
 const createEmailNotificationOnce = async (
     input: Omit<NotifyInput, "recipients">,
     recipient: NotificationRecipient,
@@ -336,6 +381,11 @@ const createEmailNotificationOnce = async (
     }
 };
 
+/**
+ * Giải thuật điều phối trung tâm khử trùng lặp người nhận và fan-out thông báo đa kênh:
+ * - Lọc bỏ các `userId` không hợp lệ và khử trùng lặp danh sách người nhận bằng bảng băm `Map<number, NotificationRecipient>` trong O(N).
+ * - Với mỗi người nhận duy nhất, thực thi độc lập luồng fan-out In-App + Realtime Socket + FCM Push (`createInAppNotificationOnce`) và luồng SMTP Email (`createEmailNotificationOnce`).
+ */
 export const notify = async (input: NotifyInput) => {
     const uniqueRecipients = new Map<number, NotificationRecipient>();
 
@@ -365,6 +415,10 @@ const getActiveUser = async (userId: number, transaction?: Transaction) => {
     );
 };
 
+/**
+ * Giải thuật truy vấn danh sách `userId` của toàn bộ Quản trị viên đang hoạt động (`r.code = 'admin'` và `u.status = 'active'`)
+ * nhằm phục vụ fan-out các thông báo kiểm duyệt hồ sơ Host, chỗ nghỉ và hoàn tiền.
+ */
 const getAdminRecipientIds = async (transaction?: Transaction) => {
     let rows: Array<{ userId: number }> = [];
 
@@ -408,6 +462,9 @@ const getListingForNotification = async (listingId: number, transaction?: Transa
     );
 };
 
+/**
+ * Giải thuật nạp song song (`Promise.all`) ngữ cảnh liên kết của đơn đặt phòng (booking, chỗ nghỉ, khách, chủ nhà và giao dịch thanh toán mới nhất).
+ */
 const getBookingContext = async (bookingId: number, transaction?: Transaction) => {
     const booking = await safeNotificationLookup<BookingDocument>("booking", { bookingId }, () =>
         Booking.findOne({
@@ -474,6 +531,10 @@ const bookingSummaryLines = (
     `Tổng tiền: ${formatMoney(payment?.amount ?? booking.totalAmount, payment?.currency ?? booking.currency)}`,
 ];
 
+/**
+ * Giải thuật fan-out thông báo song phương cho cả Khách đặt phòng và Chủ nhà đối với một sự kiện vòng đời booking,
+ * gán đúng đường dẫn điều hướng (`actionUrl`) tương ứng với vai trò của từng bên.
+ */
 const notifyBookingParticipants = async (params: {
     eventType: NotificationEventType;
     bookingId: number;
@@ -517,6 +578,9 @@ const notifyBookingParticipants = async (params: {
     });
 };
 
+/**
+ * Giải thuật phát thông báo chào mừng người dùng đăng ký mới (`USER_REGISTERED`) qua In-App, Push và Email xác nhận tạo tài khoản.
+ */
 export const notifyUserRegistered = async (userId: number, transaction?: Transaction) => {
     const user = await getActiveUser(userId, transaction);
 
@@ -559,6 +623,9 @@ export const notifyUserRegistered = async (userId: number, transaction?: Transac
     });
 };
 
+/**
+ * Giải thuật phát tán (fan-out) thông báo hồ sơ đăng ký Host mới (`HOST_APPLICATION_SUBMITTED`) tới toàn bộ tài khoản Admin đang hoạt động.
+ */
 export const notifyHostApplicationSubmitted = async (
     applicationId: number,
     userId: number,
@@ -603,6 +670,9 @@ export const notifyHostApplicationSubmitted = async (
     });
 };
 
+/**
+ * Giải thuật thông báo phê duyệt hồ sơ đối tác Chủ nhà (`HOST_APPLICATION_APPROVED`) qua In-App, Push và Email cho người nộp đơn.
+ */
 export const notifyHostApplicationApproved = async (
     applicationId: number,
     userId: number,
@@ -646,6 +716,9 @@ export const notifyHostApplicationApproved = async (
     });
 };
 
+/**
+ * Giải thuật thông báo từ chối hồ sơ đăng ký Chủ nhà (`HOST_APPLICATION_REJECTED`) kèm lý do chi tiết để người dùng bổ sung giấy tờ và gửi lại.
+ */
 export const notifyHostApplicationRejected = async (
     applicationId: number,
     userId: number,
@@ -692,6 +765,10 @@ export const notifyHostApplicationRejected = async (
     });
 };
 
+/**
+ * Giải thuật thông báo gửi kiểm duyệt chỗ nghỉ (`LISTING_SUBMITTED`):
+ * Gửi đồng thời xác nhận chờ duyệt cho Chủ nhà (`targetRole = "host"`) và thông báo tác vụ kiểm duyệt cho toàn bộ Admin (`forAdmin = true`).
+ */
 export const notifyListingSubmitted = async (listingId: number, transaction?: Transaction) => {
     const listing = await getListingForNotification(listingId, transaction);
 
@@ -741,6 +818,9 @@ export const notifyListingSubmitted = async (listingId: number, transaction?: Tr
     });
 };
 
+/**
+ * Giải thuật thông báo chỗ nghỉ được phê duyệt xuất bản (`LISTING_APPROVED`) qua In-App, Push và Email tới Chủ nhà sở hữu.
+ */
 export const notifyListingApproved = async (listingId: number, transaction?: Transaction) => {
     const listing = await getListingForNotification(listingId, transaction);
 
@@ -786,6 +866,9 @@ export const notifyListingApproved = async (listingId: number, transaction?: Tra
     });
 };
 
+/**
+ * Giải thuật thông báo chỗ nghỉ bị từ chối kiểm duyệt (`LISTING_REJECTED`) kèm lý do từ chối tới Chủ nhà qua In-App, Push và Email.
+ */
 export const notifyListingRejected = async (listingId: number, transaction?: Transaction) => {
     const listing = await getListingForNotification(listingId, transaction);
 
@@ -833,6 +916,9 @@ export const notifyListingRejected = async (listingId: number, transaction?: Tra
     });
 };
 
+/**
+ * Giải thuật thông báo khởi tạo đơn đặt phòng mới (`BOOKING_CREATED`) tới cả Khách hàng (nhắc thanh toán giữ chỗ) và Chủ nhà.
+ */
 export const notifyBookingCreated = async (bookingId: number, transaction?: Transaction) => {
     await notifyBookingParticipants({
         eventType: "BOOKING_CREATED",
@@ -845,6 +931,9 @@ export const notifyBookingCreated = async (bookingId: number, transaction?: Tran
     });
 };
 
+/**
+ * Giải thuật thông báo giao dịch thanh toán đang chờ xử lý (`PAYMENT_PENDING`) dẫn hướng khách hàng tới trang hoàn tất thanh toán.
+ */
 export const notifyPaymentPending = async (paymentId: number, transaction?: Transaction) => {
     const payment = await safeNotificationLookup<PaymentDocument>("payment", { paymentId }, () =>
         Payment.findOne({
@@ -882,6 +971,10 @@ export const notifyPaymentPending = async (paymentId: number, transaction?: Tran
     });
 };
 
+/**
+ * Giải thuật thông báo thanh toán đặt phòng thành công (`PAYMENT_SUCCESS`):
+ * Chỉ kích hoạt khi `payment.status === "paid"`, gửi biên nhận tóm tắt booking kèm mã giao dịch cho Khách qua Email/In-App và báo đơn chờ xác nhận cho Chủ nhà.
+ */
 export const notifyPaymentSuccess = async (paymentId: number, transaction?: Transaction) => {
     const payment = await safeNotificationLookup<PaymentDocument>("payment", { paymentId }, () =>
         Payment.findOne({
@@ -951,6 +1044,9 @@ export const notifyPaymentSuccess = async (paymentId: number, transaction?: Tran
     });
 };
 
+/**
+ * Giải thuật thông báo phiên giữ chỗ thanh toán đã hết hạn (`PAYMENT_EXPIRED`) tới cả Khách hàng (kèm Email) và Chủ nhà.
+ */
 export const notifyPaymentExpired = async (bookingId: number, transaction?: Transaction) => {
     const context = await getBookingContext(bookingId, transaction);
 
@@ -989,6 +1085,9 @@ export const notifyPaymentExpired = async (bookingId: number, transaction?: Tran
     });
 };
 
+/**
+ * Giải thuật thông báo Chủ nhà đã xác nhận đơn đặt phòng (`BOOKING_CONFIRMED`) kèm chi tiết lưu trú qua Email/In-App cho Khách hàng.
+ */
 export const notifyBookingConfirmed = async (bookingId: number, transaction?: Transaction) => {
     const context = await getBookingContext(bookingId, transaction);
 
@@ -1023,6 +1122,9 @@ export const notifyBookingConfirmed = async (bookingId: number, transaction?: Tr
     });
 };
 
+/**
+ * Giải thuật thông báo đơn đặt phòng bị hủy (`BOOKING_CANCELLED`) tới Khách hàng và Chủ nhà kèm lý do và thời điểm hủy trong payload.
+ */
 export const notifyBookingCancelled = async (bookingId: number, transaction?: Transaction) => {
     const context = await getBookingContext(bookingId, transaction);
 
@@ -1045,6 +1147,10 @@ export const notifyBookingCancelled = async (bookingId: number, transaction?: Tr
     });
 };
 
+/**
+ * Giải thuật thông báo khởi tạo yêu cầu hoàn tiền (`REFUND_CREATED`):
+ * Gửi thông báo kèm Email cho Khách hàng và fan-out tới toàn bộ Admin đang hoạt động (loại trừ chính `guestUserId` để tránh nhận thông báo kép).
+ */
 export const notifyRefundCreated = async (refundId: number, transaction?: Transaction) => {
     const refund = await safeNotificationLookup("refund", { refundId }, () =>
         Refund.findByPk(refundId, {
@@ -1107,13 +1213,143 @@ export const notifyRefundCreated = async (refundId: number, transaction?: Transa
                 userId,
                 title: "Có refund mới cần xử lý",
                 body,
-                actionUrl: "/admin",
-                payload,
+                actionUrl: "/admin/chi-tra",
+                payload: {
+                    ...payload,
+                    forAdmin: true,
+                    targetRole: "admin",
+                },
             })),
         ],
     });
 };
 
+// CONFLICT-RESOLVED: Giữ trọn bộ hàm thông báo hoàn tiền (`notifyRefundSucceeded`, `notifyRefundRejected`) từ `origin/develop` và JSDoc giải thuật thông báo chi trả của nhánh refactor.
+/**
+ * Giải thuật thông báo hoàn tiền thành công (`REFUND_CREATED`) tới Khách đặt phòng qua In-App, Push và Email.
+ */
+export const notifyRefundSucceeded = async (refundId: number, transaction?: Transaction) => {
+    const refund = await safeNotificationLookup("refund", { refundId }, () =>
+        Refund.findByPk(refundId, {
+            transaction,
+        }),
+    );
+
+    if (!refund) {
+        return;
+    }
+
+    const context = await getBookingContext(refund.bookingId, transaction);
+
+    if (!context) {
+        return;
+    }
+
+    const title = "Hoàn tiền thành công";
+    const body = `Số tiền ${formatMoney(refund.amount, refund.currency)} đã được hoàn về tài khoản ngân hàng của bạn. Mã GD: ${refund.providerRef ?? ""}`;
+    const payload = {
+        refundId: refund.refundId,
+        paymentId: refund.paymentId,
+        bookingId: refund.bookingId,
+        status: refund.status,
+        amount: toNumber(refund.amount),
+        currency: refund.currency,
+        providerRef: refund.providerRef,
+    };
+    const lines = [
+        `Xin chào ${context.guest?.fullName ?? ""},`,
+        body,
+        `Mã giao dịch ngân hàng: ${refund.providerRef ?? "N/A"}`,
+        `Cảm ơn bạn đã đồng hành cùng The Palm Villa.`,
+    ];
+
+    await notify({
+        eventType: "REFUND_CREATED",
+        targetType: "refund",
+        targetId: refund.refundId,
+        transaction,
+        recipients: [
+            {
+                userId: Number(context.booking.guestUserId),
+                title,
+                body,
+                actionUrl: "/account/trips",
+                payload,
+                email: context.guest?.email
+                    ? {
+                          to: context.guest.email,
+                          subject: "Hoàn tiền thành công - The Palm Villa",
+                          text: lines.filter(Boolean).join("\n"),
+                          html: buildEmailHtml(title, lines),
+                      }
+                    : null,
+            },
+        ],
+    });
+};
+
+/**
+ * Giải thuật thông báo từ chối yêu cầu hoàn tiền tới Khách đặt phòng kèm lý do từ chối chi tiết.
+ */
+export const notifyRefundRejected = async (refundId: number, rejectionReason: string, transaction?: Transaction) => {
+    const refund = await safeNotificationLookup("refund", { refundId }, () =>
+        Refund.findByPk(refundId, {
+            transaction,
+        }),
+    );
+
+    if (!refund) {
+        return;
+    }
+
+    const context = await getBookingContext(refund.bookingId, transaction);
+
+    if (!context) {
+        return;
+    }
+
+    const title = "Yêu cầu hoàn tiền bị từ chối";
+    const body = `Yêu cầu hoàn tiền cho booking #${refund.bookingId} đã bị từ chối. Lý do: ${rejectionReason}`;
+    const lines = [
+        `Xin chào ${context.guest?.fullName ?? ""},`,
+        body,
+        `Nếu bạn có bất kỳ thắc mắc nào, vui lòng liên hệ bộ phận hỗ trợ The Palm Villa.`,
+    ];
+
+    await notify({
+        eventType: "REFUND_CREATED",
+        targetType: "refund",
+        targetId: refund.refundId,
+        transaction,
+        recipients: [
+            {
+                userId: Number(context.booking.guestUserId),
+                title,
+                body,
+                actionUrl: "/account/trips",
+                payload: {
+                    refundId: refund.refundId,
+                    bookingId: refund.bookingId,
+                    status: refund.status,
+                    amount: toNumber(refund.amount),
+                    rejectionReason,
+                },
+                email: context.guest?.email
+                    ? {
+                          to: context.guest.email,
+                          subject: "Thông báo từ chối hoàn tiền - The Palm Villa",
+                          text: lines.filter(Boolean).join("\n"),
+                          html: buildEmailHtml(title, lines),
+                      }
+                    : null,
+            },
+        ],
+    });
+};
+
+/**
+ * Giải thuật thông báo khởi tạo lô thanh toán doanh thu (`PAYOUT_CREATED`) tới Chủ nhà qua In-App, Push và Email.
+ */
 export const notifyPayoutCreated = async (payoutId: number, transaction?: Transaction) => {
     const payout = await HostPayoutBatch.findByPk(payoutId, {
         transaction,
@@ -1124,6 +1360,7 @@ export const notifyPayoutCreated = async (payoutId: number, transaction?: Transa
     }
 
     const host = await getActiveUser(Number(payout.hostId), transaction);
+    const adminIds = await getAdminRecipientIds(transaction);
     const title = "Payout đã được tạo";
     const body = `Payout #${payout.payoutId} trị giá ${formatMoney(payout.amount, payout.currency)} đang chờ xử lý.`;
     const lines = [
@@ -1158,10 +1395,126 @@ export const notifyPayoutCreated = async (payoutId: number, transaction?: Transa
                       }
                     : null,
             },
+            ...adminIds.map((userId) => ({
+                userId,
+                title: "Có yêu cầu rút tiền Host cần duyệt",
+                body: `Host ${host?.fullName ?? ""} yêu cầu rút ${formatMoney(payout.amount, payout.currency)}.`,
+                actionUrl: "/admin/chi-tra",
+                payload: {
+                    payoutId: payout.payoutId,
+                    amount: toNumber(payout.amount),
+                    currency: payout.currency,
+                    status: payout.status,
+                    forAdmin: true,
+                    targetRole: "admin",
+                },
+            })),
         ],
     });
 };
 
+export const notifyPayoutPaid = async (payoutId: number, transaction?: Transaction) => {
+    const payout = await HostPayoutBatch.findByPk(payoutId, {
+        transaction,
+    });
+
+    if (!payout) {
+        return;
+    }
+
+    const host = await getActiveUser(Number(payout.hostId), transaction);
+    const title = "Chi trả doanh thu thành công";
+    const body = `Số tiền ${formatMoney(payout.amount, payout.currency)} đã được chuyển vào tài khoản ngân hàng của bạn. Mã GD: ${payout.transferReference ?? ""}`;
+    const lines = [
+        `Xin chào ${host?.fullName ?? ""},`,
+        body,
+        `Mã tham chiếu ngân hàng: ${payout.transferReference ?? "N/A"}`,
+        `Thời gian chi trả: ${payout.paidAt ? new Date(payout.paidAt).toLocaleString("vi-VN") : "Hôm nay"}`,
+    ];
+
+    await notify({
+        eventType: "PAYOUT_CREATED",
+        targetType: "payout",
+        targetId: payout.payoutId,
+        transaction,
+        recipients: [
+            {
+                userId: Number(payout.hostId),
+                title,
+                body,
+                actionUrl: "/chu-nha/thanh-toan",
+                payload: {
+                    payoutId: payout.payoutId,
+                    amount: toNumber(payout.amount),
+                    currency: payout.currency,
+                    status: payout.status,
+                    transferReference: payout.transferReference,
+                },
+                email: host?.email
+                    ? {
+                          to: host.email,
+                          subject: "Chi trả doanh thu thành công - The Palm Villa",
+                          text: lines.filter(Boolean).join("\n"),
+                          html: buildEmailHtml(title, lines),
+                      }
+                    : null,
+            },
+        ],
+    });
+};
+
+export const notifyPayoutRejected = async (payoutId: number, rejectionReason: string, transaction?: Transaction) => {
+    const payout = await HostPayoutBatch.findByPk(payoutId, {
+        transaction,
+    });
+
+    if (!payout) {
+        return;
+    }
+
+    const host = await getActiveUser(Number(payout.hostId), transaction);
+    const title = "Đợt chi trả Payout bị từ chối";
+    const body = `Đợt chi trả #${payout.payoutId} trị giá ${formatMoney(payout.amount, payout.currency)} đã bị từ chối. Lý do: ${rejectionReason}`;
+    const lines = [
+        `Xin chào ${host?.fullName ?? ""},`,
+        body,
+        `Vui lòng kiểm tra lại thông tin tài khoản ngân hàng hoặc liên hệ bộ phận hỗ trợ.`,
+    ];
+
+    await notify({
+        eventType: "PAYOUT_CREATED",
+        targetType: "payout",
+        targetId: payout.payoutId,
+        transaction,
+        recipients: [
+            {
+                userId: Number(payout.hostId),
+                title,
+                body,
+                actionUrl: "/chu-nha/thanh-toan",
+                payload: {
+                    payoutId: payout.payoutId,
+                    amount: toNumber(payout.amount),
+                    currency: payout.currency,
+                    status: payout.status,
+                    rejectionReason,
+                },
+                email: host?.email
+                    ? {
+                          to: host.email,
+                          subject: "Thông báo từ chối chi trả - The Palm Villa",
+                          text: lines.filter(Boolean).join("\n"),
+                          html: buildEmailHtml(title, lines),
+                      }
+                    : null,
+            },
+        ],
+    });
+};
+
+/**
+ * Giải thuật thông báo có đánh giá mới từ khách lưu trú (`REVIEW_CREATED`) gửi trực tiếp tới Chủ nhà sở hữu chỗ nghỉ.
+ */
 export const notifyReviewCreated = async (reviewId: number, transaction?: Transaction) => {
     const review = await Review.findOne({
         where: {
@@ -1201,6 +1554,10 @@ export const notifyReviewCreated = async (reviewId: number, transaction?: Transa
     });
 };
 
+/**
+ * Giải thuật phát tán hàng loạt (broadcast fan-out) thông báo lịch điều chỉnh phí nền tảng (`PLATFORM_FEE_SCHEDULED`) tới toàn bộ Host đang hoạt động:
+ * Truy vấn tập Host duy nhất (`r.code = 'host'`, `u.status = 'active'`), định dạng mốc hiệu lực sau 7 ngày theo múi giờ `Asia/Ho_Chi_Minh` và điều phối qua `notify`.
+ */
 export const notifyAllHostsPlatformFeeScheduled = async (
     settingId: number,
     oldFeePct: number,
@@ -1262,6 +1619,10 @@ export const notifyAllHostsPlatformFeeScheduled = async (
     });
 };
 
+/**
+ * Giải thuật truy vấn phân trang hộp thư thông báo In-App của người dùng:
+ * Thực thi song song 3 truy vấn (`Promise.all`) để lấy trang dữ liệu hiện tại, tổng số thông báo khớp bộ lọc và tổng số thông báo chưa đọc (`readAt IS NULL`).
+ */
 export const listMyNotifications = async (user: AuthenticatedUser, query: ListNotificationsQuery) => {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(maxPageLimit, Math.max(1, query.limit ?? 10));
@@ -1302,6 +1663,10 @@ export const listMyNotifications = async (user: AuthenticatedUser, query: ListNo
     };
 };
 
+/**
+ * Giải thuật đánh dấu đã đọc một thông báo In-App đơn lẻ:
+ * Kiểm tra quyền sở hữu `recipientUserId = Number(user.id)` (ném lỗi 404 nếu không thuộc người dùng) và cập nhật lũy đẳng mốc `readAt`.
+ */
 export const markNotificationRead = async (user: AuthenticatedUser, notificationLogId: number) => {
     const notification = await NotificationLog.findOne({
         where: {
@@ -1323,6 +1688,9 @@ export const markNotificationRead = async (user: AuthenticatedUser, notification
     return serializeNotification(notification);
 };
 
+/**
+ * Giải thuật đánh dấu đã đọc hàng loạt (`bulk update`) toàn bộ thông báo In-App chưa đọc (`readAt IS NULL`) của người dùng hiện tại với cùng mốc `readAt`.
+ */
 export const markAllNotificationsRead = async (user: AuthenticatedUser) => {
     const readAt = new Date();
     const [updatedCount] = await NotificationLog.update(

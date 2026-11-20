@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:hotel_booking_flutter/features/host/data/host_repository.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/screens/host_portal_screens.dart';
 
@@ -155,19 +156,19 @@ void main() {
       await tester.longPress(find.text('xin chao'));
       await tester.pumpAndSettle();
 
-      expect(find.text('❤️'), findsOneWidget);
-      expect(find.text('😆'), findsOneWidget);
-      expect(find.text('😮'), findsOneWidget);
-      expect(find.text('😢'), findsOneWidget);
-      expect(find.text('😡'), findsOneWidget);
-      expect(find.text('👍'), findsOneWidget);
+      expect(find.byKey(const Key('reaction_heart_m1')), findsOneWidget);
+      expect(find.byKey(const Key('reaction_laugh_m1')), findsOneWidget);
+      expect(find.byKey(const Key('reaction_surprised_m1')), findsOneWidget);
+      expect(find.byKey(const Key('reaction_sad_m1')), findsOneWidget);
+      expect(find.byKey(const Key('reaction_angry_m1')), findsOneWidget);
+      expect(find.byKey(const Key('reaction_like_m1')), findsOneWidget);
 
-      // Tap ❤️ to react
-      await tester.tap(find.text('❤️'));
+      // Tap heart icon to react
+      await tester.tap(find.byKey(const Key('reaction_heart_m1')));
       await tester.pumpAndSettle();
 
-      // Reaction badge ❤️ is now attached to the bubble
-      expect(find.text('❤️'), findsOneWidget);
+      // Reaction badge icon is now attached to the bubble
+      expect(find.byKey(const Key('reaction_badge_heart_m1')), findsOneWidget);
 
       // 8. Test quick reply chips filling input
       final quickChip = find.text('Dạ vâng, bên em đã nhận thông tin ạ!');
@@ -183,7 +184,7 @@ void main() {
       // When text is non-empty, send button appears
       expect(find.byKey(const Key('host_message_send_btn')), findsOneWidget);
 
-      // 9. Verify Messenger toolbar buttons (Plus, Camera, Gallery, Mic, Quick Emoji 😤)
+      // 9. Verify Messenger toolbar buttons (Plus, Camera, Gallery, Mic, Quick LucideIcon)
       inputWidget.controller?.clear();
       await tester.pumpAndSettle();
 
@@ -193,7 +194,13 @@ void main() {
       expect(find.byKey(const Key('chat_mic_btn')), findsOneWidget);
       expect(find.byKey(const Key('chat_input_smile_btn')), findsOneWidget);
       expect(find.byKey(const Key('chat_quick_emoji_btn')), findsOneWidget);
-      expect(find.text('😤'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('chat_quick_emoji_btn')),
+          matching: find.byIcon(LucideIcons.thumbsUp),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Nhắn tin'), findsOneWidget);
     },
   );
@@ -214,7 +221,7 @@ void main() {
                   'id': 'conv-admin',
                   'conversationId': 'conv-admin',
                   'listingId': 12,
-                  'listingTitle': 'Seaside Sunset Homestay & Studio Hạ Long',
+                  'listingTitle': 'Seaside Sunset Homestay & Studio Bãi Trước',
                   'otherParticipant': {
                     'fullName': 'Quản trị viên The Palm Villa',
                     'role': 'admin',
@@ -229,14 +236,14 @@ void main() {
                   'id': 'conv-guest',
                   'conversationId': 'conv-guest',
                   'listingId': 12,
-                  'listingTitle': 'Seaside Sunset Homestay & Studio Hạ Long',
+                  'listingTitle': 'Seaside Sunset Homestay & Studio Bãi Trước',
                   'guestName': 'ĐẶNG KIM AN',
                   'otherParticipant': {
                     'fullName': 'ĐẶNG KIM AN',
                     'role': 'guest',
                   },
                   'lastMessage': {
-                    'content': '👍',
+                    'content': '[Thích]',
                     'createdAt': '2026-10-31T11:49:00.000Z',
                   },
                   'unreadCount': 2,
@@ -276,7 +283,7 @@ void main() {
 
       // Listing title rendered below participant name on both rows
       expect(
-        find.text('Seaside Sunset Homestay & Studio Hạ Long'),
+        find.text('Seaside Sunset Homestay & Studio Bãi Trước'),
         findsNWidgets(2),
       );
 
@@ -285,8 +292,84 @@ void main() {
         find.text('Hồ bơi của biệt thự là nước mặn hay nước ngọt?'),
         findsOneWidget,
       );
-      expect(find.text('👍'), findsOneWidget);
+      expect(find.text('[Thích]'), findsOneWidget);
       expect(find.text('2'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Host chat replaces sync button with "Xem chỗ nghỉ" (Xem villa) button like guest interface',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(400, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final client = _FakeDioClient();
+      client.dio.httpClientAdapter = _ChatRecordingAdapter(
+        responder: (options) {
+          if (options.path == '/api/conversations') {
+            return _jsonResponse({
+              'items': [
+                {
+                  'id': 'conv-101',
+                  'conversationId': 'conv-101',
+                  'listingId': '101',
+                  'listingTitle': 'The Palm Villa Vũng Tàu',
+                  'guestName': 'Lê Hoàng Long',
+                  'otherParticipant': {
+                    'fullName': 'Lê Hoàng Long',
+                  },
+                },
+              ],
+            });
+          }
+          if (options.path.contains('/api/conversations/conv-101/messages')) {
+            return _jsonResponse({
+              'items': [
+                {
+                  'messageId': 'm1',
+                  'content': 'What are the check-in and check-out times?',
+                  'senderRole': 'guest',
+                  'senderName': 'Lê Hoàng Long',
+                  'isMe': false,
+                  'createdAt': '2026-11-05T08:00:00.000Z',
+                },
+              ],
+            });
+          }
+          return _jsonResponse({'items': <dynamic>[]});
+        },
+      );
+
+      final repo = HostRepository(
+        client as dynamic,
+        roleResolver: () => 'host',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hostRepositoryProvider.overrideWithValue(repo),
+            hostCurrentUserRoleProvider.overrideWithValue('host'),
+          ],
+          child: const MaterialApp(
+            home: HostPortalScreen(
+              initialSection: HostPortalSection.messages,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap to open conversation detail
+      await tester.tap(find.text('Lê Hoàng Long'));
+      await tester.pumpAndSettle();
+
+      // 1. Sync button (refreshCw) must NOT be present in chat header
+      expect(find.byIcon(LucideIcons.refreshCw), findsNothing);
+
+      // 2. "Xem villa" / "Xem chỗ nghỉ" button with externalLink icon must be present
+      expect(find.byKey(const Key('view_listing_button')), findsOneWidget);
+      expect(find.byIcon(LucideIcons.externalLink), findsOneWidget);
     },
   );
 }

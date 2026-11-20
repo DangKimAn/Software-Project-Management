@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
 /// Shared light luxury radii. Fullscreen media and system bars stay square.
+/// Tập hợp hằng số độ bo góc (Border Radius) chuẩn của hệ thống thiết kế Light Luxury.
+///
+/// Thống nhất bo góc dạng viên thuốc (`pill = 999.0`) cho nút bấm / thanh tìm kiếm / chip,
+/// bo góc mềm cho thẻ biệt thự (`card = 24.0`), hộp thoại (`modal = 28.0`) và ngăn kéo đáy (`bottomSheetTop = 32.0`).
 abstract final class AppRadii {
   static const double sm = 8.0;
   static const double md = 16.0;

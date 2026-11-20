@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP đặt phòng cho khách (`/api/bookings`) và quản lý đơn cho chủ nhà (`hostBookingsRoutes`):
+ * - Áp dụng chuỗi middleware xác thực (`authenticate`), kiểm tra vai trò (`requireRole`), giới hạn tần suất tạo đơn (`Limiter`) và kiểm chứng schema đầu vào (`validate`).
+ */
+
 import express from "express";
 
 import {
@@ -23,6 +28,7 @@ import {
     cancelBookingBodySchema,
     createBulkBookingBodySchema,
     createBookingBodySchema,
+    guestCancelBookingBodySchema,
 } from "./bookings.validator";
 
 const router = express.Router();
@@ -36,7 +42,7 @@ router.get("/mine", validate({ query: bookingsQuerySchema }), getMyGuestBookings
 router.get("/:bookingId", validate({ params: bookingIdParamSchema }), getGuestBookingById);
 router.post(
     "/:bookingId/cancel",
-    validate({ params: bookingIdParamSchema, body: cancelBookingBodySchema }),
+    validate({ params: bookingIdParamSchema, body: guestCancelBookingBodySchema }),
     cancelGuestBookingById,
 );
 

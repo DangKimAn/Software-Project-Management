@@ -39,7 +39,18 @@ class _ChatAudioBubbleState extends State<ChatAudioBubble> {
 
   // Waveform bars pattern matching Facebook Messenger voice note
   static const List<double> _waveformHeights = [
-    18.0, 4.0, 4.0, 18.0, 18.0, 15.0, 12.0, 7.0, 4.0, 12.0, 15.0, 12.0,
+    18.0,
+    4.0,
+    4.0,
+    18.0,
+    18.0,
+    15.0,
+    12.0,
+    7.0,
+    4.0,
+    12.0,
+    15.0,
+    12.0,
   ];
 
   @override
@@ -158,7 +169,8 @@ class _ChatAudioBubbleState extends State<ChatAudioBubble> {
         : 0.0;
 
     final primaryColor = isMe ? Colors.white : AppColors.primary;
-    final secondaryColor = isMe ? Colors.white.withValues(alpha: 0.38) : const Color(0xFFCBD5E1);
+    final secondaryColor =
+        isMe ? Colors.white.withValues(alpha: 0.38) : const Color(0xFFCBD5E1);
 
     return InkWell(
       onTap: _togglePlay,
@@ -185,7 +197,8 @@ class _ChatAudioBubbleState extends State<ChatAudioBubble> {
                         height: 14,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(primaryColor),
                         ),
                       )
                     : Icon(
@@ -203,7 +216,8 @@ class _ChatAudioBubbleState extends State<ChatAudioBubble> {
                 final box = context.findRenderObject() as RenderBox?;
                 if (box != null) {
                   // Fraction based on touch inside waveform
-                  _seekToFraction(details.localPosition.dx.clamp(0.0, 65.0) / 65.0);
+                  _seekToFraction(
+                      details.localPosition.dx.clamp(0.0, 65.0) / 65.0);
                 }
               },
               child: SizedBox(

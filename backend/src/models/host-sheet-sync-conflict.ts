@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu bản ghi xung đột đồng bộ lịch giữa đơn đặt phòng trên hệ thống và thao tác sửa tay trên Google Sheets.
+ */
 import {
     CreationOptional,
     DataTypes,

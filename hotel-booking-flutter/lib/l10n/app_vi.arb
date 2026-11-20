@@ -1,5 +1,6 @@
 {
   "@@locale": "vi",
+  "@@x-conflict-resolved": "CONFLICT-RESOLVED: Gop toan bo khoa da ngon ngu tu nhanh refactor (Support, Footer, 404) va origin/develop (i18n toan he thong), loai bo 3 khoa aiSearch da xoa.",
   "appTitle": "The Palm Villa",
   "appTagline": "Biệt thự nghỉ dưỡng cao cấp Vũng Tàu",
   "greetingMorning": "Chào buổi sáng!",
@@ -47,9 +48,6 @@
   "searchSortPriceAsc": "Giá thấp đến cao",
   "searchSortPriceDesc": "Giá cao đến thấp",
   "searchSortRatingDesc": "Đánh giá cao nhất",
-  "aiSearchTitle": "Tìm kiếm thông minh bằng AI",
-  "aiSearchPlaceholder": "Mô tả kỳ nghỉ mong muốn (VD: Villa sát biển Bãi Sau cho 15 người có hồ bơi nước mặn, BBQ)...",
-  "aiSearchAction": "Tìm bằng AI",
   "navDiscover": "Khám phá",
   "navZalo": "Zalo",
   "navHotline": "Hotline",
@@ -230,6 +228,11 @@
   "loadingVillas": "Đang tải chỗ nghỉ...",
   "loadingVillaDetail": "Đang tải thông tin chi tiết biệt thự...",
   "loadingFavorites": "Đang tải danh sách yêu thích...",
+  "loadingTrips": "Đang tải lịch trình...",
+  "loadingPaymentInfo": "Đang tải thông tin thanh toán đặt phòng...",
+  "guestPaymentConnectingGateway": "Đang kết nối cổng thanh toán...",
+  "guestPaymentBookingNotFoundTitle": "Không tìm thấy đơn đặt phòng",
+  "guestPaymentBookingNotFoundMessage": "Đơn đặt phòng không tồn tại hoặc đã hết hạn.",
   "emptyList": "Không tìm thấy villa nào phù hợp",
   "emptyListDesc": "Hãy thử thay đổi tiêu chí tìm kiếm hoặc khoảng thời gian lưu trú.",
   "errorOccurred": "Đã có lỗi xảy ra",
@@ -460,7 +463,7 @@
     }
   },
   "footerSocial": "Mạng xã hội",
-  "footerCopyright": "© Bản quyền thuộc về Villa Vũng Tàu 2026",
+  "footerCopyright": "© 2026 The Palm Villa Vũng Tàu. Bảo lưu mọi quyền.",
   "settingsAvatarUpdateTitle": "Cập nhật ảnh đại diện",
   "settingsAvatarUpdateHint": "Chọn ảnh định dạng JPG, PNG, WebP hoặc GIF từ máy của bạn (dung lượng tối đa 5MB).",
   "settingsAvatarPickFromDevice": "Chọn ảnh từ thiết bị (Tối đa 5MB)",
@@ -931,5 +934,460 @@
   "spaceExterior": "Ngoại thất",
   "spaceView": "Tầm nhìn",
   "spaceDining": "Phòng ăn",
-  "spaceOther": "Không gian khác"
+  "spaceOther": "Không gian khác",
+  "blogAllArticles": "Tất cả bài viết",
+  "blogShareTooltip": "Chia sẻ bài viết",
+  "blogShareInvalidLink": "Liên kết bài viết không hợp lệ để chia sẻ.",
+  "blogShareSuccess": "Đã sao chép liên kết bài viết vào bộ nhớ tạm",
+  "blogShareFailure": "Không thể sao chép liên kết bài viết trên thiết bị này.",
+  "blogNotFoundTitle": "Không tìm thấy bài viết",
+  "blogNotFoundDescription": "Bài viết có thể đã được gỡ hoặc đường dẫn không chính xác.",
+  "blogBackToBlog": "Quay lại Cẩm nang",
+  "blogLoadingArticle": "Đang tải bài viết...",
+  "blogRelatedArticlesBadge": "BÀI VIẾT LIÊN QUAN",
+  "blogRelatedArticlesTitle": "Gợi ý đọc tiếp",
+  "blogViewAllArticles": "Xem tất cả bài viết",
+  "blogReadMinutes": "{minutes} phút đọc",
+  "@blogReadMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "blogDefaultAuthor": "Ban biên tập The Palm",
+  "blogListBadge": "CẨM NANG LƯU TRÚ VŨNG TÀU",
+  "blogListHeroTitle": "Kinh nghiệm lưu trú, lịch trình & bí quyết đặt Villa biển Vũng Tàu",
+  "blogSearchHint": "Tìm bài viết cẩm nang Vũng Tàu...",
+  "blogClearSearchTooltip": "Xóa từ khóa tìm kiếm",
+  "blogCategoryAll": "Tất cả",
+  "blogCategoryTravelGuide": "Cẩm nang du lịch",
+  "blogCategoryReviews": "Đánh giá Villa & Homestay",
+  "blogCategoryTripGuide": "Cẩm nang chuyến đi",
+  "blogCategoryBookingTips": "Kinh nghiệm đặt phòng",
+  "blogCategoryLocalDiscovery": "Khám phá địa phương",
+  "blogCategoryStayTips": "Mẹo lưu trú",
+  "blogCategoryNearBeach": "Villa gần biển",
+  "blogCategoryBookingChecklist": "Checklist đặt phòng",
+  "blogEmptyTitle": "Chưa có bài viết phù hợp",
+  "blogEmptyDescription": "Hãy thử chọn chuyên mục khác hoặc từ khóa khác.",
+  "blogClearFilters": "Xóa bộ lọc",
+  "blogLoadingList": "Đang tải danh sách bài viết...",
+  "blogPaginationPrev": "Trang trước",
+  "blogPaginationNext": "Trang sau",
+  "blogPaginationPage": "Trang {page}",
+  "@blogPaginationPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      }
+    }
+  },
+  "footerSupportTitle": "Hỗ trợ",
+  "footerLinkBookingGuide": "Hướng dẫn đặt phòng",
+  "footerLinkCancellationPolicy": "Chính sách hủy phòng",
+  "footerLinkComplaintsFeedback": "Khiếu nại & Góp ý",
+  "footerLinkFaq": "Câu hỏi thường gặp (FAQ)",
+  "footerExploreTitle": "Khám phá & Dịch vụ",
+  "footerLinkAboutUs": "Về chúng tôi",
+  "footerLinkExploreVungTau": "Khám phá Vũng Tàu",
+  "footerLinkTravelGuide": "Cẩm nang du lịch",
+  "footerLinkAddonServices": "Dịch vụ đi kèm",
+  "footerLinkMemberOffers": "Ưu đãi thành viên",
+  "footerContactTitle": "Liên hệ",
+  "footerHotlineLabel": "Hotline: {phone}",
+  "@footerHotlineLabel": {
+    "placeholders": {
+      "phone": {
+        "type": "String"
+      }
+    }
+  },
+  "footerOnlineConsultLink": "Liên hệ tư vấn trực tuyến",
+  "footerAddressLabel": "Địa chỉ: {address}",
+  "@footerAddressLabel": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "footerEmailLabel": "Email: {email}",
+  "@footerEmailLabel": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "footerEmailSubject": "Liên hệ đặt phòng The Palm Villa Vũng Tàu",
+  "footerSocialTitle": "Social",
+  "supportGuideStep1Title": "Tìm kiếm theo phân khu & lịch trống thực tế",
+  "supportGuideStep1Desc": "Chọn phân khu biển tại Vũng Tàu (Bãi Sau, Bãi Trước, Chí Linh, Long Cung), khoảng ngày lưu trú [Nhận phòng, Trả phòng) và tổng số khách đoàn để lọc đúng các căn biệt thự đang mở lịch.",
+  "supportGuideStep2Title": "Kiểm tra bảng giá theo đêm & áp dụng mã ưu đãi",
+  "supportGuideStep2Desc": "Xem chi tiết thông số biệt thự (phòng ngủ, giường, WC, khoảng cách biển), bảng giá từng đêm ngày thường / cuối tuần, phụ thu khách vượt tiêu chuẩn (nếu có) và nhập mã ưu đãi hợp lệ.",
+  "supportGuideStep3Title": "Khóa lịch giữ chỗ tạm thời 15 phút",
+  "supportGuideStep3Desc": "Ngay khi tạo đơn đặt phòng, hệ thống tự động khóa khoảng ngày lưu trú trong 15 phút (trạng thái Chờ thanh toán) để bảo vệ bạn khỏi tình trạng trùng lịch với đoàn khách khác.",
+  "supportGuideStep4Title": "Thanh toán trực tuyến & nhận xác nhận lưu trú",
+  "supportGuideStep4Desc": "Hoàn tất thanh toán qua cổng thanh toán được hỗ trợ (VNPay, MoMo hoặc VietQR) trong thời gian giữ chỗ. Theo dõi trạng thái đơn và nhắn tin trực tiếp với Chủ nhà ngay tại mục Chuyến đi.",
+  "supportCancelFlexName": "Chính sách Linh hoạt (Flexible)",
+  "supportCancelFlexBadge": "Hoàn 100% trước 24 giờ",
+  "supportCancelFlexRule1": "Hủy trước thời điểm nhận phòng từ đủ 24 giờ trở lên: hoàn 100% tổng số tiền đã thanh toán.",
+  "supportCancelFlexRule2": "Hủy trong vòng dưới 24 giờ trước giờ nhận phòng: không áp dụng hoàn tiền.",
+  "supportCancelModName": "Chính sách Trung bình (Moderate)",
+  "supportCancelModBadge": "Hoàn 100% trước 5 ngày",
+  "supportCancelModRule1": "Hủy trước thời điểm nhận phòng từ đủ 5 ngày (120 giờ) trở lên: hoàn 100% tổng số tiền đã thanh toán.",
+  "supportCancelModRule2": "Hủy trong khoảng từ đủ 24 giờ đến dưới 5 ngày (120 giờ): hoàn 50% tổng số tiền đã thanh toán.",
+  "supportCancelModRule3": "Hủy trong vòng dưới 24 giờ trước giờ nhận phòng: không áp dụng hoàn tiền.",
+  "supportCancelStrictName": "Chính sách Nghiêm ngặt (Strict)",
+  "supportCancelStrictBadge": "Hoàn 50% trước 7 ngày",
+  "supportCancelStrictRule1": "Hủy trước thời điểm nhận phòng từ đủ 7 ngày (168 giờ) trở lên: hoàn 50% tổng số tiền đã thanh toán.",
+  "supportCancelStrictRule2": "Hủy trong vòng dưới 7 ngày (168 giờ) trước giờ nhận phòng: không áp dụng hoàn tiền.",
+  "supportComplaintStep1Title": "Gửi phản ánh kèm mã đơn hoặc mã chỗ nghỉ",
+  "supportComplaintStep1Desc": "Đăng nhập tài khoản và gửi báo cáo trực tuyến kèm mã đơn đặt phòng (Booking ID) hoặc mã biệt thự (Listing ID), nêu rõ vấn đề thực tế cần đối soát.",
+  "supportComplaintStep2Title": "Đối soát lịch sử lưu trú & luồng thanh toán",
+  "supportComplaintStep2Desc": "Bộ phận Kiểm duyệt & An toàn (Trust & Safety) kiểm tra nhật ký trạng thái đơn, lịch sử trao đổi tin nhắn trên ứng dụng và chứng từ thanh toán độc lập.",
+  "supportComplaintStep3Title": "Phản hồi kết quả & bảo vệ quyền lợi khách hàng",
+  "supportComplaintStep3Desc": "Kết quả xử lý được cập nhật minh bạch vào trạng thái báo cáo (Đã giải quyết / Từ chối kèm lý do) và kích hoạt quy trình hoàn tiền nếu Chủ nhà vi phạm cam kết.",
+  "supportFaqCatAll": "Tất cả",
+  "supportFaqCatBooking": "Đặt phòng & Lịch trống",
+  "supportFaqCatPayment": "Thanh toán & Hoàn tiền",
+  "supportFaqCatAmenities": "Tiện ích & Nội quy",
+  "supportFaqCatHost": "Đối tác Chủ nhà",
+  "supportFaq1Q": "Số đêm lưu trú được hệ thống tính như thế nào?",
+  "supportFaq1A": "Hệ thống áp dụng mô hình đêm lưu trú nửa mở [Nhận phòng, Trả phòng) theo múi giờ Việt Nam (Asia/Ho_Chi_Minh). Ví dụ chọn nhận phòng ngày 15 và trả phòng ngày 17 sẽ gồm 2 đêm ở (đêm 15 và đêm 16); ngày 17 là ngày trả phòng.",
+  "supportFaq2Q": "Tại sao đơn đặt phòng có thời gian giữ chỗ 15 phút?",
+  "supportFaq2A": "Mỗi căn biệt thự nguyên căn là tài sản đơn chiếc. Khi bạn tạo đơn, hệ thống khóa ngày lưu trú trong 15 phút để không ai khác đặt trùng trong lúc bạn thao tác thanh toán. Quá 15 phút chưa thanh toán, khóa ngày sẽ tự động giải phóng.",
+  "supportFaq3Q": "Giá cuối tuần và phụ thu đoàn đông được tính ra sao?",
+  "supportFaq3A": "Bảng giá từng đêm (ngày thường, thứ Bảy/cuối tuần), phí dọn dẹp và phụ thu khách vượt mức tiêu chuẩn đều lấy trực tiếp từ cấu hình đã kiểm duyệt của từng căn biệt thự và hiển thị minh bạch trước khi bạn xác nhận đặt phòng.",
+  "supportFaq4Q": "Tôi có thể thanh toán bằng những phương thức nào?",
+  "supportFaq4A": "Hệ thống hỗ trợ thanh toán trực tuyến qua cổng VNPay, ví MoMo và chuyển khoản mã VietQR. Mọi giao dịch đều được đối soát tự động và cập nhật tức thời vào mục Chuyến đi.",
+  "supportFaq5Q": "Khi hủy phòng hợp lệ hoặc Chủ nhà từ chối đơn, tôi nhận lại tiền bằng cách nào?",
+  "supportFaq5A": "Nếu đơn đã thanh toán được hủy trong khung giờ hoàn tiền của căn biệt thự (hoặc bị Chủ nhà hủy/từ chối — hoàn 100%), hệ thống tự động khởi tạo yêu cầu hoàn tiền riêng biệt để bộ phận tài chính đối soát hoàn trả về tài khoản/kênh thanh toán của bạn.",
+  "supportFaq6Q": "Tôi có thể trao đổi trực tiếp với Chủ nhà trước khi đặt không?",
+  "supportFaq6A": "Có. Tại trang chi tiết từng biệt thự, bạn có thể bấm Nhắn tin cho Host hoặc kết nối qua kênh tư vấn Zalo OA / Hotline tại trang Liên hệ để hỏi rõ về hồ bơi, bếp BBQ hoặc chỗ đậu xe đoàn.",
+  "supportFaq7Q": "Làm thế nào để đăng ký cho thuê biệt thự trên The Palm Villa?",
+  "supportFaq7A": "Bạn truy cập mục Trở thành Host trên thanh điều hướng hoặc chân trang, hoàn tất hồ sơ xác thực danh tính (KYC CCCD) và thông tin chỗ nghỉ. Sau khi Quản trị viên phê duyệt, bạn có thể quản lý lịch 30 ngày và đồng bộ hai chiều với Google Sheets.",
+  "supportZoneBaiSauName": "Phân khu Bãi Sau (Thùy Vân – Thi Sách)",
+  "supportZoneBaiSauHint": "Bờ biển dài, sôi động, thuận tiện đi bộ ra bãi tắm",
+  "supportZoneBaiSauHighlight": "Tập trung nhiều biệt thự hồ bơi riêng diện tích lớn cho nhóm bạn và gia đình, gần trục đường Thùy Vân, Thi Sách, Võ Thị Sáu.",
+  "supportZoneBaiTruocName": "Phân khu Bãi Trước (Trần Phú – Quang Trung)",
+  "supportZoneBaiTruocHint": "Ngắm hoàng hôn biển trực diện, gần trung tâm ẩm thực",
+  "supportZoneBaiTruocHighlight": "Không gian biệt thự nghỉ dưỡng hướng biển Trần Phú yên tĩnh, tầm nhìn hoàng hôn thoáng đãng và di chuyển thuận tiện tới công viên Bãi Trước.",
+  "supportZoneChiLinhName": "Phân khu Chí Linh",
+  "supportZoneChiLinhHint": "Khu nghỉ dưỡng biệt lập, an ninh, bãi tắm riêng tư",
+  "supportZoneChiLinhHighlight": "Phù hợp đoàn gia đình nhiều thế hệ hoặc nhóm công ty yêu thích không gian xanh mát, yên tĩnh và bãi biển sạch thoáng.",
+  "supportZoneLongCungName": "Phân khu Long Cung – Thủy Tiên",
+  "supportZoneLongCungHint": "Quần thể biệt thự nghỉ dưỡng sát biển cho đoàn đông",
+  "supportZoneLongCungHighlight": "Nổi bật với các căn biệt thự sân vườn rộng, hồ bơi riêng và khu tổ chức tiệc nướng BBQ ngoài trời gần bãi tắm Long Cung.",
+  "supportAddonPoolTitle": "Hồ bơi riêng tại biệt thự",
+  "supportAddonPoolDesc": "Không gian hồ bơi riêng tư ngay trong khuôn viên căn biệt thự, phù hợp thư giãn cùng gia đình và nhóm bạn.",
+  "supportAddonPoolNote": "Có sẵn theo thông số công bố của từng căn biệt thự.",
+  "supportAddonBbqTitle": "Khu vực bếp nướng BBQ sân vườn",
+  "supportAddonBbqDesc": "Trang bị khu vực nướng ngoài trời, bàn ghế sân vườn và dụng cụ bếp cơ bản phục vụ tiệc tối ấm cúng.",
+  "supportAddonBbqNote": "Trao đổi trước với Chủ nhà về than nướng hoặc hỗ trợ dọn rửa.",
+  "supportAddonKitchenTitle": "Bếp nấu tiêu chuẩn gia đình",
+  "supportAddonKitchenDesc": "Đầy đủ tủ lạnh, bếp nấu, nồi chảo và bát đĩa để đoàn tự chuẩn bị hải sản tươi sống mua tại chợ địa phương.",
+  "supportAddonKitchenNote": "Vui lòng giữ vệ sinh khu bếp theo nội quy từng chỗ nghỉ.",
+  "supportAddonKaraokeTitle": "Phòng giải trí & Âm thanh Karaoke",
+  "supportAddonKaraokeDesc": "Hệ thống loa giải trí hoặc phòng sinh hoạt chung tại các căn biệt thự có gắn nhãn tiện nghi Karaoke.",
+  "supportAddonKaraokeNote": "Tuân thủ khung giờ yên tĩnh khu dân cư (trước 22:00).",
+  "supportAddonParkingTitle": "Chỗ đậu xe ô tô & xe đoàn an toàn",
+  "supportAddonParkingDesc": "Sân đậu xe trong khuôn viên hoặc đường nội khu rộng rãi thuận tiện cho ô tô cá nhân và xe du lịch 7–29 chỗ.",
+  "supportAddonParkingNote": "Kiểm tra sức chứa xe cụ thể trong phần mô tả chi tiết villa.",
+  "supportAddonBeachTitle": "Vị trí gần bãi tắm biển",
+  "supportAddonBeachDesc": "Các căn biệt thự có khoảng cách thực tế tới bãi tắm được công bố rõ ràng bằng đơn vị mét ngay trên thẻ thông tin.",
+  "supportAddonBeachNote": "Lọc nhanh các căn sát biển chỉ với một chạm bên dưới.",
+  "supportExploreZoneAction": "Xem biệt thự khu vực này",
+  "supportServiceNotePrefix": "Lưu ý: {note}",
+  "@supportServiceNotePrefix": {
+    "placeholders": {
+      "note": {
+        "type": "String"
+      }
+    }
+  },
+  "supportFilterByAmenityAction": "Lọc villa có tiện ích này",
+  "supportFaqSearchHint": "Tìm câu hỏi theo từ khóa (ví dụ: giữ chỗ, hoàn tiền)...",
+  "supportFaqClearSearchTooltip": "Xóa từ khóa",
+  "supportFaqEmptyResult": "Không tìm thấy câu hỏi phù hợp với từ khóa hiện tại. Vui lòng thử từ khóa khác hoặc liên hệ trực tiếp đội ngũ tư vấn.",
+  "supportBookingGuideEyebrow": "Hỗ trợ đặt phòng",
+  "supportBookingGuideTitle": "Hướng dẫn đặt biệt thự nguyên căn",
+  "supportBookingGuideSubtitle": "Quy trình đặt chỗ 4 bước minh bạch với cơ chế khóa lịch 15 phút chống trùng phòng và đối soát thanh toán trực tuyến tức thời.",
+  "supportBookingGuideNoteTitle": "Lưu ý khi nhận và trả phòng",
+  "supportBookingGuideNoteBody": "Mọi đơn đặt đều tính theo đêm lưu trú [Nhận phòng, Trả phòng) theo múi giờ Việt Nam. Trước khi khởi hành, bạn có thể nhắn tin trực tiếp với Chủ nhà trong mục Tin nhắn để thống nhất giờ đón đoàn và danh sách xe.",
+  "supportBookingGuideCtaTitle": "Sẵn sàng tìm căn biệt thự phù hợp cho đoàn của bạn?",
+  "supportBookingGuideCtaDesc": "Tra cứu ngay danh sách biệt thự đang mở lịch trống kèm giá niêm yết theo đêm tại Vũng Tàu.",
+  "supportBookingGuidePrimaryAction": "Tìm biệt thự ngay",
+  "supportBookingGuideSecondaryAction": "Liên hệ tư vấn",
+  "supportCancelEyebrow": "Chính sách lưu trú & hoàn tiền",
+  "supportCancelTitle": "Chính sách hủy phòng & Hoàn tiền",
+  "supportCancelSubtitle": "Tỷ lệ hoàn tiền được hệ thống tính tự động dựa trên loại chính sách công bố của từng căn biệt thự và số giờ còn lại trước ngày nhận phòng.",
+  "supportCancelHostProtectTitle": "Bảo vệ khách lưu trú 100% khi Chủ nhà hủy đơn",
+  "supportCancelHostProtectBody": "Trong trường hợp đơn đã thanh toán bị Chủ nhà từ chối hoặc chủ động hủy, hệ thống tự động tạo lệnh hoàn 100% giá trị thanh toán không phụ thuộc bậc chính sách. Các đơn giữ chỗ chưa thanh toán sẽ tự hủy miễn phí sau 15 phút.",
+  "supportCancelCtaTitle": "Kiểm tra trạng thái đơn hoặc yêu cầu hủy phòng",
+  "supportCancelCtaDesc": "Truy cập mục Chuyến đi để xem chính sách áp dụng riêng cho đơn đặt phòng của bạn hoặc liên hệ bộ phận hỗ trợ.",
+  "supportCancelPrimaryAction": "Xem Chuyến đi của tôi",
+  "supportCancelSecondaryAction": "Câu hỏi thường gặp",
+  "supportComplaintsEyebrow": "An toàn & Minh bạch",
+  "supportComplaintsTitle": "Khiếu nại, Báo cáo & Góp ý dịch vụ",
+  "supportComplaintsSubtitle": "Mọi phản ánh về chất lượng biệt thự, sai lệch thông tin tin đăng hoặc thái độ phục vụ đều được ghi vết và đối soát độc lập.",
+  "supportComplaintsCtaTitle": "Cần hỗ trợ khẩn cấp trong thời gian đang lưu trú?",
+  "supportComplaintsCtaDesc": "Kết nối trực tiếp qua Hotline hoặc Zalo OA tại văn phòng Vũng Tàu (08:00 – 22:00) để được hỗ trợ ngay.",
+  "supportComplaintsPrimaryAction": "Mở trang Liên hệ",
+  "supportComplaintsSecondaryAction": "Tin nhắn với Host",
+  "supportFaqEyebrow": "Trung tâm giải đáp",
+  "supportFaqPageTitle": "Câu hỏi thường gặp (FAQ)",
+  "supportFaqSubtitle": "Giải đáp nhanh các thắc mắc về cách tính đêm lưu trú, khóa lịch 15 phút, phương thức thanh toán, hoàn tiền và đăng ký đối tác Chủ nhà.",
+  "supportFaqCtaTitle": "Chưa tìm thấy câu trả lời bạn cần?",
+  "supportFaqCtaDesc": "Đội ngũ tư vấn tại 28 Thi Sách, TP. Vũng Tàu luôn sẵn sàng giải đáp chi tiết theo nhu cầu riêng của đoàn.",
+  "supportFaqPrimaryAction": "Liên hệ tư vấn trực tuyến",
+  "supportFaqSecondaryAction": "Xem hướng dẫn đặt phòng",
+  "supportAboutEyebrow": "Về The Palm Villa",
+  "supportAboutTitle": "Nền tảng đặt biệt thự nghỉ dưỡng nguyên căn tại Vũng Tàu",
+  "supportAboutSubtitle": "Kết nối trực tiếp du khách với hệ thống biệt thự nghỉ dưỡng đã qua kiểm duyệt thực tế và xác thực danh tính Chủ nhà (KYC) tại TP. Vũng Tàu.",
+  "supportAboutPillar1Title": "Chỗ nghỉ kiểm duyệt & Host xác thực KYC",
+  "supportAboutPillar1Body": "Mọi hồ sơ đối tác Chủ nhà đều trải qua bước xác minh danh tính và kiểm duyệt thông tin, hình ảnh thực tế trước khi mở lịch đón khách.",
+  "supportAboutPillar2Title": "Khóa lịch chống đặt trùng (Zero Double-Booking)",
+  "supportAboutPillar2Body": "Cơ chế khóa ngày mức giao dịch ngay khi tạo đơn giúp bảo vệ tuyệt đối lịch lưu trú của đoàn trong suốt thời gian thanh toán.",
+  "supportAboutPillar3Title": "Giá niêm yết minh bạch theo từng đêm",
+  "supportAboutPillar3Body": "Hiển thị rõ giá ngày thường, giá cuối tuần, phí vệ sinh và phụ thu khách vượt tiêu chuẩn từ dữ liệu máy chủ trước khi thanh toán.",
+  "supportAboutCtaTitle": "Đồng hành cùng The Palm Villa",
+  "supportAboutCtaDesc": "Khám phá các căn biệt thự đang mở lịch hoặc đăng ký trở thành đối tác Chủ nhà để quản lý lịch và doanh thu minh bạch.",
+  "supportAboutPrimaryAction": "Khám phá nơi lưu trú",
+  "supportAboutSecondaryAction": "Trở thành Host",
+  "supportExploreVtEyebrow": "Bản đồ phân khu nghỉ dưỡng",
+  "supportExploreVtTitle": "Khám phá Vũng Tàu theo từng phân khu biển",
+  "supportExploreVtSubtitle": "Mỗi phân khu tại Vũng Tàu mang một nét trải nghiệm riêng. Chọn khu vực phù hợp với lịch trình của đoàn để lọc ngay các căn biệt thự thực tế.",
+  "supportExploreVtCtaTitle": "Kết hợp lịch trình ăn chơi & kinh nghiệm đi biển",
+  "supportExploreVtCtaDesc": "Tham khảo thêm các bài viết cẩm nang du lịch địa phương để lên kế hoạch trọn vẹn cho kỳ nghỉ tại Vũng Tàu.",
+  "supportExploreVtPrimaryAction": "Đọc Cẩm nang du lịch",
+  "supportExploreVtSecondaryAction": "Mở bản đồ tìm kiếm",
+  "supportAddonEyebrow": "Tiện nghi & Trải nghiệm",
+  "supportAddonTitle": "Tiện ích biệt thự & Dịch vụ lưu trú đi kèm",
+  "supportAddonSubtitle": "Tổng hợp các nhóm tiện nghi đặc trưng của biệt thự nguyên căn và cách trao đổi nhu cầu chuẩn bị tiệc BBQ, đậu xe đoàn cùng Chủ nhà.",
+  "supportAddonNoteTitle": "Cách đặt dịch vụ hoặc yêu cầu chuẩn bị trước giờ nhận phòng",
+  "supportAddonNoteBody": "Mỗi căn biệt thự có cấu hình tiện nghi và quy định phụ thu khách đoàn riêng được niêm yết công khai. Sau khi chọn căn ưng ý, bạn có thể nhấn Nhắn tin cho Host ngay trên trang chi tiết để xác nhận các nhu cầu riêng.",
+  "supportAddonCtaTitle": "Tìm biệt thự có đầy đủ hồ bơi riêng & sân BBQ?",
+  "supportAddonCtaDesc": "Sử dụng bộ lọc đa tiêu chí trên trang Tìm kiếm để chọn chính xác các tiện ích đoàn của bạn mong muốn.",
+  "supportAddonPrimaryAction": "Mở bộ lọc nơi lưu trú",
+  "supportAddonSecondaryAction": "Liên hệ tư vấn đoàn",
+  "supportMemberEyebrow": "Quyền lợi tài khoản",
+  "supportMemberTitle": "Ưu đãi thành viên & Mã giảm giá đặt phòng",
+  "supportMemberSubtitle": "Đăng ký tài khoản thành viên miễn phí để áp dụng mã ưu đãi trực tiếp khi đặt biệt thự, đồng bộ danh sách yêu thích và quản lý lịch sử chuyến đi.",
+  "supportMemberNote1Title": "Sử dụng Mã giảm giá (Coupon) trực tiếp khi đặt phòng",
+  "supportMemberNote1Body": "Thành viên đã đăng nhập có thể áp dụng mã ưu đãi theo phần trăm (%) hoặc số tiền cố định trên trang chi tiết biệt thự. Hệ thống tự động kiểm tra hạn dùng, giá trị đơn tối thiểu và số lượt sử dụng của từng tài khoản.",
+  "supportMemberNote2Title": "Đồng bộ Danh sách yêu thích & Theo dõi Chuyến đi thời gian thực",
+  "supportMemberNote2Body": "Lưu lại các căn biệt thự ưng ý trên mọi thiết bị, nhận thông báo trạng thái đơn tức thời và nhắn tin trực tiếp với Chủ nhà không qua trung gian.",
+  "supportMemberCtaTitle": "Áp dụng ưu đãi cho kỳ nghỉ sắp tới tại Vũng Tàu",
+  "supportMemberCtaDesc": "Chọn căn biệt thự yêu thích, kiểm tra giá niêm yết theo đêm và nhập mã giảm giá ngay tại bước xác nhận đặt phòng.",
+  "supportMemberPrimaryAction": "Tìm biệt thự đang mở lịch",
+  "supportMemberSecondaryAction": "Danh sách yêu thích",
+  "supportReportTargetBooking": "Đơn đặt phòng (Mã Booking)",
+  "supportReportTargetListing": "Chỗ nghỉ / Biệt thự (Mã Villa)",
+  "supportReportTargetReview": "Đánh giá lưu trú (Mã Review)",
+  "supportReportTargetUser": "Tài khoản người dùng (Mã User)",
+  "supportReportSuccessMessage": "Đã ghi nhận phản ánh thành công. Bộ phận Kiểm duyệt & An toàn sẽ đối soát và phản hồi sớm nhất.",
+  "supportReportErrorFallback": "Không thể gửi phản ánh lúc này. Vui lòng thử lại.",
+  "supportReportStatusResolved": "Đã giải quyết",
+  "supportReportStatusRejected": "Đã từ chối",
+  "supportReportStatusOpen": "Đang xử lý",
+  "supportReportGuestCardTitle": "Gửi báo cáo & khiếu nại trực tuyến",
+  "supportReportGuestCardBody": "Để đảm bảo tính xác thực và đối soát đúng mã đơn đặt phòng, vui lòng đăng nhập tài khoản trước khi gửi phản ánh trực tuyến hoặc kết nối nhanh qua trang Liên hệ.",
+  "supportReportLoginAction": "Đăng nhập để gửi phản ánh",
+  "supportReportDirectContactAction": "Mở kênh Liên hệ trực tiếp",
+  "supportReportAuthCardTitle": "Gửi phản ánh / báo cáo tới bộ phận Kiểm duyệt",
+  "supportReportAuthCardSubtitle": "Thông tin phản ánh được lưu vết trực tiếp để Quản trị viên kiểm tra và phản hồi minh bạch.",
+  "supportReportTargetGroupLabel": "Nhóm đối tượng phản ánh",
+  "supportReportTargetIdLabel": "Mã định danh số (ví dụ: mã đơn 102 hoặc mã villa 15)",
+  "supportReportTargetIdError": "Vui lòng nhập mã số nguyên dương hợp lệ",
+  "supportReportReasonLabel": "Tiêu đề khiếu nại / góp ý",
+  "supportReportReasonEmptyError": "Vui lòng nhập tiêu đề phản ánh",
+  "supportReportReasonMaxError": "Tối đa 255 ký tự",
+  "supportReportDescLabel": "Mô tả chi tiết sự việc (tùy chọn)",
+  "supportReportSubmittingLabel": "Đang gửi phản ánh...",
+  "supportReportSubmitAction": "Gửi phản ánh",
+  "supportReportRecentTitle": "Phản ánh gần đây của bạn ({count})",
+  "@supportReportRecentTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "supportCouponEmptyError": "Vui lòng nhập mã ưu đãi cần kiểm tra.",
+  "supportCouponValidStatus": "Mã {code} hợp lệ — ước tính giảm {discount} cho đơn tạm tính.",
+  "@supportCouponValidStatus": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      },
+      "discount": {
+        "type": "String"
+      }
+    }
+  },
+  "supportCouponInvalidFallback": "Mã ưu đãi chưa đủ điều kiện hoặc đã hết hạn.",
+  "supportCouponCheckError": "Không thể kiểm tra mã ưu đãi lúc này.",
+  "supportCouponCardTitle": "Tra cứu hiệu lực Mã ưu đãi (Coupon)",
+  "supportCouponGuestHint": "Đăng nhập tài khoản thành viên để kiểm tra trực tiếp hiệu lực mã giảm giá theo giá trị đơn dự kiến hoặc áp dụng ngay tại bước đặt biệt thự.",
+  "supportCouponAuthHint": "Nhập mã ưu đãi bạn đang có và giá trị đơn lưu trú dự kiến (VNĐ) để kiểm tra điều kiện áp dụng trực tiếp từ hệ thống.",
+  "supportCouponLoginAction": "Đăng nhập thành viên",
+  "supportCouponRegisterAction": "Tạo tài khoản miễn phí",
+  "supportCouponCodeInputLabel": "Mã ưu đãi (ví dụ: PALM2026)",
+  "supportCouponAmountInputLabel": "Giá trị đơn tạm tính (VNĐ)",
+  "supportCouponCheckingLabel": "Đang kiểm tra...",
+  "supportCouponCheckAction": "Kiểm tra mã ưu đãi",
+  "homeEmptyApprovedVillas": "Hiện chưa có căn biệt thự nào đã được phê duyệt trên hệ thống.",
+  "homeApprovedVillasCountTitle": "Danh sách chỗ nghỉ đã duyệt ({count})",
+  "@homeApprovedVillasCountTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "homePrevVillaTooltip": "Căn trước",
+  "homeNextVillaTooltip": "Căn tiếp theo",
+  "homeFavoriteAdd": "Lưu vào yêu thích",
+  "homeFavoriteRemove": "Bỏ khỏi yêu thích",
+  "homeCardSpecsSummary": "{bedrooms} PN · Tối đa {guests} khách",
+  "@homeCardSpecsSummary": {
+    "placeholders": {
+      "bedrooms": {
+        "type": "int"
+      },
+      "guests": {
+        "type": "int"
+      }
+    }
+  },
+  "searchFilterBtn": "Bộ lọc",
+  "searchFilterActiveBtn": "Bộ lọc ({count})",
+  "@searchFilterActiveBtn": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchShowMapBtn": "Hiện bản đồ",
+  "searchHideMapBtn": "Ẩn bản đồ",
+  "searchClearAllBtn": "Xóa tất cả",
+  "searchFoundStaysCount": "Tìm thấy {count} chỗ nghỉ tại Vũng Tàu",
+  "@searchFoundStaysCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "favoritesSavedCountSubtitle": "{count} căn biệt thự đã lưu",
+  "@favoritesSavedCountSubtitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "favoritesSyncOfflineNotice": "Không thể đồng bộ máy chủ — đang hiển thị danh sách lưu trên thiết bị.",
+  "favoritesInvalidCountNotice": "Có {count} chỗ nghỉ không còn mở lịch nhận khách.",
+  "@favoritesInvalidCountNotice": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "favoritesExploreAction": "Khám phá biệt thự",
+  "contactEyebrow": "HỖ TRỢ TRỰC TIẾP VŨNG TÀU",
+  "contactBrowseVillas": "Xem danh sách Villa",
+  "contactHeroTitle": "Liên hệ đội ngũ tư vấn & vận hành lưu trú",
+  "contactHeroSubtitle": "Hỗ trợ kiểm tra lịch trống, tư vấn chọn căn theo đoàn và giải đáp thông tin lưu trú tại TP. Vũng Tàu.",
+  "contactHotlineTitle": "Hotline & Zalo tư vấn",
+  "contactVerifiedBadge": "Đã xác minh cấu hình",
+  "contactCallNow": "Gọi ngay",
+  "contactCopyHotlineTooltip": "Sao chép số Hotline",
+  "contactCopiedHotline": "Đã sao chép số Hotline vào bộ nhớ tạm",
+  "contactOpenZalo": "Nhắn Zalo OA",
+  "contactOfficeTitle": "Văn phòng đón tiếp tại Vũng Tàu",
+  "contactMapAction": "Xem bản đồ đường đi",
+  "contactEmailTitle": "Hòm thư hỗ trợ & đối soát",
+  "contactSameDayReply": "Phản hồi trong ngày",
+  "contactSendEmail": "Gửi Email hỗ trợ",
+  "contactCopyEmailTooltip": "Sao chép địa chỉ Email",
+  "contactCopiedEmail": "Đã sao chép địa chỉ Email vào bộ nhớ tạm",
+  "authWelcomeBack": "Chào mừng trở lại",
+  "authLoginSubtitle": "Đăng nhập để xem kỳ nghỉ và quản lý chuyến đi của bạn tại The Palm Villa.",
+  "authIdentifierLabel": "Email hoặc số điện thoại",
+  "authIdentifierHint": "Nhập email hoặc số điện thoại Việt Nam",
+  "authPasswordLabel": "Mật khẩu",
+  "authPasswordHint": "Nhập mật khẩu",
+  "authShowPasswordTooltip": "Hiện mật khẩu",
+  "authHidePasswordTooltip": "Ẩn mật khẩu",
+  "authRememberMe": "Ghi nhớ đăng nhập",
+  "authSigningIn": "Đang đăng nhập...",
+  "authOrDivider": "HOẶC",
+  "authGoogleLoginBtn": "Đăng nhập với Google",
+  "authNoAccountYet": "Chưa có tài khoản?",
+  "authRegisterBtn": "Đăng ký",
+  "authCreateAccountTitle": "Tạo tài khoản mới",
+  "authRegisterSubtitle": "Trải nghiệm đặt phòng villa nghỉ dưỡng đẳng cấp và nhận ưu đãi độc quyền.",
+  "authFullNameLabel": "Họ và tên",
+  "authFullNameHint": "Nhập họ và tên",
+  "authPhoneRequiredLabel": "Số điện thoại *",
+  "authPhoneHint": "Nhập số điện thoại Việt Nam (vd: 0901234567)",
+  "authEmailRequiredLabel": "Email *",
+  "authEmailHint": "Nhập địa chỉ email",
+  "authPasswordCreateHint": "Tạo mật khẩu (tối thiểu 8 ký tự, gồm chữ và số)",
+  "authConfirmPasswordLabel": "Xác nhận mật khẩu *",
+  "authConfirmPasswordHint": "Nhập lại mật khẩu vừa tạo",
+  "authPasswordStrengthLabel": "Độ mạnh mật khẩu: {level}",
+  "@authPasswordStrengthLabel": {
+    "placeholders": {
+      "level": {
+        "type": "String"
+      }
+    }
+  },
+  "authStrengthWeak": "Yếu",
+  "authStrengthFair": "Trung bình",
+  "authStrengthGood": "Khá",
+  "authStrengthStrong": "Mạnh",
+  "authTermsAgreement": "Tôi đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của The Palm Villa",
+  "authTermsRequiredError": "Vui lòng đồng ý với Điều khoản dịch vụ và Chính sách bảo mật",
+  "authCreatingAccount": "Đang tạo tài khoản...",
+  "authAlreadyHaveAccount": "Bạn đã có tài khoản?",
+  "authForgotQuestionTitle": "Quên mật khẩu?",
+  "authOtpVerifyTitle": "Xác thực mã OTP",
+  "authPasswordChangedTitle": "Đổi mật khẩu thành công",
+  "authForgotRequestSubtitle": "Nhập email hoặc số điện thoại đã đăng ký để nhận mã xác thực khôi phục mật khẩu.",
+  "authForgotOtpSubtitle": "Nhập 6 chữ số OTP và thiết lập mật khẩu mới.",
+  "authForgotSuccessSubtitle": "Mật khẩu của bạn đã được cập nhật an toàn.",
+  "authSendOtpButton": "Gửi mã xác thực",
+  "authOtpSentTo": "Mã OTP đã gửi tới: {target}",
+  "@authOtpSentTo": {
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "authOtpSixDigitsLabel": "Mã OTP gồm 6 chữ số",
+  "authNewPasswordLabel": "Mật khẩu mới",
+  "authResendOtpCountdown": "Gửi lại sau 00:{seconds}",
+  "@authResendOtpCountdown": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "authResendOtpButton": "Gửi lại mã OTP",
+  "authConfirmOtpButton": "Xác nhận mã OTP",
+  "authOtpSuccessBanner": "Mã OTP đã được xác thực và mật khẩu mới đã sẵn sàng sử dụng.",
+  "authBackToLoginButton": "Quay lại đăng nhập",
+  "adminTabFinance": "Tài chính & Chi trả",
+  "adminTabBlog": "Cẩm nang Blog",
+  "adminTabTrustSafety": "Báo cáo & Khiếu nại"
 }

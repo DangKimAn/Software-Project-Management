@@ -1,21 +1,43 @@
 import '../../../core/security/url_security_validator.dart';
 
+/// Trạng thái kết nối và đồng bộ hai chiều giữa Host Portal và tệp Google Sheets.
 enum HostSheetConnectionState {
+  /// Chưa liên kết tệp Google Sheets nào.
   disconnected('disconnected', 'Chưa kết nối'),
+
+  /// Đang kết nối ổn định và đủ quyền ghi (Editor).
   connected('connected', 'Đã kết nối'),
+
+  /// Tài khoản dịch vụ chưa được cấp quyền Editor trên trang tính.
   permissionError('permission_error', 'Lỗi quyền Editor'),
+
+  /// Không tìm thấy tệp trang tính theo Spreadsheet ID đã cấu hình.
   notFound('not_found', 'Không tìm thấy tệp'),
+
+  /// Cấu trúc dòng/cột hoặc tab tháng trên trang tính bị xóa hoặc sửa sai chuẩn.
   structureError('structure_error', 'Sai lệch cấu trúc'),
+
+  /// Đang chạm ngưỡng giới hạn tốc độ truy vấn của Google Sheets API.
   quotaLimited('quota_limited', 'Giới hạn tốc độ Google API'),
+
+  /// Phát sinh lỗi trong tiến trình đồng bộ dữ liệu gần nhất.
   syncError('sync_error', 'Lỗi đồng bộ'),
+
+  /// Chủ nhà chủ động tạm dừng đồng bộ tự động.
   paused('paused', 'Tạm dừng');
 
+  /// Giá trị chuỗi mã hóa trao đổi với REST API Backend.
   final String apiValue;
+
+  /// Nhãn tiếng Việt hiển thị trên huy hiệu trạng thái đồng bộ.
   final String labelVi;
+
   const HostSheetConnectionState(this.apiValue, this.labelVi);
 
+  /// Cho biết kết nối Google Sheets hiện đang hoạt động bình thường hay không.
   bool get isHealthy => this == HostSheetConnectionState.connected;
 
+  /// Cho biết kết nối đang gặp lỗi quyền, cấu trúc, hạn mức hoặc đồng bộ cần xử lý hay không.
   bool get hasError =>
       this == HostSheetConnectionState.permissionError ||
       this == HostSheetConnectionState.notFound ||
@@ -23,6 +45,7 @@ enum HostSheetConnectionState {
       this == HostSheetConnectionState.quotaLimited ||
       this == HostSheetConnectionState.syncError;
 
+  /// Giải mã giá trị thô `raw` từ JSON sang hằng số `HostSheetConnectionState` tương ứng.
   static HostSheetConnectionState fromApi(dynamic raw) {
     final normalized = (raw ?? '').toString().trim().toLowerCase();
     for (final state in HostSheetConnectionState.values) {
@@ -72,6 +95,7 @@ Map<String, dynamic> _asMap(dynamic value) {
   return const <String, dynamic>{};
 }
 
+/// Thông tin cấu hình tích hợp Google Sheets của một tài khoản Chủ nhà.
 class HostSheetIntegrationInfo {
   final int integrationId;
   final String spreadsheetId;
@@ -90,6 +114,7 @@ class HostSheetIntegrationInfo {
   final String? lastErrorMessage;
   final int consecutiveFailures;
 
+  /// Khởi tạo thông tin cấu hình tích hợp Google Sheets của Host.
   const HostSheetIntegrationInfo({
     required this.integrationId,
     required this.spreadsheetId,
@@ -109,8 +134,11 @@ class HostSheetIntegrationInfo {
     this.consecutiveFailures = 0,
   });
 
-  /// Returns a validated `https://docs.google.com/spreadsheets/d/...` URL, or null if unsafe.
+  /// Trả về đường dẫn `https://docs.google.com/spreadsheets/d/...` đã kiểm duyệt an toàn, hoặc `null` nếu không hợp lệ.
   String? get safeSpreadsheetUrl {
+    // Giải thuật xác thực liên kết Google Sheets an toàn (Safe Spreadsheet URL Resolution):
+    // Đối chiếu `spreadsheetUrl` với `spreadsheetId` kỳ vọng qua `UrlSecurityValidator`;
+    // nếu liên kết gốc bị biến dạng, tự động dựng lại URL chính tắc từ `spreadsheetId`.
     if (UrlSecurityValidator.isValidGoogleSpreadsheetUrl(
       spreadsheetUrl,
       expectedSpreadsheetId: spreadsheetId,
@@ -122,6 +150,7 @@ class HostSheetIntegrationInfo {
     );
   }
 
+  /// Khởi tạo `HostSheetIntegrationInfo` từ dữ liệu JSON phản hồi của Backend.
   factory HostSheetIntegrationInfo.fromJson(Map<String, dynamic> json) {
     return HostSheetIntegrationInfo(
       integrationId: _asInt(json['integrationId']),
@@ -146,6 +175,7 @@ class HostSheetIntegrationInfo {
   }
 }
 
+/// Thống kê tổng hợp số lượng chỗ nghỉ, giữ chỗ tạm, xung đột mở và tác vụ chờ của bộ đồng bộ Google Sheets.
 class HostSheetSyncStats {
   final int totalListings;
   final int archivedListings;
@@ -154,6 +184,7 @@ class HostSheetSyncStats {
   final int syncErrorsCount;
   final int pendingJobsCount;
 
+  /// Khởi tạo bộ chỉ số thống kê đồng bộ Google Sheets.
   const HostSheetSyncStats({
     this.totalListings = 0,
     this.archivedListings = 0,
@@ -163,6 +194,7 @@ class HostSheetSyncStats {
     this.pendingJobsCount = 0,
   });
 
+  /// Khởi tạo `HostSheetSyncStats` từ JSON.
   factory HostSheetSyncStats.fromJson(Map<String, dynamic> json) {
     return HostSheetSyncStats(
       totalListings: _asInt(json['totalListings']),
@@ -175,17 +207,20 @@ class HostSheetSyncStats {
   }
 }
 
+/// Bản tóm tắt chỗ nghỉ được ánh xạ thành một dòng quản lý trên Google Sheets.
 class HostSheetListingSummary {
   final int listingId;
   final String title;
   final String status;
 
+  /// Khởi tạo bản tóm tắt chỗ nghỉ đồng bộ với trang tính.
   const HostSheetListingSummary({
     required this.listingId,
     required this.title,
     required this.status,
   });
 
+  /// Khởi tạo `HostSheetListingSummary` từ JSON.
   factory HostSheetListingSummary.fromJson(Map<String, dynamic> json) {
     return HostSheetListingSummary(
       listingId: _asInt(json['listingId']),
@@ -195,6 +230,7 @@ class HostSheetListingSummary {
   }
 }
 
+/// Bản ghi cảnh báo hoặc xung đột lịch phát sinh giữa ứng dụng và tệp Google Sheets.
 class HostSheetWarningItem {
   final int conflictId;
   final int? listingId;
@@ -209,6 +245,7 @@ class HostSheetWarningItem {
   final bool canUndoBulkChange;
   final DateTime? createdAt;
 
+  /// Khởi tạo bản ghi cảnh báo xung đột đồng bộ trang tính.
   const HostSheetWarningItem({
     required this.conflictId,
     this.listingId,
@@ -224,6 +261,7 @@ class HostSheetWarningItem {
     this.createdAt,
   });
 
+  /// Cho biết xung đột này có phải lỗi hư hỏng cấu trúc trang tính (thiếu dòng, trùng dòng, mất tab tháng) hay không.
   bool get isStructuralConflict =>
       conflictType == 'missing_listing_row' ||
       conflictType == 'duplicate_listing_row' ||
@@ -231,11 +269,13 @@ class HostSheetWarningItem {
       conflictType == 'tampered_listing_id' ||
       conflictType == 'sheet_structure_corrupted';
 
+  /// Cho biết cảnh báo xung đột sửa đồng thời (`app_vs_sheet_concurrent`) có hỗ trợ mở khóa trực tiếp một ngày lẻ hay không.
   bool get canUnlockSingleDay =>
       conflictDate != null &&
       conflictDate!.isNotEmpty &&
       conflictType == 'app_vs_sheet_concurrent';
 
+  /// Khởi tạo `HostSheetWarningItem` từ JSON.
   factory HostSheetWarningItem.fromJson(Map<String, dynamic> json) {
     final conflictType = (json['conflictType'] ?? '').toString().trim();
     return HostSheetWarningItem(
@@ -258,6 +298,7 @@ class HostSheetWarningItem {
   }
 }
 
+/// Dòng nhật ký ghi nhận một thay đổi đồng bộ hai chiều giữa ứng dụng và Google Sheets.
 class HostSheetChangeLogItem {
   final int logId;
   final int? listingId;
@@ -269,6 +310,7 @@ class HostSheetChangeLogItem {
   final String? newValue;
   final DateTime? detectedAt;
 
+  /// Khởi tạo dòng nhật ký thay đổi đồng bộ trang tính.
   const HostSheetChangeLogItem({
     required this.logId,
     this.listingId,
@@ -281,6 +323,7 @@ class HostSheetChangeLogItem {
     this.detectedAt,
   });
 
+  /// Nhãn tiếng Việt mô tả chiều đồng bộ dữ liệu (`Sheets -> Ứng dụng`, `Ứng dụng -> Sheets`, hoặc tự động sửa cấu trúc).
   String get directionLabelVi {
     switch (direction) {
       case 'sheet_to_app':
@@ -294,6 +337,7 @@ class HostSheetChangeLogItem {
     }
   }
 
+  /// Nhãn tiếng Việt mô tả chi tiết hành động nghiệp vụ được ghi nhận trong nhật ký đồng bộ.
   String get actionLabelVi {
     switch (action) {
       case 'host_block_added':
@@ -319,6 +363,7 @@ class HostSheetChangeLogItem {
     }
   }
 
+  /// Khởi tạo `HostSheetChangeLogItem` từ JSON.
   factory HostSheetChangeLogItem.fromJson(Map<String, dynamic> json) {
     return HostSheetChangeLogItem(
       logId: _asInt(json['logId']),
@@ -334,6 +379,7 @@ class HostSheetChangeLogItem {
   }
 }
 
+/// Gói dữ liệu toàn cảnh trạng thái tích hợp Google Sheets của Chủ nhà trả về từ `/api/host/sheet-sync/status`.
 class HostSheetSyncStatusPayload {
   final bool connected;
   final String? serviceAccountEmail;
@@ -344,6 +390,7 @@ class HostSheetSyncStatusPayload {
   final List<HostSheetWarningItem> openWarnings;
   final List<HostSheetChangeLogItem> recentLogs;
 
+  /// Khởi tạo gói trạng thái tổng thể của bộ đồng bộ Google Sheets.
   const HostSheetSyncStatusPayload({
     this.connected = false,
     this.serviceAccountEmail,
@@ -355,6 +402,7 @@ class HostSheetSyncStatusPayload {
     this.recentLogs = const [],
   });
 
+  /// Trạng thái kết nối hiệu lực sau khi đối chiếu cờ `connected` và cấu hình `integration`.
   HostSheetConnectionState get effectiveState {
     if (!connected || integration == null) {
       return HostSheetConnectionState.disconnected;
@@ -362,6 +410,7 @@ class HostSheetSyncStatusPayload {
     return integration!.status;
   }
 
+  /// Khởi tạo `HostSheetSyncStatusPayload` từ dữ liệu JSON phản hồi của Backend.
   factory HostSheetSyncStatusPayload.fromJson(Map<String, dynamic> json) {
     final integrationMap = json['integration'];
     final rawListings = json['listingsSummary'] is List
@@ -407,7 +456,7 @@ class HostSheetSyncStatusPayload {
   }
 }
 
-/// Validates a Google Sheets URL or Spreadsheet ID before sending to backend.
+/// Kiểm tra tính hợp lệ của đường dẫn Google Sheets hoặc mã `Spreadsheet ID` từ `rawInput` trước khi gửi lên Backend.
 String? validateGoogleSheetInput(String rawInput) {
   final trimmed = rawInput.trim();
   if (trimmed.isEmpty) {
@@ -420,7 +469,7 @@ String? validateGoogleSheetInput(String rawInput) {
   return null;
 }
 
-/// Validates an optional Host editor email address.
+/// Kiểm tra định dạng địa chỉ email quyền Editor tùy chọn `rawEmail` của Chủ nhà.
 String? validateOptionalEditorEmail(String? rawEmail) {
   final trimmed = (rawEmail ?? '').trim();
   if (trimmed.isEmpty) return null;

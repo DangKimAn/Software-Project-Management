@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/features/host/data/host_repository.dart';
-import 'package:hotel_booking_flutter/features/host/domain/host_models.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/screens/host_portal_screens.dart';
 import 'package:hotel_booking_flutter/features/host/services/host_file_picker_service.dart';
 
@@ -129,8 +128,13 @@ class FakeCalendarAdapter implements HttpClientAdapter {
 
 class FakeFilePickerService implements HostFilePickerService {
   @override
-  Future<HostPickedFile?> pickKycDocument(
-          {BuildContext? context, String title = ''}) async =>
+  // CONFLICT-RESOLVED: Đáp ứng chữ ký `pickKycDocument` hợp nhất gồm cả `imageOnly` và `source`.
+  Future<HostPickedFile?> pickKycDocument({
+    BuildContext? context,
+    String title = '',
+    bool imageOnly = false,
+    HostKycFileSource source = HostKycFileSource.deviceFile,
+  }) async =>
       null;
   @override
   Future<List<HostPickedFile>> pickListingImages(

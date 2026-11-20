@@ -7,11 +7,16 @@ import '../../../../app/theme/app_colors.dart';
 import '../../domain/entities/booking.dart';
 import '../view_models/trips_view_model.dart';
 
-/// Wraps the entire application's Navigator shell to display a pinned sticky banner
-/// at the top whenever the authenticated user has an active pending booking hold.
+/// Khung bọc toàn cục quanh cây điều hướng ứng dụng nhằm ghim biểu ngữ nhắc thanh toán ở đỉnh màn hình
+/// bất cứ khi nào người dùng đăng nhập đang có đơn giữ chỗ chờ thanh toán còn hiệu lực.
+///
+/// Tự động ẩn biểu ngữ khi người dùng đang đứng trực tiếp tại màn hình thanh toán của chính đơn đó
+/// (`/thanh-toan/:id`) hoặc màn hình kết quả thanh toán (`/thanh-toan/ket-qua`).
 class GlobalPendingBookingWrapper extends ConsumerWidget {
+  /// Cây giao diện con được bọc bên dưới biểu ngữ giữ chỗ.
   final Widget child;
 
+  /// Khởi tạo `GlobalPendingBookingWrapper`.
   const GlobalPendingBookingWrapper({
     super.key,
     required this.child,
@@ -63,11 +68,13 @@ class GlobalPendingBookingWrapper extends ConsumerWidget {
   }
 }
 
-/// Banner displayed directly underneath headers (such as `AppTopHeader` or `AppBar`)
-/// when the user has an active pending booking hold.
+/// Biểu ngữ giữ chỗ chờ thanh toán đặt ngay bên dưới thanh tiêu đề (`AppTopHeader` hoặc `AppBar`)
+/// khi khách hàng có đơn đặt phòng đang đếm ngược thời gian thanh toán.
 class GlobalPendingBookingHeaderBanner extends ConsumerWidget {
+  /// Khoảng đệm lề tùy chỉnh bao quanh biểu ngữ.
   final EdgeInsetsGeometry? margin;
 
+  /// Khởi tạo `GlobalPendingBookingHeaderBanner`.
   const GlobalPendingBookingHeaderBanner({
     super.key,
     this.margin,
@@ -95,8 +102,7 @@ class GlobalPendingBookingHeaderBanner extends ConsumerWidget {
       } catch (_) {}
     }
 
-    if (currentPath.contains('/thanh-toan') ||
-        currentPath.contains('/pay')) {
+    if (currentPath.contains('/thanh-toan') || currentPath.contains('/pay')) {
       return const SizedBox.shrink();
     }
 
@@ -107,12 +113,16 @@ class GlobalPendingBookingHeaderBanner extends ConsumerWidget {
   }
 }
 
-/// A pinned hold countdown banner matching the app's design system.
-/// Displays a live countdown pill ("09:45") and navigates to the payment screen on tap.
+/// Thành phần biểu ngữ đếm ngược thời gian giữ chỗ trực tiếp (`MM:SS`) theo hệ thống thiết kế,
+/// cho phép chạm để điều hướng thẳng tới màn hình hoàn tất thanh toán của đơn `booking`.
 class GlobalPendingBookingBanner extends ConsumerStatefulWidget {
+  /// Đơn đặt phòng đang giữ chỗ chờ thanh toán cần hiển thị bộ đếm ngược.
   final Booking booking;
+
+  /// Khoảng lề ngoài tùy chỉnh của thẻ biểu ngữ.
   final EdgeInsetsGeometry? margin;
 
+  /// Khởi tạo `GlobalPendingBookingBanner`.
   const GlobalPendingBookingBanner({
     super.key,
     required this.booking,
@@ -153,6 +163,10 @@ class _GlobalPendingBookingBannerState
     super.dispose();
   }
 
+  // Giải thuật đồng bộ đồng hồ đếm ngược giữ chỗ toàn cục (`_syncCountdown`):
+  // Khóa theo tổ hợp `(id, paymentDeadline, remainingPaymentSeconds)` để tránh khởi tạo lại Timer không cần thiết;
+  // mỗi giây tính lại số giây thực tế từ `computeRemainingPaymentSeconds()`, và ngay khi chạm mốc `0`
+  // sẽ hủy Timer đồng thời gọi `ref.invalidate(myBookingsProvider)` để tự động thu hồi biểu ngữ hết hạn.
   void _syncCountdown() {
     final bookingKey =
         '${widget.booking.id}_${widget.booking.paymentDeadline?.toIso8601String()}_${widget.booking.remainingPaymentSeconds}';
@@ -202,8 +216,7 @@ class _GlobalPendingBookingBannerState
 
   void _navigateToPayment() {
     final router = ref.read(appRouterProvider);
-    final currentPath =
-        router.routerDelegate.currentConfiguration.uri.path;
+    final currentPath = router.routerDelegate.currentConfiguration.uri.path;
     final targetPath = '/thanh-toan/${widget.booking.id}';
     if (currentPath != targetPath) {
       router.push(targetPath);
@@ -298,8 +311,7 @@ class _GlobalPendingBookingBannerState
                               vertical: 7,
                             ),
                             minimumSize: Size.zero,
-                            tapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             textStyle: const TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w600,

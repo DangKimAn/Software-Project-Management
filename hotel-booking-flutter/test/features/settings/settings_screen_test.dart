@@ -734,7 +734,8 @@ void main() {
 
       // Unverified guest
       expect(find.text('Khách lưu trú'), findsOneWidget);
-      expect(find.byKey(const Key('settings_verification_status')), findsNothing);
+      expect(
+          find.byKey(const Key('settings_verification_status')), findsNothing);
       expect(find.textContaining('Xác minh danh tính'), findsNothing);
       expect(find.byKey(const Key('menu_become_host')), findsOneWidget);
       expect(find.byKey(const Key('menu_admin_portal')), findsNothing);
@@ -781,7 +782,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Hồ sơ Chủ nhà đang chờ duyệt'), findsOneWidget);
-      expect(find.byKey(const Key('settings_verification_status')), findsNothing);
+      expect(
+          find.byKey(const Key('settings_verification_status')), findsNothing);
       expect(find.textContaining('Xác minh danh tính'), findsNothing);
       expect(find.byKey(const Key('menu_host_status')), findsOneWidget);
 

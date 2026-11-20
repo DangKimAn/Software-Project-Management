@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hotel_booking_flutter/app/di/providers.dart';
 import 'package:hotel_booking_flutter/app/theme/app_theme.dart';
-import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_header.dart';
 import 'package:hotel_booking_flutter/shared/widgets/notification_glass_widgets.dart';
 
 class _FakeLocaleNotifier extends StateNotifier<String>
@@ -445,7 +445,8 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.text('Refund of ≈ \$63.20 for booking #42 is pending processing.'),
+          find.text(
+              'Refund of ≈ \$63.20 for booking #42 is pending processing.'),
           findsOneWidget,
         );
 
@@ -526,4 +527,3 @@ void main() {
     );
   });
 }
-

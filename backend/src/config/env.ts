@@ -30,6 +30,10 @@ export type AppEnv = {
     momoRequestType: string;
     momoLang: string;
     momoOrderExpireTimeMinutes?: number;
+    disbursementMode: "mock" | "payos";
+    payosClientId?: string;
+    payosApiKey?: string;
+    payosChecksumKey?: string;
     accessTokenTtlMinutes: number;
     refreshTokenTtlDays: number;
     refreshTokenTtlMs: number;
@@ -273,6 +277,11 @@ const readEnv = (...names: string[]) => {
 };
 
 
+/**
+ * Giải thuật nạp, ép kiểu và kiểm định an ninh toàn bộ biến môi trường hệ thống (`AppEnv`):
+ * - Chặn biến chứa placeholder chưa giải tham chiếu (`${...}`), từ chối khóa bí mật yếu hoặc trùng nhau giữa Access/Refresh/Hash/OTP trên môi trường `production`.
+ * - Cấm kết nối MySQL bằng tài khoản `root` và cấm truyền Refresh Token qua `body`/`header` ngoài môi trường phát triển nội bộ.
+ */
 export const getEnv = (): AppEnv => {
     const nodeEnv = process.env.NODE_ENV ?? "development";
     const jwtSecret = assertProductionValue(
@@ -591,6 +600,10 @@ export const getEnv = (): AppEnv => {
             "MOMO_ORDER_EXPIRE_TIME_MINUTES",
             process.env.MOMO_ORDER_EXPIRE_TIME_MINUTES,
         ),
+        disbursementMode: (process.env.DISBURSEMENT_MODE === "payos" ? "payos" : "mock") as "mock" | "payos",
+        payosClientId: process.env.PAYOS_CLIENT_ID,
+        payosApiKey: process.env.PAYOS_API_KEY,
+        payosChecksumKey: process.env.PAYOS_CHECKSUM_KEY,
         openaiApiKey: assertResolvedEnv("OPENAI_API_KEY", process.env.OPENAI_API_KEY),
         openaiVisionModel: assertResolvedEnv("OPENAI_VISION_MODEL", process.env.OPENAI_VISION_MODEL) ?? "gpt-4.1-mini",
         firebaseServiceAccountPath: assertResolvedEnv(

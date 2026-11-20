@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize biểu diễn bảng quan hệ nhiều-nhiều liên kết chỗ nghỉ với các tiện ích đi kèm.
+ */
 import {
     CreationOptional,
     DataTypes,

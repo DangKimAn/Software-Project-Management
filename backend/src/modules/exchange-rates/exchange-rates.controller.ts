@@ -1,9 +1,17 @@
+/**
+ * Bộ điều phối HTTP tra cứu tỷ giá quy đổi ngoại tệ tham khảo từ đồng cơ sở VND (`exchange-rates`):
+ * - Gắn header kiểm soát bộ nhớ đệm ngắn hạn và ủy quyền lấy bảng tỷ giá mới nhất (kèm cơ chế dự phòng cache) cho tầng dịch vụ.
+ */
+
 import type { RequestHandler } from "express";
 
 import { sendError, sendSuccess } from "../../common/http";
 import { getExchangeRatesService } from "./exchange-rates.service";
 import { ExchangeRatesUnavailableError } from "./exchange-rates.types";
 
+/**
+ * Xử lý yêu cầu HTTP trả về bảng tỷ giá quy đổi từ VND sang USD/KRW kèm siêu dữ liệu nguồn và độ tươi dữ liệu.
+ */
 export const getLatestExchangeRates: RequestHandler = async (_req, res, next) => {
     try {
         const payload = await getExchangeRatesService().getExchangeRates();
