@@ -304,6 +304,65 @@ const getBookingPayoutCandidates = async (
     );
 
 /**
+ * Giải thuật giải phóng nguyên tử các bản ghi khóa đơn đặt phòng trong `host_payout_booking_item`
+ * khi lô rút tiền chuyển sang trạng thái kết thúc không chi trả (`cancelled` hoặc `rejected`):
+ * - Thu thập danh sách mã đơn đặt phòng đang gắn với `payoutId` để lưu vết kiểm toán (`audit_logs`).
+ * - Xóa toàn bộ dòng liên kết của `payoutId` khỏi `host_payout_booking_item` trong cùng giao dịch ACID,
+ *   giải phóng chỉ mục duy nhất `uniq_host_payout_booking_item_booking_detail` để chủ nhà có thể tạo lại yêu cầu rút tiền mới mà không gặp lỗi `HTTP 409 Conflict`.
+ */
+const releasePayoutBookingItems = async (
+    payoutId: number,
+    transaction: Transaction,
+): Promise<{ releasedBookingIds: number[]; releasedCount: number }> => {
+    const existingItems = await HostPayoutBookingItem.findAll({
+        where: { payoutId },
+        transaction,
+    });
+    const releasedBookingIds = existingItems.map((item) =>
+        Number(item.bookingOrderId ?? item.bookingDetailId),
+    );
+    const releasedCount = await HostPayoutBookingItem.destroy({
+        where: { payoutId },
+        transaction,
+    });
+
+    return {
+        releasedBookingIds,
+        releasedCount,
+    };
+};
+
+/**
+ * Giải thuật tự làm sạch các dòng khóa mồ côi trong `host_payout_booking_item` thuộc về những lô rút tiền lịch sử
+ * đã kết thúc không thanh toán (`cancelled`, `rejected`, `failed`) ngay trước khi chèn liên kết lô mới,
+ * ngăn chặn xung đột chỉ mục duy nhất trên dữ liệu tồn đọng cũ mà vẫn giữ nguyên khóa bảo vệ của các lô đang hoạt động hoặc đã chi trả.
+ */
+const purgeTerminalPayoutBookingItems = async (
+    bookingDetailIds: number[],
+    transaction?: Transaction,
+): Promise<void> => {
+    if (bookingDetailIds.length === 0) {
+        return;
+    }
+
+    await sequelize.query(
+        `
+        DELETE FROM host_payout_booking_item
+        WHERE booking_detail_id IN (:bookingDetailIds)
+          AND payout_id IN (
+              SELECT payout_id
+              FROM host_payout_batch
+              WHERE status IN ('cancelled', 'rejected', 'failed')
+          )
+        `,
+        {
+            replacements: { bookingDetailIds },
+            transaction,
+        },
+    );
+};
+
+/**
  * Giải thuật chống chi trả trùng lặp (Anti-Double-Payout) trong giao dịch ACID có khóa bi quan `FOR UPDATE`.
  */
 const assertNoDuplicatePayoutBookings = async (
@@ -451,6 +510,11 @@ export const createHostPayout = async (
                 transferReference: null,
             },
             { transaction },
+        );
+
+        await purgeTerminalPayoutBookingItems(
+            bookingRows.map((row) => row.bookingDetailId),
+            transaction,
         );
 
         await HostPayoutBookingItem.bulkCreate(
@@ -606,6 +670,11 @@ export async function rejectHostPayout(params: {
         payout.rejectedAt = new Date();
         payout.rejectionReason = rejectionReason;
 
+        const { releasedBookingIds, releasedCount } = await releasePayoutBookingItems(
+            payout.payoutId,
+            transaction,
+        );
+
         await payout.save({ transaction });
         await writeAuditLog({
             actorId: params.actorUserId,
@@ -615,6 +684,8 @@ export async function rejectHostPayout(params: {
             metadata: {
                 hostId: payout.hostId,
                 reason: rejectionReason,
+                releasedBookingIds,
+                releasedItemCount: releasedCount,
             },
             transaction,
         });
@@ -890,6 +961,11 @@ export const requestHostPayout = async (
             }
 
             if (selectedBookings.length > 0) {
+                await purgeTerminalPayoutBookingItems(
+                    selectedBookings.map((row) => row.bookingDetailId),
+                    transaction,
+                );
+
                 await HostPayoutBookingItem.bulkCreate(
                     selectedBookings.map((row) => ({
                         payoutId: payout.payoutId,
@@ -944,6 +1020,13 @@ export const requestHostPayout = async (
     });
 };
 
+/**
+ * Giải thuật hủy yêu cầu rút tiền của Chủ nhà trong giao dịch ACID (`cancelHostPayout`):
+ * - Khóa bi quan bản ghi lô rút tiền (`FOR UPDATE`), xác thực quyền sở hữu (`403`) và trạng thái `pending` (`400`).
+ * - Giải phóng nguyên tử toàn bộ dòng khóa đơn đặt phòng trong `host_payout_booking_item` qua `releasePayoutBookingItems`
+ *   để gỡ khóa duy nhất `booking_detail_id`, đảm bảo chủ nhà có thể gửi lại yêu cầu rút tiền mới ngay lập tức mà không gặp lỗi `HTTP 409 Conflict`.
+ * - Cập nhật trạng thái lô sang `cancelled` và ghi nhận đầy đủ danh sách `releasedBookingIds` vào `audit_logs`.
+ */
 export async function cancelHostPayout(
     host: AuthenticatedUser,
     payoutId: number,
@@ -968,6 +1051,11 @@ export async function cancelHostPayout(
             throw new ApiError(400, "Chỉ có thể hủy yêu cầu rút tiền đang ở trạng thái Chờ duyệt");
         }
 
+        const { releasedBookingIds, releasedCount } = await releasePayoutBookingItems(
+            payout.payoutId,
+            transaction,
+        );
+
         payout.status = "cancelled";
         payout.notes = payout.notes
             ? `${payout.notes}\n[Đã hủy bởi chủ nhà lúc ${new Date().toISOString()}]`
@@ -985,6 +1073,8 @@ export async function cancelHostPayout(
                 payoutId: payout.payoutId,
                 amount: Number(payout.amount),
                 currency: payout.currency,
+                releasedBookingIds,
+                releasedItemCount: releasedCount,
             },
             ipAddress: context.ipAddress,
             userAgent: context.userAgent,
@@ -996,6 +1086,7 @@ export async function cancelHostPayout(
             status: payout.status,
             amount: payout.amount,
             notes: payout.notes,
+            releasedBookingIds,
         };
     });
 }
