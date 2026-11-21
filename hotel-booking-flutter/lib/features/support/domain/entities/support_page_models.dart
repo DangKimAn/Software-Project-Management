@@ -144,22 +144,29 @@ class UserSupportReport {
 
 /// Tiện ích lọc và ánh xạ định tuyến cho phân hệ Hỗ trợ & Thông tin.
 abstract final class SupportPageResolver {
-  // Giải thuật ánh xạ đường dẫn URL (Route Path) sang `SupportPageType`:
-  // Chuẩn hóa đường dẫn (loại bỏ dấu gạch chéo dư ở cuối và chữ hoa) rồi đối sánh
+  // Giải thuật ánh xạ đường dẫn URL (Route Path, bao gồm cả bí danh rút gọn như `/ho-tro/chinh-sach-huy`, `/ho-tro/khieu-nai`) sang `SupportPageType`:
+  // Chuẩn hóa đường dẫn (tách bỏ query string, loại bỏ dấu gạch chéo dư ở cuối và chữ hoa) rồi đối sánh
   // bảng ánh xạ tĩnh O(1) để quyết định đúng trang đích cần hiển thị.
   static SupportPageType? resolveFromPath(String rawPath) {
-    var normalized = rawPath.trim().toLowerCase();
+    var normalized = rawPath.split('?').first.trim().toLowerCase();
     while (normalized.length > 1 && normalized.endsWith('/')) {
       normalized = normalized.substring(0, normalized.length - 1);
     }
 
     switch (normalized) {
+      case '/ho-tro/huong-dan':
       case '/ho-tro/huong-dan-dat-phong':
         return SupportPageType.bookingGuide;
+      case '/ho-tro/chinh-sach-huy':
+      case '/chinh-sach-huy':
+      case '/chinh-sach-huy-phong':
       case '/ho-tro/chinh-sach-huy-phong':
         return SupportPageType.cancellationPolicy;
+      case '/ho-tro/khieu-nai':
+      case '/khieu-nai':
       case '/ho-tro/khieu-nai-gop-y':
         return SupportPageType.complaintsFeedback;
+      case '/ho-tro/faq':
       case '/ho-tro/cau-hoi-thuong-gap':
       case '/faq':
         return SupportPageType.faq;

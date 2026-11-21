@@ -220,6 +220,27 @@ void main() {
         SupportPageResolver.resolveFromPath('/uu-dai-thanh-vien'),
         SupportPageType.memberOffers,
       );
+      // Short support aliases (CHROME-22)
+      expect(
+        SupportPageResolver.resolveFromPath('/ho-tro/chinh-sach-huy'),
+        SupportPageType.cancellationPolicy,
+      );
+      expect(
+        SupportPageResolver.resolveFromPath('/chinh-sach-huy'),
+        SupportPageType.cancellationPolicy,
+      );
+      expect(
+        SupportPageResolver.resolveFromPath('/ho-tro/khieu-nai'),
+        SupportPageType.complaintsFeedback,
+      );
+      expect(
+        SupportPageResolver.resolveFromPath('/ho-tro/huong-dan'),
+        SupportPageType.bookingGuide,
+      );
+      expect(
+        SupportPageResolver.resolveFromPath('/ho-tro/faq'),
+        SupportPageType.faq,
+      );
       expect(SupportPageResolver.resolveFromPath('/unknown'), isNull);
     });
 
@@ -371,6 +392,32 @@ void main() {
             '/uu-dai-thanh-vien',
             'Ưu đãi thành viên & Mã giảm giá đặt phòng',
             'Tra cứu hiệu lực Mã ưu đãi (Coupon)',
+          ),
+          // CHROME-22: Short support aliases redirect cleanly without 404
+          (
+            '/ho-tro/chinh-sach-huy',
+            'Chính sách hủy phòng & Hoàn tiền',
+            'Chính sách Trung bình (Moderate)',
+          ),
+          (
+            '/chinh-sach-huy',
+            'Chính sách hủy phòng & Hoàn tiền',
+            'Chính sách Trung bình (Moderate)',
+          ),
+          (
+            '/ho-tro/khieu-nai',
+            'Khiếu nại, Báo cáo & Góp ý dịch vụ',
+            'Gửi báo cáo & khiếu nại trực tuyến',
+          ),
+          (
+            '/ho-tro/huong-dan',
+            'Hướng dẫn đặt biệt thự nguyên căn',
+            'Khóa lịch giữ chỗ tạm thời 15 phút',
+          ),
+          (
+            '/ho-tro/faq',
+            'Câu hỏi thường gặp (FAQ)',
+            'Tại sao đơn đặt phòng có thời gian giữ chỗ 15 phút?',
           ),
         ];
 

@@ -398,6 +398,40 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           child: const ContactScreen(),
         ),
       ),
+      // Giải thuật chuyển hướng các bí danh rút gọn của phân hệ Hỗ trợ (`/ho-tro`, `/ho-tro/chinh-sach-huy`, `/ho-tro/khieu-nai`, `/ho-tro/huong-dan`)
+      // về đường dẫn chính tắc tương ứng nhằm triệt tiêu lỗi 404 khi người dùng gõ URL ngắn trên trình duyệt (CHROME-22).
+      GoRoute(
+        path: '/ho-tro',
+        redirect: (context, state) => '/lien-he',
+      ),
+      GoRoute(
+        path: '/ho-tro/huong-dan',
+        redirect: (context, state) => '/ho-tro/huong-dan-dat-phong',
+      ),
+      GoRoute(
+        path: '/ho-tro/chinh-sach-huy',
+        redirect: (context, state) => '/ho-tro/chinh-sach-huy-phong',
+      ),
+      GoRoute(
+        path: '/chinh-sach-huy',
+        redirect: (context, state) => '/ho-tro/chinh-sach-huy-phong',
+      ),
+      GoRoute(
+        path: '/chinh-sach-huy-phong',
+        redirect: (context, state) => '/ho-tro/chinh-sach-huy-phong',
+      ),
+      GoRoute(
+        path: '/ho-tro/khieu-nai',
+        redirect: (context, state) => '/ho-tro/khieu-nai-gop-y',
+      ),
+      GoRoute(
+        path: '/khieu-nai',
+        redirect: (context, state) => '/ho-tro/khieu-nai-gop-y',
+      ),
+      GoRoute(
+        path: '/ho-tro/faq',
+        redirect: (context, state) => '/ho-tro/cau-hoi-thuong-gap',
+      ),
       GoRoute(
         path: '/ho-tro/huong-dan-dat-phong',
         pageBuilder: (context, state) => _buildSlideTransitionPage(
@@ -771,8 +805,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           child: const HostPortalScreen(section: 'thanh-toan'),
         ),
       ),
-      // Giải thuật chuyển hướng bí danh tài chính/rút tiền (/chu-nha/tai-chinh, /chu-nha/rut-tien, /host/tai-chinh, /host/thanh-toan)
-      // về đường dẫn chính tắc /chu-nha/thanh-toan nhằm triệt tiêu lỗi 404 khi truy cập URL trực tiếp (CHROME-08).
+      // Giải thuật chuyển hướng bí danh tài chính/rút tiền (`/chu-nha/tai-chinh`, `/chu-nha/rut-tien`, `/host/tai-chinh`, `/host/thanh-toan`)
+      // về đường dẫn chính tắc `/chu-nha/thanh-toan` nhằm triệt tiêu lỗi 404 khi truy cập URL trực tiếp (CHROME-08).
       GoRoute(
         path: '/chu-nha/tai-chinh',
         redirect: (context, state) => '/chu-nha/thanh-toan',
