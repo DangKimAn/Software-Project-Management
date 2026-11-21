@@ -8,6 +8,10 @@ const purposeTitle: Record<AuthOtpPurpose, string> = {
     verify_phone: "xác thực số điện thoại",
 };
 
+/**
+ * Giải thuật mã hóa thực thể HTML (HTML Entity Encoding) chống tiêm mã HTML/XSS trong mẫu thư điện tử:
+ * Chuyển đổi 5 ký tự đặc biệt (`&`, `<`, `>`, `"`, `'`) sang mã thực thể tương ứng trước khi nội suy vào thân HTML của email OTP.
+ */
 const escapeHtml = (value: string) =>
     value
         .replace(/&/g, "&amp;")
@@ -16,6 +20,12 @@ const escapeHtml = (value: string) =>
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 
+/**
+ * Giải thuật định dạng và gửi thư điện tử chứa mã xác thực một lần (OTP):
+ * 1. Ánh xạ mục đích xác thực (`sign_up`, `forgot_password`, `verify_email`, `verify_phone`) sang tiêu đề tiếng Việt thân thiện.
+ * 2. Chuẩn hóa mốc thời gian hết hạn sang múi giờ `Asia/Ho_Chi_Minh` (`vi-VN`).
+ * 3. Tạo đồng thời phiên bản văn bản thuần (`text`) và giao diện HTML đã qua `escapeHtml` rồi chuyển phát qua dịch vụ SMTP `sendMail`.
+ */
 export const sendAuthOtpEmail = async (input: {
     to: string;
     otp: string;

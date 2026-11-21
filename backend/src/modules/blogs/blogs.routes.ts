@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP công khai và quản trị cho phân hệ bài viết (`blogs`):
+ * - Nhánh công khai cho phép đọc danh sách và chi tiết bài viết đã xuất bản; nhánh quản trị (`adminBlogsRoutes`) yêu cầu `authenticate`, `requireRole("admin")` và `validate` schema.
+ */
+
 import express from "express";
 
 import { authenticate } from "../../middlewares/authenticate.middleware";

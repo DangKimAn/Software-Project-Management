@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý hàng đợi tác vụ đồng bộ bất đồng bộ Google Sheets có độ ưu tiên, khóa thuê bao và cơ chế thử lại.
+ */
 import {
     CreationOptional,
     DataTypes,

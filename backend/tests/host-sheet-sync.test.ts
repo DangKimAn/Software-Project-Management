@@ -10,7 +10,7 @@ import type {
     RawSheetCell,
     RawSheetTab,
     RawSpreadsheetResponse,
-} from "../src/services/google-sheets-client.service";
+} from "../src/modules/host-sheet-sync/google-sheets.client";
 
 process.env.NODE_ENV = "test";
 process.env.JWT_SECRET_KEY = "test-secret";
@@ -30,12 +30,11 @@ const Listing = require("../dist/models/listing").default;
 const User = require("../dist/models/user").default;
 
 const authService = require("../dist/modules/auth/auth.service");
-const auditLogService = require("../dist/services/audit-log-service");
-const semanticSearchIndexer = require("../dist/modules/semantic-search/semantic-search.indexer");
-const hostVerificationStatusService = require("../dist/services/host-verification-status-service");
+const auditLogService = require("../dist/services/audit-log.service");
+const hostVerificationStatusService = require("../dist/modules/host-kyc/host-status-sync.service");
 const notificationService = require("../dist/modules/notifications/notification.service");
-const bookingDateLockService = require("../dist/services/booking-date-lock.service");
-const googleSheetsClient = require("../dist/services/google-sheets-client.service");
+const bookingDateLockService = require("../dist/modules/bookings/booking-date-lock.service");
+const googleSheetsClient = require("../dist/modules/host-sheet-sync/google-sheets.client");
 const hostSheetLayout = require("../dist/modules/host-sheet-sync/host-sheet-sync.layout");
 const hostSheetSyncService = require("../dist/modules/host-sheet-sync/host-sheet-sync.service");
 const hostSheetSyncWorker = require("../dist/modules/host-sheet-sync/host-sheet-sync.worker");
@@ -953,7 +952,6 @@ describe("Google Sheets Agency Mode — Bidirectional Sync, RBAC, Safety & Edge 
         patch(sequelize, "query", async () => []);
         patch(auditLogService, "writeAuditLog", async () => ({}));
         patch(auditLogService, "createAuditLog", async () => ({}));
-        patch(semanticSearchIndexer, "scheduleSemanticReindex", () => {});
         patch(hostVerificationStatusService, "isHostVerifiedForPublishing", async () => true);
         patch(notificationService, "notifyListingApproved", async () => {});
         patch(notificationService, "notifyListingRejected", async () => {});

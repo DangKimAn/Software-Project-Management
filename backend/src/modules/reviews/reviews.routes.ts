@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP đánh giá chỗ ở (`/api/reviews`):
+ * - Áp dụng middleware xác thực (`authenticate`), phân quyền theo nghiệp vụ (khách đánh giá / chủ nhà phản hồi), giới hạn tần suất (`Limiter`) và kiểm chứng dữ liệu.
+ */
+
 import express from "express";
 import { body, param } from "express-validator";
 

@@ -15,7 +15,10 @@ void main() {
 
   Widget buildCalendarApp(Locale locale, {DateTime? initialDate}) {
     final seed = initialDate != null
-        ? BookingDate(year: initialDate.year, month: initialDate.month, day: initialDate.day)
+        ? BookingDate(
+            year: initialDate.year,
+            month: initialDate.month,
+            day: initialDate.day)
         : const BookingDate(year: 2026, month: 11, day: 10);
     return MaterialApp(
       locale: locale,
@@ -38,7 +41,8 @@ void main() {
   }
 
   group('Calendar Localization across vi, en, ko', () {
-    testWidgets('renders Vietnamese calendar header and weekdays for vi locale', (tester) async {
+    testWidgets('renders Vietnamese calendar header and weekdays for vi locale',
+        (tester) async {
       await tester.pumpWidget(buildCalendarApp(const Locale('vi')));
       await tester.pumpAndSettle();
 
@@ -52,7 +56,8 @@ void main() {
       expect(find.text('CN'), findsOneWidget);
     });
 
-    testWidgets('renders English calendar header and weekdays for en locale', (tester) async {
+    testWidgets('renders English calendar header and weekdays for en locale',
+        (tester) async {
       await tester.pumpWidget(buildCalendarApp(const Locale('en')));
       await tester.pumpAndSettle();
 
@@ -66,7 +71,8 @@ void main() {
       expect(find.text('Sun'), findsOneWidget);
     });
 
-    testWidgets('renders Korean calendar header and weekdays for ko locale', (tester) async {
+    testWidgets('renders Korean calendar header and weekdays for ko locale',
+        (tester) async {
       await tester.pumpWidget(buildCalendarApp(const Locale('ko')));
       await tester.pumpAndSettle();
 

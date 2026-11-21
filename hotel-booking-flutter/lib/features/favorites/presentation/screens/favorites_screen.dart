@@ -7,33 +7,36 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../core/storage/preferences_service.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_loading.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../../villas/domain/entities/villa.dart';
 import '../../../villas/presentation/widgets/property_card.dart';
-import '../../domain/repositories/wishlist_repository.dart';
+export '../../../../app/di/providers.dart' show wishlistDetailProvider;
 
-final wishlistDetailProvider =
-    FutureProvider.autoDispose<WishlistResponse?>((ref) async {
-  final user = ref.watch(authNotifierProvider).valueOrNull;
-  if (user == null) return null;
-  final repo = ref.watch(wishlistRepositoryProvider);
-  await repo.getWishlistListingIds();
-  return repo.getWishlistDetail();
-});
-
-/// Complete port of `Source goc/frontend/src/views/pages/Wishlist/WishlistPage.tsx`.
+/// Màn hình danh sách biệt thự yêu thích (Wishlist) của người dùng và khách vãng lai.
+///
+/// Hợp nhất dữ liệu thời gian thực giữa trạng thái tim lạc quan (`favoritesProvider`),
+/// danh sách tải từ máy chủ (`wishlistDetailProvider`) và bộ giải mã biệt thự ngoại trang
+/// (`resolvedFavoriteVillasProvider`), đồng thời cảnh báo rõ các chỗ nghỉ ngừng hoạt động.
 class FavoritesScreen extends ConsumerWidget {
+  /// Khởi tạo màn hình danh sách yêu thích.
   const FavoritesScreen({super.key});
 
+  /// Dựng giao diện danh sách biệt thự đã lưu theo lưới đáp ứng đa kích thước màn hình.
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final favorites = ref.watch(favoritesProvider);
+    final favoritesNotifier = ref.read(favoritesProvider.notifier);
+    final isAuthenticated =
+        ref.watch(authNotifierProvider.select((s) => s.valueOrNull != null));
     final wishlistAsync = ref.watch(wishlistDetailProvider);
     final villasAsync = ref.watch(villaListProvider);
+    final resolvedGuestVillasAsync = ref.watch(resolvedFavoriteVillasProvider);
+    final activeL10n =
+        lookupAppLocalizations(Locale(ref.watch(localeProvider)));
 
     return Scaffold(
       backgroundColor: AppColors.surfaceBase,
@@ -44,6 +47,10 @@ class FavoritesScreen extends ConsumerWidget {
             Expanded(
               child: villasAsync.when(
                 data: (allVillas) {
+                  // Giải thuật hợp nhất danh sách biệt thự yêu thích không trễ trạng thái (Zero-Stale Unheart Sync):
+                  // 1. Khi đã đồng bộ backend hoặc người dùng vừa bấm bỏ tim, chỉ giữ các ID đang thuộc `validFavoriteIds`
+                  //    (tuyệt đối không để `backendDetail.listingIds` cũ làm thẻ đã bỏ tim xuất hiện lại).
+                  // 2. Với khách chưa đăng nhập, kết hợp thêm `resolvedFavoriteVillasProvider` để hiển thị cả các biệt thự ngoài trang 1.
                   final backendDetail = wishlistAsync.valueOrNull;
                   final invalidIds = PreferencesService.normalizeListingIds(
                     backendDetail?.invalidListingIds ?? const <String>[],
@@ -55,24 +62,41 @@ class FavoritesScreen extends ConsumerWidget {
                           !invalidSet.contains(id))
                       .toSet();
 
+                  final extraResolved =
+                      resolvedGuestVillasAsync.valueOrNull ?? const <Villa>[];
+
                   final byId = <String, Villa>{
                     for (final v in allVillas)
                       if (validFavoriteIds.contains(v.id)) v.id: v,
+                    for (final v in extraResolved)
+                      if (validFavoriteIds.contains(v.id)) v.id: v,
                     if (backendDetail != null)
                       for (final v in backendDetail.items)
-                        if (validFavoriteIds.contains(v.id) ||
-                            backendDetail.listingIds.contains(v.id))
-                          if (!invalidSet.contains(v.id)) v.id: v,
+                        if (!invalidSet.contains(v.id) &&
+                            !favoritesNotifier.isRemovedInSession(v.id) &&
+                            (validFavoriteIds.contains(v.id) ||
+                                (!favoritesNotifier.hasSyncedBackend &&
+                                    isAuthenticated &&
+                                    backendDetail.listingIds.contains(v.id))))
+                          v.id: v,
                   };
                   final savedVillas = byId.values.toList();
+
+                  if (savedVillas.isEmpty &&
+                      invalidIds.isEmpty &&
+                      validFavoriteIds.isNotEmpty &&
+                      resolvedGuestVillasAsync.isLoading) {
+                    return AppLoading(
+                      message: activeL10n.loadingFavorites,
+                    );
+                  }
 
                   if (savedVillas.isEmpty && invalidIds.isEmpty) {
                     return AppEmptyView(
                       icon: LucideIcons.heart,
-                      title: 'Chưa có biệt thự nào được lưu',
-                      description:
-                          'Bấm vào biểu tượng trái tim ở góc ảnh biệt thự để thêm vào danh sách yêu thích.',
-                      actionText: 'Khám phá biệt thự',
+                      title: activeL10n.favoritesEmpty,
+                      description: activeL10n.favoritesEmptyDesc,
+                      actionText: activeL10n.favoritesExploreAction,
                       onAction: () => context.go('/'),
                     );
                   }
@@ -89,16 +113,18 @@ class FavoritesScreen extends ConsumerWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
-                                    'Danh sách yêu thích của bạn',
-                                    style: TextStyle(
+                                  Text(
+                                    activeL10n.settingsMyFavorites,
+                                    style: const TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.w800,
                                     ),
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    'Đã lưu ${savedVillas.length} nơi lưu trú tại Vũng Tàu',
+                                    activeL10n.favoritesSavedCountSubtitle(
+                                      savedVillas.length,
+                                    ),
                                     style: const TextStyle(
                                       fontSize: 13,
                                       color: AppColors.textSecondary,
@@ -114,10 +140,11 @@ class FavoritesScreen extends ConsumerWidget {
                                           color: AppColors.iconMuted,
                                         ),
                                         const SizedBox(width: 8),
-                                        const Expanded(
+                                        Expanded(
                                           child: Text(
-                                            'Không đồng bộ được wishlist từ máy chủ. Dữ liệu lưu cục bộ vẫn được giữ.',
-                                            style: TextStyle(
+                                            activeL10n
+                                                .favoritesSyncOfflineNotice,
+                                            style: const TextStyle(
                                               fontSize: 13,
                                               fontWeight: FontWeight.w600,
                                               color: AppColors.textSecondary,
@@ -130,7 +157,7 @@ class FavoritesScreen extends ConsumerWidget {
                                           ),
                                           onPressed: () => ref.invalidate(
                                               wishlistDetailProvider),
-                                          child: const Text('Thử lại'),
+                                          child: Text(activeL10n.ctaRetry),
                                         ),
                                       ],
                                     ),
@@ -147,7 +174,10 @@ class FavoritesScreen extends ConsumerWidget {
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
-                                            'Có ${invalidIds.length} nơi lưu trú đã lưu hiện không còn khả dụng hoặc đã ngừng hoạt động.',
+                                            activeL10n
+                                                .favoritesInvalidCountNotice(
+                                              invalidIds.length,
+                                            ),
                                             style: const TextStyle(
                                               fontSize: 13,
                                               fontWeight: FontWeight.w600,
@@ -159,6 +189,9 @@ class FavoritesScreen extends ConsumerWidget {
                                     ),
                                   ],
                                   const SizedBox(height: 18),
+                                  // Giải thuật chia lưới đáp ứng đa điểm ngắt (Responsive Breakpoint Grid):
+                                  // Xác định số cột theo bề rộng khả dụng (>= 960px: 3 cột, >= 620px: 2 cột, < 620px: 1 cột)
+                                  // và tính chiều rộng thẻ `cardW` trừ khoảng hở `gap` để dàn đều bằng `Wrap`.
                                   LayoutBuilder(
                                     builder: (context, constraints) {
                                       final cols = constraints.maxWidth >= 960
@@ -199,12 +232,10 @@ class FavoritesScreen extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      const SliverToBoxAdapter(child: AppFooter()),
                     ],
                   );
                 },
-                loading: () => AppLoading(
-                    message: context.l10n.loadingFavorites),
+                loading: () => AppLoading(message: activeL10n.loadingFavorites),
                 error: (err, _) => AppErrorView(
                   message: err.toString(),
                   onRetry: () => ref.invalidate(villaListProvider),

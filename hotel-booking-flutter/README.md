@@ -1,6 +1,6 @@
 # The Palm Villa — Ứng dụng Đa nền tảng Flutter (Android, iOS & Web)
 
-> Ứng dụng khách đa nền tảng phục vụ khám phá biệt thự bằng AI, đặt phòng trực tuyến, vận hành cổng Chủ nhà (*Host Studio*) và quản trị toàn sàn (*Admin Console*) cho hệ sinh thái **The Palm Villa**.
+> Ứng dụng khách đa nền tảng phục vụ khám phá biệt thự nghỉ dưỡng, đặt phòng trực tuyến, vận hành cổng Chủ nhà (*Host Studio*) và quản trị toàn sàn (*Admin Console*) cho hệ sinh thái **The Palm Villa**.
 
 [![Flutter CI](https://github.com/DangKimAn/Software-Project-Management/actions/workflows/flutter_ci.yml/badge.svg)](https://github.com/DangKimAn/Software-Project-Management/actions/workflows/flutter_ci.yml)
 [![Flutter](https://img.shields.io/badge/Flutter-%3E%3D3.19.0-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
@@ -25,7 +25,7 @@
 
 ---
 
-## 2. Cấu trúc Thư mục Chuẩn (`146` tệp Dart / `15` Phân hệ)
+## 2. Cấu trúc Thư mục Chuẩn (`182` tệp Dart / `14` Phân hệ)
 
 ```text
 hotel-booking-flutter/
@@ -51,31 +51,29 @@ hotel-booking-flutter/
 │   │   ├── config/                  # Kiểm tra tính hợp lệ của biến môi trường lúc biên dịch
 │   │   ├── date/                    # Value Object xử lý khoảng lưu trú [checkIn, checkOut) chuẩn múi giờ
 │   │   ├── errors/                  # Phân loại lỗi bất biến bằng Sealed Class (AppFailure)
-│   │   ├── formatters/              # Định dạng tiền tệ và quy đổi tỷ giá đa quốc gia
+│   │   ├── currency/                # Định dạng tiền tệ (MoneyFormatter) và quy đổi tỷ giá đa quốc gia
 │   │   ├── logging/                 # Bộ ghi nhật ký an toàn (chống rò rỉ PII và JWT)
 │   │   ├── network/                 # Dio HTTP Client tích hợp Interceptor tự động làm mới Access Token
 │   │   └── security/ & storage/     # Lưu trữ khóa mật mã (FlutterSecureStorage) & tùy chọn người dùng
-│   ├── features/                    # 15 Phân hệ chức năng độc lập theo mô hình MVVM
+│   ├── features/                    # 14 Phân hệ chức năng độc lập theo mô hình MVVM
 │   │   ├── admin/                   # Trung tâm điều hành Admin: Dashboard, RBAC, KYC, Tin đăng, Giải ngân
 │   │   ├── auth/                    # Đăng nhập, Đăng ký, Xác thực OTP, Quên mật khẩu & Google Sign-In
 │   │   ├── blog/                    # Cẩm nang du lịch và bài viết khám phá Vũng Tàu
-│   │   ├── booking_inquiry/         # Luồng đặt phòng, áp mã giảm giá, thanh toán VNPay/MoMo/VietQR & Tư vấn
-│   │   ├── contact/                 # Gửi yêu cầu liên hệ và kết nối Hotline / Zalo OA
 │   │   ├── favorites/               # Quản lý danh sách biệt thự yêu thích (Wishlist đồng bộ tài khoản)
-│   │   ├── home/                    # Trang chủ khám phá, danh mục nhanh và lối tắt tìm kiếm AI
+│   │   ├── home/                    # Trang chủ khám phá, danh mục biệt thự nổi bật và chọn khu vực nhanh
 │   │   ├── host/                    # Cổng Chủ nhà Studio: Tổng quan, Biệt thự, Lịch 30 ngày, Đơn đặt, Google Sheets, KYC
 │   │   ├── messages/                # Nhắn tin thời gian thực Socket.IO kiểu Messenger (cảm xúc, ảnh, trả lời nhanh)
 │   │   ├── reviews/                 # Đánh giá xếp hạng sau lưu trú và phản hồi của Chủ nhà
-│   │   ├── search/                  # Tìm kiếm ngữ nghĩa văn bản AI, tìm bằng hình ảnh & bộ lọc nâng cao
+│   │   ├── search/                  # Tìm kiếm biệt thự theo khu vực, bản đồ bán kính, lịch trống & bộ lọc nâng cao
 │   │   ├── settings/                # Hồ sơ cá nhân, chuyển đổi ngôn ngữ (vi/en/ko), tiền tệ & thông báo
+│   │   ├── support/                 # Trung tâm hỗ trợ, liên hệ Hotline/Zalo OA, hướng dẫn đặt phòng & chính sách hoàn hủy
 │   │   ├── trips/                   # Quản lý lịch trình chuyến đi của Khách theo trạng thái Booking FSM
 │   │   ├── villas/                  # Danh sách biệt thự, thẻ hiển thị thông số và bộ lọc thông minh
 │   │   └── villa_detail/            # Chi tiết biệt thự, thư viện ảnh, lịch trống, bản đồ tiện ích & đánh giá
 │   ├── shared/                      # Thành phần giao diện tái sử dụng (Buttons, Cards, Frosted Notifications...)
 │   └── l10n/                        # Tệp ngôn ngữ nguồn (app_vi.arb, app_en.arb, app_ko.arb)
-├── test/                            # 52 bộ kiểm thử tự động (Unit, Widget, Multi-Viewport, Golden & Integration)
-├── integration_test/                # Kịch bản kiểm thử đầu-cuối (App E2E Tests)
-└── tools/quality/                   # Kịch bản kiểm toán bảo mật và quy chuẩn mã nguồn Dart
+├── test/                            # 60 tệp kiểm thử tự động (Unit, Widget, Multi-Viewport, Golden & Integration)
+└── integration_test/                # 1 tệp kịch bản kiểm thử đầu-cuối (App E2E Tests — tổng cộng 61 tệp kiểm thử)
 ```
 
 ---
@@ -133,11 +131,11 @@ flutter build appbundle --release --flavor prod --dart-define-from-file=config/p
 Trước khi khởi tạo Pull Request, mã nguồn bắt buộc vượt qua đầy đủ các bước kiểm tra tương đương trên đường ống GitHub Actions (`flutter_ci.yml`):
 
 ```bash
-# 1. Quét rò rỉ khóa bí mật, chính sách Zero-Mock và chuẩn an toàn TLS
-dart run tools/quality/secret_and_rule_audit.dart
+# 1. Quét rò rỉ khóa bí mật, chính sách Zero-Mock và chuẩn an toàn TLS (tệp hợp nhất tại thư mục gốc)
+dart run ../tools/quality/secret_and_rule_audit.dart
 
 # 2. Kiểm tra định dạng chuẩn Dart
-dart format --output=none --set-exit-if-changed test/integration integration_test tools/quality
+dart format --output=none --set-exit-if-changed test/integration integration_test ../tools/quality
 
 # 3. Phân tích tĩnh mã nguồn (0 lỗi, 0 cảnh báo)
 flutter analyze --no-fatal-infos

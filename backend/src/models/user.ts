@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý thực thể tài khoản người dùng cốt lõi: định danh, mật khẩu băm, trạng thái KYC và khóa bảo mật.
+ */
 import {
     CreationOptional,
     DataTypes,

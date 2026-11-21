@@ -6,39 +6,53 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import '../../../../l10n/l10n.dart';
+// CONFLICT-RESOLVED: Điều phối kết nối Socket, tải tệp R2 & truy vấn hội thoại qua `MessagesViewModel`,
+// hỗ trợ đa ngôn ngữ `l10n` từ develop và thay thế toàn bộ Emoji chức năng bằng `LucideIcons` theo FLUTTER_RULES.md.
 import '../../../../app/di/providers.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/errors/app_failure.dart';
-import '../../../../core/network/dio_client.dart';
-import '../../../../core/network/socket_service.dart';
 import '../../../../shared/animations/fade_slide_in.dart';
 import '../../../../shared/animations/source_animations.dart';
+import '../../../../shared/widgets/app_chat_expressions.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
+import '../../../../shared/widgets/report_violation_dialog.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
-import '../../data/conversations_repository.dart';
-import '../../services/chat_media_upload_service.dart';
+// CONFLICT-RESOLVED: Giữ `MessagesViewModel` chuẩn MVVM của HEAD kết hợp dịch vụ ghi âm và các widget bong bóng ảnh/thoại từ develop.
 import '../../services/chat_voice_recorder_service.dart';
+import '../view_models/messages_view_model.dart';
 import '../widgets/chat_audio_bubble.dart';
 import '../widgets/chat_image_bubble.dart';
 import '../widgets/chat_time_divider.dart';
 import '../widgets/messenger_voice_recorder_bar.dart';
 
+/// Phân loại vai trò cổng giao diện đang mở màn hình trò chuyện (`guest`, `host`, `admin`).
 enum _ChatPortalRole { guest, host, admin }
 
-/// Unified Messenger-style chat screen shared across Guest (`/messages`, `/tin-nhan`),
-/// Host (`isHostPortal: true`), and Admin (`isAdminPortal: true` / `/admin/tin-nhan`).
+/// Màn hình trò chuyện trực tuyến hợp nhất theo phong cách Messenger dùng chung cho
+/// Khách hàng (`/messages`, `/tin-nhan`), Chủ nhà (`isHostPortal` là `true`) và Quản trị viên (`isAdminPortal` là `true`).
+///
+/// Quản lý đồng bộ hai chiều giữa luồng sự kiện Socket.IO thời gian thực và REST API:
+/// - Hiển thị bong bóng tin nhắn lạc quan tức thì khi người dùng bấm gửi và đối soát qua `ChatMessageItem.mergeAndSortMessages`.
+/// - Tự động kết nối lại, nạp bù lịch sử bị nhỡ khi khôi phục ứng dụng hoặc rớt mạng tạm thời.
+/// - Bảo toàn bản nháp văn bản, vị trí cuộn và số lượng tin nhắn mới bên dưới cho từng cuộc trò chuyện độc lập.
 class MessagesScreen extends ConsumerStatefulWidget {
+  /// Mã cuộc trò chuyện cần tự động chọn và mở ngay khi vào màn hình (nếu có).
   final String? initialConversationId;
+
+  /// Cho biết màn hình đang được nhúng trong Cổng Chủ nhà để áp dụng phạm vi quyền chủ nhà.
   final bool isHostPortal;
+
+  /// Cho biết màn hình đang được nhúng trong Cổng Quản trị viên hệ thống.
   final bool isAdminPortal;
 
+  /// Khởi tạo `MessagesScreen`.
   const MessagesScreen({
     super.key,
     this.initialConversationId,
@@ -52,20 +66,13 @@ class MessagesScreen extends ConsumerStatefulWidget {
 
 class _MessagesScreenState extends ConsumerState<MessagesScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
-  static const List<String> _messengerReactions = [
-    '❤️',
-    '😆',
-    '😮',
-    '😢',
-    '😡',
-    '👍',
-  ];
+  // CONFLICT-RESOLVED: Loại bỏ hằng số chuỗi trả lời nhanh tĩnh và danh sách Emoji cảm xúc thô vì đã dùng `AppLocalizations` động (từ develop) và `AppChatExpressions` dựa trên `LucideIcons` (từ HEAD).
 
   String? _selectedConversationId;
   String? _activeUserId;
 
   final Map<String, List<ChatMessageItem>> _messagesByConversation = {};
-  final Map<String, PaginationMeta> _paginationByConversation = {};
+  final Map<String, MessagesPaginationMeta> _paginationByConversation = {};
   final Map<String, AppFailure> _messagesErrorByConversation = {};
   final Map<String, bool> _loadingMessagesByConversation = {};
   final Map<String, bool> _loadingHistoryByConversation = {};
@@ -91,8 +98,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   bool _isRecordingVoice = false;
   int _voiceRecordingSeconds = 0;
   Timer? _voiceTimer;
+  // CONFLICT-RESOLVED: Giữ bộ ghi âm thực `ChatVoiceRecorderService` từ develop và mã biểu cảm không dùng Emoji (`'like'`) của HEAD.
   final ChatVoiceRecorderService _voiceRecorder = ChatVoiceRecorderService();
-  String _chatQuickEmoji = '👍';
+  String _chatQuickEmoji = 'like';
 
   bool _isSwitchingConversation = false;
   bool _isUserNearBottom = true;
@@ -100,11 +108,12 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
 
   bool get _isEmbeddedPortal => widget.isHostPortal || widget.isAdminPortal;
 
-  late final SocketService _socket;
   StreamSubscription<Map<String, dynamic>>? _socketMessageSub;
   StreamSubscription<Map<String, dynamic>>? _socketErrorSub;
   StreamSubscription<Map<String, dynamic>>? _socketTypingSub;
+  StreamSubscription<Map<String, dynamic>>? _socketReactionSub;
   StreamSubscription<void>? _reconnectSub;
+  MessagesViewModel? _cachedVm;
 
   List<ChatMessageItem> get _activeMessages {
     final id = _selectedConversationId;
@@ -124,12 +133,14 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     _inputCtrl.addListener(_onInputChanged);
     _scrollController.addListener(_onScrollChanged);
 
-    _socket = ref.read(socketServiceProvider);
-    unawaited(_socket.connect());
-    _socketMessageSub = _socket.onMessageNew.listen(_onSocketMessage);
-    _socketErrorSub = _socket.onConversationError.listen(_onSocketError);
-    _socketTypingSub = _socket.onTyping.listen(_onSocketTyping);
-    _reconnectSub = _socket.onConnected.listen((_) => _onSocketReconnected());
+    final vm = ref.read(messagesViewModelProvider);
+    _cachedVm = vm;
+    unawaited(vm.connectSocket());
+    _socketMessageSub = vm.onMessageNew.listen(_onSocketMessage);
+    _socketErrorSub = vm.onConversationError.listen(_onSocketError);
+    _socketTypingSub = vm.onTyping.listen(_onSocketTyping);
+    _socketReactionSub = vm.onMessageReaction.listen(_onSocketReaction);
+    _reconnectSub = vm.onConnected.listen((_) => _onSocketReconnected());
 
     if (_selectedConversationId != null &&
         _selectedConversationId!.isNotEmpty) {
@@ -164,7 +175,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     if (state == AppLifecycleState.resumed) {
       final user = ref.read(authNotifierProvider).valueOrNull;
       if (user != null) {
-        unawaited(ref.read(socketServiceProvider).connect());
+        unawaited(ref.read(messagesViewModelProvider).connectSocket());
         _onSocketReconnected();
       }
     }
@@ -183,6 +194,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     }
   }
 
+  // Giải thuật tiết lưu tín hiệu đang gõ văn bản (`typing` throttling):
+  // Chỉ phát sự kiện `sendTyping` tối đa 1 lần mỗi 2 giây trên cùng một `conversationId` để tránh làm nghẽn kênh Socket.IO.
   void _maybeEmitTyping(String conversationId) {
     final now = DateTime.now();
     final lastSent = _lastTypingSentAt[conversationId];
@@ -191,7 +204,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       return;
     }
     _lastTypingSentAt[conversationId] = now;
-    ref.read(socketServiceProvider).sendTyping(conversationId, isTyping: true);
+    ref
+        .read(messagesViewModelProvider)
+        .sendTyping(conversationId, isTyping: true);
   }
 
   void _onScrollChanged() {
@@ -265,10 +280,11 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   }
 
   void _clearStateForSessionChange() {
-    final socket = ref.read(socketServiceProvider);
     if (_selectedConversationId != null &&
         _selectedConversationId!.isNotEmpty) {
-      socket.leaveConversation(_selectedConversationId!);
+      ref
+          .read(messagesViewModelProvider)
+          .leaveConversation(_selectedConversationId!);
     }
     for (final timer in _typingTimers.values) {
       timer.cancel();
@@ -297,6 +313,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     _selectedConversationId = null;
   }
 
+  // Giải thuật đồng bộ bù sau khi kết nối lại Socket.IO (`_onSocketReconnected`):
+  // Làm mới danh sách hộp thư và tải bù trang tin nhắn mới nhất của hội thoại đang mở,
+  // hợp nhất qua `mergeAndSortMessages` để không làm mất các bong bóng lạc quan đang chờ gửi.
   void _onSocketReconnected() {
     if (!mounted) return;
     ref.invalidate(conversationsListProvider);
@@ -314,7 +333,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
 
     try {
       final result = await ref
-          .read(conversationsRepositoryProvider)
+          .read(messagesViewModelProvider)
           .getMessagesPaginated(conversationId);
       if (!mounted) return;
       final wasNearBottom =
@@ -341,6 +360,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     }
   }
 
+  // Giải thuật xử lý lỗi phân quyền từ kênh Socket.IO (`conversation:error`):
+  // Khi máy chủ từ chối quyền truy cập (`forbidden` / `unauthorized`), lập tức rời phòng lắng nghe,
+  // xóa bộ nhớ đệm tin nhắn của hội thoại đó và gán `AuthFailure(403)`.
   void _onSocketError(Map<String, dynamic> payload) {
     if (!mounted) return;
     final convId = payload['conversationId']?.toString().trim() ?? '';
@@ -350,7 +372,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     final isForbidden = rawMessage.toLowerCase().contains('forbidden') ||
         rawMessage.toLowerCase().contains('unauthorized');
     if (isForbidden) {
-      ref.read(socketServiceProvider).leaveConversation(convId);
+      ref.read(messagesViewModelProvider).leaveConversation(convId);
       setState(() {
         _messagesByConversation.remove(convId);
         _loadingMessagesByConversation[convId] = false;
@@ -363,6 +385,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     }
   }
 
+  // Giải thuật hiển thị chỉ báo đối phương đang nhập văn bản tự động tắt sau 4 giây nếu không có xung mới.
   void _onSocketTyping(Map<String, dynamic> payload) {
     if (!mounted) return;
     final convId = payload['conversationId']?.toString().trim() ?? '';
@@ -402,6 +425,28 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     });
   }
 
+  // Giải thuật đồng bộ biểu cảm tin nhắn thời gian thực (`message:reaction`):
+  // Cập nhật hoặc gỡ biểu cảm trên bong bóng tin nhắn tương ứng ngay khi đối phương thao tác.
+  void _onSocketReaction(Map<String, dynamic> payload) {
+    if (!mounted) return;
+    final msgId = (payload['messageId'] ?? '').toString().trim();
+    if (msgId.isEmpty) return;
+    final reaction = (payload['reaction'] ?? '').toString().trim();
+    setState(() {
+      if (reaction.isEmpty) {
+        _messageReactions.remove(msgId);
+      } else {
+        _messageReactions[msgId] = reaction;
+      }
+    });
+  }
+
+  // Giải thuật xử lý tin nhắn thời gian thực từ Socket.IO (`message:new`) và đối soát lạc quan:
+  // Bước 1: Giải mã `SocketMessageEnvelope`, xác thực quyền thành viên (`canAccess` & `senderUserId`/`receiverUserId`).
+  // Bước 2: Gọi `ChatMessageItem.mergeAndSortMessages` để khử trùng lặp với phản hồi HTTP `POST`
+  //         và thu hồi bong bóng lạc quan đang chờ gửi (`isPending`) nếu là tin nhắn của chính mình phản xạ về.
+  // Bước 3: Cập nhật tóm tắt hội thoại (`lastMessage`, `unreadCount`), tăng bộ đếm tin chưa đọc phía dưới
+  //         nếu người dùng đang cuộn xem lịch sử cũ, hoặc tự động cuộn xuống đáy và gọi `_markReadQuietly`.
   void _onSocketMessage(Map<String, dynamic> payload) {
     if (!mounted) return;
     final envelope = SocketMessageEnvelope.fromJson(payload);
@@ -507,7 +552,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   Future<void> _markReadQuietly(String conversationId) async {
     try {
       final res = await ref
-          .read(conversationsRepositoryProvider)
+          .read(messagesViewModelProvider)
           .markConversationRead(conversationId);
       if (!mounted) return;
       final baseList =
@@ -558,13 +603,16 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     final prevId = _selectedConversationId;
     _saveDraftAndScrollBeforeLeaving(prevId);
     if (prevId != null && prevId.isNotEmpty) {
-      ref.read(socketServiceProvider).leaveConversation(prevId);
+      ref.read(messagesViewModelProvider).leaveConversation(prevId);
     }
     setState(() {
       _selectedConversationId = null;
     });
   }
 
+  // Giải thuật chuyển đổi cuộc trò chuyện đang mở (`_selectConversation`):
+  // Lưu bản nháp và vị trí cuộn của hội thoại cũ, rời phòng Socket cũ, kiểm tra quyền truy cập hội thoại mới,
+  // khôi phục bản nháp & bộ nhớ đệm tức thì, tham gia phòng Socket mới, tải trang đầu lịch sử và đánh dấu đã đọc.
   Future<void> _selectConversation(
     String conversationId, {
     bool forceReload = false,
@@ -575,7 +623,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     final prevId = _selectedConversationId;
     if (prevId != null && prevId != trimmedId) {
       _saveDraftAndScrollBeforeLeaving(prevId);
-      ref.read(socketServiceProvider).leaveConversation(prevId);
+      ref.read(messagesViewModelProvider).leaveConversation(prevId);
     }
 
     _loadDraftForConversation(trimmedId);
@@ -584,7 +632,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
 
     final currentUserId = ref.read(authNotifierProvider).valueOrNull?.id ?? '';
     if (!_isAuthorizedToAccessConversation(trimmedId, currentUserId)) {
-      ref.read(socketServiceProvider).leaveConversation(trimmedId);
+      ref.read(messagesViewModelProvider).leaveConversation(trimmedId);
       setState(() {
         _selectedConversationId = trimmedId;
         _loadingMessagesByConversation[trimmedId] = false;
@@ -626,12 +674,12 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       );
     }
 
-    final socket = ref.read(socketServiceProvider);
-    socket.joinConversation(trimmedId);
+    final vm = ref.read(messagesViewModelProvider);
+    vm.joinConversation(trimmedId);
 
     try {
       final paginated = await ref
-          .read(conversationsRepositoryProvider)
+          .read(messagesViewModelProvider)
           .getMessagesPaginated(trimmedId);
       if (!mounted) return;
       setState(() {
@@ -656,9 +704,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       await _markReadQuietly(trimmedId);
     } catch (e) {
       if (!mounted) return;
-      final failure = DioClient.handleError(e);
+      final failure = MessagesViewModel.mapError(e);
       if (failure is AuthFailure || failure is NotFoundFailure) {
-        socket.leaveConversation(trimmedId);
+        vm.leaveConversation(trimmedId);
       }
       setState(() {
         _loadingMessagesByConversation[trimmedId] = false;
@@ -667,6 +715,10 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     }
   }
 
+  // Giải thuật phân trang ngược tải thêm tin nhắn cũ (`_loadMoreHistory`) giữ nguyên điểm neo cuộn:
+  // Ghi nhận `beforeMaxExtent` và `beforePixels` trước khi ghép tin nhắn cũ bằng `prependOlderMessages`,
+  // sau khi khung hình dựng xong thì bù trừ độ chênh lệch chiều cao `delta = afterMaxExtent - beforeMaxExtent`
+  // vào vị trí cuộn để khung nhìn của người dùng không bị giật nhảy lên đầu trang.
   Future<void> _loadMoreHistory(String conversationId) async {
     if (_loadingHistoryByConversation[conversationId] == true) return;
     final meta = _paginationByConversation[conversationId];
@@ -685,7 +737,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     try {
       final nextPage = meta.page + 1;
       final result =
-          await ref.read(conversationsRepositoryProvider).getMessagesPaginated(
+          await ref.read(messagesViewModelProvider).getMessagesPaginated(
                 conversationId,
                 page: nextPage,
                 limit: meta.limit,
@@ -694,9 +746,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       setState(() {
         final existing = _messagesByConversation[conversationId] ?? const [];
         _messagesByConversation[conversationId] =
-            ChatMessageItem.mergeAndSortMessages(
-          existing,
+            ChatMessageItem.prependOlderMessages(
           result.items,
+          existing,
           conversationId: conversationId,
         );
         _paginationByConversation[conversationId] = result.pagination;
@@ -717,7 +769,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       });
     } catch (e) {
       if (!mounted) return;
-      final failure = DioClient.handleError(e);
+      final failure = MessagesViewModel.mapError(e);
       setState(() {
         _loadingHistoryByConversation[conversationId] = false;
       });
@@ -731,6 +783,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     await _sendDirectContent(text, clearInput: true);
   }
 
+  // Giải thuật khởi tạo bong bóng tin nhắn lạc quan (Optimistic UI Send):
+  // Sinh khóa tạm duy nhất `local_<timestamp>_<seq>`, chèn ngay tin nhắn ở trạng thái `sending` vào danh sách
+  // thông qua `mergeAndSortMessages`, cuộn mượt xuống đáy rồi chuyển giao cho `_dispatchMessageRequest`.
   Future<void> _sendDirectContent(
     String rawContent, {
     bool clearInput = false,
@@ -739,7 +794,11 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   }) async {
     final convId = _selectedConversationId;
     final text = rawContent.trim();
-    if (convId == null || convId.isEmpty || (text.isEmpty && (attachments == null || attachments.isEmpty))) return;
+    if (convId == null ||
+        convId.isEmpty ||
+        (text.isEmpty && (attachments == null || attachments.isEmpty))) {
+      return;
+    }
 
     final currentUserId = ref.read(authNotifierProvider).valueOrNull?.id ?? '';
     if (currentUserId.isEmpty) return;
@@ -821,7 +880,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   AppLocalizations get _currentL10n =>
       lookupAppLocalizations(Locale(ref.read(localeProvider)));
 
-  List<String> _quickRepliesForRole(_ChatPortalRole role, [AppLocalizations? l10n]) {
+  List<String> _quickRepliesForRole(_ChatPortalRole role,
+      [AppLocalizations? l10n]) {
     final loc = l10n ?? _currentL10n;
     switch (role) {
       case _ChatPortalRole.admin:
@@ -864,14 +924,20 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
         imageQuality: 82,
       );
       if (!mounted || file == null) return;
-      AppToast.show(context, l10n.chatToastUploadingPhoto, type: AppToastType.info);
-      final bytes = await file.readAsBytes();
-      final uploadService = ref.read(chatMediaUploadServiceProvider);
-      final result = await uploadService.uploadMediaBytesToR2(
-        bytes: bytes,
-        filename: file.name.isNotEmpty ? file.name : 'camera_${DateTime.now().millisecondsSinceEpoch}.jpg',
-        contentType: 'image/jpeg',
+      AppToast.show(
+        context,
+        l10n.chatToastUploadingPhoto,
+        type: AppToastType.info,
       );
+      final bytes = await file.readAsBytes();
+      // CONFLICT-RESOLVED: Tải ảnh chụp thực tế lên R2 qua `MessagesViewModel.uploadChatMedia` (MVVM của HEAD + R2 upload từ develop).
+      final result = await ref.read(messagesViewModelProvider).uploadChatMedia(
+            bytes: bytes,
+            filename: file.name.isNotEmpty
+                ? file.name
+                : 'camera_${DateTime.now().millisecondsSinceEpoch}.jpg',
+            contentType: 'image/jpeg',
+          );
       if (!mounted) return;
       await _sendDirectContent(
         '',
@@ -886,7 +952,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       );
     } catch (e) {
       if (!mounted) return;
-      final failure = DioClient.handleError(e);
+      final failure = MessagesViewModel.mapError(e);
       AppToast.show(context, failure.message, type: AppToastType.error);
     }
   }
@@ -899,14 +965,20 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
         imageQuality: 85,
       );
       if (!mounted || file == null) return;
-      AppToast.show(context, l10n.chatToastUploadingPhoto, type: AppToastType.info);
-      final bytes = await file.readAsBytes();
-      final uploadService = ref.read(chatMediaUploadServiceProvider);
-      final result = await uploadService.uploadMediaBytesToR2(
-        bytes: bytes,
-        filename: file.name.isNotEmpty ? file.name : 'gallery_${DateTime.now().millisecondsSinceEpoch}.jpg',
-        contentType: 'image/jpeg',
+      AppToast.show(
+        context,
+        l10n.chatToastUploadingPhoto,
+        type: AppToastType.info,
       );
+      final bytes = await file.readAsBytes();
+      // CONFLICT-RESOLVED: Tải ảnh thư viện lên R2 qua `MessagesViewModel.uploadChatMedia` (MVVM của HEAD + R2 upload từ develop).
+      final result = await ref.read(messagesViewModelProvider).uploadChatMedia(
+            bytes: bytes,
+            filename: file.name.isNotEmpty
+                ? file.name
+                : 'gallery_${DateTime.now().millisecondsSinceEpoch}.jpg',
+            contentType: 'image/jpeg',
+          );
       if (!mounted) return;
       await _sendDirectContent(
         '',
@@ -921,7 +993,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       );
     } catch (e) {
       if (!mounted) return;
-      final failure = DioClient.handleError(e);
+      final failure = MessagesViewModel.mapError(e);
       AppToast.show(context, failure.message, type: AppToastType.error);
     }
   }
@@ -935,10 +1007,15 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
         _isRecordingVoice = false;
         _voiceRecordingSeconds = 0;
       });
+      // CONFLICT-RESOLVED: Thu âm thực và tải tệp âm thanh lên R2 từ develop, loại bỏ ký tự Emoji ở nội dung và chuẩn hóa lỗi qua `MessagesViewModel.mapError`.
       unawaited(() async {
         try {
           if (!mounted) return;
-          AppToast.show(context, l10n.chatToastUploadingVoice, type: AppToastType.info);
+          AppToast.show(
+            context,
+            l10n.chatToastUploadingVoice,
+            type: AppToastType.info,
+          );
 
           final recordedResult = await _voiceRecorder.stop();
           if (recordedResult == null || recordedResult.bytes.isEmpty) {
@@ -958,15 +1035,15 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
               ? recordedResult.durationSeconds
               : (sec > 0 ? sec : 1);
 
-          final uploadService = ref.read(chatMediaUploadServiceProvider);
-          final result = await uploadService.uploadMediaBytesToR2(
-            bytes: audioBytes,
-            filename: filename,
-            contentType: contentType,
-          );
+          final result =
+              await ref.read(messagesViewModelProvider).uploadChatMedia(
+                    bytes: audioBytes,
+                    filename: filename,
+                    contentType: contentType,
+                  );
           if (!mounted) return;
           await _sendDirectContent(
-            '🎤 ${_currentL10n.chatVoiceMessage} (00:${recordedSeconds.toString().padLeft(2, '0')})',
+            '${_currentL10n.chatVoiceMessage} (00:${recordedSeconds.toString().padLeft(2, '0')})',
             messageType: 'file',
             attachments: [
               {
@@ -978,8 +1055,12 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
           );
         } catch (e) {
           if (!mounted) return;
-          final failure = DioClient.handleError(e);
-          AppToast.show(context, 'Tải âm thanh lên R2 thất bại: ${failure.message}', type: AppToastType.error);
+          final failure = MessagesViewModel.mapError(e);
+          AppToast.show(
+            context,
+            'Tải âm thanh lên R2 thất bại: ${failure.message}',
+            type: AppToastType.error,
+          );
         }
       }());
     } else {
@@ -1011,9 +1092,15 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     }
   }
 
-  void _showChatMoreOptions(_ChatPortalRole role, ConversationItem conv, [AppLocalizations? l10n]) {
+  // CONFLICT-RESOLVED: Sử dụng các mẫu câu phản hồi nhanh đa ngôn ngữ `AppLocalizations` từ develop kết hợp `LucideIcons` của HEAD.
+  void _showChatMoreOptions(
+    _ChatPortalRole role,
+    ConversationItem conv, [
+    AppLocalizations? l10n,
+  ]) {
     final loc = l10n ?? _currentL10n;
-    final templates = <({IconData icon, String title, String subtitle, String content})>[
+    final templates =
+        <({IconData icon, String title, String subtitle, String content})>[
       switch (role) {
         _ChatPortalRole.admin => (
             icon: LucideIcons.shieldCheck,
@@ -1205,26 +1292,6 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
-        const emojis = [
-          '😊',
-          '🥰',
-          '😍',
-          '🌴',
-          '🏖️',
-          '✨',
-          '👍',
-          '🙏',
-          '❤️',
-          '🔥',
-          '🎉',
-          '💯',
-          '⭐',
-          '🌊',
-          '🏡',
-          '🔑',
-          '☕',
-          '🌟',
-        ];
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1233,18 +1300,27 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
               children: [
                 Text(
                   loc.chatSelectEmojiTitle,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 15),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
-                  spacing: 12,
+                  spacing: 10,
                   runSpacing: 10,
-                  children: emojis.map((e) {
-                    return InkWell(
-                      onTap: () {
+                  children: kAppChatExpressionTokens.map((item) {
+                    return ActionChip(
+                      avatar: Icon(
+                        item.icon,
+                        size: 18,
+                        color: AppColors.primary,
+                      ),
+                      label: Text(item.label),
+                      onPressed: () {
                         Navigator.pop(ctx);
                         final current = _inputCtrl.text;
-                        final next = current.isEmpty ? e : '$current $e';
+                        final next = current.isEmpty
+                            ? item.sendText
+                            : '$current ${item.sendText}';
                         _inputCtrl.value = TextEditingValue(
                           text: next,
                           selection:
@@ -1252,11 +1328,6 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                         );
                         _inputFocusNode.requestFocus();
                       },
-                      borderRadius: BorderRadius.circular(16),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text(e, style: const TextStyle(fontSize: 26)),
-                      ),
                     );
                   }).toList(),
                 ),
@@ -1273,22 +1344,35 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     showDialog<void>(
       context: context,
       builder: (ctx) {
-        const quickOptions = ['👍', '❤️', '😤', '🌴', '🔥', '⭐'];
         return AlertDialog(
           title: Text(loc.chatSelectQuickEmojiTitle),
           content: Wrap(
-            spacing: 14,
-            runSpacing: 12,
-            children: quickOptions.map((e) {
-              return InkWell(
-                onTap: () {
-                  setState(() => _chatQuickEmoji = e);
-                  Navigator.pop(ctx);
-                },
-                borderRadius: BorderRadius.circular(16),
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Text(e, style: const TextStyle(fontSize: 30)),
+            spacing: 12,
+            runSpacing: 10,
+            children: kAppQuickChatOptions.map((item) {
+              final isSelected = _chatQuickEmoji == item.code;
+              return Tooltip(
+                message: item.label,
+                child: InkWell(
+                  onTap: () {
+                    setState(() => _chatQuickEmoji = item.code);
+                    Navigator.pop(ctx);
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color:
+                          isSelected ? AppColors.brandSoft : Colors.transparent,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(
+                      item.icon,
+                      size: 24,
+                      color:
+                          isSelected ? AppColors.primary : AppColors.iconStrong,
+                    ),
+                  ),
                 ),
               );
             }).toList(),
@@ -1334,6 +1418,10 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     });
   }
 
+  // Giải thuật gửi tin nhắn qua HTTP và đối soát hai chiều với Socket.IO (`_dispatchMessageRequest`):
+  // - Khi `sendMessage` thành công: gắn `localId` vào bản ghi trả về và gọi `mergeAndSortMessages(..., replaceLocalId: localId)`
+  //   để thay thế bong bóng tạm bằng bản ghi chuẩn của máy chủ (hoặc hợp nhất êm nếu sự kiện Socket.IO đã đến trước).
+  // - Khi gặp lỗi mạng/máy chủ: chuyển trạng thái bong bóng tương ứng sang `MessageDeliveryStatus.failed` để cho phép gửi lại.
   Future<void> _dispatchMessageRequest({
     required String conversationId,
     required String localId,
@@ -1342,7 +1430,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     List<Map<String, dynamic>>? attachments,
   }) async {
     try {
-      final sent = await ref.read(conversationsRepositoryProvider).sendMessage(
+      final sent = await ref.read(messagesViewModelProvider).sendMessage(
             conversationId: conversationId,
             content: content,
             messageType: messageType,
@@ -1384,7 +1472,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       }
     } catch (e) {
       if (!mounted) return;
-      final failure = DioClient.handleError(e);
+      final failure = MessagesViewModel.mapError(e);
       setState(() {
         final currentList = _messagesByConversation[conversationId] ?? const [];
         _messagesByConversation[conversationId] = currentList.map((m) {
@@ -1401,6 +1489,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     }
   }
 
+  // Giải thuật tổng hợp danh sách hội thoại hiển thị (`_effectiveConversations`):
+  // Lọc các hội thoại người dùng được phép truy cập theo vai trò cổng, áp dụng các bản vá thời gian thực
+  // từ `_conversationOverrides` và sắp xếp giảm dần theo thời điểm hoạt động mới nhất (`lastMessageAt` / `updatedAt`).
   List<ConversationItem> _effectiveConversations(
     List<ConversationItem> rawList,
     String currentUserId,
@@ -1472,7 +1563,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     WidgetsBinding.instance.removeObserver(this);
     if (_selectedConversationId != null &&
         _selectedConversationId!.isNotEmpty) {
-      _socket.leaveConversation(_selectedConversationId!);
+      _cachedVm?.leaveConversation(_selectedConversationId!);
     }
     for (final timer in _typingTimers.values) {
       timer.cancel();
@@ -1483,6 +1574,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
     _socketMessageSub?.cancel();
     _socketErrorSub?.cancel();
     _socketTypingSub?.cancel();
+    _socketReactionSub?.cancel();
     _reconnectSub?.cancel();
     _inputCtrl.removeListener(_onInputChanged);
     _scrollController.removeListener(_onScrollChanged);
@@ -1538,7 +1630,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       skipLoadingOnRefresh: !convsAsync.hasError,
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, _) {
-        final failure = DioClient.handleError(err);
+        final failure = MessagesViewModel.mapError(err);
         return AppErrorView(
           title: _errorTitleFor(failure, l10n),
           message: failure.message,
@@ -1572,7 +1664,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                   _messagesErrorByConversation[selectedId] == null) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (!mounted) return;
-                  _socket.leaveConversation(selectedId);
+                  ref
+                      .read(messagesViewModelProvider)
+                      .leaveConversation(selectedId);
                   setState(() {
                     _loadingMessagesByConversation[selectedId] = false;
                     _messagesByConversation.remove(selectedId);
@@ -1696,21 +1790,30 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       },
     );
 
-    if (_isEmbeddedPortal) {
-      return Material(
-        color: AppColors.surfaceBase,
-        child: bodyContent,
-      );
-    }
+    final mainContent = _isEmbeddedPortal
+        ? Material(
+            color: AppColors.surfaceBase,
+            child: bodyContent,
+          )
+        : Scaffold(
+            backgroundColor: AppColors.background,
+            body: Column(
+              children: [
+                const AppSearchHeader(currentPath: '/messages'),
+                Expanded(child: bodyContent),
+              ],
+            ),
+          );
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
-        children: [
-          const AppSearchHeader(currentPath: '/messages'),
-          Expanded(child: bodyContent),
-        ],
-      ),
+    return PopScope(
+      canPop: _selectedConversationId == null,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_selectedConversationId != null) {
+          _leaveActiveConversationToInbox();
+        }
+      },
+      child: mainContent,
     );
   }
 
@@ -1806,146 +1909,160 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                 itemCount: conversations.length,
                 separatorBuilder: (_, __) =>
                     const Divider(height: 1, color: AppColors.divider),
-              itemBuilder: (context, index) {
-                final conv = conversations[index];
-                final isSelected = conv.id == _selectedConversationId;
-                final counterpart = conv.displayNameFor(currentUserId);
-                final timeLabel =
-                    _formatTimestamp(conv.lastMessageAt ?? conv.updatedAt);
-                final savedDraft = _draftsByConversation[conv.id]?.trim() ?? '';
-                final hasDraft = savedDraft.isNotEmpty && !isSelected;
-                final previewText = hasDraft
-                    ? '${loc.chatDraftPrefix}$savedDraft'
-                    : localizeChatPreview(conv.lastMessage, loc: loc);
+                // CONFLICT-RESOLVED: Hiển thị tiền tố bản nháp và tóm tắt tin nhắn theo ngôn ngữ hiện hành từ develop.
+                itemBuilder: (context, index) {
+                  final conv = conversations[index];
+                  final isSelected = conv.id == _selectedConversationId;
+                  final counterpart = conv.displayNameFor(currentUserId);
+                  final timeLabel =
+                      _formatTimestamp(conv.lastMessageAt ?? conv.updatedAt);
+                  final savedDraft =
+                      _draftsByConversation[conv.id]?.trim() ?? '';
+                  final hasDraft = savedDraft.isNotEmpty && !isSelected;
+                  final previewText = hasDraft
+                      ? '${loc.chatDraftPrefix}$savedDraft'
+                      : localizeChatPreview(conv.lastMessage, loc: loc);
 
-                return InkWell(
-                  key: ValueKey<String>('conv_tile_${conv.id}'),
-                  onTap: () => _selectConversation(conv.id),
-                  child: Container(
-                    color: AppColors.surfaceBase,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.s16,
-                      vertical: 14,
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildParticipantAvatar(
-                          counterpart,
-                          conv.displayAvatar,
-                        ),
-                        const SizedBox(width: AppSpacing.s12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      counterpart,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: AppColors.textStrong,
-                                        fontWeight: conv.unreadCount > 0
-                                            ? FontWeight.w800
-                                            : FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                  if (timeLabel.isNotEmpty) ...[
-                                    const SizedBox(width: AppSpacing.s8),
-                                    Flexible(
-                                      flex: 0,
+                  return InkWell(
+                    key: ValueKey<String>('conv_tile_${conv.id}'),
+                    onTap: () => _selectConversation(conv.id),
+                    child: Container(
+                      color: AppColors.surfaceBase,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.s16,
+                        vertical: 14,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildParticipantAvatar(
+                            counterpart,
+                            conv.displayAvatar,
+                          ),
+                          const SizedBox(width: AppSpacing.s12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
                                       child: Text(
-                                        timeLabel,
+                                        counterpart,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: AppColors.textMuted,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: AppColors.textStrong,
+                                          fontWeight: conv.unreadCount > 0
+                                              ? FontWeight.w800
+                                              : FontWeight.w700,
                                         ),
                                       ),
                                     ),
+                                    if (timeLabel.isNotEmpty) ...[
+                                      const SizedBox(width: AppSpacing.s8),
+                                      Flexible(
+                                        flex: 0,
+                                        child: Text(
+                                          timeLabel,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: AppColors.textMuted,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ],
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                conv.listingTitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.primary,
                                 ),
-                              ),
-                              const SizedBox(height: 2),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      previewText,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight:
-                                            (conv.unreadCount > 0 || hasDraft)
-                                                ? FontWeight.w600
-                                                : FontWeight.w400,
-                                        color: hasDraft
-                                            ? AppColors.primary
-                                            : (conv.unreadCount > 0
-                                                ? AppColors.textPrimary
-                                                : AppColors.textSecondary),
-                                      ),
-                                    ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  [
+                                    if (conv.roleBadgeFor(
+                                          currentUserId,
+                                          localeCode: loc.localeName,
+                                        ) !=
+                                        null)
+                                      conv.roleBadgeFor(
+                                        currentUserId,
+                                        localeCode: loc.localeName,
+                                      )!,
+                                    if (conv.listingTitle.trim().isNotEmpty)
+                                      conv.listingTitle.trim(),
+                                  ].join(' · '),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.primary,
                                   ),
-                                  if (conv.unreadCount > 0) ...[
-                                    const SizedBox(width: AppSpacing.s8),
-                                    Container(
-                                      key: ValueKey<String>(
-                                        'unread_badge_${conv.id}',
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 7,
-                                        vertical: 2,
-                                      ),
-                                      decoration: const BoxDecoration(
-                                        color: AppColors.primary,
-                                        borderRadius: AppRadii.roundedPill,
-                                      ),
+                                ),
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    Expanded(
                                       child: Text(
-                                        conv.unreadCount > 99
-                                            ? '99+'
-                                            : '${conv.unreadCount}',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.white,
+                                        previewText,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight:
+                                              (conv.unreadCount > 0 || hasDraft)
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w400,
+                                          color: hasDraft
+                                              ? AppColors.primary
+                                              : (conv.unreadCount > 0
+                                                  ? AppColors.textPrimary
+                                                  : AppColors.textSecondary),
                                         ),
                                       ),
                                     ),
+                                    if (conv.unreadCount > 0) ...[
+                                      const SizedBox(width: AppSpacing.s8),
+                                      Container(
+                                        key: ValueKey<String>(
+                                          'unread_badge_${conv.id}',
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 7,
+                                          vertical: 2,
+                                        ),
+                                        decoration: const BoxDecoration(
+                                          color: AppColors.primary,
+                                          borderRadius: AppRadii.roundedPill,
+                                        ),
+                                        child: Text(
+                                          conv.unreadCount > 99
+                                              ? '99+'
+                                              : '${conv.unreadCount}',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ],
-                                ],
-                              ),
-                            ],
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
-        ),
-      ],
-    ),
+        ],
+      ),
     );
   }
 
@@ -2028,15 +2145,53 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            counterpart,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textStrong,
-                            ),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 2,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                counterpart,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textStrong,
+                                ),
+                              ),
+                              if (conv.roleBadgeFor(
+                                    currentUserId,
+                                    localeCode: loc.localeName,
+                                  ) !=
+                                  null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceMuted,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: AppColors.borderSoft,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    conv.roleBadgeFor(
+                                      currentUserId,
+                                      localeCode: loc.localeName,
+                                    )!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                           Text(
                             conv.listingTitle,
@@ -2080,6 +2235,38 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                               : AppColors.iconMuted,
                         ),
                       ),
+                    if (!isCompactHeader &&
+                        paneWidth >= 520 &&
+                        textScale <= 1.15)
+                      IconButton(
+                        key: const Key('chat_report_violation_btn'),
+                        onPressed: () {
+                          final rawTargetId =
+                              (conv.otherParticipantId?.trim().isNotEmpty ==
+                                      true)
+                                  ? conv.otherParticipantId!.trim()
+                                  : (conv.hostId == currentUserId
+                                      ? conv.guestId
+                                      : conv.hostId);
+                          showReportViolationDialog(
+                            context: context,
+                            ref: ref,
+                            targetType: 'user',
+                            targetId: int.tryParse(rawTargetId) ?? 0,
+                            targetLabel: counterpart,
+                          );
+                        },
+                        tooltip: 'Báo cáo vi phạm',
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        icon: const Icon(
+                          LucideIcons.flag,
+                          size: 17,
+                          color: AppColors.iconMuted,
+                        ),
+                      ),
                     if (conv.listingId.isNotEmpty)
                       isCompactHeader
                           ? Semantics(
@@ -2104,7 +2291,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                           : TextButton(
                               key: const Key('view_listing_button'),
                               onPressed: () =>
-                                    context.push('/villa/${conv.listingId}'),
+                                  context.push('/villa/${conv.listingId}'),
                               style: TextButton.styleFrom(
                                 minimumSize: const Size(48, 48),
                                 shape: const StadiumBorder(),
@@ -2162,9 +2349,9 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                 onHorizontalDragUpdate: (details) {
                                   final dx = details.primaryDelta ?? 0.0;
                                   _horizontalDragOffset += dx;
-                                  final progress = (_horizontalDragOffset.abs() /
-                                          55.0)
-                                      .clamp(0.0, 1.0);
+                                  final progress =
+                                      (_horizontalDragOffset.abs() / 55.0)
+                                          .clamp(0.0, 1.0);
                                   _timestampDragCtrl.value = progress;
                                 },
                                 onHorizontalDragEnd: (_) {
@@ -2263,11 +2450,10 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                         final prevSameSender = msgIndex > 0 &&
                                             messages[msgIndex - 1].senderId ==
                                                 msg.senderId;
-                                        final nextSameSender =
-                                            msgIndex < messages.length - 1 &&
-                                                messages[msgIndex + 1]
-                                                        .senderId ==
-                                                    msg.senderId;
+                                        final nextSameSender = msgIndex <
+                                                messages.length - 1 &&
+                                            messages[msgIndex + 1].senderId ==
+                                                msg.senderId;
                                         final isLastMessage =
                                             msgIndex == messages.length - 1;
 
@@ -2280,18 +2466,20 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                           );
                                         }
 
-                                        final showTimeDivider = currentDt != null &&
-                                            shouldShowChatTimeDivider(
-                                              currentDt,
-                                              prevDt,
-                                            );
-                                        final timeDividerLabel = currentDt != null
-                                            ? formatChatTimeDivider(
-                                                currentDt,
-                                                localeCode:
-                                                    ref.watch(localeProvider),
-                                              )
-                                            : '';
+                                        final showTimeDivider =
+                                            currentDt != null &&
+                                                shouldShowChatTimeDivider(
+                                                  currentDt,
+                                                  prevDt,
+                                                );
+                                        final timeDividerLabel =
+                                            currentDt != null
+                                                ? formatChatTimeDivider(
+                                                    currentDt,
+                                                    localeCode: ref
+                                                        .watch(localeProvider),
+                                                  )
+                                                : '';
 
                                         final bubble = _buildMessageBubble(
                                           msg,
@@ -2346,7 +2534,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                               color: Colors.white,
                                             ),
                                             label: Text(
-                                              loc.chatNewMessagesCount(unreadBelow),
+                                              loc.chatNewMessagesCount(
+                                                  unreadBelow),
                                               style: const TextStyle(
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w600,
@@ -2423,7 +2612,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                               recordingSeconds: _voiceRecordingSeconds,
                               onCancel: () {
                                 _voiceTimer?.cancel();
-    unawaited(_voiceRecorder.cancel());
+                                unawaited(_voiceRecorder.cancel());
                                 setState(() {
                                   _isRecordingVoice = false;
                                   _voiceRecordingSeconds = 0;
@@ -2434,199 +2623,212 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                           : Row(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                          // 1. Nút '+' tiện ích mở rộng tròn màu hồng
-                          Semantics(
-                            button: true,
-                            label: loc.chatMoreOptions,
-                            child: Tooltip(
-                              message: loc.chatMoreOptions,
-                              child: InkWell(
-                                key: const Key('chat_more_features_btn'),
-                                onTap: () =>
-                                    _showChatMoreOptions(chatRole, conv, loc),
-                                borderRadius: BorderRadius.circular(24),
-                                child: SizedBox(
-                                  width: isCompactComposer ? 40 : 36,
-                                  height: 48,
-                                  child: Center(
-                                    child: Container(
-                                      width: 28,
-                                      height: 28,
-                                      decoration: const BoxDecoration(
-                                        color: AppColors.primary,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        LucideIcons.plus,
-                                        size: 16,
-                                        color: Colors.white,
+                                // 1. Nút '+' tiện ích mở rộng tròn màu hồng
+                                Semantics(
+                                  button: true,
+                                  label: loc.chatMoreOptions,
+                                  child: Tooltip(
+                                    message: loc.chatMoreOptions,
+                                    child: InkWell(
+                                      key: const Key('chat_more_features_btn'),
+                                      onTap: () => _showChatMoreOptions(
+                                          chatRole, conv, loc),
+                                      borderRadius: BorderRadius.circular(24),
+                                      child: SizedBox(
+                                        width: isCompactComposer ? 40 : 36,
+                                        height: 48,
+                                        child: Center(
+                                          child: Container(
+                                            width: 28,
+                                            height: 28,
+                                            decoration: const BoxDecoration(
+                                              color: AppColors.primary,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              LucideIcons.plus,
+                                              size: 16,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          ),
-                          if (!isCompactComposer) ...[
-                            const SizedBox(width: 2),
-                            // 2. Nút Máy ảnh (Camera)
-                            IconButton(
-                              key: const Key('chat_camera_btn'),
-                              onPressed: _openCameraChat,
-                              tooltip: loc.chatCamera,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 36,
-                                minHeight: 48,
-                              ),
-                              icon: const Icon(
-                                LucideIcons.camera,
-                                size: 21,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            // 3. Nút Thư viện ảnh (Gallery)
-                            IconButton(
-                              key: const Key('chat_gallery_btn'),
-                              onPressed: _pickAndSendChatImage,
-                              tooltip: loc.chatGallery,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 36,
-                                minHeight: 48,
-                              ),
-                              icon: const Icon(
-                                LucideIcons.image,
-                                size: 21,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            // 4. Nút Micro thu âm
-                            IconButton(
-                              key: const Key('chat_mic_btn'),
-                              onPressed: _toggleVoiceRecording,
-                              tooltip: _isRecordingVoice
-                                  ? loc.chatStopRecording
-                                  : loc.chatVoiceMessage,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 36,
-                                minHeight: 48,
-                              ),
-                              icon: Icon(
-                                _isRecordingVoice
-                                    ? LucideIcons.square
-                                    : LucideIcons.mic,
-                                size: 21,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(width: 6),
-
-                          // 5. Ô nhập tin nhắn Messenger bo tròn + nút mặt cười
-                          Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                              child: TextField(
-                                key: const Key('chat_message_input'),
-                                controller: _inputCtrl,
-                                focusNode: _inputFocusNode,
-                                textInputAction: TextInputAction.send,
-                                minLines: 1,
-                                maxLines: 4,
-                                style: const TextStyle(
-                                  fontSize: 14.5,
-                                  color: AppColors.textStrong,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: loc.chatInputPlaceholder,
-                                  hintStyle: const TextStyle(
-                                    color: Color(0xFF94A3B8),
-                                    fontSize: 14.5,
-                                  ),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 10,
-                                  ),
-                                  suffixIcon: IconButton(
-                                    key: const Key('chat_input_smile_btn'),
-                                    onPressed: () => _showEmojiSelector(loc),
-                                    tooltip: loc.chatEmojiTooltip,
+                                if (!isCompactComposer) ...[
+                                  const SizedBox(width: 2),
+                                  // 2. Nút Máy ảnh (Camera)
+                                  IconButton(
+                                    key: const Key('chat_camera_btn'),
+                                    onPressed: _openCameraChat,
+                                    tooltip: loc.chatCamera,
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(
                                       minWidth: 36,
-                                      minHeight: 36,
+                                      minHeight: 48,
                                     ),
                                     icon: const Icon(
-                                      LucideIcons.smile,
-                                      size: 20,
+                                      LucideIcons.camera,
+                                      size: 21,
                                       color: AppColors.primary,
                                     ),
                                   ),
-                                ),
-                                onSubmitted: (_) => _sendMessage(),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
+                                  // 3. Nút Thư viện ảnh (Gallery)
+                                  IconButton(
+                                    key: const Key('chat_gallery_btn'),
+                                    onPressed: _pickAndSendChatImage,
+                                    tooltip: loc.chatGallery,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 36,
+                                      minHeight: 48,
+                                    ),
+                                    icon: const Icon(
+                                      LucideIcons.image,
+                                      size: 21,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                  // 4. Nút Micro thu âm
+                                  IconButton(
+                                    key: const Key('chat_mic_btn'),
+                                    onPressed: _toggleVoiceRecording,
+                                    tooltip: _isRecordingVoice
+                                        ? loc.chatStopRecording
+                                        : loc.chatVoiceMessage,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 36,
+                                      minHeight: 48,
+                                    ),
+                                    icon: Icon(
+                                      _isRecordingVoice
+                                          ? LucideIcons.square
+                                          : LucideIcons.mic,
+                                      size: 21,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(width: 6),
 
-                          // 6. Nút Gửi tin nhắn / Cảm xúc nhanh (luôn >= 48x48)
-                          ValueListenableBuilder<TextEditingValue>(
-                            valueListenable: _inputCtrl,
-                            builder: (context, value, _) {
-                              final hasText = value.text.trim().isNotEmpty;
-                              return Semantics(
-                                button: true,
-                                label: hasText
-                                    ? loc.chatSendMessage
-                                    : loc.chatSendQuickEmoji,
-                                child: Tooltip(
-                                  message: hasText
-                                      ? loc.chatSendMessage
-                                      : loc.chatSendQuickEmojiHint,
-                                  child: InkWell(
-                                    key: const Key('chat_send_button'),
-                                    onTap: () {
-                                      if (_inputCtrl.text.trim().isNotEmpty) {
-                                        _sendMessage();
-                                      } else {
-                                        _sendDirectContent(_chatQuickEmoji);
-                                      }
-                                    },
-                                    onLongPress:
-                                        hasText ? null : () => _chooseQuickEmoji(loc),
-                                    borderRadius: BorderRadius.circular(24),
-                                    child: SizedBox(
-                                      width: 48,
-                                      height: 48,
-                                      child: Center(
-                                        child: hasText
-                                            ? const Icon(
-                                                LucideIcons.send,
-                                                size: 21,
-                                                color: AppColors.primary,
-                                              )
-                                            : Text(
-                                                _chatQuickEmoji,
-                                                style: const TextStyle(
-                                                  fontSize: 24,
-                                                ),
-                                              ),
+                                // 5. Ô nhập tin nhắn Messenger bo tròn + nút mặt cười
+                                Expanded(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(22),
+                                    ),
+                                    child: TextField(
+                                      key: const Key('chat_message_input'),
+                                      controller: _inputCtrl,
+                                      focusNode: _inputFocusNode,
+                                      textInputAction: TextInputAction.send,
+                                      minLines: 1,
+                                      maxLines: 4,
+                                      style: const TextStyle(
+                                        fontSize: 14.5,
+                                        color: AppColors.textStrong,
                                       ),
+                                      decoration: InputDecoration(
+                                        hintText: loc.chatInputPlaceholder,
+                                        hintStyle: const TextStyle(
+                                          color: Color(0xFF94A3B8),
+                                          fontSize: 14.5,
+                                        ),
+                                        border: InputBorder.none,
+                                        isDense: true,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 10,
+                                        ),
+                                        suffixIcon: IconButton(
+                                          key:
+                                              const Key('chat_input_smile_btn'),
+                                          onPressed: () =>
+                                              _showEmojiSelector(loc),
+                                          tooltip: loc.chatEmojiTooltip,
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(
+                                            minWidth: 36,
+                                            minHeight: 36,
+                                          ),
+                                          icon: const Icon(
+                                            LucideIcons.smile,
+                                            size: 20,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      ),
+                                      onSubmitted: (_) => _sendMessage(),
                                     ),
                                   ),
                                 ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
+                                const SizedBox(width: 4),
+
+                                // 6. Nút Gửi tin nhắn / Cảm xúc nhanh (luôn >= 48x48)
+                                ValueListenableBuilder<TextEditingValue>(
+                                  valueListenable: _inputCtrl,
+                                  builder: (context, value, _) {
+                                    final hasText =
+                                        value.text.trim().isNotEmpty;
+                                    return Semantics(
+                                      button: true,
+                                      label: hasText
+                                          ? loc.chatSendMessage
+                                          : loc.chatSendQuickEmoji,
+                                      child: Tooltip(
+                                        message: hasText
+                                            ? loc.chatSendMessage
+                                            : loc.chatSendQuickEmojiHint,
+                                        child: InkWell(
+                                          key: const Key('chat_send_button'),
+                                          onTap: () {
+                                            if (_inputCtrl.text
+                                                .trim()
+                                                .isNotEmpty) {
+                                              _sendMessage();
+                                            } else {
+                                              _sendDirectContent(
+                                                resolveAppQuickChatOption(
+                                                  _chatQuickEmoji,
+                                                ).sendText,
+                                              );
+                                            }
+                                          },
+                                          onLongPress: hasText
+                                              ? null
+                                              : () => _chooseQuickEmoji(loc),
+                                          borderRadius:
+                                              BorderRadius.circular(24),
+                                          child: SizedBox(
+                                            width: 48,
+                                            height: 48,
+                                            child: Center(
+                                              child: hasText
+                                                  ? const Icon(
+                                                      LucideIcons.send,
+                                                      size: 21,
+                                                      color: AppColors.primary,
+                                                    )
+                                                  : Icon(
+                                                      resolveAppQuickChatOption(
+                                                        _chatQuickEmoji,
+                                                      ).icon,
+                                                      size: 21,
+                                                      color: AppColors.primary,
+                                                    ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
                     ),
                   ),
                 ),
@@ -2691,26 +2893,39 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: _messengerReactions.map((emoji) {
-          final isSelected = _messageReactions[msgKey] == emoji;
-          return InkWell(
-            key: ValueKey<String>('reaction_${emoji}_$msgKey'),
-            onTap: () {
-              setState(() {
-                if (isSelected) {
-                  _messageReactions.remove(msgKey);
-                } else {
-                  _messageReactions[msgKey] = emoji;
+        children: kAppMessengerReactions.map((item) {
+          final isSelected = _messageReactions[msgKey] == item.code;
+          return Tooltip(
+            message: item.label,
+            child: InkWell(
+              key: ValueKey<String>('reaction_${item.code}_$msgKey'),
+              onTap: () {
+                final nextReaction = isSelected ? '' : item.code;
+                setState(() {
+                  if (isSelected) {
+                    _messageReactions.remove(msgKey);
+                  } else {
+                    _messageReactions[msgKey] = item.code;
+                  }
+                  _reactionActiveMsgKey = null;
+                });
+                final activeConvId = _selectedConversationId;
+                if (activeConvId != null && activeConvId.isNotEmpty) {
+                  ref.read(messagesViewModelProvider).sendReaction(
+                        activeConvId,
+                        messageId: msgKey,
+                        reaction: nextReaction,
+                      );
                 }
-                _reactionActiveMsgKey = null;
-              });
-            },
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-              child: Text(
-                emoji,
-                style: const TextStyle(fontSize: 22),
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Icon(
+                  item.icon,
+                  size: 20,
+                  color: isSelected ? AppColors.primary : AppColors.iconStrong,
+                ),
               ),
             ),
           );
@@ -2786,7 +3001,8 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
               child: CircleAvatar(
                 backgroundColor: Colors.black54,
                 child: IconButton(
-                  icon: const Icon(LucideIcons.x, color: Colors.white, size: 20),
+                  icon:
+                      const Icon(LucideIcons.x, color: Colors.white, size: 20),
                   onPressed: () => Navigator.pop(ctx),
                 ),
               ),
@@ -2870,9 +3086,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
       beginOffset: const Offset(0, 6),
       child: Padding(
         padding: EdgeInsets.only(
-          bottom: selectedReaction != null
-              ? 16
-              : (nextSameSender ? 3 : 10),
+          bottom: selectedReaction != null ? 16 : (nextSameSender ? 3 : 10),
         ),
         child: Column(
           crossAxisAlignment:
@@ -2883,19 +3097,16 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
               animation: _timestampDragCtrl,
               builder: (context, child) {
                 final dragVal = _timestampDragCtrl.value;
-                final showTime =
-                    (dragVal > 0.08 || isTimestampExpanded) &&
-                        timeLabel.isNotEmpty;
+                final showTime = (dragVal > 0.08 || isTimestampExpanded) &&
+                    timeLabel.isNotEmpty;
                 return Column(
-                  crossAxisAlignment: isMe
-                      ? CrossAxisAlignment.end
-                      : CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                   children: [
                     if (showTime)
                       Opacity(
-                        opacity: isTimestampExpanded
-                            ? 1.0
-                            : dragVal.clamp(0.0, 1.0),
+                        opacity:
+                            isTimestampExpanded ? 1.0 : dragVal.clamp(0.0, 1.0),
                         child: Padding(
                           padding: EdgeInsets.only(
                             bottom: 3,
@@ -2994,19 +3205,24 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                       padding: EdgeInsets.only(
                                         bottom: isImageOnly
                                             ? 0
-                                            : (displayCaption != null ? AppSpacing.s8 : 0),
+                                            : (displayCaption != null
+                                                ? AppSpacing.s8
+                                                : 0),
                                       ),
                                       child: _isAudioUrl(attachmentUrl)
-                                          ? _buildAudioBubble(attachmentUrl, isMe: isMe)
+                                          ? _buildAudioBubble(attachmentUrl,
+                                              isMe: isMe)
                                           : ChatImageBubble(
                                               imageUrl: attachmentUrl,
                                               borderRadius: bubbleRadius,
                                               maxWidth: maxBubbleWidth,
-                                              onTap: () => _openFullScreenImage(context, attachmentUrl),
+                                              onTap: () => _openFullScreenImage(
+                                                  context, attachmentUrl),
                                             ),
                                     ),
                                 ],
-                                if (displayCaption != null && displayCaption.isNotEmpty)
+                                if (displayCaption != null &&
+                                    displayCaption.isNotEmpty)
                                   Text(
                                     displayCaption,
                                     softWrap: true,
@@ -3108,9 +3324,21 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                                       ),
                                     ],
                                   ),
-                                  child: Text(
-                                    selectedReaction,
-                                    style: const TextStyle(fontSize: 12),
+                                  child: Builder(
+                                    builder: (context) {
+                                      final reactionMeta =
+                                          resolveAppChatReaction(
+                                        selectedReaction,
+                                      );
+                                      return Icon(
+                                        reactionMeta.icon,
+                                        key: ValueKey<String>(
+                                          'reaction_badge_${reactionMeta.code}_$stableKey',
+                                        ),
+                                        size: 13,
+                                        color: AppColors.primary,
+                                      );
+                                    },
                                   ),
                                 ),
                               ),
@@ -3157,10 +3385,15 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   }
 }
 
-/// Complete port of `Source goc/frontend/src/views/pages/HostMessage/HostMessagePage.tsx` (`/villa/:villaId/nhan-tin-host`).
+/// Màn hình liên hệ và gửi tin nhắn đầu tiên cho Chủ nhà từ trang chi tiết biệt thự (`/villa/:villaId/nhan-tin-host`).
+///
+/// Hiển thị thông tin tóm tắt của chỗ nghỉ, danh sách câu hỏi gợi ý nhanh và khởi tạo cuộc hội thoại
+/// thông qua `MessagesViewModel.startVillaConversationAndSend` trước khi điều hướng sang phòng chat chính.
 class HostMessageScreen extends ConsumerStatefulWidget {
+  /// Mã định danh biệt thự cần khởi tạo cuộc trò chuyện với Chủ nhà.
   final String villaId;
 
+  /// Khởi tạo `HostMessageScreen`.
   const HostMessageScreen({
     super.key,
     required this.villaId,
@@ -3175,11 +3408,11 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
   bool _isSending = false;
 
   List<String> _quickQuestionsFor(AppLocalizations l10n) => [
-    l10n.hostMsgQuestion1,
-    l10n.hostMsgQuestion2,
-    l10n.hostMsgQuestion3,
-    l10n.hostMsgQuestion4,
-  ];
+        l10n.hostMsgQuestion1,
+        l10n.hostMsgQuestion2,
+        l10n.hostMsgQuestion3,
+        l10n.hostMsgQuestion4,
+      ];
 
   @override
   void dispose() {
@@ -3187,6 +3420,7 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
     super.dispose();
   }
 
+  // Giải thuật kiểm tra đăng nhập, tạo hội thoại theo `villaId`, gửi tin nhắn mở đầu và chuyển hướng vào phòng chat.
   Future<void> _startConversationAndSend() async {
     final user = ref.read(authNotifierProvider).valueOrNull;
     if (user == null) {
@@ -3199,16 +3433,18 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
 
     setState(() => _isSending = true);
     try {
-      final repo = ref.read(conversationsRepositoryProvider);
-      final conv = await repo.getOrCreateConversation(widget.villaId);
-      await repo.sendMessage(conversationId: conv.id, content: text);
-      ref.invalidate(conversationsListProvider);
+      final conv = await ref
+          .read(messagesViewModelProvider)
+          .startVillaConversationAndSend(
+            villaId: widget.villaId,
+            content: text,
+          );
       if (!mounted) return;
       setState(() => _isSending = false);
       context.go('/messages?conversationId=${conv.id}');
     } catch (e) {
       if (!mounted) return;
-      final failure = DioClient.handleError(e);
+      final failure = MessagesViewModel.mapError(e);
       setState(() => _isSending = false);
       AppToast.show(context, failure.message, type: AppToastType.error);
     }
@@ -3228,7 +3464,7 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
             child: villaAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (err, _) {
-                final failure = DioClient.handleError(err);
+                final failure = MessagesViewModel.mapError(err);
                 return AppErrorView(
                   message: failure.message,
                   onRetry: () =>
@@ -3326,7 +3562,9 @@ class _HostMessageScreenState extends ConsumerState<HostMessageScreen> {
                                           ),
                                           const SizedBox(height: 3),
                                           Text(
-                                            l10n.hostMsgHostLabel(villa.host?.fullName ?? l10n.hostMsgDefaultHost),
+                                            l10n.hostMsgHostLabel(
+                                                villa.host?.fullName ??
+                                                    l10n.hostMsgDefaultHost),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(

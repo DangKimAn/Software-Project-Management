@@ -7,23 +7,23 @@ import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/date/booking_date.dart';
 import '../../../../core/storage/preferences_service.dart';
-import '../../../../core/utils/currency_formatter.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
 import '../../domain/entities/booking.dart';
 import '../view_models/trips_view_model.dart';
 
-/// Complete port of `Source goc/frontend/src/views/pages/MultiBooking/MultiBookingPage.tsx` (`/gio-cho-dat`).
+/// Màn hình giỏ chờ và đặt phòng hàng loạt nhiều căn biệt thự cùng lúc (`/gio-cho-dat`).
 ///
-/// Fixes BUG-19, BUG-20, BUG-32:
-/// - Edits queue items via `updateItem()` instead of `addItem()`.
-/// - Uses `BookingQueueItem.calculatePriceEstimate()` for accurate temporary pricing (weekday/weekend nights, fixed surcharge not multiplied by nights, extra guest fees).
-/// - Validates per-item dates & guests before submitting and maps `BulkBookingException` per-item backend errors onto the specific villa cards.
-/// - Never clears the queue before `POST /api/bookings/bulk` succeeds.
-/// - Renders `BookingResultCard` for ALL created bookings (1..N) so the user can pay each unpaid booking individually without losing bookings #2..#N.
+/// Đảm bảo quy trình đặt nhiều căn chính xác và an toàn:
+/// - Cập nhật từng mục trong hàng đợi qua `updateItem` và ước tính giá tạm tính chuẩn xác bằng `BookingQueueItem.calculatePriceEstimate`
+///   (tách đêm thường/cuối tuần, phụ thu cố định không nhân theo đêm và phụ phí khách vượt tiêu chuẩn).
+/// - Kiểm tra hợp lệ ngày lưu trú theo múi giờ Việt Nam (`UTC+7`), số đêm (`1..60`) và sức chứa tối đa của từng căn trước khi gửi.
+/// - Chỉ xóa giỏ chờ sau khi `POST /api/bookings/bulk` thành công; nếu lỗi sẽ ánh xạ `BulkBookingException` về đúng từng thẻ biệt thự.
+/// - Hiển thị đầy đủ danh sách toàn bộ các đơn vừa tạo (`1..N`) kèm đếm ngược giữ chỗ để khách thanh toán lần lượt từng căn.
 class MultiBookingScreen extends ConsumerStatefulWidget {
+  /// Khởi tạo `MultiBookingScreen`.
   const MultiBookingScreen({super.key});
 
   @override
@@ -73,7 +73,8 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
   }
 
   Future<void> _pickDatesForItem(int index, BookingQueueItem item) async {
-    final now = DateTime.now();
+    // Giải thuật khóa ngày quá khứ theo múi giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7) thay vì giờ máy thiết bị:
+    final now = BookingDate.todayVn();
     final today = DateTime(now.year, now.month, now.day);
     final parsedStart = DateTime.tryParse(item.checkIn ?? '');
     final parsedEnd = DateTime.tryParse(item.checkOut ?? '');
@@ -125,7 +126,8 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
 
   Map<int, String> _validateQueueItems(List<BookingQueueItem> queue) {
     final errors = <int, String>{};
-    final now = DateTime.now();
+    // Giải thuật khóa ngày quá khứ theo múi giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7) thay vì giờ máy thiết bị:
+    final now = BookingDate.todayVn();
     final today = DateTime(now.year, now.month, now.day);
 
     for (var i = 0; i < queue.length; i++) {
@@ -157,6 +159,9 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
     return errors;
   }
 
+  // Giải thuật gửi yêu cầu đặt nhiều căn biệt thự đồng thời (`_submitBulkBooking`):
+  // Kiểm tra giới hạn tối đa số căn, thẩm định ngày & số khách từng dòng qua `_validateQueueItems`,
+  // yêu cầu đăng nhập nếu chưa có phiên, gọi `createBulkBookings` và chỉ xóa giỏ chờ khi máy chủ xác nhận thành công.
   Future<void> _submitBulkBooking(List<BookingQueueItem> queue) async {
     if (queue.isEmpty || _isSubmitting) return;
 
@@ -210,7 +215,7 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
       }).toList();
 
       final createdBookings = await ref
-          .read(bookingRepositoryProvider)
+          .read(tripsActionsViewModelProvider)
           .createBulkBookings(items: payload);
 
       // Clear queue ONLY after backend confirms bulk creation succeeded
@@ -256,11 +261,11 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
     if (_createdBookings.isEmpty || _isRefreshingBookings || !mounted) return;
     setState(() => _isRefreshingBookings = true);
 
-    final repo = ref.read(bookingRepositoryProvider);
+    final actions = ref.read(tripsActionsViewModelProvider);
     final updated = <Booking>[];
     for (final existing in _createdBookings) {
       try {
-        final fresh = await repo.getBookingById(existing.id);
+        final fresh = await actions.getBookingById(existing.id);
         updated.add(fresh ?? existing);
       } catch (_) {
         updated.add(existing);
@@ -569,7 +574,6 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                                   ),
                                 ),
                               ),
-                              const AppFooter(),
                             ],
                           ),
                         ),
@@ -944,8 +948,7 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                CurrencyFormatter.formatVnd(
-                                    totalConfirmedAmount),
+                                MoneyFormatter.formatVnd(totalConfirmedAmount),
                                 style: const TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.w800,
@@ -999,7 +1002,6 @@ class _MultiBookingScreenState extends ConsumerState<MultiBookingScreen>
               ),
             ),
           ),
-          const AppFooter(),
         ],
       ),
     );
@@ -1176,7 +1178,7 @@ class BookingResultCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      CurrencyFormatter.formatVnd(booking.totalAmount),
+                      MoneyFormatter.formatVnd(booking.totalAmount),
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,

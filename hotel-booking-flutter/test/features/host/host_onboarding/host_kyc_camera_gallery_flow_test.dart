@@ -15,11 +15,13 @@ class _SpyFilePickerService implements HostFilePickerService {
   String? lastTitle;
   HostPickedFile? fileToReturn;
 
+  // CONFLICT-RESOLVED: Đồng bộ tham số `imageOnly` của chữ ký hàm `pickKycDocument` trong `HostFilePickerService`.
   @override
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = 'Chọn tài liệu xác minh',
     HostKycFileSource source = HostKycFileSource.deviceFile,
+    bool imageOnly = false,
   }) async {
     lastTitle = title;
     lastSource = source;
@@ -56,7 +58,18 @@ class _MockOnboardingApiService extends HostOnboardingApiService {
 
 void main() {
   final sampleJpgBytes = Uint8List.fromList([
-    0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
+    0xFF,
+    0xD8,
+    0xFF,
+    0xE0,
+    0x00,
+    0x10,
+    0x4A,
+    0x46,
+    0x49,
+    0x46,
+    0x00,
+    0x01,
   ]);
 
   setUp(() {
@@ -70,7 +83,8 @@ void main() {
     return ProviderScope(
       overrides: [
         hostRepositoryProvider.overrideWithValue(_MockHostRepository()),
-        hostOnboardingApiProvider.overrideWithValue(_MockOnboardingApiService()),
+        hostOnboardingApiProvider
+            .overrideWithValue(_MockOnboardingApiService()),
         hostFilePickerProvider.overrideWithValue(spyPicker),
         if (permissionService != null)
           hostOnboardingPermissionProvider.overrideWithValue(permissionService),

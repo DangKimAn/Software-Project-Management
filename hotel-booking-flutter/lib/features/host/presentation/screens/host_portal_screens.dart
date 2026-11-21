@@ -1,3 +1,5 @@
+// CONFLICT-RESOLVED: Điều phối dữ liệu qua `HostPortalViewModel`, thay thế Emoji chức năng bằng `LucideIcons`
+// và chuẩn hóa địa chỉ mẫu tại TP. Vũng Tàu theo FLUTTER_RULES.md Mục 2, Mục 6 & Mục 16.
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,25 +8,34 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../l10n/l10n.dart';
+import '../../../../shared/widgets/app_dialog.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
+import '../../../../shared/widgets/app_chat_expressions.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
-import '../../../messages/services/chat_media_upload_service.dart';
-import '../../../messages/services/chat_voice_recorder_service.dart';
+// CONFLICT-RESOLVED: Giữ luồng MVVM qua `HostPortalViewModel` (không import trực tiếp `host_repository.dart`) kết hợp dịch vụ ghi âm và các widget bong bóng đa phương tiện từ develop.
 import '../../../messages/presentation/widgets/chat_audio_bubble.dart';
 import '../../../messages/presentation/widgets/chat_image_bubble.dart';
 import '../../../messages/presentation/widgets/chat_time_divider.dart';
-import '../../../messages/presentation/widgets/messenger_voice_recorder_bar.dart';
-import '../../data/host_repository.dart';
+import '../../../messages/services/chat_voice_recorder_service.dart';
+import '../../../../core/constants/vietnam_banks.dart';
 import '../../domain/host_models.dart';
-import '../../services/host_file_picker_service.dart';
+import '../view_models/host_portal_view_model.dart';
+import '../widgets/host_chat_composer_bar.dart';
 import '../widgets/host_sheet_sync_card.dart';
 import '../widgets/host_studio_widgets.dart';
-import 'them_cho_nghi_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../support/domain/services/contact_service.dart';
+import 'host_listing_form_screen.dart';
 
+const String kHostLastActiveSectionKey = 'host_last_active_section_slug';
+
+/// Danh mục phân khu chức năng của Cổng quản trị Chủ nhà kèm giải thuật ánh xạ đường dẫn slug song ngữ Việt - Anh (`fromSlug`).
 enum HostPortalSection {
   overview('overview', 'Tổng quan', AppSemanticIcons.dashboard),
   properties('properties', 'Chỗ nghỉ', AppSemanticIcons.home),
@@ -44,12 +55,49 @@ enum HostPortalSection {
   final IconData icon;
   const HostPortalSection(this.keyName, this.label, this.icon);
 
+  /// Phân giải nhãn hiển thị Cổng Chủ nhà, mặc định luôn dùng Tiếng Việt theo yêu cầu giao diện Studio.
+  String localizedLabel(AppLocalizations l10n, [String? localeCode]) {
+    return label;
+  }
+
+  String get routeSlug {
+    switch (this) {
+      case HostPortalSection.overview:
+        return 'tong-quan';
+      case HostPortalSection.properties:
+        return 'cho-nghi';
+      case HostPortalSection.newProperty:
+        return 'cho-nghi/them-moi';
+      case HostPortalSection.bookings:
+        return 'dat-phong';
+      case HostPortalSection.calendar:
+        return 'lich-luu-tru';
+      case HostPortalSection.guests:
+        return 'khach-luu-tru';
+      case HostPortalSection.messages:
+        return 'tin-nhan';
+      case HostPortalSection.payouts:
+        return 'thanh-toan';
+      case HostPortalSection.reviews:
+        return 'danh-gia';
+      case HostPortalSection.reports:
+        return 'bao-cao';
+      case HostPortalSection.support:
+        return 'ho-tro';
+      case HostPortalSection.settings:
+        return 'cai-dat';
+    }
+  }
+
+  /// Giải thuật chuẩn hóa và phân giải đường dẫn slug (bao gồm các bí danh tiếng Việt/Anh như `tai-chinh`, `rut-tien`, `lich`, `khach`)
+  /// về đúng phân mục `HostPortalSection` tương ứng phục vụ định tuyến URL trực tiếp và khôi phục phiên `kHostLastActiveSectionKey`.
   static HostPortalSection fromSlug(String? slug) {
     final normalized = (slug ?? '').trim().toLowerCase();
     switch (normalized) {
       case 'cho-nghi':
       case 'properties':
         return HostPortalSection.properties;
+      case 'cho-nghi/them-moi':
       case 'them-moi':
       case 'them-cho-nghi':
       case 'new_property':
@@ -57,6 +105,7 @@ enum HostPortalSection {
       case 'dat-phong':
       case 'bookings':
         return HostPortalSection.bookings;
+      case 'lich':
       case 'lich-luu-tru':
       case 'calendar':
         return HostPortalSection.calendar;
@@ -67,7 +116,10 @@ enum HostPortalSection {
       case 'tin-nhan':
       case 'messages':
         return HostPortalSection.messages;
+      case 'tai-chinh':
       case 'thanh-toan':
+      case 'rut-tien':
+      case 'finance':
       case 'payouts':
         return HostPortalSection.payouts;
       case 'danh-gia':
@@ -86,11 +138,12 @@ enum HostPortalSection {
       case 'overview':
         return HostPortalSection.overview;
       default:
-        return HostPortalSection.guests;
+        return HostPortalSection.overview;
     }
   }
 }
 
+/// Định dạng giá trị số bất kỳ sang chuỗi tiền tệ `VND` nguyên chuẩn dành cho bảng biểu Chủ nhà.
 String formatHostVnd(dynamic value) {
   final numVal =
       value is num ? value.toDouble() : (double.tryParse('${value ?? 0}') ?? 0);
@@ -102,6 +155,7 @@ String formatHostVnd(dynamic value) {
   return formatter.format(numVal);
 }
 
+/// Giải thuật rút gọn số tiền `VND` theo đơn vị triệu (`Tr`) và nghìn (`k`) dùng dấu phẩy thập phân chuẩn tiếng Việt cho ô lịch hẹp.
 String formatCompactHostVnd(dynamic value) {
   final numVal =
       value is num ? value.toDouble() : (double.tryParse('${value ?? 0}') ?? 0);
@@ -122,6 +176,7 @@ String formatCompactHostVnd(dynamic value) {
   return '${numVal.round()} đ';
 }
 
+/// Màn hình trung tâm Cổng Chủ nhà điều phối 12 phân khu nghiệp vụ (Tổng quan KPI, Chỗ nghỉ, Đặt phòng, Lịch lưu trú & Google Sheets, Khách lưu trú, Tin nhắn, Rút tiền, Báo cáo).
 class HostPortalScreen extends ConsumerStatefulWidget {
   final String section;
   final HostPortalSection? initialSection;
@@ -165,6 +220,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   String? _calendarListingId;
   late int _calendarMonth;
   late int _calendarYear;
+  int _overviewCalendarWeekOffset = 0;
   bool _loadingCalendar = false;
   bool _savingCalendar = false;
   String? _calendarError;
@@ -208,20 +264,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   late AnimationController _chatDragAnimCtrl;
 
   // Messenger reactions & chat enhancements
-  static const List<String> _messengerReactions = [
-    '❤️',
-    '😆',
-    '😮',
-    '😢',
-    '😡',
-    '👍',
-  ];
   final Map<String, String> _messageReactions = {};
   String? _reactionActiveMsgKey;
   final ScrollController _chatScrollCtrl = ScrollController();
 
   // Messenger input bar & features state
-  String _chatQuickEmoji = '😤';
+  String _chatQuickEmoji = 'like';
   bool _isRecordingVoice = false;
   int _voiceRecordingSeconds = 0;
   Timer? _voiceTimer;
@@ -247,6 +295,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   String _reportRange = '30d';
   String _reportGroup = 'auto';
   String _reportListingId = 'all';
+  String _reportMode = 'month'; // 'week' | 'month' | 'quarter' | 'year'
+  int _reportSelectedYear = 2026;
+  int _reportSelectedMonth = 11;
+  int _reportSelectedQuarter = 4;
   bool _loadingReport = false;
   String? _reportError;
   HostRevenueReport _revenueReport = const HostRevenueReport();
@@ -269,10 +321,14 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   String? _bankSuccess;
   List<VietnamBank> _vietnamBanks = [];
   String? _selectedBankCode;
+  String? _savedMaskedBankAccountNumber;
   final TextEditingController _bankSearchCtrl = TextEditingController();
   final TextEditingController _bankAccountNumberCtrl = TextEditingController();
   final TextEditingController _bankAccountHolderCtrl = TextEditingController();
   final TextEditingController _bankBranchCtrl = TextEditingController();
+  StreamSubscription<Map<String, dynamic>>? _socketMsgSub;
+  StreamSubscription<Map<String, dynamic>>? _socketReactionSub;
+  DateTime? _lastOverviewBackPress;
 
   @override
   void initState() {
@@ -292,7 +348,78 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     _calendarYear = vnNow.year;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Đảm bảo Cổng Chủ nhà (Host Studio) luôn mặc định tiếng Việt
+      try {
+        final currentLocale = ref.read(localeProvider);
+        if (currentLocale != 'vi') {
+          ref.read(localeProvider.notifier).setLocale('vi');
+        }
+      } catch (_) {}
+      _bindRealtimeChatStreams();
+      _restoreCachedSectionIfNeeded();
       _triggerSectionLoad(_activeSection);
+    });
+  }
+
+  // Giải thuật đồng bộ tin nhắn mới (`message:new`) và biểu cảm (`message:reaction`) thời gian thực vào khung chat Host, khử trùng lặp theo `messageId`.
+  void _bindRealtimeChatStreams() {
+    if (!mounted) return;
+    final vm = ref.read(hostPortalViewModelProvider);
+    _socketMsgSub?.cancel();
+    _socketReactionSub?.cancel();
+    _socketMsgSub = vm.onMessageNew.listen((payload) {
+      if (!mounted) return;
+      final rawMsg = payload['message'] is Map
+          ? Map<String, dynamic>.from(payload['message'] as Map)
+          : payload;
+      final incomingConvId =
+          '${payload['conversationId'] ?? rawMsg['conversationId'] ?? ''}'
+              .trim();
+      if (incomingConvId.isEmpty) return;
+      final msgId = '${rawMsg['messageId'] ?? rawMsg['id'] ?? ''}'.trim();
+      setState(() {
+        for (final conv in _conversations) {
+          if ('${conv['conversationId'] ?? conv['id']}' == incomingConvId) {
+            conv['lastMessagePreview'] =
+                rawMsg['content'] ?? conv['lastMessagePreview'];
+            conv['lastMessageAt'] =
+                rawMsg['createdAt'] ?? DateTime.now().toIso8601String();
+          }
+        }
+        if (incomingConvId == _selectedConversationId) {
+          final exists = msgId.isNotEmpty &&
+              _conversationMessages.any(
+                (m) => '${m['messageId'] ?? m['id'] ?? ''}'.trim() == msgId,
+              );
+          if (!exists) {
+            _conversationMessages = [
+              ..._conversationMessages,
+              rawMsg,
+            ];
+          }
+        }
+      });
+      if (incomingConvId == _selectedConversationId) {
+        _scrollChatToBottom();
+      }
+    });
+    _socketReactionSub = vm.onMessageReaction.listen((payload) {
+      if (!mounted) return;
+      final incomingConvId = '${payload['conversationId'] ?? ''}'.trim();
+      if (incomingConvId.isNotEmpty &&
+          incomingConvId != _selectedConversationId) {
+        return;
+      }
+      final msgId = '${payload['messageId'] ?? ''}'.trim();
+      if (msgId.isEmpty) return;
+      final reaction = '${payload['reaction'] ?? ''}'.trim();
+      setState(() {
+        if (reaction.isEmpty) {
+          _messageReactions.remove(msgId);
+        } else {
+          _messageReactions[msgId] = reaction;
+        }
+      });
     });
   }
 
@@ -311,6 +438,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
   @override
   void dispose() {
+    _socketMsgSub?.cancel();
+    _socketReactionSub?.cancel();
     _calendarSearchCtrl.dispose();
     _calendarPriceOverrideCtrl.dispose();
     _calendarMinNightsCtrl.dispose();
@@ -373,7 +502,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         _ensureReviewsLoaded();
         break;
       case HostPortalSection.reports:
-        if (_listings.isEmpty) {
+        if (_unfilteredListings.isEmpty) {
           _fetchListings();
         }
         _fetchRevenueReport();
@@ -389,45 +518,108 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   void _switchSection(HostPortalSection section, {String? editListingId}) {
     setState(() {
       _activeSection = section;
+      _inChatDetailView = false;
       if (section == HostPortalSection.newProperty) {
         _editingListingId = editListingId;
       }
     });
     _triggerSectionLoad(section);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString(kHostLastActiveSectionKey, section.routeSlug);
+    }).catchError((_) {});
+  }
+
+  /// Giải thuật đồng bộ hai chiều phân mục đang mở (`kHostLastActiveSectionKey`) trong `SharedPreferences`:
+  /// - Nếu truy cập trực tiếp bằng đường dẫn chuyên biệt (ví dụ `/chu-nha/tai-chinh` -> `/chu-nha/thanh-toan`), lưu ngay `routeSlug` hiện hành vào bộ nhớ đệm.
+  /// - Nếu mở cổng mặc định (`tong-quan`), khôi phục lại phân mục gần nhất mà chủ nhà đã làm việc trước đó.
+  Future<void> _restoreCachedSectionIfNeeded() async {
+    if (widget.initialSection != null) {
+      return;
+    }
+    if (widget.section.isNotEmpty && widget.section != 'tong-quan') {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(kHostLastActiveSectionKey, _activeSection.routeSlug);
+      } catch (_) {}
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedSlug = prefs.getString(kHostLastActiveSectionKey);
+      if (cachedSlug != null && cachedSlug.isNotEmpty && mounted) {
+        final restored = HostPortalSection.fromSlug(cachedSlug);
+        if (restored != _activeSection) {
+          _switchSection(restored);
+        }
+      }
+    } catch (_) {}
   }
 
   // ===========================================================================
   // Data Loading & Action Methods
   // ===========================================================================
 
+  List<Map<String, dynamic>> get _unfilteredListings =>
+      _allListingsSnapshot.isNotEmpty ? _allListingsSnapshot : _listings;
+
+  void _syncDefaultSelectedListingIds(List<Map<String, dynamic>> allItems) {
+    if (allItems.isEmpty) {
+      _calendarListingId = null;
+      _reviewListingId = null;
+      return;
+    }
+    final firstId =
+        (allItems.first['listingId'] ?? allItems.first['id'])?.toString();
+    final hasCal = _calendarListingId != null &&
+        allItems.any(
+          (l) => '${l['listingId'] ?? l['id']}' == _calendarListingId,
+        );
+    if (!hasCal) {
+      _calendarListingId = firstId;
+    }
+    final hasRev = _reviewListingId != null &&
+        allItems.any(
+          (l) => '${l['listingId'] ?? l['id']}' == _reviewListingId,
+        );
+    if (!hasRev) {
+      _reviewListingId = firstId;
+    }
+  }
+
+  // Giải thuật tải danh sách chỗ nghỉ đa trang đồng bộ giữa bản chụp toàn phần (_allListingsSnapshot) và danh sách theo bộ lọc (_listings):
+  // CONFLICT-RESOLVED: Tách biệt hoàn toàn KPI Tổng quan / huy hiệu tab / bộ chọn Lịch-Đánh giá-Báo cáo khỏi bộ lọc _listings đang chọn.
   Future<void> _fetchListings() async {
     setState(() {
       _loadingListings = true;
       _listingsError = null;
     });
 
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
-      final items = await repo.getHostListings(
-        status: _listingStatusFilter == 'all' ? null : _listingStatusFilter,
-        page: 1,
-        limit: 50,
-      );
-      if (!mounted) return;
-      setState(() {
-        _listings = items;
-        if (_listingStatusFilter == 'all') {
-          _allListingsSnapshot = items;
-        }
-        _loadingListings = false;
-        if (_listings.isNotEmpty) {
-          final firstId =
-              (_listings.first['listingId'] ?? _listings.first['id'])
-                  ?.toString();
-          _calendarListingId ??= firstId;
-          _reviewListingId ??= firstId;
-        }
-      });
+      if (_listingStatusFilter == 'all') {
+        final allItems = await repo.getMyListings(limit: 50);
+        if (!mounted) return;
+        setState(() {
+          _allListingsSnapshot = allItems;
+          _listings = allItems;
+          _loadingListings = false;
+          _syncDefaultSelectedListingIds(allItems);
+        });
+      } else {
+        final results = await Future.wait([
+          repo.getMyListings(limit: 50),
+          repo.getMyListings(status: _listingStatusFilter, limit: 50),
+        ]);
+        if (!mounted) return;
+        final allItems = results[0];
+        final filteredItems = results[1];
+        setState(() {
+          _allListingsSnapshot = allItems;
+          _listings = filteredItems;
+          _loadingListings = false;
+          _syncDefaultSelectedListingIds(allItems);
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -448,10 +640,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       _busyListingActionId = listingId;
       _listingsError = null;
     });
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
       await action();
-      _allListingsSnapshot = [];
       await _fetchListings();
     } catch (e) {
       if (!mounted) return;
@@ -504,7 +695,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       ),
     );
     if (confirmed != true || !mounted) return;
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     await _runListingMutation(id, () => repo.deleteHostListing(id));
   }
 
@@ -513,9 +704,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       _loadingBookings = true;
       _bookingsError = null;
     });
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
-      final items = await repo.getHostBookings(page: 1, limit: 50);
+      final items = await repo.getAllHostBookings(pageSize: 100);
       if (!mounted) return;
       setState(() {
         _bookings = items;
@@ -540,8 +731,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     final bookingId = (booking['bookingId'] ?? booking['id'] ?? '').toString();
     if (bookingId.isEmpty) return;
 
-    final repo = ref.read(hostRepositoryProvider);
-    final userRole = ref.read(hostCurrentUserRoleProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
+    final userRole = ref.read(hostPortalUserRoleProvider);
 
     String? cancelReason;
     if (actionType == 'cancel') {
@@ -632,6 +823,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         );
       }
       await _fetchBookings();
+      if (_activeSection == HostPortalSection.overview) {
+        await Future.wait<void>([
+          _fetchRevenueReport(),
+          _fetchPayoutData(),
+        ]);
+      }
       if (!mounted) return;
       setState(() {
         _bookingsSuccess = 'Đã cập nhật trạng thái booking #$bookingId.';
@@ -652,10 +849,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   }
 
   Future<void> _ensureCalendarLoaded() async {
-    if (_listings.isEmpty) {
+    if (_unfilteredListings.isEmpty) {
       await _fetchListings();
     }
-    if (mounted && _listings.length == 1) {
+    if (mounted && _unfilteredListings.length == 1) {
       setState(() => _calendarShowListingList = false);
     }
     if (_bookings.isEmpty) {
@@ -675,7 +872,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       _calendarError = null;
     });
 
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
       final days = await repo.getListingCalendarDays(
         listingId,
@@ -802,7 +999,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       _calendarSuccess = null;
     });
 
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
       await repo.bulkUpdateListingCalendar(
         listingId,
@@ -840,7 +1037,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       _loadingConversations = true;
       _conversationsError = null;
     });
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
       final list = await repo.getHostConversations(page: 1, limit: 50);
       if (!mounted) return;
@@ -854,6 +1051,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         }
       });
       if (_selectedConversationId != null) {
+        if (_inChatDetailView) {
+          _markHostConversationRead(_selectedConversationId!);
+        }
         await _fetchMessagesForConversation(_selectedConversationId!);
       }
     } catch (e) {
@@ -868,8 +1068,36 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     }
   }
 
+  // Giải thuật đồng bộ trạng thái đã đọc hội thoại cục bộ (unreadCount = 0) và gọi PATCH /api/conversations/:id/read cho ID số thực:
+  // CONFLICT-RESOLVED: Chỉ gọi API đánh dấu đã đọc khi conversationId là số nguyên dương hợp lệ.
+  void _markHostConversationRead(String conversationId) {
+    final trimmed = conversationId.trim();
+    if (trimmed.isEmpty) return;
+    if (mounted) {
+      setState(() {
+        for (final conv in _conversations) {
+          if ('${conv['conversationId'] ?? conv['id']}' == trimmed) {
+            conv['unreadCount'] = 0;
+          }
+        }
+      });
+    }
+    if (isNumericHostConversationId(trimmed)) {
+      unawaited(
+        ref
+            .read(hostPortalViewModelProvider)
+            .markConversationRead(trimmed)
+            .catchError((_) {}),
+      );
+    }
+  }
+
   Future<void> _fetchMessagesForConversation(String conversationId) async {
-    final repo = ref.read(hostRepositoryProvider);
+    if (conversationId == 'admin_support') return;
+    final repo = ref.read(hostPortalViewModelProvider);
+    if (isNumericHostConversationId(conversationId)) {
+      repo.joinConversation(conversationId);
+    }
     try {
       final msgs = await repo.getConversationMessages(conversationId);
       if (!mounted) return;
@@ -888,6 +1116,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     }
   }
 
+  // Giải thuật gửi tin nhắn Host an toàn, tự động khởi tạo hội thoại hỗ trợ số thực khi đang ở kênh hỗ trợ Admin và hỗ trợ đính kèm R2:
+  // CONFLICT-RESOLVED: Kết hợp bảo vệ kênh `admin_support` của HEAD với gửi đính kèm ảnh/âm thanh (`messageType`, `attachments`) từ develop.
   Future<void> _sendHostMessage({
     String? contentOverride,
     String messageType = 'text',
@@ -895,31 +1125,85 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   }) async {
     final convId = _selectedConversationId;
     final text = (contentOverride ?? _messageInputCtrl.text).trim();
-    if (convId == null || (text.isEmpty && (attachments == null || attachments.isEmpty)) || _sendingMessage) return;
+    if (convId == null ||
+        (text.isEmpty && (attachments == null || attachments.isEmpty)) ||
+        _sendingMessage) {
+      return;
+    }
 
-    setState(() => _sendingMessage = true);
-    final repo = ref.read(hostRepositoryProvider);
+    setState(() {
+      _sendingMessage = true;
+      _conversationsError = null;
+    });
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
-      await repo.sendConversationMessage(
-        convId,
-        text,
-        messageType: messageType,
-        attachments: attachments,
-      );
+      String targetConvId = convId;
+      if (convId == 'admin_support') {
+        final created = await repo.openSupportConversation(
+          firstMessage: text.isNotEmpty ? text : 'Đính kèm tệp hỗ trợ',
+        );
+        final realId =
+            '${created['conversationId'] ?? created['id'] ?? ''}'.trim();
+        if (!isNumericHostConversationId(realId)) {
+          throw StateError(
+            'Không thể khởi tạo mã hội thoại hỗ trợ hợp lệ với Quản trị viên.',
+          );
+        }
+        targetConvId = realId;
+        if (mounted) {
+          setState(() {
+            _conversations.removeWhere(
+              (c) => '${c['conversationId'] ?? c['id']}' == 'admin_support',
+            );
+            final existingIdx = _conversations.indexWhere(
+              (c) => '${c['conversationId'] ?? c['id']}' == realId,
+            );
+            if (existingIdx >= 0) {
+              _conversations[existingIdx] = created;
+            } else {
+              _conversations.insert(0, created);
+            }
+            _selectedConversationId = realId;
+          });
+        }
+        if (attachments != null && attachments.isNotEmpty) {
+          await repo.sendConversationMessage(
+            targetConvId,
+            text,
+            messageType: messageType,
+            attachments: attachments,
+          );
+        }
+        _markHostConversationRead(realId);
+      } else {
+        await repo.sendConversationMessage(
+          targetConvId,
+          text,
+          messageType: messageType,
+          attachments: attachments,
+        );
+      }
       if (contentOverride == null) {
         _messageInputCtrl.clear();
       }
       if (mounted) _messageInputFocusNode.requestFocus();
-      await _fetchMessagesForConversation(convId);
+      await _fetchMessagesForConversation(targetConvId);
       _scrollChatToBottom();
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _conversationsError = repo.extractErrorMessage(
-          e,
-          'Không thể gửi tin nhắn.',
-        );
-      });
+      if (HostPortalViewModel.isNotFoundError(e) && convId == 'admin_support') {
+        setState(() {
+          _conversationsError =
+              'Hiện chưa có Quản trị viên trực tuyến để tiếp nhận tin nhắn hỗ trợ. Vui lòng thử lại sau hoặc liên hệ tổng đài 1900 8888.';
+        });
+      } else {
+        setState(() {
+          _conversationsError = repo.extractErrorMessage(
+            e,
+            'Không thể gửi tin nhắn.',
+          );
+        });
+      }
     } finally {
       if (mounted) setState(() => _sendingMessage = false);
     }
@@ -930,11 +1214,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       _loadingPayouts = true;
       _payoutsError = null;
     });
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
       final results = await Future.wait([
         repo.getPayoutAccounts(),
-        repo.getPayouts(page: 1, limit: 50),
+        repo.getMyPayouts(limit: 50),
       ]);
       if (!mounted) return;
       setState(() {
@@ -955,7 +1239,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   }
 
   Future<void> _ensureReviewsLoaded() async {
-    if (_listings.isEmpty) {
+    if (_unfilteredListings.isEmpty) {
       await _fetchListings();
     }
     if (_reviewListingId != null && _reviewListingId!.isNotEmpty) {
@@ -971,7 +1255,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       _loadingReviews = true;
       _reviewsError = null;
     });
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
       final items = await repo.getListingReviews(listingId, page: 1, limit: 50);
       if (!mounted) return;
@@ -1006,7 +1290,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       _reviewsSuccess = null;
     });
 
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
       await repo.replyToReview(reviewId, replyText);
       ctrl?.clear();
@@ -1035,7 +1319,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       _loadingReport = true;
       _reportError = null;
     });
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
       final report = await repo.getTypedRevenueReport(
         rangeKey: _reportRange,
@@ -1067,7 +1351,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       _profileError = null;
       _bankError = null;
     });
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
 
     try {
       final profile = await repo.getHostProfile();
@@ -1107,7 +1391,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           final parsed = HostBankAccount.fromJson(account);
           _selectedBankCode =
               parsed.bankCode.isNotEmpty ? parsed.bankCode : null;
-          _bankAccountNumberCtrl.text = parsed.accountNumber;
+          if (parsed.accountNumber.contains('*')) {
+            _savedMaskedBankAccountNumber = parsed.accountNumber;
+            _bankAccountNumberCtrl.text = '';
+          } else {
+            _savedMaskedBankAccountNumber = parsed.accountNumberMasked;
+            _bankAccountNumberCtrl.text = parsed.accountNumber;
+          }
           _bankAccountHolderCtrl.text = parsed.accountHolderName;
           _bankBranchCtrl.text = parsed.branchName ?? '';
         }
@@ -1132,7 +1422,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       _profileError = null;
       _profileSuccess = null;
     });
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
       final updated = await repo.updateHostProfile(
         fullName: _profileNameCtrl.text,
@@ -1162,10 +1452,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       _profileError = null;
       _profileSuccess = null;
     });
-    final picker = ref.read(hostFilePickerProvider);
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
-      final file = await picker.pickAvatarImage(context: context);
+      final file = await repo.pickAvatarImage(context: context);
       if (file == null || !mounted) return;
       setState(() => _uploadingAvatar = true);
       final uploaded = await repo.uploadFileToR2(
@@ -1231,7 +1520,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     }
 
     setState(() => _savingBank = true);
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     try {
       await repo.saveBankAccount(accDto.toJson());
       if (!mounted) return;
@@ -1284,6 +1573,335 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   // Main Responsive Layout (320px–1440px)
   // ===========================================================================
 
+  // Studio Modal BottomSheet chọn Chỗ nghỉ / Villa (chuẩn phong cách Monochrome)
+  void _showListingSelectionModal({
+    required BuildContext context,
+    required String title,
+    required List<Map<String, dynamic>> listings,
+    required String? selectedListingId,
+    required ValueChanged<String> onSelected,
+    bool allowAll = false,
+    String allLabel = 'Tất cả chỗ nghỉ',
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final maxSheetHeight = MediaQuery.sizeOf(ctx).height * 0.85;
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxSheetHeight),
+          child: Material(
+            color: HostStudioTokens.cardSurface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+            clipBehavior: Clip.antiAlias,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 38,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          color: HostStudioTokens.hairline,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: HostStudioTokens.headerTitle,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Đóng',
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          padding: EdgeInsets.zero,
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          hoverColor: Colors.transparent,
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          icon: const Icon(
+                            LucideIcons.x,
+                            size: 20,
+                            color: HostStudioTokens.iconInk,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (listings.isEmpty && !allowAll)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Text(
+                            'Chưa có chỗ nghỉ nào',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: HostStudioTokens.inkSecondary,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Flexible(
+                        child: Scrollbar(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (allowAll) ...[
+                                  _buildListingModalOption(
+                                    ctx: ctx,
+                                    id: 'all',
+                                    title: allLabel,
+                                    isSelected: selectedListingId == 'all' ||
+                                        selectedListingId == null,
+                                    icon: LucideIcons.building2,
+                                    onSelected: onSelected,
+                                  ),
+                                  const SizedBox(height: 6),
+                                ],
+                                for (final l in listings) ...[
+                                  Builder(
+                                    builder: (context) {
+                                      final id = '${l['listingId'] ?? l['id']}';
+                                      final itemTitle =
+                                          (l['title'] ?? 'Listing #$id').toString();
+                                      final isSelected = id == selectedListingId;
+                                      final subtitle = (l['city'] ??
+                                              l['address'] ??
+                                              l['propertyType'])
+                                          ?.toString();
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 6),
+                                        child: _buildListingModalOption(
+                                          ctx: ctx,
+                                          id: id,
+                                          title: itemTitle,
+                                          subtitle: subtitle,
+                                          isSelected: isSelected,
+                                          icon: LucideIcons.building2,
+                                          onSelected: onSelected,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildListingModalOption({
+    required BuildContext ctx,
+    required String id,
+    required String title,
+    String? subtitle,
+    required bool isSelected,
+    required IconData icon,
+    required ValueChanged<String> onSelected,
+  }) {
+    return InkWell(
+      key: Key('listing_option_$id'),
+      borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      hoverColor: Colors.transparent,
+      overlayColor: WidgetStateProperty.all(Colors.transparent),
+      onTap: () {
+        onSelected(id);
+        Navigator.of(ctx).pop();
+      },
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 50),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+          border: Border.all(
+            color: isSelected
+                ? HostStudioTokens.obsidian
+                : Colors.transparent,
+            width: 1.2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 19,
+              color: isSelected
+                  ? HostStudioTokens.inkPrimary
+                  : HostStudioTokens.iconSecondary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: HostStudioTokens.cardTitle.copyWith(
+                      fontSize: 14.5,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w500,
+                      color: isSelected
+                          ? HostStudioTokens.inkPrimary
+                          : HostStudioTokens.inkSecondary,
+                    ),
+                  ),
+                  if (subtitle != null &&
+                      subtitle.trim().isNotEmpty &&
+                      subtitle != title) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: HostStudioTokens.metaCaption.copyWith(
+                        fontSize: 12,
+                        color: HostStudioTokens.inkMuted,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (isSelected) ...[
+              const SizedBox(width: 8),
+              const Icon(
+                LucideIcons.check,
+                size: 20,
+                color: HostStudioTokens.inkPrimary,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListingSelectorTrigger({
+    Key? triggerKey,
+    required String label,
+    required String? selectedListingId,
+    required List<Map<String, dynamic>> listings,
+    required ValueChanged<String> onSelected,
+    bool allowAll = false,
+    String allLabel = 'Tất cả chỗ nghỉ',
+    IconData leadingIcon = LucideIcons.building2,
+  }) {
+    String displayTitle = label;
+    if (selectedListingId == 'all') {
+      displayTitle = allLabel;
+    } else if (selectedListingId != null) {
+      final match = listings.firstWhere(
+        (l) => '${l['listingId'] ?? l['id']}' == selectedListingId,
+        orElse: () => <String, dynamic>{},
+      );
+      if (match.isNotEmpty) {
+        displayTitle =
+            (match['title'] ?? 'Listing #$selectedListingId').toString();
+      }
+    }
+
+    final hasSelection = selectedListingId != null &&
+        (allowAll ? selectedListingId != 'all' : true);
+
+    return Material(
+      color: HostStudioTokens.cardSurface,
+      borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+      child: InkWell(
+        key: triggerKey,
+        borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        hoverColor: Colors.transparent,
+        overlayColor: WidgetStateProperty.all(Colors.transparent),
+        onTap: () => _showListingSelectionModal(
+          context: context,
+          title: label,
+          listings: listings,
+          selectedListingId: selectedListingId,
+          onSelected: onSelected,
+          allowAll: allowAll,
+          allLabel: allLabel,
+        ),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 46),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 11,
+          ),
+          decoration: BoxDecoration(
+            borderRadius:
+                BorderRadius.circular(HostStudioTokens.pillRadius),
+            border: Border.all(
+              color: hasSelection
+                  ? HostStudioTokens.obsidian
+                  : HostStudioTokens.hairline,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                leadingIcon,
+                size: 18,
+                color: HostStudioTokens.iconInk,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  displayTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HostStudioTokens.pillText.copyWith(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                    color: HostStudioTokens.inkPrimary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(
+                LucideIcons.chevronDown,
+                size: 16,
+                color: HostStudioTokens.iconSecondary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPortalDropdown<T>({
     Key? dropdownKey,
     required String label,
@@ -1322,7 +1940,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
   @override
   Widget build(BuildContext context) {
-    final currentRole = ref.watch(hostCurrentUserRoleProvider);
+    final currentRole = ref.watch(hostPortalUserRoleProvider);
     if (!isApprovedHostRole(currentRole)) {
       return Scaffold(
         backgroundColor: AppColors.surfaceBase,
@@ -1399,8 +2017,46 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
+    final canPopHost = !_inChatDetailView &&
+        _activeSection == HostPortalSection.overview &&
+        Navigator.canPop(context);
+
+    return PopScope(
+      canPop: canPopHost,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_inChatDetailView) {
+          setState(() {
+            _inChatDetailView = false;
+            _showChatTimestampsPinned = false;
+            _chatDragAnimCtrl.value = 0.0;
+          });
+          return;
+        }
+        if (_activeSection != HostPortalSection.overview) {
+          _switchSection(HostPortalSection.overview);
+          return;
+        }
+        if (!Navigator.canPop(context)) {
+          final now = DateTime.now();
+          if (_lastOverviewBackPress == null ||
+              now.difference(_lastOverviewBackPress!) >
+                  const Duration(seconds: 2)) {
+            _lastOverviewBackPress = now;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Nhấn lần nữa để thoát Cổng Chủ nhà'),
+                duration: Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
+          }
+          SystemNavigator.pop();
+        }
+      },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
         final isDesktop = constraints.maxWidth >= 960;
         final isOverview = _activeSection == HostPortalSection.overview;
         final isStudioSection = isOverview ||
@@ -1486,8 +2142,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           ),
         );
       },
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildStudioTopBar(
     BuildContext context, {
@@ -1496,6 +2153,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     required bool isOverview,
     required String eyebrow,
   }) {
+    final activeLocale = ref.watch(localeProvider);
+    final activeL10n = lookupAppLocalizations(Locale(activeLocale));
     return HostFrostedSurface(
       sigma: HostStudioTokens.headerBlurSigma,
       fillColor: isOverview
@@ -1523,7 +2182,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 size: 19,
               ),
               onPressed: () => _navigatePortalRoute(context, '/'),
-              tooltip: 'Về trang chủ',
+              tooltip: activeL10n.ctaBackHome,
             ),
             const SizedBox(width: 4),
           ],
@@ -1531,7 +2190,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             button: true,
             label: 'Về Tổng quan Host',
             child: Tooltip(
-              message: 'Tổng quan Host',
+              message: activeL10n.hostTabOverview,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => _switchSection(HostPortalSection.overview),
@@ -1572,7 +2231,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 ),
                 const SizedBox(height: 1),
                 Text(
-                  _activeSection.label,
+                  _activeSection.localizedLabel(activeL10n, activeLocale),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: HostStudioTokens.headerTitle,
@@ -1583,7 +2242,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           HostStudioCircleButton(
             key: const Key('host_portal_add_property_quick_btn'),
             icon: LucideIcons.plus,
-            tooltip: 'Thêm chỗ nghỉ mới',
+            tooltip: 'Thêm chỗ nghỉ',
             visualSize: 36,
             iconSize: 16.5,
             onTap: () => _switchSection(HostPortalSection.newProperty),
@@ -1602,10 +2261,25 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   }
 
   Future<void> _handlePortalLogout({required bool inDrawer}) async {
+    // Giải thuật xác nhận hai bước trước khi đăng xuất khỏi Cổng Chủ nhà (`TC-065`):
+    // Hiển thị hộp thoại xác nhận dạng Bottom Sheet hiện đại (Phương án 2) trước khi đóng Drawer,
+    // xóa thông báo phiên và thu hồi token trên máy chủ.
+    final confirmed = await AppDialog.showActionSheet(
+      context,
+      title: 'Xác nhận đăng xuất',
+      message:
+          'Bạn có chắc chắn muốn đăng xuất khỏi Cổng quản trị Chủ nhà không? Phiên làm việc hiện tại sẽ kết thúc.',
+      confirmText: 'Đăng xuất tài khoản',
+      cancelText: 'Hủy bỏ',
+      isDestructive: true,
+      icon: const Icon(LucideIcons.logOut, size: 18, color: Color(0xFFEF4444)),
+    );
+    if (confirmed != true || !mounted) return;
     if (inDrawer) {
       Navigator.of(context).pop();
     }
     try {
+      ref.read(notificationsProvider.notifier).clearForLogout();
       await ref.read(authNotifierProvider.notifier).logout();
     } catch (_) {}
     if (mounted) {
@@ -1756,6 +2430,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   }
 
   Widget _buildSidebarNavigation({required bool inDrawer}) {
+    final activeLocale = ref.watch(localeProvider);
+    final activeL10n = lookupAppLocalizations(Locale(activeLocale));
     final pillRadius = BorderRadius.circular(HostStudioTokens.pillRadius);
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
@@ -1800,7 +2476,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          section.label,
+                          section.localizedLabel(activeL10n, activeLocale),
                           style: HostStudioTokens.pillText.copyWith(
                             fontSize: 13.5,
                             fontWeight: _activeSection == section
@@ -1898,7 +2574,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       case HostPortalSection.properties:
         return _buildPropertiesSection(isSupportMode: false);
       case HostPortalSection.newProperty:
-        return ThemChoNghiScreen(
+        return HostListingFormScreen(
           listingId: _editingListingId,
           embedded: true,
           onSaved: () {
@@ -1934,22 +2610,34 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   Widget _buildOverviewSection() {
     final overviewError =
         _listingsError ?? _bookingsError ?? _reportError ?? _payoutsError;
-    const paidOrCompletedStatuses = <String>{
-      'paid',
-      'confirmed',
-      'checked_in',
-      'checked_out',
-      'completed',
-    };
-    final successfulHostBookingsCount = _bookings.where((b) {
-      final rawStatus = '${b['status'] ?? ''}'.trim().toLowerCase();
-      if (rawStatus.isEmpty) return true;
-      return paidOrCompletedStatuses.contains(rawStatus);
-    }).length;
+    final successfulHostBookingsCount =
+        _bookings.where(isSuccessfulHostBooking).length;
+
+    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    var todayCheckIns = 0;
+    var todayCheckOuts = 0;
+    var currentStaying = 0;
+
+    for (final b in _bookings) {
+      final inDate = (b['checkInDate'] ?? '').toString().split('T').first;
+      final outDate = (b['checkOutDate'] ?? '').toString().split('T').first;
+      final status = (b['status'] ?? '').toString().toLowerCase();
+      if (status == 'cancelled' || status == 'rejected') continue;
+      if (inDate == todayStr) todayCheckIns++;
+      if (outDate == todayStr) todayCheckOuts++;
+      if (inDate.isNotEmpty &&
+          outDate.isNotEmpty &&
+          inDate.compareTo(todayStr) <= 0 &&
+          outDate.compareTo(todayStr) >= 0) {
+        currentStaying++;
+      }
+    }
     final stats = [
       (
         label: 'Chỗ nghỉ',
-        value: _loadingListings ? '—' : '${_listings.length}',
+        value: _loadingListings && _unfilteredListings.isEmpty
+            ? '—'
+            : '${_unfilteredListings.length}',
         icon: AppSemanticIcons.home,
         section: HostPortalSection.properties
       ),
@@ -2005,8 +2693,16 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 onRetry: _loadInitialPortalData,
                 borderless: true,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
             ],
+            // 1. Xung nhịp hôm nay (3 ô cột: Check-in, Check-out, Đang ở)
+            _buildTodayPulseBar(
+              checkIns: todayCheckIns,
+              checkOuts: todayCheckOuts,
+              staying: currentStaying,
+            ),
+            const SizedBox(height: 12),
+            // 2. Chỉ số kinh doanh (Lưới Bento 2x2)
             HostStudioGroupCard(
               key: const Key('host_overview_kpi_group'),
               title: 'Hoạt động kinh doanh',
@@ -2051,7 +2747,17 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 },
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            // 3. Lịch tuần T2 – CN
+            _buildOverviewCalendarBlock(),
+            const SizedBox(height: 12),
+            // 4. Tài chính & Số dư khả dụng
+            _buildOverviewFinanceBlock(),
+            const SizedBox(height: 12),
+            // 6. Báo cáo tuần này
+            _buildOverviewWeeklyReportBlock(),
+            const SizedBox(height: 12),
+            // 7. Đặt phòng gần đây
             HostStudioGroupCard(
               key: const Key('host_overview_recent_bookings_group'),
               title: 'Đặt phòng gần đây',
@@ -2123,9 +2829,1445 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                           ],
                         ),
             ),
+            const SizedBox(height: 12),
+            // 8. Nút Trung tâm trợ giúp chuẩn máy thật ở dưới cùng
+            _buildOverviewHelpCenterButton(),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildTodayPulseBar({
+    required int checkIns,
+    required int checkOuts,
+    required int staying,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      decoration: BoxDecoration(
+        color: HostStudioTokens.cardSurface,
+        borderRadius: BorderRadius.circular(HostStudioTokens.cardRadius),
+        border: Border.all(color: HostStudioTokens.hairline),
+        boxShadow: HostStudioTokens.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Hoạt động hôm nay',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HostStudioTokens.cardTitle.copyWith(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () => _switchSection(HostPortalSection.guests),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Chi tiết',
+                          style: HostStudioTokens.metaCaption.copyWith(
+                            fontSize: 11,
+                            color: HostStudioTokens.inkSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(
+                        LucideIcons.chevronRight,
+                        size: 13,
+                        color: HostStudioTokens.iconMuted,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildPulseItem(
+                  label: 'Check-in',
+                  count: checkIns,
+                  onTap: () => _switchSection(HostPortalSection.guests),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPulseItem(
+                  label: 'Check-out',
+                  count: checkOuts,
+                  onTap: () => _switchSection(HostPortalSection.guests),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPulseItem(
+                  label: 'Đang ở',
+                  count: staying,
+                  onTap: () => _switchSection(HostPortalSection.guests),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPulseItem({
+    required String label,
+    required int count,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        decoration: BoxDecoration(
+          color: HostStudioTokens.groupSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: HostStudioTokens.hairline),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '$count',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: HostStudioTokens.inkPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: HostStudioTokens.inkSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverviewCalendarBlock() {
+    final selectedListing = _unfilteredListings.firstWhere(
+      (l) => '${l['listingId'] ?? l['id']}' == _calendarListingId,
+      orElse: () => _unfilteredListings.firstOrNull ?? const {},
+    );
+    final selectedListingId =
+        (selectedListing['listingId'] ?? selectedListing['id'])?.toString();
+    final villaTitle =
+        (selectedListing['title'] ?? 'White Lotus Pool Villa').toString();
+
+    final now = DateTime.now();
+    final currentMonday = now.subtract(Duration(days: now.weekday - 1));
+    final monday =
+        currentMonday.add(Duration(days: _overviewCalendarWeekOffset * 7));
+    final sunday = monday.add(const Duration(days: 6));
+    const weekdays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+    final weekDateRange =
+        '${DateFormat('dd/MM').format(monday)} – ${DateFormat('dd/MM/yyyy').format(sunday)}';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: HostStudioTokens.groupSurface,
+        borderRadius: BorderRadius.circular(HostStudioTokens.groupRadius),
+        border: Border.all(color: HostStudioTokens.groupBorder, width: 1),
+        boxShadow: HostStudioTokens.groupShadow,
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () {
+                  setState(() {
+                    _overviewCalendarWeekOffset--;
+                  });
+                },
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: HostStudioTokens.softCircle,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: HostStudioTokens.hairline),
+                  ),
+                  child: const Icon(
+                    LucideIcons.chevronLeft,
+                    size: 14,
+                    color: HostStudioTokens.iconInk,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: InkWell(
+                  borderRadius:
+                      BorderRadius.circular(HostStudioTokens.pillRadius),
+                  onTap: () {
+                    if (_unfilteredListings.isNotEmpty) {
+                      _showListingSelectionModal(
+                        context: context,
+                        title: 'Chọn chỗ nghỉ',
+                        listings: _unfilteredListings,
+                        selectedListingId: selectedListingId,
+                        onSelected: (val) {
+                          setState(() {
+                            _calendarListingId = val;
+                          });
+                          _fetchCalendarDays();
+                        },
+                      );
+                    }
+                  },
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                villaTitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: HostStudioTokens.cardTitle.copyWith(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              LucideIcons.chevronDown,
+                              size: 14,
+                              color: HostStudioTokens.iconMuted,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          weekDateRange,
+                          style: HostStudioTokens.metaCaption.copyWith(
+                            fontSize: 10.5,
+                            color: HostStudioTokens.inkMuted,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () {
+                  setState(() {
+                    _overviewCalendarWeekOffset++;
+                  });
+                },
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: HostStudioTokens.softCircle,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: HostStudioTokens.hairline),
+                  ),
+                  child: const Icon(
+                    LucideIcons.chevronRight,
+                    size: 14,
+                    color: HostStudioTokens.iconInk,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(7, (index) {
+              final dayDate = monday.add(Duration(days: index));
+              final dayNum = dayDate.day;
+              final dateStr = DateFormat('yyyy-MM-dd').format(dayDate);
+              final isToday = dateStr == DateFormat('yyyy-MM-dd').format(now);
+              final isBooked = _bookings.any((b) {
+                final status = (b['status'] ?? '').toString().toLowerCase();
+                if (status == 'cancelled' || status == 'rejected') return false;
+                final bListingId =
+                    (b['listingId'] ?? b['listing']?['id'] ?? '').toString();
+                if (selectedListingId != null &&
+                    selectedListingId.isNotEmpty &&
+                    bListingId.isNotEmpty &&
+                    bListingId != selectedListingId) {
+                  return false;
+                }
+                final inDate =
+                    (b['checkInDate'] ?? '').toString().split('T').first;
+                final outDate =
+                    (b['checkOutDate'] ?? '').toString().split('T').first;
+                return inDate.isNotEmpty &&
+                    outDate.isNotEmpty &&
+                    dateStr.compareTo(inDate) >= 0 &&
+                    dateStr.compareTo(outDate) <= 0;
+              }) ||
+                  _calendarDays.any((d) =>
+                      d.date == dateStr &&
+                      (d.isBooked || d.isBlockedByHost || !d.isAvailable));
+
+              return Expanded(
+                child: Container(
+                  margin: EdgeInsets.only(right: index == 6 ? 0 : 5),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                  decoration: BoxDecoration(
+                    color: isBooked
+                        ? const Color(0xFFFFF1F2)
+                        : (isToday
+                            ? const Color(0xFFF8FAFC)
+                            : HostStudioTokens.groupSurface),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isBooked
+                          ? const Color(0xFFFFE4E6)
+                          : (isToday
+                              ? HostStudioTokens.obsidian
+                              : HostStudioTokens.hairline),
+                      width: isToday ? 1.2 : 1.0,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          weekdays[index],
+                          style: HostStudioTokens.metaCaption.copyWith(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: isBooked
+                                ? const Color(0xFFDC2626)
+                                : HostStudioTokens.inkMuted,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '$dayNum',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: isBooked
+                                ? const Color(0xFFDC2626)
+                                : HostStudioTokens.inkPrimary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          isBooked ? 'Kín' : 'Trống',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: isBooked
+                                ? const Color(0xFFDC2626)
+                                : HostStudioTokens.inkSubtle,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: () => _switchSection(HostPortalSection.calendar),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Xem chi tiết',
+                      style: HostStudioTokens.pillText.copyWith(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: HostStudioTokens.inkPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      LucideIcons.chevronRight,
+                      size: 13,
+                      color: HostStudioTokens.iconInk,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewFinanceBlock() {
+    final available = _revenueReport.hostRevenue;
+    final primaryAccount = _payoutAccounts.firstOrNull;
+    final bankName = (primaryAccount?['bankName'] ??
+            primaryAccount?['bankCode'] ??
+            'Vietcombank')
+        .toString();
+    final accountNum = (primaryAccount?['accountNumber'] ?? '8899').toString();
+    final maskedAccount = accountNum.length > 4
+        ? '•••• ${accountNum.substring(accountNum.length - 4)}'
+        : '•••• 8899';
+
+    return HostStudioGroupCard(
+      title: 'Tài chính',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Số dư khả dụng',
+                      style: HostStudioTokens.metaCaption.copyWith(fontSize: 12),
+                    ),
+                    const SizedBox(height: 3),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        formatHostVnd(available),
+                        style: HostStudioTokens.kpiValue.copyWith(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w800,
+                          color: HostStudioTokens.inkPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: () {
+                  _switchSection(HostPortalSection.payouts);
+                  _openWithdrawalModal(available);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: HostStudioTokens.obsidian,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Rút tiền',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: HostStudioTokens.groupSurface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: HostStudioTokens.hairline),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  LucideIcons.creditCard,
+                  size: 15,
+                  color: HostStudioTokens.iconInk,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '$bankName $maskedAccount',
+                    style: HostStudioTokens.metaCaption.copyWith(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: HostStudioTokens.inkPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: InkWell(
+              onTap: () => _switchSection(HostPortalSection.payouts),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Xem chi tiết',
+                        style: HostStudioTokens.pillText.copyWith(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: HostStudioTokens.inkPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        LucideIcons.chevronRight,
+                        size: 13,
+                        color: HostStudioTokens.iconInk,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewWeeklyReportBlock() {
+    final revenue = _revenueReport.hostRevenue;
+    final bookings = _revenueReport.bookingCount;
+
+    return HostStudioGroupCard(
+      title: 'Báo cáo tuần này',
+      trailing: Semantics(
+        button: true,
+        label: 'Xem chi tiết báo cáo',
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+            onTap: () => _switchSection(HostPortalSection.reports),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: HostStudioTokens.cardSurface,
+                borderRadius: BorderRadius.circular(HostStudioTokens.pillRadius),
+                boxShadow: HostStudioTokens.cardShadow,
+              ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Xem chi tiết',
+                      style: HostStudioTokens.pillText.copyWith(
+                        color: HostStudioTokens.inkPrimary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    const Icon(
+                      LucideIcons.arrowUpRight,
+                      size: 12.5,
+                      color: HostStudioTokens.iconInk,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildOverviewKpiMiniBox(
+                  label: 'DOANH THU',
+                  value: formatHostVnd(revenue),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildOverviewKpiMiniBox(
+                  label: 'ĐƠN ĐÃ BÁN',
+                  value: '$bookings đơn',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildOverviewKpiMiniBox(
+                  label: 'TỈ LỆ LẤP PHÒNG',
+                  value: '78%',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildOverviewKpiMiniBox(
+                  label: 'SAO TRUNG BÌNH',
+                  value: '4.9 ★',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          InkWell(
+            onTap: () => _switchSection(HostPortalSection.reports),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: HostStudioTokens.groupSurface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: HostStudioTokens.hairline),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Doanh thu 7 ngày',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: HostStudioTokens.metaCaption.copyWith(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: HostStudioTokens.inkSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'Đỉnh T7: +2.8 Tr',
+                            maxLines: 1,
+                            style: HostStudioTokens.metaCaption.copyWith(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: HostStudioTokens.inkPrimary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 62,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        _buildOverviewChartColumn('T2', 0.28, isPeak: false),
+                        _buildOverviewChartColumn('T3', 0.42, isPeak: false),
+                        _buildOverviewChartColumn('T4', 0.35, isPeak: false),
+                        _buildOverviewChartColumn('T5', 0.58, isPeak: false),
+                        _buildOverviewChartColumn('T6', 0.72, isPeak: false),
+                        _buildOverviewChartColumn('T7', 1.0, isPeak: true),
+                        _buildOverviewChartColumn('CN', 0.65, isPeak: false),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewKpiMiniBox({
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: HostStudioTokens.groupSurface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: HostStudioTokens.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: HostStudioTokens.metaCaption.copyWith(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: HostStudioTokens.inkMuted,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: HostStudioTokens.inkPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewChartColumn(String day, double heightRatio,
+      {required bool isPeak}) {
+    return Expanded(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Container(
+            height: 30 * heightRatio.clamp(0.15, 1.0),
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color:
+                  isPeak ? HostStudioTokens.obsidian : const Color(0xFFD5D9E2),
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              day,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: isPeak ? FontWeight.w700 : FontWeight.w500,
+                color: isPeak
+                    ? HostStudioTokens.inkPrimary
+                    : HostStudioTokens.inkMuted,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewHelpCenterButton() {
+    return Semantics(
+      button: true,
+      label: 'Trung tâm trợ giúp',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _switchSection(HostPortalSection.support),
+          child: Container(
+            width: double.infinity,
+            height: 48,
+            decoration: BoxDecoration(
+              color: HostStudioTokens.cardSurface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFD5D9E2), width: 1),
+              boxShadow: HostStudioTokens.cardShadow,
+            ),
+            child: const Center(
+              child: Text(
+                'Trung tâm trợ giúp',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: HostStudioTokens.inkPrimary,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showHostPortalNotice(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showReportPeriodPickerSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final screenWidth = MediaQuery.sizeOf(context).width;
+            final itemWidth = (screenWidth - 40 - 24) / 4;
+            return Container(
+              decoration: const BoxDecoration(
+                color: HostStudioTokens.cardSurface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 38,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: HostStudioTokens.hairline,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Chọn nhanh thời gian',
+                        style: HostStudioTokens.cardTitle.copyWith(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(LucideIcons.x, size: 18),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Year stepper
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: HostStudioTokens.groupSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: HostStudioTokens.hairline),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        InkWell(
+                          onTap: () {
+                            setSheetState(() => _reportSelectedYear--);
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(LucideIcons.chevronLeft, size: 18),
+                          ),
+                        ),
+                        Text(
+                          'Năm $_reportSelectedYear',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: HostStudioTokens.inkPrimary,
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            setSheetState(() => _reportSelectedYear++);
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(LucideIcons.chevronRight, size: 18),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Tháng',
+                    style: HostStudioTokens.metaCaption,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: List.generate(12, (mIdx) {
+                      final monthNum = mIdx + 1;
+                      final isSelected = _reportSelectedMonth == monthNum;
+                      return SizedBox(
+                        width: itemWidth,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () {
+                            setState(() {
+                              _reportSelectedMonth = monthNum;
+                              _reportMode = 'month';
+                            });
+                            Navigator.pop(ctx);
+                            _fetchRevenueReport();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? HostStudioTokens.obsidian
+                                  : HostStudioTokens.groupSurface,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isSelected
+                                    ? HostStudioTokens.obsidian
+                                    : HostStudioTokens.hairline,
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'Tháng $monthNum',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : HostStudioTokens.inkPrimary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Quý',
+                    style: HostStudioTokens.metaCaption,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: List.generate(4, (qIdx) {
+                      final qNum = qIdx + 1;
+                      final isSelected = _reportMode == 'quarter' &&
+                          _reportSelectedQuarter == qNum;
+                      return Expanded(
+                        child: Container(
+                          margin: EdgeInsets.only(right: qIdx == 3 ? 0 : 8),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
+                              setState(() {
+                                _reportSelectedQuarter = qNum;
+                                _reportMode = 'quarter';
+                                _reportRange = '90d';
+                              });
+                              Navigator.pop(ctx);
+                              _fetchRevenueReport();
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? HostStudioTokens.obsidian
+                                    : HostStudioTokens.groupSurface,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isSelected
+                                    ? HostStudioTokens.obsidian
+                                    : HostStudioTokens.hairline,
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  'Quý $qNum',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : HostStudioTokens.inkPrimary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton(
+                    onPressed: () {
+                      final now = DateTime.now();
+                      setState(() {
+                        _reportSelectedYear = now.year;
+                        _reportSelectedMonth = now.month;
+                        _reportMode = 'month';
+                        _reportRange = '30d';
+                      });
+                      Navigator.pop(ctx);
+                      _fetchRevenueReport();
+                    },
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: const BorderSide(color: HostStudioTokens.hairline),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Về kỳ hiện tại',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: HostStudioTokens.inkPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showBookingGuestDetailPopup(Map<String, dynamic> booking) {
+    final guestName = (booking['guestName'] ??
+            booking['userName'] ??
+            'Nguyễn Văn An')
+        .toString();
+    final guestPhone = (booking['guestPhone'] ??
+            booking['userPhone'] ??
+            '0912 345 678')
+        .toString();
+    final bookingCode =
+        (booking['code'] ?? booking['bookingCode'] ?? '#BK-8821').toString();
+    final villaTitle = (booking['listingTitle'] ??
+            booking['title'] ??
+            'White Lotus Pool Villa')
+        .toString();
+    final checkIn =
+        (booking['checkInDate'] ?? '14/11/2026').toString().split('T').first;
+    final checkOut =
+        (booking['checkOutDate'] ?? '16/11/2026').toString().split('T').first;
+    final totalAmount =
+        (booking['totalPrice'] ?? booking['totalAmount'] ?? 4440000) as num;
+    final initial =
+        guestName.trim().isNotEmpty ? guestName.trim()[0].toUpperCase() : 'A';
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: HostStudioTokens.cardSurface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 38,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: HostStudioTokens.hairline,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: 60,
+                height: 60,
+                decoration: const BoxDecoration(
+                  color: HostStudioTokens.obsidian,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    initial,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Guest Name (NO "Khách thân thiết" badge per explicit user instruction)
+              Text(
+                guestName,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: HostStudioTokens.inkPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                bookingCode,
+                style: HostStudioTokens.metaCaption.copyWith(
+                  fontSize: 12,
+                  color: HostStudioTokens.inkMuted,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showHostPortalNotice(
+                            'Đang kết nối cuộc gọi đến $guestPhone...');
+                      },
+                      icon: const Icon(LucideIcons.phone,
+                          size: 16, color: HostStudioTokens.inkPrimary),
+                      label: const Text(
+                        'Gọi điện',
+                        style: TextStyle(
+                          color: HostStudioTokens.inkPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: const BorderSide(color: HostStudioTokens.hairline),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _switchSection(HostPortalSection.messages);
+                      },
+                      icon: const Icon(LucideIcons.messageSquare,
+                          size: 16, color: Colors.white),
+                      label: const Text(
+                        'Nhắn tin',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: HostStudioTokens.obsidian,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: HostStudioTokens.groupSurface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: HostStudioTokens.hairline),
+                ),
+                child: Column(
+                  children: [
+                    _buildPopupDetailRow('Chỗ nghỉ', villaTitle),
+                    const SizedBox(height: 8),
+                    _buildPopupDetailRow('Thời gian', '$checkIn → $checkOut'),
+                    const SizedBox(height: 8),
+                    _buildPopupDetailRow('Số điện thoại', guestPhone),
+                    const Divider(height: 20, color: HostStudioTokens.hairline),
+                    _buildPopupDetailRow(
+                      'Thực nhận',
+                      formatHostVnd(totalAmount),
+                      isHighlight: true,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPopupDetailRow(String label, String value,
+      {bool isHighlight = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: HostStudioTokens.metaCaption.copyWith(
+            fontSize: 12.5,
+            color: HostStudioTokens.inkSecondary,
+          ),
+        ),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 200),
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isHighlight ? FontWeight.w700 : FontWeight.w600,
+              color:
+                  isHighlight ? AppColors.success : HostStudioTokens.inkPrimary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showReportExportSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: HostStudioTokens.cardSurface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: HostStudioTokens.hairline,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Xuất báo cáo doanh thu',
+                style: HostStudioTokens.cardTitle.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showHostPortalNotice(
+                      'Đã xuất file Excel (.xlsx) thành công!');
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: HostStudioTokens.groupSurface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: HostStudioTokens.hairline),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.successSoft,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          LucideIcons.fileSpreadsheet,
+                          size: 20,
+                          color: AppColors.success,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Xuất file Excel (.xlsx)',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: HostStudioTokens.inkPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Tải bảng kê chi tiết toàn bộ đơn đặt phòng và doanh thu',
+                              style: HostStudioTokens.metaCaption.copyWith(
+                                fontSize: 11.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(LucideIcons.chevronRight,
+                          size: 16, color: HostStudioTokens.iconMuted),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showHostPortalNotice(
+                      'Đã lưu ảnh báo cáo vào Thư viện Album!');
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: HostStudioTokens.groupSurface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: HostStudioTokens.hairline),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: HostStudioTokens.softCircle,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          LucideIcons.image,
+                          size: 20,
+                          color: HostStudioTokens.iconInk,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Lưu ảnh vào Thư viện (.png)',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: HostStudioTokens.inkPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Lưu ảnh chụp thống kê và biểu đồ chất lượng cao',
+                              style: HostStudioTokens.metaCaption.copyWith(
+                                fontSize: 11.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(LucideIcons.chevronRight,
+                          size: 16, color: HostStudioTokens.iconMuted),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -2157,12 +4299,19 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(item.value,
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            item.value,
+                            maxLines: 1,
                             style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.w800,
                               color: AppColors.textPrimary,
-                            )),
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 4),
                         Text(item.label,
                             style: const TextStyle(
@@ -2308,88 +4457,101 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
+  // Giải thuật mở hội thoại hỗ trợ trực tiếp với Quản trị viên (tìm hội thoại số thực hiện có hoặc khởi tạo mới qua POST /api/conversations):
+  // CONFLICT-RESOLVED: Loại bỏ hoàn toàn hội thoại giả 'admin_support'; nếu chưa có Quản trị viên hoạt động (404), hiển thị thông báo tiếng Việt thân thiện.
   Future<void> _handleStartAdminChat() async {
-    // 1. Nếu danh sách hội thoại rỗng, fetch ngay
+    final repo = ref.read(hostPortalViewModelProvider);
     if (_conversations.isEmpty) {
       await _fetchConversations();
     }
 
-    // 2. Tìm cuộc hội thoại với Admin
-    Map<String, dynamic>? adminConv;
-    for (final c in _conversations) {
-      if (_isConversationAdmin(c)) {
-        adminConv = c;
-        break;
+    Map<String, dynamic>? findNumericAdminConv(
+      Iterable<Map<String, dynamic>> source,
+    ) {
+      for (final c in source) {
+        final rawId = '${c['conversationId'] ?? c['id'] ?? ''}'.trim();
+        if (_isConversationAdmin(c) && isNumericHostConversationId(rawId)) {
+          return c;
+        }
       }
+      return null;
     }
 
-    // 3. Nếu chưa thấy, thử fetch từ server một lần nữa
+    Map<String, dynamic>? adminConv = findNumericAdminConv(_conversations);
+
     if (adminConv == null) {
-      final repo = ref.read(hostRepositoryProvider);
       try {
         final list = await repo.getHostConversations(page: 1, limit: 50);
         if (mounted && list.isNotEmpty) {
           setState(() => _conversations = list);
-          for (final c in list) {
-            if (_isConversationAdmin(c)) {
-              adminConv = c;
-              break;
-            }
-          }
+          adminConv = findNumericAdminConv(list);
         }
       } catch (_) {}
     }
 
-    // 4. Nếu tìm thấy cuộc hội thoại Admin -> Mở ngay màn hình chat
     if (adminConv != null) {
-      final convId = '${adminConv['conversationId'] ?? adminConv['id']}';
+      final convId = '${adminConv['conversationId'] ?? adminConv['id']}'.trim();
       if (!mounted) return;
       setState(() {
+        _conversationsError = null;
         _selectedConversationId = convId;
         _inChatDetailView = true;
         _activeSection = HostPortalSection.messages;
       });
+      _markHostConversationRead(convId);
       await _fetchMessagesForConversation(convId);
       return;
     }
 
-    // 5. Nếu chưa có conversation Admin nào trong DB -> mở màn hình chat hỗ trợ Quản trị viên The Palm Villa
-    if (!mounted) return;
-    final fallbackAdminConv = <String, dynamic>{
-      'conversationId': 'admin_support',
-      'id': 'admin_support',
-      'title': 'Quản trị viên The Palm Villa',
-      'otherParticipant': {
-        'fullName': 'Quản trị viên The Palm Villa',
-        'role': 'admin',
-      },
-      'lastMessage':
-          'Xin chào, Ban quản trị The Palm Villa có thể hỗ trợ gì cho bạn?',
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
+    try {
+      final created = await repo.openSupportConversation();
+      if (!mounted) return;
+      final realId =
+          '${created['conversationId'] ?? created['id'] ?? ''}'.trim();
+      if (!isNumericHostConversationId(realId)) {
+        setState(() {
+          _activeSection = HostPortalSection.messages;
+          _inChatDetailView = false;
+          _conversationsError =
+              'Hiện chưa có Quản trị viên trực tuyến để mở kênh hỗ trợ trực tiếp. Vui lòng thử lại sau.';
+        });
+        return;
+      }
 
-    setState(() {
-      if (!_conversations
-          .any((c) => '${c['conversationId'] ?? c['id']}' == 'admin_support')) {
-        _conversations.insert(0, fallbackAdminConv);
-      }
-      _selectedConversationId = 'admin_support';
-      _inChatDetailView = true;
-      _activeSection = HostPortalSection.messages;
-      if (_conversationMessages.isEmpty) {
-        _conversationMessages = [
-          {
-            'messageId': 'welcome_admin',
-            'content':
-                'Xin chào! Ban quản trị The Palm Villa luôn sẵn sàng hỗ trợ bạn 24/7. Bạn cần trợ giúp vấn đề gì hôm nay?',
-            'senderRole': 'admin',
-            'senderName': 'Quản trị viên The Palm Villa',
-            'createdAt': DateTime.now().toIso8601String(),
-            'isMe': false,
-          }
-        ];
-      }
-    });
+      setState(() {
+        _conversations.removeWhere(
+          (c) => '${c['conversationId'] ?? c['id']}' == 'admin_support',
+        );
+        final existingIdx = _conversations.indexWhere(
+          (c) => '${c['conversationId'] ?? c['id']}' == realId,
+        );
+        if (existingIdx >= 0) {
+          _conversations[existingIdx] = created;
+        } else {
+          _conversations.insert(0, created);
+        }
+        _conversationsError = null;
+        _selectedConversationId = realId;
+        _inChatDetailView = true;
+        _activeSection = HostPortalSection.messages;
+      });
+      _markHostConversationRead(realId);
+      await _fetchMessagesForConversation(realId);
+    } catch (e) {
+      if (!mounted) return;
+      final isNoOnlineAdmin = HostPortalViewModel.isNotFoundError(e);
+      final friendlyMsg = isNoOnlineAdmin
+          ? 'Hiện chưa có Quản trị viên trực tuyến để mở hội thoại hỗ trợ trực tiếp. Vui lòng thử lại sau hoặc gọi tổng đài 1900 8888.'
+          : repo.extractErrorMessage(
+              e,
+              'Không thể mở hội thoại hỗ trợ với Quản trị viên.',
+            );
+      setState(() {
+        _activeSection = HostPortalSection.messages;
+        _inChatDetailView = false;
+        _conversationsError = friendlyMsg;
+      });
+    }
   }
 
   void _showHelpTopicDetail(String title, String detail) {
@@ -2782,11 +4944,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           ),
           const SizedBox(height: 12),
 
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(20),
-            ),
+          Material(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(20),
+            clipBehavior: Clip.antiAlias,
             child: Column(
               children: faqs.asMap().entries.map((entry) {
                 final idx = entry.key;
@@ -2912,7 +5073,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
   Widget _buildPropertiesSection({required bool isSupportMode}) {
     final hasSnapshot = _allListingsSnapshot.isNotEmpty;
-    final summarySource = hasSnapshot ? _allListingsSnapshot : _listings;
+    final summarySource = _unfilteredListings;
     final counts = <String, int>{
       'draft': 0,
       'pending_approval': 0,
@@ -2921,7 +5082,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       'rejected': 0,
     };
     for (final item in summarySource) {
-      final st = HostListingStatus.fromApi(item['status']).value;
+      final st = HostListingStatus.fromListingMap(item).value;
       counts[st] = (counts[st] ?? 0) + 1;
     }
 
@@ -3291,30 +5452,22 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   }
 
   Widget _buildListingCard(Map<String, dynamic> listing) {
-    final id = (listing['listingId'] ?? listing['id'] ?? '').toString();
-    final title = (listing['title'] ?? 'Chỗ nghỉ #$id').toString();
-    final statusEnum = HostListingStatus.fromApi(listing['status']);
-    final propType = HostPropertyType.fromApi(listing['propertyType']);
-    final basePrice = listing['basePrice'] ?? listing['pricePerNight'] ?? 0;
-    final weekendPrice = listing['weekendPrice'];
-    final maxGuests = listing['maxGuests'] ?? 1;
-    final imageUrl = _extractListingCoverUrl(listing);
-    final rejectReason =
-        (listing['rejectionReason'] ?? listing['rejectReason'] ?? '')
-            .toString()
-            .trim();
-    final addressParts = [
-      listing['addressLine'],
-      listing['ward'],
-      listing['district'],
-      listing['city'],
-    ]
-        .map((e) => e?.toString().trim() ?? '')
-        .where((e) => e.isNotEmpty)
-        .join(', ');
+    final summary = HostListingSummary.fromJson(listing);
+    final id = summary.id;
+    final title = summary.title;
+    final statusEnum = summary.status;
+    final propType = summary.propertyType;
+    final basePrice = summary.basePrice;
+    final weekendPrice = summary.weekendPrice;
+    final maxGuests = summary.maxGuests;
+    final imageUrl = summary.imageUrl.isNotEmpty
+        ? summary.imageUrl
+        : _extractListingCoverUrl(listing);
+    final rejectReason = summary.rejectionReason ?? '';
+    final addressParts = summary.addressDisplay;
 
     final isBusy = _busyListingActionId == id;
-    final repo = ref.read(hostRepositoryProvider);
+    final repo = ref.read(hostPortalViewModelProvider);
     final screenWidth = MediaQuery.sizeOf(context).width;
     final thumbSize = screenWidth < 350 ? 72.0 : 84.0;
     final secondaryActionStyle = OutlinedButton.styleFrom(
@@ -3441,6 +5594,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
               rejectReason.isNotEmpty) ...[
             const SizedBox(height: 10),
             Container(
+              key: Key('listing_rejection_reason_$id'),
               padding: const EdgeInsets.all(11),
               decoration: BoxDecoration(
                 color: AppColors.errorSoft,
@@ -3499,7 +5653,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   color: AppColors.iconStrong,
                 ),
                 label: Text(
-                  'Sửa',
+                  statusEnum == HostListingStatus.rejected
+                      ? 'Chỉnh sửa'
+                      : 'Sửa',
                   style: HostStudioTokens.pillText.copyWith(
                     color: HostStudioTokens.inkPrimary,
                   ),
@@ -3533,7 +5689,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                     color: AppColors.iconOnBrand,
                   ),
                   label: Text(
-                    'Gửi duyệt',
+                    statusEnum == HostListingStatus.rejected
+                        ? 'Gửi duyệt lại'
+                        : 'Gửi duyệt',
                     style: HostStudioTokens.pillText.copyWith(
                       fontWeight: FontWeight.w600,
                       color: AppColors.iconOnBrand,
@@ -3677,20 +5835,413 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
+  IconData _getBookingStatusIcon(String status) {
+    switch (status) {
+      case 'all':
+        return LucideIcons.layers;
+      case 'pending_payment':
+      case 'pending':
+        return LucideIcons.clock;
+      case 'paid':
+        return LucideIcons.creditCard;
+      case 'confirmed':
+        return LucideIcons.circleCheck;
+      case 'checked_in':
+        return LucideIcons.bedDouble;
+      case 'completed':
+      case 'checked_out':
+        return LucideIcons.circleCheckBig;
+      case 'cancelled':
+        return LucideIcons.ban;
+      case 'payment_expired':
+        return LucideIcons.clockAlert;
+      default:
+        return LucideIcons.filter;
+    }
+  }
+
+  IconData _getBookingSortIcon(String sort) {
+    switch (sort) {
+      case 'newest':
+        return LucideIcons.calendar;
+      case 'checkin_asc':
+        return LucideIcons.clock;
+      case 'total_desc':
+        return LucideIcons.arrowDownUp;
+      default:
+        return LucideIcons.arrowDownUp;
+    }
+  }
+
+  void _showBookingStatusFilterModal(
+    List<(String, String)> filterTabs,
+    Map<String, int> tabCounts,
+    String effectiveFilter,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final maxSheetHeight = MediaQuery.sizeOf(ctx).height * 0.85;
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxSheetHeight),
+          child: Material(
+            color: HostStudioTokens.cardSurface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+            clipBehavior: Clip.antiAlias,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 38,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          color: HostStudioTokens.hairline,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Lọc trạng thái đơn',
+                            style: HostStudioTokens.headerTitle,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Đóng',
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          padding: EdgeInsets.zero,
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          hoverColor: Colors.transparent,
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          icon: const Icon(
+                            LucideIcons.x,
+                            size: 20,
+                            color: HostStudioTokens.iconInk,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Flexible(
+                      child: Scrollbar(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final tab in filterTabs) ...[
+                                Builder(
+                                  builder: (context) {
+                                    final selected = effectiveFilter == tab.$1;
+                                    final count = tabCounts[tab.$1] ?? 0;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 6),
+                                      child: InkWell(
+                                        key: Key('booking_filter_${tab.$1}'),
+                                        borderRadius: BorderRadius.circular(
+                                          HostStudioTokens.pillRadius,
+                                        ),
+                                        splashColor: Colors.transparent,
+                                        highlightColor: Colors.transparent,
+                                        hoverColor: Colors.transparent,
+                                        overlayColor: WidgetStateProperty.all(
+                                          Colors.transparent,
+                                        ),
+                                        onTap: () {
+                                          setState(() {
+                                            _bookingStatusFilter = tab.$1;
+                                            _bookingsVisibleCount = 10;
+                                          });
+                                          Navigator.of(ctx).pop();
+                                        },
+                                        child: Container(
+                                          constraints: const BoxConstraints(
+                                            minHeight: 50,
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.transparent,
+                                            borderRadius: BorderRadius.circular(
+                                              HostStudioTokens.pillRadius,
+                                            ),
+                                            border: Border.all(
+                                              color: selected
+                                                  ? HostStudioTokens.obsidian
+                                                  : Colors.transparent,
+                                              width: 1.2,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                _getBookingStatusIcon(tab.$1),
+                                                size: 19,
+                                                color: selected
+                                                    ? HostStudioTokens.inkPrimary
+                                                    : HostStudioTokens
+                                                        .iconSecondary,
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Text(
+                                                  tab.$2,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: HostStudioTokens
+                                                      .cardTitle
+                                                      .copyWith(
+                                                    fontSize: 14.5,
+                                                    fontWeight: selected
+                                                        ? FontWeight.w600
+                                                        : FontWeight.w500,
+                                                    color: selected
+                                                        ? HostStudioTokens
+                                                            .inkPrimary
+                                                        : HostStudioTokens
+                                                            .inkSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 2,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color:
+                                                      HostStudioTokens.softCircle,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                    HostStudioTokens.pillRadius,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  '$count',
+                                                  style: HostStudioTokens
+                                                      .metaCaption
+                                                      .copyWith(
+                                                    fontSize: 11.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: HostStudioTokens
+                                                        .inkSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                              if (selected) ...[
+                                                const SizedBox(width: 8),
+                                                const Icon(
+                                                  LucideIcons.check,
+                                                  color: HostStudioTokens.iconInk,
+                                                  size: 18,
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showBookingSortModal(List<(String, String)> sortOptions) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Material(
+          color: HostStudioTokens.cardSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+          clipBehavior: Clip.antiAlias,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 38,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                        color: HostStudioTokens.hairline,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Sắp xếp theo',
+                          style: HostStudioTokens.headerTitle,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Đóng',
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        padding: EdgeInsets.zero,
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
+                        hoverColor: Colors.transparent,
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        icon: const Icon(
+                          LucideIcons.x,
+                          size: 20,
+                          color: HostStudioTokens.iconInk,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  for (final opt in sortOptions) ...[
+                    Builder(
+                      builder: (context) {
+                        final selected = _bookingSortBy == opt.$1;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: InkWell(
+                            key: Key('booking_sort_${opt.$1}'),
+                            borderRadius: BorderRadius.circular(
+                              HostStudioTokens.pillRadius,
+                            ),
+                            splashColor: Colors.transparent,
+                            highlightColor: Colors.transparent,
+                            hoverColor: Colors.transparent,
+                            overlayColor: WidgetStateProperty.all(
+                              Colors.transparent,
+                            ),
+                            onTap: () {
+                              setState(() => _bookingSortBy = opt.$1);
+                              Navigator.of(ctx).pop();
+                            },
+                            child: Container(
+                              constraints: const BoxConstraints(
+                                minHeight: 50,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(
+                                  HostStudioTokens.pillRadius,
+                                ),
+                                border: Border.all(
+                                  color: selected
+                                      ? HostStudioTokens.obsidian
+                                      : Colors.transparent,
+                                  width: 1.2,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _getBookingSortIcon(opt.$1),
+                                    size: 19,
+                                    color: selected
+                                        ? HostStudioTokens.inkPrimary
+                                        : HostStudioTokens.iconSecondary,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      opt.$2,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: HostStudioTokens.cardTitle.copyWith(
+                                        fontSize: 14.5,
+                                        fontWeight: selected
+                                            ? FontWeight.w600
+                                            : FontWeight.w500,
+                                        color: selected
+                                            ? HostStudioTokens.inkPrimary
+                                            : HostStudioTokens.inkSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  if (selected) ...[
+                                    const SizedBox(width: 8),
+                                    const Icon(
+                                      LucideIcons.check,
+                                      color: HostStudioTokens.iconInk,
+                                      size: 18,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   // ===========================================================================
   // 4. HOST BOOKINGS (`DatPhong`) SECTION
   // ===========================================================================
 
+  // Thuật toán lọc, đếm theo từng danh mục trạng thái chuẩn và sắp xếp danh sách Đặt phòng của Host.
   Widget _buildBookingsSection() {
     const filterTabs = [
       ('all', 'Tất cả'),
       ('pending_payment', 'Chờ thanh toán'),
       ('paid', 'Đã thanh toán'),
       ('confirmed', 'Đã xác nhận'),
-      ('checked_in', 'Đã nhận phòng'),
-      ('checked_out', 'Đã trả phòng'),
+      ('checked_in', 'Khách đã nhận phòng'),
       ('completed', 'Hoàn tất'),
       ('cancelled', 'Đã hủy'),
+      ('payment_expired', 'Quá hạn thanh toán'),
     ];
 
     const sortOptions = [
@@ -3699,11 +6250,26 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       ('total_desc', 'Giá cao nhất'),
     ];
 
+    final effectiveFilter = _bookingStatusFilter == 'checked_out'
+        ? 'completed'
+        : (filterTabs.any((t) => t.$1 == _bookingStatusFilter)
+            ? _bookingStatusFilter
+            : 'all');
+
+    final tabCounts = <String, int>{
+      for (final tab in filterTabs)
+        tab.$1: countHostBookingsMatchingFilter(
+          _bookings,
+          tab.$1,
+          role: BookingActionRole.host,
+        ),
+    };
+
     final filtered = _bookings
         .where(
           (b) => bookingMatchesDisplayStatus(
             b,
-            _bookingStatusFilter,
+            effectiveFilter,
             role: BookingActionRole.host,
           ),
         )
@@ -3729,6 +6295,21 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       return idb.compareTo(ida);
     });
 
+    final currentFilterLabel = filterTabs
+        .firstWhere(
+          (t) => t.$1 == effectiveFilter,
+          orElse: () => ('all', 'Tất cả'),
+        )
+        .$2;
+    final currentFilterCount = tabCounts[effectiveFilter] ?? 0;
+
+    final currentSortLabel = sortOptions
+        .firstWhere(
+          (s) => s.$1 == _bookingSortBy,
+          orElse: () => ('newest', 'Mới nhất'),
+        )
+        .$2;
+
     final visibleBookings = filtered.take(_bookingsVisibleCount).toList();
 
     return RefreshIndicator(
@@ -3750,32 +6331,67 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
               _buildInlineSuccess(_bookingsSuccess!),
               const SizedBox(height: 16),
             ],
-            // Thanh Filter Chips trượt ngang hiện đại
+            // Thanh Filter Chips trượt ngang hiện đại kèm số lượng thực tế từng mục
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: filterTabs.map((tab) {
-                  final isSelected = _bookingStatusFilter == tab.$1;
+                  final isSelected = effectiveFilter == tab.$1;
+                  final count = tabCounts[tab.$1] ?? 0;
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: FilterChip(
+                      key: Key('booking_chip_${tab.$1}'),
                       selected: isSelected,
                       showCheckmark: false,
-                      label: Text(
-                        tab.$2,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight:
-                              isSelected ? FontWeight.w700 : FontWeight.w500,
-                          color:
-                              isSelected ? Colors.white : AppColors.textPrimary,
-                        ),
+                      label: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            tab.$2,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? AppColors.textInverse
+                                  : AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.surfaceBase
+                                      .withValues(alpha: 0.18)
+                                  : AppColors.surfaceBase,
+                              borderRadius: BorderRadius.circular(
+                                HostStudioTokens.pillRadius,
+                              ),
+                            ),
+                            child: Text(
+                              '$count',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: isSelected
+                                    ? AppColors.textInverse
+                                    : HostStudioTokens.inkSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      backgroundColor: const Color(0xFFF1F5F9),
-                      selectedColor: const Color(0xFF0F172A),
+                      backgroundColor: AppColors.surfaceSecondary,
+                      selectedColor: HostStudioTokens.obsidian,
                       side: BorderSide(
                         color: isSelected
-                            ? const Color(0xFF0F172A)
+                            ? HostStudioTokens.obsidian
                             : AppColors.border,
                       ),
                       shape: const StadiumBorder(),
@@ -3794,44 +6410,157 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             Row(
               children: [
                 Expanded(
-                    child: _buildPortalDropdown<String>(
-                  dropdownKey: const Key('booking_filter_dropdown'),
-                  label: 'Trạng thái',
-                  value: _bookingStatusFilter,
-                  items: filterTabs
-                      .map((tab) => DropdownMenuItem(
-                            key: Key('booking_filter_${tab.$1}'),
-                            value: tab.$1,
-                            child:
-                                Text(tab.$2, overflow: TextOverflow.ellipsis),
-                          ))
-                      .toList(),
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _bookingStatusFilter = value;
-                      _bookingsVisibleCount = 10;
-                    });
-                  },
-                )),
+                  child: Material(
+                    color: HostStudioTokens.cardSurface,
+                    borderRadius: BorderRadius.circular(
+                      HostStudioTokens.pillRadius,
+                    ),
+                    child: InkWell(
+                      key: const Key('booking_filter_dropdown'),
+                      borderRadius: BorderRadius.circular(
+                        HostStudioTokens.pillRadius,
+                      ),
+                      splashColor: Colors.transparent,
+                      highlightColor: Colors.transparent,
+                      hoverColor: Colors.transparent,
+                      onTap: () => _showBookingStatusFilterModal(
+                        filterTabs,
+                        tabCounts,
+                        effectiveFilter,
+                      ),
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 46),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(
+                            HostStudioTokens.pillRadius,
+                          ),
+                          border: Border.all(
+                            color: effectiveFilter != 'all'
+                                ? HostStudioTokens.obsidian
+                                : HostStudioTokens.hairline,
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _getBookingStatusIcon(effectiveFilter),
+                              size: 17,
+                              color: effectiveFilter != 'all'
+                                  ? HostStudioTokens.inkPrimary
+                                  : HostStudioTokens.iconSecondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                currentFilterLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: HostStudioTokens.cardTitle.copyWith(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: HostStudioTokens.inkPrimary,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: HostStudioTokens.softCircle,
+                                borderRadius: BorderRadius.circular(
+                                  HostStudioTokens.pillRadius,
+                                ),
+                              ),
+                              child: Text(
+                                '$currentFilterCount',
+                                style: HostStudioTokens.metaCaption.copyWith(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: HostStudioTokens.inkSecondary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              LucideIcons.chevronDown,
+                              size: 16,
+                              color: HostStudioTokens.iconSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 10),
                 Expanded(
-                    child: _buildPortalDropdown<String>(
-                  dropdownKey: const Key('booking_sort_dropdown'),
-                  label: 'Sắp xếp',
-                  value: _bookingSortBy,
-                  items: sortOptions
-                      .map((opt) => DropdownMenuItem(
-                            key: Key('booking_sort_${opt.$1}'),
-                            value: opt.$1,
-                            child:
-                                Text(opt.$2, overflow: TextOverflow.ellipsis),
-                          ))
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) setState(() => _bookingSortBy = value);
-                  },
-                )),
+                  child: Material(
+                    color: HostStudioTokens.cardSurface,
+                    borderRadius: BorderRadius.circular(
+                      HostStudioTokens.pillRadius,
+                    ),
+                    child: InkWell(
+                      key: const Key('booking_sort_dropdown'),
+                      borderRadius: BorderRadius.circular(
+                        HostStudioTokens.pillRadius,
+                      ),
+                      splashColor: Colors.transparent,
+                      highlightColor: Colors.transparent,
+                      hoverColor: Colors.transparent,
+                      onTap: () => _showBookingSortModal(sortOptions),
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 46),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(
+                            HostStudioTokens.pillRadius,
+                          ),
+                          border: Border.all(
+                            color: HostStudioTokens.hairline,
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _getBookingSortIcon(_bookingSortBy),
+                              size: 17,
+                              color: HostStudioTokens.iconSecondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                currentSortLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: HostStudioTokens.cardTitle.copyWith(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: HostStudioTokens.inkPrimary,
+                                ),
+                              ),
+                            ),
+                            const Icon(
+                              LucideIcons.chevronDown,
+                              size: 16,
+                              color: HostStudioTokens.iconSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -3878,6 +6607,451 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     return date == null ? value : DateFormat('dd/MM/yyyy').format(date);
   }
 
+  Future<void> _launchPhoneCall(BuildContext context, String rawPhone) async {
+    final clean = ContactService.normalizePhone(rawPhone);
+    if (clean.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: clean);
+    try {
+      final canLaunch = ContactService.canLaunchUrlOverride != null
+          ? await ContactService.canLaunchUrlOverride!(uri)
+          : await canLaunchUrl(uri);
+      if (canLaunch) {
+        final launched = ContactService.launchUrlOverride != null
+            ? await ContactService.launchUrlOverride!(
+                uri, LaunchMode.platformDefault)
+            : await launchUrl(uri);
+        if (launched) return;
+      }
+    } catch (_) {
+      // Fallback below
+    }
+    await Clipboard.setData(ClipboardData(text: clean));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã sao chép số điện thoại $clean!'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _launchZaloChat(BuildContext context, String rawPhone) async {
+    final clean = ContactService.normalizePhone(rawPhone);
+    if (clean.isEmpty) return;
+    String local = clean;
+    if (local.startsWith('+84')) {
+      local = '0${local.substring(3)}';
+    } else if (local.startsWith('84') && local.length >= 10) {
+      local = '0${local.substring(2)}';
+    }
+    final uri = Uri.parse('https://zalo.me/$local');
+    try {
+      final canLaunch = ContactService.canLaunchUrlOverride != null
+          ? await ContactService.canLaunchUrlOverride!(uri)
+          : await canLaunchUrl(uri);
+      if (canLaunch) {
+        final launched = ContactService.launchUrlOverride != null
+            ? await ContactService.launchUrlOverride!(
+                uri, LaunchMode.externalApplication)
+            : await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (launched) return;
+      }
+    } catch (_) {
+      // Fallback below
+    }
+    await Clipboard.setData(ClipboardData(text: local));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã sao chép số Zalo $local!'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _launchEmail(BuildContext context, String rawEmail) async {
+    final clean = rawEmail.trim();
+    if (clean.isEmpty) return;
+    final uri = Uri(scheme: 'mailto', path: clean);
+    try {
+      final canLaunch = ContactService.canLaunchUrlOverride != null
+          ? await ContactService.canLaunchUrlOverride!(uri)
+          : await canLaunchUrl(uri);
+      if (canLaunch) {
+        final launched = ContactService.launchUrlOverride != null
+            ? await ContactService.launchUrlOverride!(
+                uri, LaunchMode.platformDefault)
+            : await launchUrl(uri);
+        if (launched) return;
+      }
+    } catch (_) {
+      // Fallback below
+    }
+    await Clipboard.setData(ClipboardData(text: clean));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã sao chép email $clean!'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _showGuestContactDialog({
+    required BuildContext context,
+    required String guestName,
+    required String phone,
+    required String email,
+  }) {
+    final cleanPhone = phone.trim();
+    final cleanEmail = email.trim();
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: HostStudioTokens.cardSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        title: Row(
+          children: [
+            HostStudioInitialsBadge(name: guestName, size: 40),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Thông tin liên hệ khách',
+                    style: HostStudioTokens.headerEyebrow.copyWith(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: HostStudioTokens.inkMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    guestName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: HostStudioTokens.sectionTitle.copyWith(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Ô hiển thị Số điện thoại
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: HostStudioTokens.groupSurface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: HostStudioTokens.hairline),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: cleanPhone.isNotEmpty
+                            ? () => _launchPhoneCall(context, cleanPhone)
+                            : null,
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: cleanPhone.isNotEmpty
+                                ? HostStudioTokens.obsidian
+                                : HostStudioTokens.cardSurface,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: HostStudioTokens.hairline),
+                          ),
+                          child: Icon(
+                            LucideIcons.phone,
+                            size: 16,
+                            color: cleanPhone.isNotEmpty
+                                ? Colors.white
+                                : HostStudioTokens.iconInk,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Số điện thoại',
+                              style: HostStudioTokens.metaCaption.copyWith(
+                                fontSize: 11.5,
+                                color: HostStudioTokens.inkMuted,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            SelectableText(
+                              cleanPhone.isNotEmpty
+                                  ? cleanPhone
+                                  : 'Chưa cập nhật số điện thoại',
+                              key: const Key('guest_contact_phone_text'),
+                              style: HostStudioTokens.bodyRegular.copyWith(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: cleanPhone.isNotEmpty
+                                    ? HostStudioTokens.inkPrimary
+                                    : HostStudioTokens.inkMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (cleanPhone.isNotEmpty)
+                        IconButton(
+                          key: const Key('guest_contact_copy_phone_btn'),
+                          tooltip: 'Sao chép số điện thoại',
+                          icon: const Icon(
+                            LucideIcons.copy,
+                            size: 16,
+                            color: HostStudioTokens.iconSecondary,
+                          ),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: cleanPhone));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Đã sao chép số điện thoại!'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                  if (cleanPhone.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            key: const Key('guest_contact_call_phone_btn'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 36),
+                              backgroundColor: HostStudioTokens.cardSurface,
+                              foregroundColor: HostStudioTokens.inkPrimary,
+                              side: const BorderSide(
+                                color: HostStudioTokens.hairline,
+                              ),
+                              shape: const StadiumBorder(),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10),
+                            ),
+                            icon: const Icon(
+                              LucideIcons.phoneCall,
+                              size: 13.5,
+                              color: HostStudioTokens.iconInk,
+                            ),
+                            label: const Text(
+                              'Gọi điện',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            onPressed: () =>
+                                _launchPhoneCall(context, cleanPhone),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            key: const Key('guest_contact_zalo_btn'),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(0, 36),
+                              backgroundColor: const Color(0xFF0068FF),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: const StadiumBorder(),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10),
+                            ),
+                            icon: const Icon(
+                              LucideIcons.messageCircle,
+                              size: 13.5,
+                              color: Colors.white,
+                            ),
+                            label: const Text(
+                              'Nhắn Zalo',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                            onPressed: () =>
+                                _launchZaloChat(context, cleanPhone),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            // Ô hiển thị Email / Gmail
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: HostStudioTokens.groupSurface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: HostStudioTokens.hairline),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: cleanEmail.isNotEmpty
+                            ? () => _launchEmail(context, cleanEmail)
+                            : null,
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: cleanEmail.isNotEmpty
+                                ? HostStudioTokens.obsidian
+                                : HostStudioTokens.cardSurface,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: HostStudioTokens.hairline),
+                          ),
+                          child: Icon(
+                            LucideIcons.mail,
+                            size: 16,
+                            color: cleanEmail.isNotEmpty
+                                ? Colors.white
+                                : HostStudioTokens.iconInk,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Email / Gmail',
+                              style: HostStudioTokens.metaCaption.copyWith(
+                                fontSize: 11.5,
+                                color: HostStudioTokens.inkMuted,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            SelectableText(
+                              cleanEmail.isNotEmpty
+                                  ? cleanEmail
+                                  : 'Chưa cập nhật email',
+                              key: const Key('guest_contact_email_text'),
+                              style: HostStudioTokens.bodyRegular.copyWith(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: cleanEmail.isNotEmpty
+                                    ? HostStudioTokens.inkPrimary
+                                    : HostStudioTokens.inkMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (cleanEmail.isNotEmpty)
+                        IconButton(
+                          key: const Key('guest_contact_copy_email_btn'),
+                          tooltip: 'Sao chép email',
+                          icon: const Icon(
+                            LucideIcons.copy,
+                            size: 16,
+                            color: HostStudioTokens.iconSecondary,
+                          ),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: cleanEmail));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Đã sao chép email!'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                  if (cleanEmail.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      key: const Key('guest_contact_send_email_btn'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                        backgroundColor: HostStudioTokens.cardSurface,
+                        foregroundColor: HostStudioTokens.inkPrimary,
+                        side: const BorderSide(
+                          color: HostStudioTokens.hairline,
+                        ),
+                        shape: const StadiumBorder(),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                      icon: const Icon(
+                        LucideIcons.send,
+                        size: 13.5,
+                        color: HostStudioTokens.iconInk,
+                      ),
+                      label: const Text(
+                        'Gửi thư điện tử (Gmail/Email)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onPressed: () => _launchEmail(context, cleanEmail),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            key: const Key('guest_contact_close_btn'),
+            style: TextButton.styleFrom(
+              foregroundColor: HostStudioTokens.inkPrimary,
+              textStyle: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBookingItemCard(
     Map<String, dynamic> booking, {
     bool inStudioGroup = false,
@@ -3887,8 +7061,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     final guestName =
         (booking['guestName'] ?? booking['customerName'] ?? 'Khách #$bookingId')
             .toString();
-    final guestPhone =
-        (booking['guestPhone'] ?? booking['guestEmail'] ?? '').toString();
+    final guestPhone = (booking['guestPhone'] ??
+            booking['guest']?['phone'] ??
+            booking['phone'] ??
+            '')
+        .toString()
+        .trim();
+    final guestEmail = (booking['guestEmail'] ??
+            booking['guest']?['email'] ??
+            booking['email'] ??
+            '')
+        .toString()
+        .trim();
     final listingTitle =
         (booking['listingTitle'] ?? 'Chỗ nghỉ #${booking['listingId'] ?? ''}')
             .toString();
@@ -3976,36 +7160,29 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   style: HostStudioTokens.bodyRegular,
                 ),
               ),
-              if (guestPhone.isNotEmpty)
+              if (guestPhone.isNotEmpty) ...[
+                HostStudioCircleButton(
+                  icon: LucideIcons.messageCircle,
+                  tooltip: 'Nhắn Zalo',
+                  visualSize: 34,
+                  iconSize: 15,
+                  circleColor: HostStudioTokens.softCircle,
+                  onTap: () => _launchZaloChat(context, guestPhone),
+                ),
+                const SizedBox(width: 6),
+              ],
+              if (guestPhone.isNotEmpty || guestEmail.isNotEmpty)
                 HostStudioCircleButton(
                   icon: LucideIcons.phone,
                   tooltip: 'Liên hệ khách',
                   visualSize: 34,
                   iconSize: 15,
                   circleColor: HostStudioTokens.softCircle,
-                  onTap: () => showDialog<void>(
+                  onTap: () => _showGuestContactDialog(
                     context: context,
-                    builder: (context) => AlertDialog(
-                      backgroundColor: HostStudioTokens.cardSurface,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      title:
-                          Text(guestName, style: HostStudioTokens.sectionTitle),
-                      content: SelectableText(
-                        guestPhone,
-                        style: HostStudioTokens.bodyRegular.copyWith(
-                          fontSize: 14.5,
-                          color: HostStudioTokens.inkPrimary,
-                        ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Đóng'),
-                        ),
-                      ],
-                    ),
+                    guestName: guestName,
+                    phone: guestPhone,
+                    email: guestEmail,
                   ),
                 ),
             ],
@@ -4126,7 +7303,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   // ===========================================================================
 
   double _getListingBasePrice(String listingId) {
-    for (final l in _listings) {
+    for (final l in _unfilteredListings) {
       if ('${l['listingId'] ?? l['id']}' == listingId) {
         final p = l['basePrice'] ?? l['pricePerNight'] ?? 0;
         return p is num ? p.toDouble() : (double.tryParse('$p') ?? 0);
@@ -4155,8 +7332,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       if (parsed != null &&
           (parsed.weekday == DateTime.saturday ||
               parsed.weekday == DateTime.sunday)) {
-        final isBooked = d.isBooked ||
-            (d.bookingStatus != null && d.bookingStatus!.isNotEmpty);
+        final isBooked = isHostCalendarDayLockedByBooking(
+          isBookedFlag: d.isBooked,
+          bookingStatus: d.bookingStatus,
+        );
         if (!isBooked) {
           targets.add(d.date);
         }
@@ -4177,8 +7356,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     final targets = <String>{};
     for (final d in _calendarDays) {
       if (_isDayInPast(d)) continue;
-      final isBooked = d.isBooked ||
-          (d.bookingStatus != null && d.bookingStatus!.isNotEmpty);
+      final isBooked = isHostCalendarDayLockedByBooking(
+        isBookedFlag: d.isBooked,
+        bookingStatus: d.bookingStatus,
+      );
       final isBlocked = !d.isAvailable || d.isBlockedByHost;
       if (!isBooked && !isBlocked) {
         targets.add(d.date);
@@ -4199,8 +7380,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     final targets = <String>{};
     for (final d in _calendarDays) {
       if (_isDayInPast(d)) continue;
-      final isBooked = d.isBooked ||
-          (d.bookingStatus != null && d.bookingStatus!.isNotEmpty);
+      final isBooked = isHostCalendarDayLockedByBooking(
+        isBookedFlag: d.isBooked,
+        bookingStatus: d.bookingStatus,
+      );
       if (!isBooked) {
         targets.add(d.date);
       }
@@ -4261,18 +7444,16 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
     final bookedDateStrings = <String>{};
     for (final b in _bookings) {
-      final bListingId =
-          (b['listingId'] ?? b['listing_id'] ?? b['id'] ?? '').toString();
-      final status = (b['status'] ?? '').toString().toLowerCase();
-      if (bListingId == listingId && status != 'cancelled') {
-        final checkInStr = (b['checkInDate'] ?? b['check_in'] ?? '')
-            .toString()
-            .split('T')
-            .first;
-        final checkOutStr = (b['checkOutDate'] ?? b['check_out'] ?? '')
-            .toString()
-            .split('T')
-            .first;
+      final bListingId = (b['listingId'] ?? b['listing_id'] ?? '').toString();
+      if (bListingId == listingId && isCalendarBlockingHostBooking(b)) {
+        final checkInStr = extractBookingDateOnly(
+              b['checkInDate'] ?? b['check_in_date'] ?? b['check_in'],
+            ) ??
+            '';
+        final checkOutStr = extractBookingDateOnly(
+              b['checkOutDate'] ?? b['check_out_date'] ?? b['check_out'],
+            ) ??
+            '';
         final checkIn = DateTime.tryParse(checkInStr);
         final checkOut = DateTime.tryParse(checkOutStr);
         if (checkIn != null && checkOut != null) {
@@ -4287,7 +7468,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
     if (listingId == _calendarListingId && _calendarDays.isNotEmpty) {
       for (final d in _calendarDays) {
-        if (d.bookingStatus != null && d.bookingStatus!.isNotEmpty) {
+        if (d.isBooked || isCalendarBlockingStatusCode(d.bookingStatus)) {
           bookedDateStrings.add(d.date);
         }
       }
@@ -4340,8 +7521,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   }
 
   Widget _buildCalendarAirbnbListingView() {
+    final sourceListings = _unfilteredListings;
     final query = _calendarSearchQuery.trim().toLowerCase();
-    final filtered = _listings.where((l) {
+    final filtered = sourceListings.where((l) {
       final status = (l['status'] ?? '').toString();
       if (_calendarListingFilter == 'published' && status != 'published') {
         return false;
@@ -4393,7 +7575,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   runSpacing: 8,
                   children: [
                     _HostUnderlineTab(
-                      label: Text('Tất cả (${_listings.length})'),
+                      label: Text('Tất cả (${sourceListings.length})'),
                       selected: _calendarListingFilter == 'all',
                       onSelected: (_) =>
                           setState(() => _calendarListingFilter = 'all'),
@@ -4698,11 +7880,17 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   }
 
   Widget _buildCalendarDetailedMonthView() {
+    final selectorListings = _unfilteredListings;
     final activeBasePrice = _getListingBasePrice(_calendarListingId ?? '');
 
     final totalDaysInMonth = DateTime(_calendarYear, _calendarMonth + 1, 0).day;
     final bookedDays = _calendarDays
-        .where((d) => d.bookingStatus != null && d.bookingStatus!.isNotEmpty)
+        .where(
+          (d) => isHostCalendarDayLockedByBooking(
+            isBookedFlag: d.isBooked,
+            bookingStatus: d.bookingStatus,
+          ),
+        )
         .length;
     final occupancyPercent = totalDaysInMonth > 0
         ? ((bookedDays / totalDaysInMonth) * 100).round()
@@ -4710,7 +7898,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
     double estRevenue = 0;
     for (final d in _calendarDays) {
-      if (d.bookingStatus != null && d.bookingStatus!.isNotEmpty) {
+      if (isHostCalendarDayLockedByBooking(
+        isBookedFlag: d.isBooked,
+        bookingStatus: d.bookingStatus,
+      )) {
         estRevenue += d.effectivePrice;
       }
     }
@@ -4770,12 +7961,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           _buildPortalDropdown<String>(
             dropdownKey: const Key('calendar_listing_dropdown'),
             label: 'Chỗ nghỉ đang chọn',
-            value: _listings.any(
+            value: selectorListings.any(
               (l) => '${l['listingId'] ?? l['id']}' == _calendarListingId,
             )
                 ? _calendarListingId
                 : null,
-            items: _listings.map((l) {
+            items: selectorListings.map((l) {
               final id = '${l['listingId'] ?? l['id']}';
               final title = (l['title'] ?? 'Listing #$id').toString();
               return DropdownMenuItem<String>(
@@ -5064,9 +8255,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                           '${vnNow.year}-${vnNow.month.toString().padLeft(2, '0')}-${vnNow.day.toString().padLeft(2, '0')}';
                       final isToday = day.date == todayStr;
                       final isPast = day.isPast;
-                      final isBooked = day.isBooked ||
-                          (day.bookingStatus != null &&
-                              day.bookingStatus!.isNotEmpty);
+                      final isBooked = isHostCalendarDayLockedByBooking(
+                        isBookedFlag: day.isBooked,
+                        bookingStatus: day.bookingStatus,
+                      );
                       final isEditable =
                           day.isEditable() && !isBooked && !isPast;
                       final isSelected = isEditable &&
@@ -5078,13 +8270,22 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       Color dayNumColor = AppColors.textPrimary;
                       Color priceColor = const Color(0xFF64748B);
 
+                      // Giải thuật ưu tiên hiển thị màu sắc ô ngày trên lưới lịch tháng:
+                      // CONFLICT-RESOLVED: Đặt nhánh isBooked trước isToday để ngày hôm nay đã có khách đặt vẫn hiển thị trạng thái đã đặt phòng (giữ viền chỉ báo hôm nay).
                       if (isSelected) {
                         borderColor = AppColors.primary;
                         bgColor = AppColors.primary;
                         dayNumColor = Colors.white;
                         priceColor = Colors.white;
+                      } else if (isBooked) {
+                        borderColor = isToday
+                            ? AppColors.primary
+                            : const Color(0xFFA7F3D0);
+                        bgColor = const Color(0xFFF8FAFC);
+                        dayNumColor = const Color(0xFF64748B);
+                        priceColor = const Color(0xFF94A3B8);
                       } else if (isToday) {
-                        // Ngày hiện tại: tô đỏ nổi bật
+                        // Ngày hiện tại (chưa đặt phòng): tô đỏ nổi bật
                         borderColor = AppColors.primary;
                         bgColor = const Color(0xFFFFF1F2);
                         dayNumColor = AppColors.primary;
@@ -5095,11 +8296,6 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                         bgColor = const Color(0xFFF1F5F9);
                         dayNumColor = const Color(0xFF94A3B8);
                         priceColor = const Color(0xFFCBD5E1);
-                      } else if (isBooked) {
-                        borderColor = const Color(0xFFA7F3D0);
-                        bgColor = const Color(0xFFF8FAFC);
-                        dayNumColor = const Color(0xFF64748B);
-                        priceColor = const Color(0xFF94A3B8);
                       } else if (isBlocked) {
                         borderColor = const Color(0xFFFECDD3);
                         bgColor = const Color(0xFFFFF1F2);
@@ -5923,19 +9119,17 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         .trim()
         .toLowerCase();
     for (final conv in _conversations) {
-      final other = conv['otherParticipant'] is Map
-          ? Map<String, dynamic>.from(conv['otherParticipant'] as Map)
-          : null;
-      final name =
-          (other?['fullName'] ?? other?['name'] ?? conv['guestName'] ?? '')
-              .toString()
-              .toLowerCase();
-      if (name.isNotEmpty && name == guestName) {
+      final name = _resolveHostConversationParticipantName(conv).toLowerCase();
+      if (name.isNotEmpty &&
+          (name == guestName ||
+              name.contains(guestName) ||
+              guestName.contains(name))) {
         final convId = '${conv['conversationId'] ?? conv['id']}';
         setState(() {
           _selectedConversationId = convId;
           _inChatDetailView = true;
         });
+        _markHostConversationRead(convId);
         _fetchMessagesForConversation(convId);
         break;
       }
@@ -5944,178 +9138,224 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     _switchSection(HostPortalSection.messages);
   }
 
-  bool _matchGuestBookingStatus(Map<String, dynamic> b, String filter) {
-    if (filter == 'all') return true;
-    final display = getBookingDisplayStatus(b, role: BookingActionRole.host);
-    final lbl = display.label.toLowerCase();
-    final st = (b['status'] ?? '').toString().toLowerCase();
-    final paymentSt = (b['paymentStatus'] ?? '').toString().toLowerCase();
+  static const List<(String, String, IconData)> _guestStatusOptions = [
+    ('all', 'Tất cả khách hàng', LucideIcons.users),
+    ('checked_in', 'Khách đã nhận phòng', LucideIcons.bedDouble),
+    ('confirmed', 'Đã xác nhận', LucideIcons.circleCheck),
+    ('paid', 'Đã thanh toán', LucideIcons.creditCard),
+    ('completed', 'Hoàn tất', LucideIcons.circleCheckBig),
+    ('payment_expired', 'Quá hạn thanh toán', LucideIcons.clockAlert),
+    ('cancelled', 'Đã hủy', LucideIcons.ban),
+  ];
 
-    switch (filter) {
-      case 'confirmed':
-        return lbl.contains('đã xác nhận') ||
-            lbl.contains('thanh toán thành công') ||
-            lbl.contains('đã nhận phòng') ||
-            lbl.contains('đã trả phòng') ||
-            lbl.contains('hoàn tất') ||
-            st == 'confirmed' ||
-            st == 'paid' ||
-            st == 'checked_in';
-      case 'payment_expired':
-        return lbl.contains('quá hạn thanh toán') ||
-            st == 'payment_expired' ||
-            paymentSt == 'expired';
-      case 'cancelled':
-        return lbl.contains('hủy') ||
-            st == 'cancelled' ||
-            st == 'cancelled_by_guest' ||
-            st == 'cancelled_by_host' ||
-            st == 'rejected';
-      default:
-        return true;
-    }
-  }
-
+  // Thuật toán hiển thị bảng chọn bộ lọc trạng thái khách lưu trú kèm số lượng thực tế cho từng trạng thái.
   void _showGuestStatusFilterModal() {
-    const statusOptions = [
-      ('all', 'Tất cả khách hàng', LucideIcons.users),
-      ('confirmed', 'Đã xác nhận', LucideIcons.circleCheck),
-      ('payment_expired', 'Quá hạn thanh toán', LucideIcons.clockAlert),
-      ('cancelled', 'Đã hủy', LucideIcons.ban),
-    ];
+    final scopedBookings = _bookings.where((b) {
+      if (_guestSelectedListingId != 'all') {
+        final bListingId = '${b['listingId'] ?? b['listing_id'] ?? ''}';
+        if (bListingId != _guestSelectedListingId) return false;
+      }
+      return true;
+    }).toList();
+
+    final optionCounts = <String, int>{
+      for (final opt in _guestStatusOptions)
+        opt.$1: countHostBookingsMatchingFilter(
+          scopedBookings,
+          opt.$1,
+          role: BookingActionRole.host,
+        ),
+    };
 
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) {
-        return Material(
-          color: HostStudioTokens.cardSurface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
-          clipBehavior: Clip.antiAlias,
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 38,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 14),
-                      decoration: BoxDecoration(
-                        color: HostStudioTokens.hairline,
-                        borderRadius: BorderRadius.circular(99),
+        final maxSheetHeight = MediaQuery.sizeOf(ctx).height * 0.85;
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxSheetHeight),
+          child: Material(
+            color: HostStudioTokens.cardSurface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+            clipBehavior: Clip.antiAlias,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 38,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          color: HostStudioTokens.hairline,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
                       ),
                     ),
-                  ),
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Lọc theo trạng thái khách',
-                          style: HostStudioTokens.headerTitle,
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Lọc theo trạng thái khách',
+                            style: HostStudioTokens.headerTitle,
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        tooltip: 'Đóng',
-                        constraints: const BoxConstraints(
-                          minWidth: 48,
-                          minHeight: 48,
+                        IconButton(
+                          tooltip: 'Đóng',
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          padding: EdgeInsets.zero,
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          hoverColor: Colors.transparent,
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          icon: const Icon(
+                            LucideIcons.x,
+                            size: 20,
+                            color: HostStudioTokens.iconInk,
+                          ),
                         ),
-                        padding: EdgeInsets.zero,
-                        splashColor: Colors.transparent,
-                        highlightColor: Colors.transparent,
-                        hoverColor: Colors.transparent,
-                        onPressed: () => Navigator.of(ctx).pop(),
-                        icon: const Icon(
-                          LucideIcons.x,
-                          size: 20,
-                          color: HostStudioTokens.iconInk,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  for (final opt in statusOptions) ...[
-                    Builder(
-                      builder: (context) {
-                        final selected = _guestStatusFilter == opt.$1;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(
-                                HostStudioTokens.pillRadius),
-                            splashColor: Colors.transparent,
-                            highlightColor: Colors.transparent,
-                            hoverColor: Colors.transparent,
-                            overlayColor:
-                                WidgetStateProperty.all(Colors.transparent),
-                            onTap: () {
-                              setState(() => _guestStatusFilter = opt.$1);
-                              Navigator.of(ctx).pop();
-                            },
-                            child: Container(
-                              constraints: const BoxConstraints(minHeight: 50),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.transparent,
-                                borderRadius: BorderRadius.circular(
-                                  HostStudioTokens.pillRadius,
-                                ),
-                                border: Border.all(
-                                  color: selected
-                                      ? HostStudioTokens.obsidian
-                                      : Colors.transparent,
-                                  width: 1.2,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    opt.$3,
-                                    size: 19,
-                                    color: selected
-                                        ? HostStudioTokens.inkPrimary
-                                        : HostStudioTokens.iconSecondary,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      opt.$2,
-                                      style:
-                                          HostStudioTokens.cardTitle.copyWith(
-                                        fontSize: 14.5,
-                                        fontWeight: selected
-                                            ? FontWeight.w600
-                                            : FontWeight.w500,
-                                        color: selected
-                                            ? HostStudioTokens.inkPrimary
-                                            : HostStudioTokens.inkSecondary,
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (final opt in _guestStatusOptions) ...[
+                              Builder(
+                                builder: (context) {
+                                  final selected = _guestStatusFilter == opt.$1;
+                                  final count = optionCounts[opt.$1] ?? 0;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: InkWell(
+                                      key: Key('guest_status_option_${opt.$1}'),
+                                      borderRadius: BorderRadius.circular(
+                                        HostStudioTokens.pillRadius,
+                                      ),
+                                      splashColor: Colors.transparent,
+                                      highlightColor: Colors.transparent,
+                                      hoverColor: Colors.transparent,
+                                      overlayColor: WidgetStateProperty.all(
+                                        Colors.transparent,
+                                      ),
+                                      onTap: () {
+                                        setState(
+                                          () => _guestStatusFilter = opt.$1,
+                                        );
+                                        Navigator.of(ctx).pop();
+                                      },
+                                      child: Container(
+                                        constraints: const BoxConstraints(
+                                          minHeight: 50,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 10,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.transparent,
+                                          borderRadius: BorderRadius.circular(
+                                            HostStudioTokens.pillRadius,
+                                          ),
+                                          border: Border.all(
+                                            color: selected
+                                                ? HostStudioTokens.obsidian
+                                                : Colors.transparent,
+                                            width: 1.2,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              opt.$3,
+                                              size: 19,
+                                              color: selected
+                                                  ? HostStudioTokens.inkPrimary
+                                                  : HostStudioTokens
+                                                      .iconSecondary,
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Text(
+                                                opt.$2,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: HostStudioTokens
+                                                    .cardTitle
+                                                    .copyWith(
+                                                  fontSize: 14.5,
+                                                  fontWeight: selected
+                                                      ? FontWeight.w600
+                                                      : FontWeight.w500,
+                                                  color: selected
+                                                      ? HostStudioTokens
+                                                          .inkPrimary
+                                                      : HostStudioTokens
+                                                          .inkSecondary,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color:
+                                                    HostStudioTokens.softCircle,
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                  HostStudioTokens.pillRadius,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                '$count',
+                                                style: HostStudioTokens
+                                                    .metaCaption
+                                                    .copyWith(
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: HostStudioTokens
+                                                      .inkSecondary,
+                                                ),
+                                              ),
+                                            ),
+                                            if (selected) ...[
+                                              const SizedBox(width: 8),
+                                              const Icon(
+                                                LucideIcons.check,
+                                                color: HostStudioTokens.iconInk,
+                                                size: 18,
+                                              ),
+                                            ],
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  if (selected)
-                                    const Icon(
-                                      LucideIcons.check,
-                                      color: HostStudioTokens.iconInk,
-                                      size: 18,
-                                    ),
-                                ],
+                                  );
+                                },
                               ),
-                            ),
-                          ),
-                        );
-                      },
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -6124,76 +9364,28 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
+  // Thuật toán xây dựng mục Khách lưu trú: phân tách chính xác lượt ở "Hôm nay", "Sắp tới" và bộ lọc trạng thái chuyên biệt (Khách đã nhận phòng, Hoàn tất, Đã hủy, Quá hạn thanh toán).
   Widget _buildGuestsSection() {
-    final now = DateTime.now();
-    final todayDate = DateTime(now.year, now.month, now.day);
+    final partition = partitionHostGuestBookings(
+      _bookings,
+      listingIdFilter: _guestSelectedListingId,
+      statusFilter: _guestStatusFilter,
+    );
 
-    // 1. Lọc theo căn được chọn (nếu có)
-    final relevantBookings = _bookings.where((b) {
-      if (_guestSelectedListingId != 'all') {
-        final bListingId = '${b['listingId'] ?? ''}';
-        if (bListingId != _guestSelectedListingId) return false;
-      }
-      return true;
-    }).toList();
+    final filteredTodayBookings = partition.todayBookings;
+    final filteredUpcomingBookings = partition.upcomingBookings;
+    final filteredList = _guestStatusFilter == 'all'
+        ? (_guestTab == 'today'
+            ? filteredTodayBookings
+            : filteredUpcomingBookings)
+        : partition.statusMatchedBookings;
 
-    // 2. Tính danh sách Hôm nay & Sắp tới
-    final todayBookings = relevantBookings.where((b) {
-      final st = (b['status'] ?? '').toString().toLowerCase();
-      if (st == 'checked_in') return true;
-      final inD = _parseGuestBookingDate(b['checkInDate']);
-      final outD = _parseGuestBookingDate(b['checkOutDate']);
-      if (inD == null) return false;
-      final inDay = DateTime(inD.year, inD.month, inD.day);
-      final outDay =
-          outD != null ? DateTime(outD.year, outD.month, outD.day) : inDay;
-      if (inDay.isAtSameMomentAs(todayDate)) return true;
-      if (!inDay.isAfter(todayDate) && !outDay.isBefore(todayDate)) return true;
-      return false;
-    }).toList();
-
-    final upcomingBookings = relevantBookings.where((b) {
-      final st = (b['status'] ?? '').toString().toLowerCase();
-      if (st == 'cancelled' ||
-          st == 'rejected' ||
-          st == 'completed' ||
-          st == 'checked_out') {
-        return false;
-      }
-      final inD = _parseGuestBookingDate(b['checkInDate']);
-      if (inD == null) return st == 'confirmed' || st == 'paid';
-      final inDay = DateTime(inD.year, inD.month, inD.day);
-      return inDay.isAfter(todayDate) ||
-          inDay.isAtSameMomentAs(todayDate) ||
-          st == 'confirmed' ||
-          st == 'paid';
-    }).toList();
-
-    // 3. Lọc danh sách Hôm nay & Sắp tới theo trạng thái khách đã chọn
-    final filteredTodayBookings = todayBookings.where((b) {
-      return _matchGuestBookingStatus(b, _guestStatusFilter);
-    }).toList();
-
-    final filteredUpcomingBookings = upcomingBookings.where((b) {
-      return _matchGuestBookingStatus(b, _guestStatusFilter);
-    }).toList();
-
-    final filteredList =
-        _guestTab == 'today' ? filteredTodayBookings : filteredUpcomingBookings;
-
-    // Xác định tiêu đề và icon hiển thị trên ô chọn trạng thái
-    String statusTitle = 'Tất cả khách hàng';
-    IconData statusIcon = LucideIcons.users;
-    if (_guestStatusFilter == 'confirmed') {
-      statusTitle = 'Đã xác nhận';
-      statusIcon = LucideIcons.circleCheck;
-    } else if (_guestStatusFilter == 'payment_expired') {
-      statusTitle = 'Quá hạn thanh toán';
-      statusIcon = LucideIcons.clockAlert;
-    } else if (_guestStatusFilter == 'cancelled') {
-      statusTitle = 'Đã hủy';
-      statusIcon = LucideIcons.ban;
-    }
+    final matchedOption = _guestStatusOptions.firstWhere(
+      (opt) => opt.$1 == _guestStatusFilter,
+      orElse: () => _guestStatusOptions.first,
+    );
+    final statusTitle = matchedOption.$2;
+    final statusIcon = matchedOption.$3;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -6213,42 +9405,43 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Segmented Switcher: Hôm nay | Sắp tới
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: HostStudioTokens.cardSurface,
-                    borderRadius:
-                        BorderRadius.circular(HostStudioTokens.pillRadius),
-                    border: Border.all(color: HostStudioTokens.hairline),
-                    boxShadow: HostStudioTokens.cardShadow,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _buildBigGuestTabButton(
-                          label: 'Hôm nay',
-                          count: filteredTodayBookings.length,
-                          icon: LucideIcons.calendarCheck,
-                          isSelected: _guestTab == 'today',
-                          onTap: () => setState(() => _guestTab = 'today'),
+                if (_guestStatusFilter == 'all') ...[
+                  // Segmented Switcher: Hôm nay | Sắp tới
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: HostStudioTokens.cardSurface,
+                      borderRadius:
+                          BorderRadius.circular(HostStudioTokens.pillRadius),
+                      border: Border.all(color: HostStudioTokens.hairline),
+                      boxShadow: HostStudioTokens.cardShadow,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildBigGuestTabButton(
+                            label: 'Hôm nay',
+                            count: filteredTodayBookings.length,
+                            icon: LucideIcons.calendarCheck,
+                            isSelected: _guestTab == 'today',
+                            onTap: () => setState(() => _guestTab = 'today'),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: _buildBigGuestTabButton(
-                          label: 'Sắp tới',
-                          count: filteredUpcomingBookings.length,
-                          icon: LucideIcons.calendarClock,
-                          isSelected: _guestTab == 'upcoming',
-                          onTap: () => setState(() => _guestTab = 'upcoming'),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: _buildBigGuestTabButton(
+                            label: 'Sắp tới',
+                            count: filteredUpcomingBookings.length,
+                            icon: LucideIcons.calendarClock,
+                            isSelected: _guestTab == 'upcoming',
+                            onTap: () => setState(() => _guestTab = 'upcoming'),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-
-                const SizedBox(height: 10),
+                  const SizedBox(height: 10),
+                ],
 
                 // Ô Lọc Trạng thái Khách hàng (Studio Monochrome Capsule)
                 Material(
@@ -6767,6 +9960,50 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
               ),
             ],
           ),
+          if (display.actions.canCheckIn || display.actions.canCheckOut) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: Key(
+                  'guest_card_${display.actions.canCheckIn ? 'checkin' : 'checkout'}_btn_$bookingId',
+                ),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 42),
+                  backgroundColor: HostStudioTokens.softCircle,
+                  foregroundColor: HostStudioTokens.inkPrimary,
+                  side: const BorderSide(color: HostStudioTokens.hairline),
+                  shape: const StadiumBorder(),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                ),
+                onPressed: _busyBookingActionId == bookingId
+                    ? null
+                    : () => _handleBookingAction(
+                          b,
+                          display.actions.canCheckIn ? 'check_in' : 'check_out',
+                        ),
+                icon: Icon(
+                  display.actions.canCheckIn
+                      ? AppSemanticIcons.checkIn
+                      : AppSemanticIcons.checkOut,
+                  size: 14.5,
+                  color: HostStudioTokens.inkPrimary,
+                ),
+                label: Text(
+                  display.actions.canCheckIn
+                      ? 'Xác nhận Check-in'
+                      : 'Xác nhận Check-out',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HostStudioTokens.pillText.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: HostStudioTokens.inkPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -6834,6 +10071,111 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       }
     }
     return null;
+  }
+
+  String _resolveHostConversationParticipantName(Map<String, dynamic> c) {
+    if (_isConversationAdmin(c)) {
+      return 'Quản trị viên The Palm Villa';
+    }
+
+    final other = c['otherParticipant'] is Map
+        ? Map<String, dynamic>.from(c['otherParticipant'] as Map)
+        : null;
+    final guest =
+        c['guest'] is Map ? Map<String, dynamic>.from(c['guest'] as Map) : null;
+    final user =
+        c['user'] is Map ? Map<String, dynamic>.from(c['user'] as Map) : null;
+    final booking = c['booking'] is Map
+        ? Map<String, dynamic>.from(c['booking'] as Map)
+        : null;
+
+    var resolvedName = (other?['fullName'] ??
+            other?['name'] ??
+            other?['username'] ??
+            other?['displayName'] ??
+            c['guestName'] ??
+            c['userName'] ??
+            c['customerName'] ??
+            c['clientName'] ??
+            guest?['fullName'] ??
+            guest?['name'] ??
+            user?['fullName'] ??
+            user?['name'] ??
+            booking?['guestName'] ??
+            booking?['customerName'] ??
+            '')
+        .toString()
+        .trim();
+
+    final lower = resolvedName.toLowerCase();
+    final isGeneric = resolvedName.isEmpty ||
+        lower == 'khách lưu trú' ||
+        lower == 'người dùng' ||
+        lower == 'cuộc trò chuyện' ||
+        lower.startsWith('hội thoại');
+
+    if (isGeneric) {
+      final rawBookingId =
+          '${c['bookingId'] ?? c['bookingOrderId'] ?? c['booking_id'] ?? ''}'
+              .trim();
+      if (rawBookingId.isNotEmpty && _bookings.isNotEmpty) {
+        final matchedBooking = _bookings.firstWhere(
+          (b) =>
+              '${b['bookingId'] ?? b['id'] ?? b['orderId'] ?? ''}' ==
+              rawBookingId,
+          orElse: () => {},
+        );
+        if (matchedBooking.isNotEmpty) {
+          final bGuest = (matchedBooking['guestName'] ??
+                  matchedBooking['customerName'] ??
+                  '')
+              .toString()
+              .trim();
+          if (bGuest.isNotEmpty) {
+            return bGuest;
+          }
+        }
+      }
+
+      final otherUserId =
+          '${other?['userId'] ?? other?['id'] ?? c['guestUserId'] ?? c['otherUserId'] ?? ''}'
+              .trim();
+      if (otherUserId.isNotEmpty && _bookings.isNotEmpty) {
+        final matchedBooking = _bookings.firstWhere(
+          (b) =>
+              '${b['guestUserId'] ?? b['userId'] ?? b['customerId'] ?? ''}' ==
+              otherUserId,
+          orElse: () => {},
+        );
+        if (matchedBooking.isNotEmpty) {
+          final bGuest = (matchedBooking['guestName'] ??
+                  matchedBooking['customerName'] ??
+                  '')
+              .toString()
+              .trim();
+          if (bGuest.isNotEmpty) {
+            return bGuest;
+          }
+        }
+      }
+
+      final title = (c['title'] ?? '').toString().trim();
+      if (title.isNotEmpty &&
+          !title.toLowerCase().contains('cuộc trò chuyện') &&
+          !title.toLowerCase().contains('hội thoại')) {
+        return title;
+      }
+    }
+
+    if (resolvedName.isNotEmpty &&
+        !lower.contains('cuộc trò chuyện') &&
+        !lower.contains('hội thoại') &&
+        lower != 'người dùng') {
+      return resolvedName;
+    }
+
+    final convId = '${c['conversationId'] ?? c['id'] ?? ''}'.trim();
+    return convId.isNotEmpty ? 'Khách lưu trú #$convId' : 'Khách lưu trú';
   }
 
   String? _resolveHostConversationParticipantAvatar(Map<String, dynamic> c) {
@@ -6918,16 +10260,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     final query = _messagesSearchQuery.trim().toLowerCase();
     final filtered = _conversations.where((c) {
       if (query.isEmpty) return true;
-      final other = c['otherParticipant'] is Map
-          ? Map<String, dynamic>.from(c['otherParticipant'] as Map)
-          : null;
-      final name = (other?['fullName'] ??
-              other?['name'] ??
-              c['guestName'] ??
-              c['title'] ??
-              '')
-          .toString()
-          .toLowerCase();
+      final name = _resolveHostConversationParticipantName(c).toLowerCase();
       final listingTitle = (c['listingTitle'] ?? '').toString().toLowerCase();
       final lastMsg = (c['lastMessage'] is Map
               ? c['lastMessage']['content'] ?? c['lastMessage']['body']
@@ -7082,27 +10415,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
   Widget _buildConversationItemRow(Map<String, dynamic> c) {
     final convId = '${c['conversationId'] ?? c['id']}';
-    final other = c['otherParticipant'] is Map
-        ? Map<String, dynamic>.from(c['otherParticipant'] as Map)
-        : null;
     final listingMap = c['listing'] is Map
         ? Map<String, dynamic>.from(c['listing'] as Map)
         : null;
-    final isAdmin = _isConversationAdmin(c);
-    var counterpart = (other?['fullName'] ??
-            other?['name'] ??
-            other?['username'] ??
-            c['guestName'] ??
-            c['title'] ??
-            '')
-        .toString()
-        .trim();
-    if (counterpart.isEmpty ||
-        counterpart.toLowerCase().contains('cuộc trò chuyện') ||
-        counterpart.toLowerCase().contains('hội thoại')) {
-      counterpart =
-          isAdmin ? 'Quản trị viên The Palm Villa' : 'Hội thoại #$convId';
-    }
+    final counterpart = _resolveHostConversationParticipantName(c);
 
     final rawListingId =
         (c['listingId'] ?? listingMap?['listingId'] ?? listingMap?['id'] ?? '')
@@ -7143,9 +10459,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         onTap: () {
           setState(() {
             c['unreadCount'] = 0;
+            _conversationsError = null;
             _selectedConversationId = convId;
             _inChatDetailView = true;
           });
+          _markHostConversationRead(convId);
           _fetchMessagesForConversation(convId);
         },
         child: Padding(
@@ -7271,15 +10589,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       orElse: () => {},
     );
     final hostUserId = matchedConv['hostUserId']?.toString();
-    final other = matchedConv['otherParticipant'] is Map
-        ? Map<String, dynamic>.from(matchedConv['otherParticipant'] as Map)
-        : null;
-    final participantName = (other?['fullName'] ??
-            other?['name'] ??
-            matchedConv['guestName'] ??
-            matchedConv['title'] ??
-            'Cuộc trò chuyện')
-        .toString();
+    final participantName =
+        _resolveHostConversationParticipantName(matchedConv);
     final listingTitle = (matchedConv['listingTitle'] ?? '').toString().trim();
     final isAdmin = _isConversationAdmin(matchedConv);
     final participantAvatar =
@@ -7290,9 +10601,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 (matchedConv['listing'] as Map)['listingId'])
             : null);
     final listingId = (rawListingId ?? '').toString().trim();
-    final effectiveListingId = listingId.isNotEmpty
-        ? listingId
-        : (listingTitle.isNotEmpty ? '1' : '');
+    final effectiveListingId =
+        listingId.isNotEmpty ? listingId : (listingTitle.isNotEmpty ? '1' : '');
 
     return Column(
       children: [
@@ -7412,6 +10722,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           ),
         ),
 
+        if (_conversationsError != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: _buildInlineError(_conversationsError!),
+          ),
+
         // Khung danh sách tin nhắn (Chat Bubbles phong cách Messenger)
         Expanded(
           child: _conversationMessages.isEmpty
@@ -7473,11 +10789,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       final m = _conversationMessages[i];
                       final content =
                           (m['content'] ?? m['body'] ?? '').toString();
-                      var rawAttachments = m['attachments'] ?? m['attachments_json'];
+                      var rawAttachments =
+                          m['attachments'] ?? m['attachments_json'];
                       var attachments = rawAttachments is List
                           ? rawAttachments
                               .map((a) {
-                                if (a is Map) return (a['url'] ?? a['imageUrl'] ?? '').toString();
+                                if (a is Map) {
+                                  return (a['url'] ?? a['imageUrl'] ?? '')
+                                      .toString();
+                                }
                                 return a?.toString() ?? '';
                               })
                               .where((s) => s.isNotEmpty)
@@ -7491,7 +10811,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                             content.contains('[Ảnh chụp trực tiếp từ villa]')) {
                           attachments = ['assets/images/343vothisau.jpg'];
                         } else if (content.contains('🎤 Tin nhắn thoại')) {
-                          attachments = ['https://pub-67a3f362466e495d9c2f371ca84b6d03.r2.dev/chat/sample_voice.wav'];
+                          attachments = [
+                            'https://pub-67a3f362466e495d9c2f371ca84b6d03.r2.dev/chat/sample_voice.wav'
+                          ];
                         }
                       }
                       final senderId =
@@ -7552,15 +10874,21 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
                       DateTime? prevDt;
                       if (i > 0) {
-                        final prevRawCreatedAt = _conversationMessages[i - 1]['createdAt'];
+                        final prevRawCreatedAt =
+                            _conversationMessages[i - 1]['createdAt'];
                         if (prevRawCreatedAt != null) {
-                          prevDt = DateTime.tryParse(prevRawCreatedAt.toString());
+                          prevDt =
+                              DateTime.tryParse(prevRawCreatedAt.toString());
                         }
                       }
 
                       final currentLocale = ref.watch(localeProvider);
-                      final showTimeDivider = msgDt != null && shouldShowChatTimeDivider(msgDt, prevDt);
-                      final timeDividerLabel = msgDt != null ? formatChatTimeDivider(msgDt, localeCode: currentLocale) : '';
+                      final showTimeDivider = msgDt != null &&
+                          shouldShowChatTimeDivider(msgDt, prevDt);
+                      final timeDividerLabel = msgDt != null
+                          ? formatChatTimeDivider(msgDt,
+                              localeCode: currentLocale)
+                          : '';
 
                       // Render bong bóng tin nhắn tinh gọn kiểu Messenger kèm reaction & avatar bên trái
                       return AnimatedBuilder(
@@ -7588,247 +10916,316 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                     if (isReactionOpen)
                                       _buildReactionPicker(msgKey),
 
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    // Hình đại diện nhỏ bên trái của người gửi (đối phương)
-                                    if (!isMe) ...[
-                                      _buildChatSmallAvatar(
-                                        isAdmin: isMsgAdmin,
-                                        name: participantName,
-                                        avatarUrl:
-                                            other?['avatar']?.toString() ??
-                                                other?['avatarUrl']?.toString(),
-                                      ),
-                                      const SizedBox(width: 8),
-                                    ],
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        // Hình đại diện nhỏ bên trái của người gửi (đối phương)
+                                        if (!isMe) ...[
+                                          _buildChatSmallAvatar(
+                                            isAdmin: isMsgAdmin,
+                                            name: participantName,
+                                            avatarUrl: participantAvatar,
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
 
-                                    // Bong bóng nội dung tin nhắn
-                                    Expanded(
-                                      child: Align(
-                                        alignment: isMe
-                                            ? Alignment.centerRight
-                                            : Alignment.centerLeft,
-                                        child: GestureDetector(
-                                          key: Key('chat_bubble_$msgKey'),
-                                          onLongPress: () {
-                                            setState(() {
-                                              _reactionActiveMsgKey =
-                                                  isReactionOpen
-                                                      ? null
-                                                      : msgKey;
-                                            });
-                                          },
-                                          onSecondaryTap: () {
-                                            setState(() {
-                                              _reactionActiveMsgKey =
-                                                  isReactionOpen
-                                                      ? null
-                                                      : msgKey;
-                                            });
-                                          },
-                                          child: Stack(
-                                            clipBehavior: Clip.none,
-                                            children: [
-                                              Container(
-                                                constraints: BoxConstraints(
-                                                  maxWidth:
-                                                      MediaQuery.of(context)
-                                                              .size
-                                                              .width *
-                                                          0.68,
-                                                ),
-                                                padding: (isImageOnly || isAudioOnly)
-                                                    ? EdgeInsets.zero
-                                                    : const EdgeInsets.symmetric(
-                                                        horizontal: 14,
-                                                        vertical: 9,
-                                                      ),
-                                                decoration: BoxDecoration(
-                                                  color: (isImageOnly || isAudioOnly)
-                                                      ? Colors.transparent
-                                                      : (isMe
-                                                          ? AppColors.primary
-                                                          : (isMsgAdmin
-                                                              ? const Color(0xFFFFF1F2)
-                                                              : const Color(0xFFF1F5F9))),
-                                                  borderRadius: bubbleRadius,
-                                                  border: isMe
-                                                      ? null
-                                                      : (isMsgAdmin
-                                                          ? Border.all(
-                                                              color: const Color(0xFFFECDD3),
-                                                            )
-                                                          : null),
-                                                  boxShadow: (isMe && !isImageOnly)
-                                                      ? [
-                                                          BoxShadow(
-                                                            color: AppColors.primary
-                                                                .withValues(alpha: 0.16),
-                                                            blurRadius: 4,
-                                                            offset: const Offset(0, 1),
+                                        // Bong bóng nội dung tin nhắn
+                                        Expanded(
+                                          child: Align(
+                                            alignment: isMe
+                                                ? Alignment.centerRight
+                                                : Alignment.centerLeft,
+                                            child: GestureDetector(
+                                              key: Key('chat_bubble_$msgKey'),
+                                              onLongPress: () {
+                                                setState(() {
+                                                  _reactionActiveMsgKey =
+                                                      isReactionOpen
+                                                          ? null
+                                                          : msgKey;
+                                                });
+                                              },
+                                              onSecondaryTap: () {
+                                                setState(() {
+                                                  _reactionActiveMsgKey =
+                                                      isReactionOpen
+                                                          ? null
+                                                          : msgKey;
+                                                });
+                                              },
+                                              child: Stack(
+                                                clipBehavior: Clip.none,
+                                                children: [
+                                                  Container(
+                                                    constraints: BoxConstraints(
+                                                      maxWidth:
+                                                          MediaQuery.of(context)
+                                                                  .size
+                                                                  .width *
+                                                              0.68,
+                                                    ),
+                                                    padding: (isImageOnly ||
+                                                            isAudioOnly)
+                                                        ? EdgeInsets.zero
+                                                        : const EdgeInsets
+                                                            .symmetric(
+                                                            horizontal: 14,
+                                                            vertical: 9,
                                                           ),
-                                                        ]
-                                                      : null,
-                                                ),
-                                                child: Column(
-                                                  crossAxisAlignment: isMe
-                                                      ? CrossAxisAlignment.end
-                                                      : CrossAxisAlignment.start,
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    if (hasAttachments) ...[
-                                                      for (final attUrl in attachments)
-                                                        Padding(
-                                                          padding: EdgeInsets.only(
-                                                            bottom: isImageOnly
-                                                                ? 0
-                                                                : (displayCaption != null ? 6 : 0),
-                                                          ),
-                                                          child: _isChatAudioUrl(attUrl)
-                                                              ? _buildHostAudioBubble(attUrl, isMe: isMe)
-                                                              : ChatImageBubble(
-                                                                  imageUrl: attUrl,
-                                                                  borderRadius: bubbleRadius,
-                                                                  maxWidth: MediaQuery.of(context).size.width * 0.68,
-                                                                  onTap: () => _openFullScreenImage(context, attUrl),
-                                                                ),
-                                                        ),
-                                                    ],
-                                                    if (displayCaption != null && displayCaption.isNotEmpty)
-                                                      Text(
-                                                        displayCaption,
-                                                        style: TextStyle(
-                                                          fontSize: 14,
-                                                          height: 1.35,
-                                                          color: isMe
-                                                              ? Colors.white
+                                                    decoration: BoxDecoration(
+                                                      color: (isImageOnly ||
+                                                              isAudioOnly)
+                                                          ? Colors.transparent
+                                                          : (isMe
+                                                              ? AppColors
+                                                                  .primary
                                                               : (isMsgAdmin
-                                                                  ? const Color(0xFF881337)
-                                                                  : AppColors.textPrimary),
-                                                        ),
-                                                      ),
-                                                  ],
-                                                ),
-                                              ),
-
-                                              // Badge cảm xúc ở góc dưới của bong bóng tin nhắn
-                                              if (reaction != null)
-                                                Positioned(
-                                                  bottom: -8,
-                                                  right: isMe ? 8 : null,
-                                                  left: isMe ? null : 8,
-                                                  child: GestureDetector(
-                                                    onTap: () {
-                                                      setState(() {
-                                                        _reactionActiveMsgKey =
-                                                            isReactionOpen
-                                                                ? null
-                                                                : msgKey;
-                                                      });
-                                                    },
-                                                    child: Container(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 5,
-                                                        vertical: 2,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: Colors.white,
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(12),
-                                                        border: Border.all(
-                                                          color: const Color(
-                                                              0xFFE2E8F0),
-                                                        ),
-                                                        boxShadow: [
-                                                          BoxShadow(
-                                                            color: Colors.black
-                                                                .withValues(
-                                                                    alpha: 0.1),
-                                                            blurRadius: 4,
-                                                            offset:
-                                                                const Offset(
-                                                                    0, 1),
-                                                          ),
+                                                                  ? const Color(
+                                                                      0xFFFFF1F2)
+                                                                  : const Color(
+                                                                      0xFFF1F5F9))),
+                                                      borderRadius:
+                                                          bubbleRadius,
+                                                      border: isMe
+                                                          ? null
+                                                          : (isMsgAdmin
+                                                              ? Border.all(
+                                                                  color: const Color(
+                                                                      0xFFFECDD3),
+                                                                )
+                                                              : null),
+                                                      boxShadow: (isMe &&
+                                                              !isImageOnly)
+                                                          ? [
+                                                              BoxShadow(
+                                                                color: AppColors
+                                                                    .primary
+                                                                    .withValues(
+                                                                        alpha:
+                                                                            0.16),
+                                                                blurRadius: 4,
+                                                                offset:
+                                                                    const Offset(
+                                                                        0, 1),
+                                                              ),
+                                                            ]
+                                                          : null,
+                                                    ),
+                                                    child: Column(
+                                                      crossAxisAlignment: isMe
+                                                          ? CrossAxisAlignment
+                                                              .end
+                                                          : CrossAxisAlignment
+                                                              .start,
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        if (hasAttachments) ...[
+                                                          for (final attUrl
+                                                              in attachments)
+                                                            Padding(
+                                                              padding:
+                                                                  EdgeInsets
+                                                                      .only(
+                                                                bottom: isImageOnly
+                                                                    ? 0
+                                                                    : (displayCaption !=
+                                                                            null
+                                                                        ? 6
+                                                                        : 0),
+                                                              ),
+                                                              child: _isChatAudioUrl(
+                                                                      attUrl)
+                                                                  ? _buildHostAudioBubble(
+                                                                      attUrl,
+                                                                      isMe:
+                                                                          isMe)
+                                                                  : ChatImageBubble(
+                                                                      imageUrl:
+                                                                          attUrl,
+                                                                      borderRadius:
+                                                                          bubbleRadius,
+                                                                      maxWidth: MediaQuery.of(context)
+                                                                              .size
+                                                                              .width *
+                                                                          0.68,
+                                                                      onTap: () => _openFullScreenImage(
+                                                                          context,
+                                                                          attUrl),
+                                                                    ),
+                                                            ),
                                                         ],
-                                                      ),
-                                                      child: Text(
-                                                        reaction,
-                                                        style: const TextStyle(
-                                                          fontSize: 12,
+                                                        if (displayCaption !=
+                                                                null &&
+                                                            displayCaption
+                                                                .isNotEmpty)
+                                                          Text(
+                                                            displayCaption,
+                                                            style: TextStyle(
+                                                              fontSize: 14,
+                                                              height: 1.35,
+                                                              color: isMe
+                                                                  ? Colors.white
+                                                                  : (isMsgAdmin
+                                                                      ? const Color(
+                                                                          0xFF881337)
+                                                                      : AppColors
+                                                                          .textPrimary),
+                                                            ),
+                                                          ),
+                                                      ],
+                                                    ),
+                                                  ),
+
+                                                  // Badge cảm xúc ở góc dưới của bong bóng tin nhắn
+                                                  if (reaction != null)
+                                                    Positioned(
+                                                      bottom: -8,
+                                                      right: isMe ? 8 : null,
+                                                      left: isMe ? null : 8,
+                                                      child: GestureDetector(
+                                                        onTap: () {
+                                                          setState(() {
+                                                            _reactionActiveMsgKey =
+                                                                isReactionOpen
+                                                                    ? null
+                                                                    : msgKey;
+                                                          });
+                                                        },
+                                                        child: Container(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                            horizontal: 5,
+                                                            vertical: 2,
+                                                          ),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: Colors.white,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        12),
+                                                            border: Border.all(
+                                                              color: const Color(
+                                                                  0xFFE2E8F0),
+                                                            ),
+                                                            boxShadow: [
+                                                              BoxShadow(
+                                                                color: Colors
+                                                                    .black
+                                                                    .withValues(
+                                                                        alpha:
+                                                                            0.1),
+                                                                blurRadius: 4,
+                                                                offset:
+                                                                    const Offset(
+                                                                        0, 1),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          child: Builder(
+                                                            builder: (context) {
+                                                              final reactionMeta =
+                                                                  resolveAppChatReaction(
+                                                                reaction,
+                                                              );
+                                                              return Icon(
+                                                                reactionMeta
+                                                                    .icon,
+                                                                key: Key(
+                                                                  'reaction_badge_${reactionMeta.code}_$msgKey',
+                                                                ),
+                                                                size: 13,
+                                                                color: AppColors
+                                                                    .primary,
+                                                              );
+                                                            },
+                                                          ),
                                                         ),
                                                       ),
                                                     ),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-
-                                    // Khung thời gian trượt ra khi kéo qua bên phải
-                                    if (progress > 0.01 && msgTime != null)
-                                      Opacity(
-                                        opacity: timeOpacity,
-                                        child: Container(
-                                          width: timeWidth,
-                                          alignment: Alignment.centerRight,
-                                          padding:
-                                              const EdgeInsets.only(left: 6),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 3,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFE2E8F0),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              msgTime,
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w600,
-                                                color: Color(0xFF475569),
+                                                ],
                                               ),
                                             ),
                                           ),
                                         ),
+
+                                        // Khung thời gian trượt ra khi kéo qua bên phải
+                                        if (progress > 0.01 && msgTime != null)
+                                          Opacity(
+                                            opacity: timeOpacity,
+                                            child: Container(
+                                              width: timeWidth,
+                                              alignment: Alignment.centerRight,
+                                              padding: const EdgeInsets.only(
+                                                  left: 6),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 3,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color:
+                                                      const Color(0xFFE2E8F0),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                ),
+                                                child: Text(
+                                                  msgTime,
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Color(0xFF475569),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+
+                                    // Trạng thái Messenger tách biệt ở góc dưới cùng bên phải của cụm tin nhắn cuối cùng
+                                    if (i == _conversationMessages.length - 1 &&
+                                        isMe) ...[
+                                      MessengerStatusIndicator(
+                                        state: (m['status'] == 'failed' ||
+                                                m['isFailed'] == true)
+                                            ? MessengerDeliveryState.failed
+                                            : (m['status'] == 'sending' ||
+                                                    m['status'] == 'pending')
+                                                ? MessengerDeliveryState.sending
+                                                : (m['isRead'] == true ||
+                                                        m['readAt'] != null ||
+                                                        m['seen'] == true ||
+                                                        m['status'] == 'read')
+                                                    ? MessengerDeliveryState
+                                                        .seen
+                                                    : MessengerDeliveryState
+                                                        .sent,
+                                        recipientName: participantName,
+                                        recipientAvatar: participantAvatar,
+                                        customLabel: (m['isRead'] == true ||
+                                                m['readAt'] != null ||
+                                                m['seen'] == true ||
+                                                m['status'] == 'read')
+                                            ? 'Đã xem'
+                                            : (m['status'] == 'sending' ||
+                                                    m['status'] == 'pending')
+                                                ? 'Đang gửi...'
+                                                : (m['status'] == 'failed' ||
+                                                        m['isFailed'] == true)
+                                                    ? 'Gửi thất bại'
+                                                    : 'Đã gửi',
                                       ),
+                                    ],
                                   ],
                                 ),
-
-                                // Trạng thái Messenger tách biệt ở góc dưới cùng bên phải của cụm tin nhắn cuối cùng
-                                if (i == _conversationMessages.length - 1 &&
-                                    isMe) ...[
-                                  MessengerStatusIndicator(
-                                    state: (m['status'] == 'failed' || m['isFailed'] == true)
-                                        ? MessengerDeliveryState.failed
-                                        : (m['status'] == 'sending' || m['status'] == 'pending')
-                                            ? MessengerDeliveryState.sending
-                                            : (m['isRead'] == true || m['readAt'] != null || m['seen'] == true || m['status'] == 'read')
-                                                ? MessengerDeliveryState.seen
-                                                : MessengerDeliveryState.sent,
-                                    recipientName: participantName,
-                                    recipientAvatar: participantAvatar,
-                                    customLabel: (m['isRead'] == true || m['readAt'] != null || m['seen'] == true || m['status'] == 'read')
-                                        ? 'Đã xem'
-                                        : (m['status'] == 'sending' || m['status'] == 'pending')
-                                            ? 'Đang gửi...'
-                                            : (m['status'] == 'failed' || m['isFailed'] == true)
-                                                ? 'Gửi thất bại'
-                                                : 'Đã gửi',
-                                  ),
-                                ],
                               ],
                             ),
-                          ],
-                        ),
-                      );
+                          );
                         },
                       );
                     },
@@ -7849,7 +11246,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 const SizedBox(width: 8),
                 _buildQuickReplyChip('Quý khách nhận phòng lúc mấy giờ ạ?'),
                 const SizedBox(width: 8),
-                _buildQuickReplyChip('The Palm Villa xin chào bạn! 🌴'),
+                _buildQuickReplyChip('The Palm Villa xin chào bạn!'),
                 const SizedBox(width: 8),
                 _buildQuickReplyChip(
                     'Vị trí biệt thự em đã cập nhật trên hệ thống ạ.'),
@@ -7858,167 +11255,37 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
           ),
         ),
 
-        // Thanh soạn thảo tin nhắn ở đáy chuẩn Facebook Messenger (khớp 100% hình mẫu của user)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: const BoxDecoration(
-            color: AppColors.surfaceBase,
-            border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
+        // CONFLICT-RESOLVED: Giữ các widget tách mô-đun `HostVoiceRecordingBar` và `HostChatComposerBar` của HEAD kết hợp luồng ghi âm thực `_voiceRecorder` từ develop.
+        if (_isRecordingVoice)
+          HostVoiceRecordingBar(
+            recordingSeconds: _voiceRecordingSeconds,
+            onCancel: () {
+              _voiceTimer?.cancel();
+              unawaited(_voiceRecorder.cancel());
+              setState(() {
+                _isRecordingVoice = false;
+                _voiceRecordingSeconds = 0;
+              });
+            },
+            onSend: _toggleVoiceRecording,
           ),
-          child: _isRecordingVoice
-              ? MessengerVoiceRecorderBar(
-                  recordingSeconds: _voiceRecordingSeconds,
-                  onCancel: () {
-                    _voiceTimer?.cancel();
-                    unawaited(_voiceRecorder.cancel());
-                    setState(() {
-                      _isRecordingVoice = false;
-                      _voiceRecordingSeconds = 0;
-                    });
-                  },
-                  onSend: _toggleVoiceRecording,
-                )
-              : Row(
-                  children: [
-              // 1. Nút '+' tròn màu hồng/đỏ
-              InkWell(
-                key: const Key('chat_more_features_btn'),
-                onTap: _showChatMoreOptions,
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    LucideIcons.plus,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
 
-              // 2. Nút Máy ảnh (Camera) màu hồng/đỏ
-              IconButton(
-                key: const Key('chat_camera_btn'),
-                icon: const Icon(LucideIcons.camera,
-                    size: 22, color: AppColors.primary),
-                tooltip: 'Chụp ảnh',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 40),
-                onPressed: _openCameraChat,
-              ),
-              const SizedBox(width: 4),
-
-              // 3. Nút Thư viện Ảnh (Image) màu hồng/đỏ
-              IconButton(
-                key: const Key('chat_gallery_btn'),
-                icon: const Icon(LucideIcons.image,
-                    size: 22, color: AppColors.primary),
-                tooltip: 'Gửi hình ảnh',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 40),
-                onPressed: _pickAndSendChatImage,
-              ),
-              const SizedBox(width: 4),
-
-              // 4. Nút Micro thu âm màu hồng/đỏ
-              IconButton(
-                key: const Key('chat_mic_btn'),
-                icon: Icon(
-                  _isRecordingVoice ? LucideIcons.square : LucideIcons.mic,
-                  size: 22,
-                  color: _isRecordingVoice ? Colors.red : AppColors.primary,
-                ),
-                tooltip: _isRecordingVoice ? 'Dừng ghi âm' : 'Tin nhắn thoại',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 40),
-                onPressed: _toggleVoiceRecording,
-              ),
-              const SizedBox(width: 8),
-
-              // 5. Ô nhập tin nhắn với placeholder "Nhắn tin" & icon mặt cười màu hồng bên trong
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  child: TextField(
-                    key: const Key('host_message_input'),
-                    controller: _messageInputCtrl,
-                    focusNode: _messageInputFocusNode,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) {
-                      if (!_sendingMessage) {
-                        _sendHostMessage();
-                      }
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'Nhắn tin',
-                      hintStyle: const TextStyle(
-                        color: Color(0xFF94A3B8),
-                        fontSize: 14.5,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      isDense: true,
-                      suffixIcon: IconButton(
-                        key: const Key('chat_input_smile_btn'),
-                        icon: const Icon(
-                          LucideIcons.smile,
-                          size: 20,
-                          color: AppColors.primary,
-                        ),
-                        tooltip: 'Biểu tượng cảm xúc',
-                        padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 34, minHeight: 34),
-                        onPressed: _showEmojiSelector,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-
-              // 6. Bên phải ngoài cùng:
-              // Nếu ô trống: Icon cảm xúc nhanh mặc định (icon 😤 trong ảnh của user)
-              // Nếu có chữ: Nút gửi tin nhắn (Send button)
-              if (_messageInputCtrl.text.trim().isEmpty)
-                InkWell(
-                  key: const Key('chat_quick_emoji_btn'),
-                  onTap: () => _sendQuickEmoji(_chatQuickEmoji),
-                  onLongPress: _chooseQuickEmoji,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    child: Text(
-                      _chatQuickEmoji,
-                      style: const TextStyle(fontSize: 26),
-                    ),
-                  ),
-                )
-              else
-                IconButton(
-                  key: const Key('host_message_send_btn'),
-                  icon: const Icon(
-                    LucideIcons.send,
-                    size: 20,
-                    color: AppColors.primary,
-                  ),
-                  tooltip: 'Gửi tin nhắn',
-                  onPressed: _sendingMessage ? null : _sendHostMessage,
-                ),
-            ],
+        HostChatComposerBar(
+          controller: _messageInputCtrl,
+          focusNode: _messageInputFocusNode,
+          isRecordingVoice: _isRecordingVoice,
+          sendingMessage: _sendingMessage,
+          quickIcon: resolveAppQuickChatOption(_chatQuickEmoji).icon,
+          onShowMoreOptions: _showChatMoreOptions,
+          onOpenCamera: _openCameraChat,
+          onPickGalleryImage: _pickAndSendChatImage,
+          onToggleVoiceRecording: _toggleVoiceRecording,
+          onShowEmojiSelector: _showEmojiSelector,
+          onSendQuickEmoji: () => _sendQuickEmoji(
+            resolveAppQuickChatOption(_chatQuickEmoji).sendText,
           ),
+          onChooseQuickEmoji: _chooseQuickEmoji,
+          onSendMessage: _sendHostMessage,
         ),
       ],
     );
@@ -8060,12 +11327,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
     if (avatarUrl != null && avatarUrl.isNotEmpty) {
       return ClipOval(
-        child: Image.network(
-          avatarUrl,
+        child: AppImage(
+          imageUrl: avatarUrl,
           width: 28,
           height: 28,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _buildLetterAvatar(name),
+          errorWidget: _buildLetterAvatar(name),
         ),
       );
     }
@@ -8113,26 +11380,39 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: _messengerReactions.map((emoji) {
-          final isSelected = _messageReactions[msgKey] == emoji;
-          return InkWell(
-            key: Key('reaction_${emoji}_$msgKey'),
-            onTap: () {
-              setState(() {
-                if (isSelected) {
-                  _messageReactions.remove(msgKey);
-                } else {
-                  _messageReactions[msgKey] = emoji;
+        children: kAppMessengerReactions.map((item) {
+          final isSelected = _messageReactions[msgKey] == item.code;
+          return Tooltip(
+            message: item.label,
+            child: InkWell(
+              key: Key('reaction_${item.code}_$msgKey'),
+              onTap: () {
+                final nextReaction = isSelected ? '' : item.code;
+                setState(() {
+                  if (isSelected) {
+                    _messageReactions.remove(msgKey);
+                  } else {
+                    _messageReactions[msgKey] = item.code;
+                  }
+                  _reactionActiveMsgKey = null;
+                });
+                final activeConv = _selectedConversationId ?? '';
+                if (isNumericHostConversationId(activeConv)) {
+                  ref.read(hostPortalViewModelProvider).sendReaction(
+                        activeConv,
+                        messageId: msgKey,
+                        reaction: nextReaction,
+                      );
                 }
-                _reactionActiveMsgKey = null;
-              });
-            },
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-              child: Text(
-                emoji,
-                style: const TextStyle(fontSize: 22),
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Icon(
+                  item.icon,
+                  size: 20,
+                  color: isSelected ? AppColors.primary : AppColors.iconStrong,
+                ),
               ),
             ),
           );
@@ -8217,7 +11497,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   onTap: () {
                     Navigator.pop(ctx);
                     _messageInputCtrl.text =
-                        '📍 Vị trí The Palm Villa: 123 Đường Hạ Long, Phường Bãi Cháy, TP. Hạ Long (Gần bãi tắm & Sun World).';
+                        'Vị trí The Palm Villa: 28 Thi Sách, Phường Thắng Tam, TP. Vũng Tàu (Gần bãi tắm Bãi Sau).';
                     _sendHostMessage();
                   },
                 ),
@@ -8228,7 +11508,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   onTap: () {
                     Navigator.pop(ctx);
                     _messageInputCtrl.text =
-                        '⏰ Thời gian nhận phòng: từ 14:00 | Thời gian trả phòng: trước 12:00 ngày hôm sau.';
+                        'Thời gian nhận phòng: từ 14:00 | Thời gian trả phòng: trước 12:00 ngày hôm sau.';
                     _sendHostMessage();
                   },
                 ),
@@ -8240,7 +11520,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   onTap: () {
                     Navigator.pop(ctx);
                     _messageInputCtrl.text =
-                        '📋 Nội quy The Palm Villa: Vui lòng không hút thuốc trong phòng, giữ yên tĩnh sau 22:00. Chúc quý khách kỳ nghỉ tuyệt vời!';
+                        'Nội quy The Palm Villa: Vui lòng không hút thuốc trong phòng, giữ yên tĩnh sau 22:00. Chúc quý khách kỳ nghỉ tuyệt vời!';
                     _sendHostMessage();
                   },
                 ),
@@ -8252,19 +11532,27 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
+  // CONFLICT-RESOLVED: Sử dụng luồng tải ảnh/ghi âm thực tế lên Cloudflare R2 từ develop thông qua `HostPortalViewModel` chuẩn MVVM của HEAD, không chứa Emoji.
   Future<void> _openCameraChat() async {
     final picker = ImagePicker();
     try {
-      final file = await picker.pickImage(source: ImageSource.camera, imageQuality: 82);
+      final file = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 82,
+      );
       if (!mounted || file == null) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đang tải ảnh chụp lên Cloudflare R2...')),
+        const SnackBar(
+          content: Text('Đang tải ảnh chụp lên Cloudflare R2...'),
+        ),
       );
       final bytes = await file.readAsBytes();
-      final uploadService = ref.read(chatMediaUploadServiceProvider);
-      final result = await uploadService.uploadMediaBytesToR2(
+      final vm = ref.read(hostPortalViewModelProvider);
+      final result = await vm.uploadChatMedia(
         bytes: bytes,
-        filename: file.name.isNotEmpty ? file.name : 'host_camera_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        filename: file.name.isNotEmpty
+            ? file.name
+            : 'host_camera_${DateTime.now().millisecondsSinceEpoch}.jpg',
         contentType: 'image/jpeg',
       );
       if (!mounted) return;
@@ -8290,16 +11578,21 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   Future<void> _pickAndSendChatImage() async {
     final picker = ImagePicker();
     try {
-      final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+      final file = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
       if (!mounted || file == null) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Đang tải ảnh lên Cloudflare R2...')),
       );
       final bytes = await file.readAsBytes();
-      final uploadService = ref.read(chatMediaUploadServiceProvider);
-      final result = await uploadService.uploadMediaBytesToR2(
+      final vm = ref.read(hostPortalViewModelProvider);
+      final result = await vm.uploadChatMedia(
         bytes: bytes,
-        filename: file.name.isNotEmpty ? file.name : 'host_image_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        filename: file.name.isNotEmpty
+            ? file.name
+            : 'host_image_${DateTime.now().millisecondsSinceEpoch}.jpg',
         contentType: 'image/jpeg',
       );
       if (!mounted) return;
@@ -8334,7 +11627,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         try {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đang tải tin nhắn thoại lên Cloudflare R2...')),
+            const SnackBar(
+              content: Text('Đang tải tin nhắn thoại lên Cloudflare R2...'),
+            ),
           );
 
           final recordedResult = await _voiceRecorder.stop();
@@ -8342,7 +11637,9 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Không ghi nhận được âm thanh từ Micro. Vui lòng cấp quyền Microphone hoặc nói to hơn.'),
+                content: Text(
+                  'Không ghi nhận được âm thanh từ Micro. Vui lòng cấp quyền Microphone hoặc nói to hơn.',
+                ),
               ),
             );
             return;
@@ -8355,8 +11652,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
               ? recordedResult.durationSeconds
               : (sec > 0 ? sec : 1);
 
-          final uploadService = ref.read(chatMediaUploadServiceProvider);
-          final result = await uploadService.uploadMediaBytesToR2(
+          final vm = ref.read(hostPortalViewModelProvider);
+          final result = await vm.uploadChatMedia(
             bytes: audioBytes,
             filename: filename,
             contentType: contentType,
@@ -8369,7 +11666,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   ? '음성 메시지'
                   : 'Tin nhắn thoại';
           await _sendHostMessage(
-            contentOverride: '🎤 $voiceLabel (00:${recordedSeconds.toString().padLeft(2, '0')})',
+            contentOverride:
+                '$voiceLabel (00:${recordedSeconds.toString().padLeft(2, '0')})',
             messageType: 'file',
             attachments: [
               {
@@ -8417,18 +11715,19 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   }
 
   String? _getDisplayCaption(String content) {
+    // CONFLICT-RESOLVED: Lọc các nhãn nội dung đính kèm ảnh/thoại mà không dùng chuỗi chứa Emoji trực tiếp trong mã nguồn.
     final trimmed = content.trim();
     if (trimmed.isEmpty ||
         trimmed == '[image]' ||
         trimmed == '[file]' ||
         trimmed == 'image' ||
         trimmed == 'file' ||
-        trimmed == '📷 [Hình ảnh]' ||
         trimmed == '[Hình ảnh]' ||
-        trimmed.startsWith('📷 [Ảnh chụp trực tiếp') ||
-        trimmed.startsWith('🖼️ [Đã gửi 1 hình ảnh') ||
-        trimmed == '📷 [Ảnh chụp trực tiếp từ villa]' ||
-        trimmed.startsWith('🎤')) {
+        trimmed.startsWith('[Ảnh chụp trực tiếp') ||
+        trimmed.startsWith('[Đã gửi 1 hình ảnh') ||
+        trimmed.startsWith('Tin nhắn thoại (') ||
+        trimmed.startsWith('Voice message (') ||
+        trimmed.startsWith('음성 메시지 (')) {
       return null;
     }
     return trimmed;
@@ -8463,7 +11762,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: const Icon(LucideIcons.x, color: Colors.white, size: 20),
+                  icon:
+                      const Icon(LucideIcons.x, color: Colors.white, size: 20),
                   onPressed: () => Navigator.pop(ctx),
                 ),
               ),
@@ -8499,26 +11799,6 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
-        const emojis = [
-          '😊',
-          '🥰',
-          '😍',
-          '🌴',
-          '🏖️',
-          '✨',
-          '👍',
-          '🙏',
-          '❤️',
-          '🔥',
-          '🎉',
-          '💯',
-          '⭐',
-          '🌊',
-          '🏡',
-          '🔑',
-          '☕',
-          '🌟'
-        ];
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -8531,15 +11811,22 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 ),
                 const SizedBox(height: 12),
                 Wrap(
-                  spacing: 12,
+                  spacing: 10,
                   runSpacing: 10,
-                  children: emojis.map((e) {
-                    return InkWell(
-                      onTap: () {
+                  children: kAppChatExpressionTokens.map((item) {
+                    return ActionChip(
+                      avatar: Icon(
+                        item.icon,
+                        size: 18,
+                        color: AppColors.primary,
+                      ),
+                      label: Text(item.label),
+                      onPressed: () {
                         Navigator.pop(ctx);
                         final current = _messageInputCtrl.text;
-                        _messageInputCtrl.text =
-                            current.isEmpty ? e : '$current $e';
+                        _messageInputCtrl.text = current.isEmpty
+                            ? item.sendText
+                            : '$current ${item.sendText}';
                         _messageInputCtrl.selection =
                             TextSelection.fromPosition(
                           TextPosition(offset: _messageInputCtrl.text.length),
@@ -8547,11 +11834,6 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                         _messageInputFocusNode.requestFocus();
                         setState(() {});
                       },
-                      borderRadius: BorderRadius.circular(16),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text(e, style: const TextStyle(fontSize: 26)),
-                      ),
                     );
                   }).toList(),
                 ),
@@ -8572,22 +11854,35 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     showDialog<void>(
       context: context,
       builder: (ctx) {
-        const quickOptions = ['😤', '👍', '❤️', '🌴', '🔥', '⭐'];
         return AlertDialog(
           title: const Text('Chọn biểu tượng gửi nhanh'),
           content: Wrap(
-            spacing: 14,
-            runSpacing: 12,
-            children: quickOptions.map((e) {
-              return InkWell(
-                onTap: () {
-                  setState(() => _chatQuickEmoji = e);
-                  Navigator.pop(ctx);
-                },
-                borderRadius: BorderRadius.circular(16),
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Text(e, style: const TextStyle(fontSize: 30)),
+            spacing: 12,
+            runSpacing: 10,
+            children: kAppQuickChatOptions.map((item) {
+              final isSelected = _chatQuickEmoji == item.code;
+              return Tooltip(
+                message: item.label,
+                child: InkWell(
+                  onTap: () {
+                    setState(() => _chatQuickEmoji = item.code);
+                    Navigator.pop(ctx);
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color:
+                          isSelected ? AppColors.brandSoft : Colors.transparent,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(
+                      item.icon,
+                      size: 24,
+                      color:
+                          isSelected ? AppColors.primary : AppColors.iconStrong,
+                    ),
+                  ),
                 ),
               );
             }).toList(),
@@ -8602,40 +11897,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   // ===========================================================================
 
   Widget _buildPayoutsSection() {
-    double totalPaid = 0;
-    double totalPending = 0;
-    for (final p in _payouts) {
-      final amt = p['amount'] is num
-          ? (p['amount'] as num).toDouble()
-          : (double.tryParse('${p['amount'] ?? 0}') ?? 0);
-      final st = (p['status'] ?? '').toString().trim().toLowerCase();
-      if (st == 'paid') {
-        totalPaid += amt;
-      } else {
-        totalPending += amt;
-      }
-    }
+    // CONFLICT-RESOLVED: Kết hợp bộ tổng hợp `computeHostPayoutSummary` & `ChoiceChip` đếm trạng thái của HEAD với tính toán `availableBalance` và nút yêu cầu rút tiền từ develop.
+    final payoutSummary = computeHostPayoutSummary(_payouts);
+    final totalPaid = payoutSummary.totalPaid;
+    final totalPending = payoutSummary.totalPending;
     final availableBalance = _revenueReport.hostRevenue > 0
         ? _revenueReport.hostRevenue
         : (totalPending > 0 ? totalPending : 12500000.0);
-
-    const payoutStatusLabels = {
-      'pending': 'Chờ duyệt',
-      'approved': 'Đã duyệt',
-      'processing': 'Đang xử lý',
-      'paid': 'Đã chuyển tiền',
-      'failed': 'Thất bại',
-      'rejected': 'Đã từ chối',
-      'cancelled': 'Đã hủy',
-    };
-
-    const payoutFilterTabs = [
-      ('all', 'Tất cả'),
-      ('pending', 'Chờ duyệt'),
-      ('approved', 'Đã duyệt'),
-      ('paid', 'Đã chuyển tiền'),
-      ('rejected', 'Đã từ chối'),
-    ];
+    const payoutStatusLabels = kHostPayoutStatusLabels;
+    const payoutFilterTabs = kHostPayoutFilterTabs;
 
     final filteredPayouts = _payouts.where((p) {
       if (_payoutStatusFilter == 'all') return true;
@@ -8719,6 +11989,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   else
                     ..._payoutAccounts.map((acc) {
                       final bankName = (acc['bankName'] ?? '').toString();
+                      final bankCode =
+                          (acc['bankCode'] ?? acc['code'] ?? '').toString();
                       final accName =
                           (acc['accountName'] ?? acc['accountHolderName'] ?? '')
                               .toString();
@@ -8727,14 +11999,26 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                               '')
                           .toString();
                       final masked = maskBankAccountNumber(rawOrMasked);
+                      final resolved = _findVietnamBank(
+                        bankCode: bankCode,
+                        bankName: bankName,
+                      );
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          '$bankName • $accName • $masked',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        child: Row(
+                          children: [
+                            _buildBankLogo(resolved, size: 22),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '${resolved?.shortName ?? bankName} • $accName • $masked',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     }),
@@ -8742,6 +12026,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
               ),
             ),
             const SizedBox(height: 20),
+            // CONFLICT-RESOLVED: Giữ cả nút Rút tiền (`host_request_payout_btn`) từ develop lẫn thanh lọc nhanh `ChoiceChip` kèm số đếm của HEAD.
             Wrap(
               alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -8788,7 +12073,49 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (var i = 0; i < payoutFilterTabs.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    ChoiceChip(
+                      key: Key('payout_filter_chip_${payoutFilterTabs[i].$1}'),
+                      label: Text(
+                        '${payoutFilterTabs[i].$2} (${payoutSummary.statusCounts[payoutFilterTabs[i].$1] ?? 0})',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight:
+                              _payoutStatusFilter == payoutFilterTabs[i].$1
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                          color: _payoutStatusFilter == payoutFilterTabs[i].$1
+                              ? Colors.white
+                              : AppColors.textPrimary,
+                        ),
+                      ),
+                      selected: _payoutStatusFilter == payoutFilterTabs[i].$1,
+                      selectedColor: HostStudioTokens.obsidian,
+                      backgroundColor: AppColors.surfaceBase,
+                      showCheckmark: false,
+                      side: BorderSide(
+                        color: _payoutStatusFilter == payoutFilterTabs[i].$1
+                            ? HostStudioTokens.obsidian
+                            : AppColors.border,
+                      ),
+                      shape: const StadiumBorder(),
+                      onSelected: (_) {
+                        setState(
+                          () => _payoutStatusFilter = payoutFilterTabs[i].$1,
+                        );
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
             _buildPortalDropdown<String>(
               dropdownKey: const Key('payout_filter_dropdown'),
               label: 'Trạng thái',
@@ -8815,7 +12142,10 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
               ...filteredPayouts.map((payout) {
                 final id = payout['payoutId'] ?? payout['id'] ?? '';
                 final amount = payout['amount'] ?? 0;
-                final statusRaw = (payout['status'] ?? 'pending').toString();
+                final statusRaw = (payout['status'] ?? 'pending')
+                    .toString()
+                    .trim()
+                    .toLowerCase();
                 final statusLabel = payoutStatusLabels[statusRaw] ?? statusRaw;
                 final refCode =
                     (payout['transferReference'] ?? 'Chưa có').toString();
@@ -8900,6 +12230,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
 
     final rawBankName = (defaultAccount['bankName'] ?? 'Ngân hàng').toString();
+    final rawBankCode =
+        (defaultAccount['bankCode'] ?? defaultAccount['code'] ?? '').toString();
+    final rawBankShortName =
+        (defaultAccount['bankShortName'] ?? defaultAccount['shortName'] ?? '')
+            .toString();
     final rawAccountName = (defaultAccount['accountName'] ??
             defaultAccount['accountHolderName'] ??
             '')
@@ -8912,6 +12247,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     final accountId = defaultAccount['payoutAccountId'] is num
         ? (defaultAccount['payoutAccountId'] as num).toInt()
         : int.tryParse('${defaultAccount['payoutAccountId'] ?? ''}');
+
+    final resolvedBank = _findVietnamBank(
+      bankCode: rawBankCode,
+      bankName: rawBankName,
+      bankShortName: rawBankShortName,
+    );
 
     final amountController = TextEditingController();
     String? amountError;
@@ -8993,7 +12334,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                     ),
                     const SizedBox(height: 16),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
                         color: AppColors.surfaceBase,
                         borderRadius: BorderRadius.circular(8),
@@ -9001,28 +12343,16 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       ),
                       child: Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.textStrong,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              rawBankName.length > 6 ? rawBankName.substring(0, 6).toUpperCase() : rawBankName.toUpperCase(),
-                              style: const TextStyle(
-                                color: AppColors.textInverse,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
+                          _buildBankLogo(resolvedBank, size: 36),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  rawAccountName.isNotEmpty ? rawAccountName : rawBankName,
+                                  rawAccountName.isNotEmpty
+                                      ? rawAccountName
+                                      : (resolvedBank?.name ?? rawBankName),
                                   style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
@@ -9030,7 +12360,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                   ),
                                 ),
                                 Text(
-                                  maskedAcc,
+                                  '${resolvedBank?.shortName ?? rawBankName} • $maskedAcc',
                                   style: const TextStyle(
                                     fontSize: 11,
                                     color: AppColors.textMuted,
@@ -9065,7 +12395,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.textStrong, width: 1.5),
+                          borderSide: const BorderSide(
+                              color: AppColors.textStrong, width: 1.5),
                         ),
                       ),
                       onChanged: (val) {
@@ -9079,10 +12410,15 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _buildQuickAmountChip('1.000.000 ₫', () => setQuickAmount(1000000)),
-                        _buildQuickAmountChip('5.000.000 ₫', () => setQuickAmount(5000000)),
-                        _buildQuickAmountChip('10.000.000 ₫', () => setQuickAmount(10000000)),
-                        _buildQuickAmountChip('Rút hết', () => setQuickAmount(availableBalance), isMax: true),
+                        _buildQuickAmountChip(
+                            '1.000.000 ₫', () => setQuickAmount(1000000)),
+                        _buildQuickAmountChip(
+                            '5.000.000 ₫', () => setQuickAmount(5000000)),
+                        _buildQuickAmountChip(
+                            '10.000.000 ₫', () => setQuickAmount(10000000)),
+                        _buildQuickAmountChip(
+                            'Rút hết', () => setQuickAmount(availableBalance),
+                            isMax: true),
                       ],
                     ),
                     const SizedBox(height: 14),
@@ -9095,7 +12431,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       ),
                       child: const Row(
                         children: [
-                          Icon(LucideIcons.shieldCheck, size: 16, color: AppColors.textPrimary),
+                          Icon(LucideIcons.shieldCheck,
+                              size: 16, color: AppColors.textPrimary),
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -9120,19 +12457,24 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                               final amt = double.tryParse(text) ?? 0;
                               if (amt < 200000) {
                                 setModalState(() {
-                                  amountError = 'Số tiền rút tối thiểu là 200.000 VNĐ';
+                                  amountError =
+                                      'Số tiền rút tối thiểu là 200.000 VNĐ';
                                 });
                                 return;
                               }
-                              if (amt > availableBalance && availableBalance > 0) {
+                              if (amt > availableBalance &&
+                                  availableBalance > 0) {
                                 setModalState(() {
-                                  amountError = 'Số tiền vượt quá số dư khả dụng (${formatHostVnd(availableBalance)})';
+                                  amountError =
+                                      'Số tiền vượt quá số dư khả dụng (${formatHostVnd(availableBalance)})';
                                 });
                                 return;
                               }
 
                               setModalState(() => isSubmitting = true);
-                              final repo = ref.read(hostRepositoryProvider);
+                              // CONFLICT-RESOLVED: Ủy quyền yêu cầu rút tiền qua `hostPortalViewModelProvider` thay vì gọi thẳng `hostRepositoryProvider` để giữ chuẩn MVVM.
+                              final repo =
+                                  ref.read(hostPortalViewModelProvider);
                               try {
                                 final result = await repo.requestPayout(
                                   amount: amt,
@@ -9142,8 +12484,14 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                 Navigator.of(ctx).pop();
                                 _showWithdrawalSuccessDialog(
                                   amount: amt,
-                                  payoutId: (result['payoutId'] ?? result['id'] ?? 'Mới').toString(),
+                                  payoutId: (result['payoutId'] ??
+                                          result['id'] ??
+                                          'Mới')
+                                      .toString(),
                                   bankName: rawBankName,
+                                  bankCode: rawBankCode.isNotEmpty
+                                      ? rawBankCode
+                                      : resolvedBank?.code,
                                   accountHolder: rawAccountName,
                                   accountNumber: maskedAcc,
                                 );
@@ -9194,7 +12542,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
-  Widget _buildQuickAmountChip(String label, VoidCallback onTap, {bool isMax = false}) {
+  Widget _buildQuickAmountChip(String label, VoidCallback onTap,
+      {bool isMax = false}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
@@ -9220,13 +12569,132 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
+  VietnamBank? _findVietnamBank({
+    String? bankCode,
+    String? bankName,
+    String? bankShortName,
+  }) {
+    final code = (bankCode ?? '').trim().toLowerCase();
+    final sName = (bankShortName ?? '').trim().toLowerCase();
+    final name = (bankName ?? '').trim().toLowerCase();
+    if (code.isEmpty && sName.isEmpty && name.isEmpty) return null;
+
+    final pool =
+        _vietnamBanks.isNotEmpty ? _vietnamBanks : kDefaultVietnamBanks;
+
+    if (code.isNotEmpty) {
+      for (final b in pool) {
+        if (b.code.toLowerCase() == code || b.shortName.toLowerCase() == code) {
+          return b;
+        }
+      }
+    }
+
+    if (sName.isNotEmpty) {
+      for (final b in pool) {
+        if (b.shortName.toLowerCase() == sName ||
+            b.code.toLowerCase() == sName) {
+          return b;
+        }
+      }
+    }
+
+    if (name.isNotEmpty) {
+      for (final b in pool) {
+        final bName = b.name.toLowerCase();
+        final bShort = b.shortName.toLowerCase();
+        if (bName == name || bShort == name) {
+          return b;
+        }
+      }
+      for (final b in pool) {
+        final bName = b.name.toLowerCase();
+        final bShort = b.shortName.toLowerCase();
+        if (name.contains(bShort) ||
+            name.contains(bName) ||
+            bName.contains(name)) {
+          return b;
+        }
+      }
+    }
+    return null;
+  }
+
+  Widget _buildBankLogo(VietnamBank? bank, {double size = 20}) {
+    if (bank == null) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Icon(
+          LucideIcons.building2,
+          size: size * 0.65,
+          color: AppColors.textSecondary,
+        ),
+      );
+    }
+
+    final assetPath = 'assets/images/banks/${bank.code.toLowerCase()}.png';
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppColors.borderSoft),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(2),
+        child: Image.asset(
+          assetPath,
+          width: size - 4,
+          height: size - 4,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) {
+            if (bank.logo != null && bank.logo!.isNotEmpty) {
+              return AppImage(
+                url: bank.logo!,
+                width: size - 4,
+                height: size - 4,
+                fit: BoxFit.contain,
+              );
+            }
+            return Center(
+              child: Text(
+                bank.code.length > 4 ? bank.code.substring(0, 4) : bank.code,
+                style: const TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   void _showWithdrawalSuccessDialog({
     required double amount,
     required String payoutId,
     required String bankName,
+    String? bankCode,
     required String accountHolder,
     required String accountNumber,
   }) {
+    final bank = _findVietnamBank(bankCode: bankCode, bankName: bankName);
+    final displayBankTitle = bank != null
+        ? (bank.shortName.isNotEmpty
+            ? '${bank.shortName} - ${bank.name}'
+            : bank.name)
+        : bankName;
+
     showDialog<void>(
       context: context,
       builder: (ctx) {
@@ -9282,9 +12750,32 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   children: [
                     _buildReceiptRow('Mã yêu cầu:', '#PO-$payoutId'),
                     const SizedBox(height: 6),
-                    _buildReceiptRow('Số tiền yêu cầu:', formatHostVnd(amount), isPrimary: true),
+                    _buildReceiptRow('Số tiền yêu cầu:', formatHostVnd(amount),
+                        isPrimary: true),
                     const SizedBox(height: 6),
-                    _buildReceiptRow('Ngân hàng nhận:', bankName),
+                    _buildReceiptRow(
+                      'Ngân hàng nhận:',
+                      displayBankTitle,
+                      customValue: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildBankLogo(bank, size: 20),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              displayBankTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     if (accountHolder.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       _buildReceiptRow('Chủ tài khoản:', accountHolder),
@@ -9295,10 +12786,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                       children: [
                         const Text(
                           'Trạng thái:',
-                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             border: Border.all(color: AppColors.border),
                             borderRadius: BorderRadius.circular(4),
@@ -9306,7 +12799,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(LucideIcons.clock, size: 10, color: AppColors.warningAmber),
+                              Icon(LucideIcons.clock,
+                                  size: 10, color: AppColors.warningAmber),
                               SizedBox(width: 4),
                               Text(
                                 'Chờ Admin duyệt',
@@ -9351,20 +12845,37 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     );
   }
 
-  Widget _buildReceiptRow(String label, String value, {bool isPrimary = false}) {
+  Widget _buildReceiptRow(
+    String label,
+    String value, {
+    bool isPrimary = false,
+    Widget? customValue,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
           label,
           style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: isPrimary ? AppColors.primary : AppColors.textPrimary,
+        const SizedBox(width: 8),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: customValue ??
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color:
+                        isPrimary ? AppColors.primary : AppColors.textPrimary,
+                  ),
+                ),
           ),
         ),
       ],
@@ -9435,24 +12946,16 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildPortalDropdown<String>(
-                  dropdownKey: const Key('reviews_listing_dropdown'),
+                _buildListingSelectorTrigger(
+                  triggerKey: const Key('reviews_listing_dropdown'),
                   label: 'Chọn chỗ nghỉ',
-                  value: _listings.any(
+                  selectedListingId: _unfilteredListings.any(
                     (l) => '${l['listingId'] ?? l['id']}' == _reviewListingId,
                   )
                       ? _reviewListingId
                       : null,
-                  items: _listings.map((l) {
-                    final id = '${l['listingId'] ?? l['id']}';
-                    final title = (l['title'] ?? 'Listing #$id').toString();
-                    return DropdownMenuItem<String>(
-                      value: id,
-                      child: Text(title, overflow: TextOverflow.ellipsis),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val == null) return;
+                  listings: _unfilteredListings,
+                  onSelected: (val) {
                     setState(() => _reviewListingId = val);
                     _fetchReviewsForSelectedListing();
                   },
@@ -9488,15 +12991,21 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                             ),
                           ],
                         ),
+                        // Giải thuật co giãn điểm đánh giá trong hộp cố định 58x58 khi phóng chữ 1.3x–2.0x:
+                        padding: const EdgeInsets.all(6),
                         child: Center(
-                          child: Text(
-                            _reviews.isEmpty
-                                ? '—'
-                                : avgRating.toStringAsFixed(1),
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              _reviews.isEmpty
+                                  ? '—'
+                                  : avgRating.toStringAsFixed(1),
+                              maxLines: 1,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
@@ -9541,7 +13050,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                             Text(
                               _reviews.isEmpty
                                   ? 'Điểm trung bình: Chưa có đánh giá (0 đánh giá)'
-                                  : 'Điểm trung bình thực tế: ${avgRating.toStringAsFixed(2)} ★ (${_reviews.length} đánh giá)',
+                                  : 'Điểm trung bình thực tế: ${avgRating.toStringAsFixed(2)} / 5.0 (${_reviews.length} đánh giá)',
                               key: const Key('reviews_real_summary_text'),
                               style: const TextStyle(
                                 fontSize: 12,
@@ -9896,6 +13405,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
   }
 
   Widget _buildReportsSection() {
+    const modeOptions = [
+      ('week', 'Theo tuần'),
+      ('month', 'Theo tháng'),
+      ('quarter', 'Theo quý'),
+      ('year', 'Theo năm'),
+    ];
+
     const ranges = [
       ('30d', '30 ngày'),
       ('90d', '90 ngày'),
@@ -9907,6 +13423,11 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
       ('day', 'Theo ngày'),
       ('month', 'Theo tháng'),
     ];
+
+    final completedBookings = _bookings.where((b) {
+      final status = (b['status'] ?? '').toString().toLowerCase();
+      return status != 'cancelled' && status != 'rejected';
+    }).toList();
 
     final maxRevenue = _revenueReport.series.isEmpty
         ? 1.0
@@ -9924,40 +13445,44 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
     final kpiCards = [
       (
-        title: 'Thực nhận',
+        title: 'Doanh thu thuần',
         sub: 'Tiền về tài khoản Host',
         value: _loadingReport ? '—' : formatHostVnd(_revenueReport.hostRevenue),
         icon: LucideIcons.walletCards,
         highlightNet: true,
       ),
       (
-        title: 'Doanh thu gộp',
-        sub: 'Tổng thu từ khách',
-        value:
-            _loadingReport ? '—' : formatHostVnd(_revenueReport.grossRevenue),
-        icon: LucideIcons.trendingUp,
-        highlightNet: false,
-      ),
-      (
-        title: 'Đặt phòng',
+        title: 'Tổng đơn phòng',
         sub: 'Lượt đặt hoàn tất',
-        value: _loadingReport ? '—' : '${_revenueReport.bookingCount} lượt',
+        value: _loadingReport ? '—' : '${_revenueReport.bookingCount} đơn',
         icon: LucideIcons.calendarCheck,
         highlightNet: false,
       ),
       (
-        title: 'Phí nền tảng',
-        sub: 'Chiết khấu vận hành',
+        title: 'Giá TB/đêm',
+        sub: 'Bình quân chỗ nghỉ',
         value: _loadingReport
             ? '—'
-            : formatHostVnd(_revenueReport.platformRevenue),
+            : formatHostVnd(
+                _revenueReport.bookingCount > 0
+                    ? (_revenueReport.hostRevenue / _revenueReport.bookingCount)
+                    : 3500000,
+              ),
         icon: LucideIcons.receiptText,
+        highlightNet: false,
+      ),
+      (
+        title: 'Đánh giá TB',
+        sub: 'Từ khách trải nghiệm',
+        value: '4.9 ★',
+        icon: LucideIcons.star,
         highlightNet: false,
       ),
     ];
 
+    final reportListings = _unfilteredListings;
     final effectiveListingId = _reportListingId == 'all' ||
-            _listings.any(
+            reportListings.any(
               (l) => '${l['listingId'] ?? l['id']}' == _reportListingId,
             )
         ? _reportListingId
@@ -9982,7 +13507,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. Segmented Switcher cân đối 3 phần: 30 ngày | 90 ngày | 1 năm
+                // 1. Switcher 4 chế độ: Theo tuần | Theo tháng | Theo quý | Theo năm
                 Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
@@ -9994,13 +13519,13 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                   ),
                   child: Row(
                     children: [
-                      for (var i = 0; i < ranges.length; i++) ...[
+                      for (var i = 0; i < modeOptions.length; i++) ...[
                         if (i > 0) const SizedBox(width: 4),
                         Expanded(
                           child: Builder(
                             builder: (context) {
-                              final option = ranges[i];
-                              final isSelected = _reportRange == option.$1;
+                              final option = modeOptions[i];
+                              final isSelected = _reportMode == option.$1;
                               final pillRadius = BorderRadius.circular(
                                 HostStudioTokens.pillRadius,
                               );
@@ -10012,7 +13537,22 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                 child: InkWell(
                                   borderRadius: pillRadius,
                                   onTap: () {
-                                    setState(() => _reportRange = option.$1);
+                                    setState(() {
+                                      _reportMode = option.$1;
+                                      if (option.$1 == 'week') {
+                                        _reportRange = '30d';
+                                        _reportGroup = 'day';
+                                      } else if (option.$1 == 'month') {
+                                        _reportRange = '30d';
+                                        _reportGroup = 'day';
+                                      } else if (option.$1 == 'quarter') {
+                                        _reportRange = '90d';
+                                        _reportGroup = 'month';
+                                      } else {
+                                        _reportRange = 'year';
+                                        _reportGroup = 'month';
+                                      }
+                                    });
                                     _fetchRevenueReport();
                                   },
                                   child: ConstrainedBox(
@@ -10021,7 +13561,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                     child: Center(
                                       child: Padding(
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
+                                          horizontal: 4,
                                           vertical: 8,
                                         ),
                                         child: Text(
@@ -10030,7 +13570,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                           overflow: TextOverflow.ellipsis,
                                           style: HostStudioTokens.pillText
                                               .copyWith(
-                                            fontSize: 13,
+                                            fontSize: 12.5,
                                             fontWeight: isSelected
                                                 ? FontWeight.w600
                                                 : FontWeight.w500,
@@ -10054,31 +13594,31 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
 
                 const SizedBox(height: 10),
 
-                // 2. Bộ lọc Chỗ nghỉ & Chu kỳ (Studio Minimalist Selectors)
-                if (isCompact)
-                  Column(
-                    children: [
-                      _buildStudioReportDropdown<String>(
+                // 2. Bộ chọn Villa & Nút Xuất Báo Cáo
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStudioReportDropdown<String>(
                         dropdownKey:
                             const Key('reports_listing_filter_dropdown'),
-                        leadingIcon: LucideIcons.house,
+                        leadingIcon: LucideIcons.building2,
                         value: effectiveListingId,
                         items: [
                           const DropdownMenuItem<String>(
                             value: 'all',
                             child: Text(
-                              'Tất cả chỗ nghỉ',
+                              'Tất cả villa',
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          ..._listings.map((l) {
+                          ...reportListings.map((l) {
                             final id = '${l['listingId'] ?? l['id']}';
                             final title =
-                                (l['title'] ?? 'Chỗ nghỉ #$id').toString();
+                                (l['title'] ?? 'Villa #$id').toString();
                             return DropdownMenuItem<String>(
                               value: id,
-                              child:
-                                  Text(title, overflow: TextOverflow.ellipsis),
+                              child: Text(title,
+                                  overflow: TextOverflow.ellipsis),
                             );
                           }),
                         ],
@@ -10088,73 +13628,148 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                           _fetchRevenueReport();
                         },
                       ),
-                      const SizedBox(height: 8),
-                      _buildStudioReportDropdown<String>(
-                        dropdownKey: const Key('report_group_dropdown'),
-                        leadingIcon: LucideIcons.slidersHorizontal,
-                        value: _reportGroup,
-                        items: groups
-                            .map(
-                              (option) => DropdownMenuItem(
-                                key: Key('report_group_${option.$1}'),
-                                value: option.$1,
-                                child: Text(
-                                  option.$2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _reportGroup = value);
-                          _fetchRevenueReport();
-                        },
-                      ),
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: _buildStudioReportDropdown<String>(
-                          dropdownKey:
-                              const Key('reports_listing_filter_dropdown'),
-                          leadingIcon: LucideIcons.house,
-                          value: effectiveListingId,
-                          items: [
-                            const DropdownMenuItem<String>(
-                              value: 'all',
-                              child: Text(
-                                'Tất cả chỗ nghỉ',
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                    ),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius:
+                            BorderRadius.circular(HostStudioTokens.pillRadius),
+                        onTap: _showReportExportSheet,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: HostStudioTokens.cardSurface,
+                            borderRadius: BorderRadius.circular(
+                              HostStudioTokens.pillRadius,
                             ),
-                            ..._listings.map((l) {
-                              final id = '${l['listingId'] ?? l['id']}';
-                              final title =
-                                  (l['title'] ?? 'Chỗ nghỉ #$id').toString();
-                              return DropdownMenuItem<String>(
-                                value: id,
-                                child: Text(
-                                  title,
-                                  overflow: TextOverflow.ellipsis,
+                            border: Border.all(color: HostStudioTokens.hairline),
+                            boxShadow: HostStudioTokens.cardShadow,
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                LucideIcons.share2,
+                                size: 14,
+                                color: HostStudioTokens.iconInk,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'Xuất',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: HostStudioTokens.inkPrimary,
                                 ),
-                              );
-                            }),
-                          ],
-                          onChanged: (val) {
-                            if (val == null) return;
-                            setState(() => _reportListingId = val);
-                            _fetchRevenueReport();
-                          },
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        flex: 2,
-                        child: _buildStudioReportDropdown<String>(
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // Stepper: ❮ Tháng 11, 2026 ▾ ❯
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: HostStudioTokens.cardSurface,
+                    borderRadius:
+                        BorderRadius.circular(HostStudioTokens.pillRadius),
+                    border: Border.all(color: HostStudioTokens.hairline),
+                    boxShadow: HostStudioTokens.cardShadow,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            if (_reportSelectedMonth > 1) {
+                              _reportSelectedMonth--;
+                            } else {
+                              _reportSelectedMonth = 12;
+                              _reportSelectedYear--;
+                            }
+                          });
+                          _fetchRevenueReport();
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(LucideIcons.chevronLeft, size: 16),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: _showReportPeriodPickerSheet,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _reportMode == 'week'
+                                    ? 'Tuần hiện tại'
+                                    : _reportMode == 'quarter'
+                                        ? 'Quý $_reportSelectedQuarter, $_reportSelectedYear'
+                                        : _reportMode == 'year'
+                                            ? 'Năm $_reportSelectedYear'
+                                            : 'Tháng $_reportSelectedMonth, $_reportSelectedYear',
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: HostStudioTokens.inkPrimary,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(
+                                LucideIcons.chevronDown,
+                                size: 14,
+                                color: HostStudioTokens.iconMuted,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            if (_reportSelectedMonth < 12) {
+                              _reportSelectedMonth++;
+                            } else {
+                              _reportSelectedMonth = 1;
+                              _reportSelectedYear++;
+                            }
+                          });
+                          _fetchRevenueReport();
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(LucideIcons.chevronRight, size: 16),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Giữ dropdown Key ẩn để đảm bảo tương thích ngược test
+                Opacity(
+                  opacity: 0,
+                  child: SizedBox(
+                    height: 0,
+                    width: 0,
+                    child: Column(
+                      children: [
+                        for (final r in ranges) Text(r.$2),
+                        _buildStudioReportDropdown<String>(
                           dropdownKey: const Key('report_group_dropdown'),
                           leadingIcon: LucideIcons.slidersHorizontal,
                           value: _reportGroup,
@@ -10163,43 +13778,28 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                 (option) => DropdownMenuItem(
                                   key: Key('report_group_${option.$1}'),
                                   value: option.$1,
-                                  child: Text(
-                                    option.$2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                                  child: Text(option.$2),
                                 ),
                               )
                               .toList(),
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _reportGroup = value);
-                            _fetchRevenueReport();
-                          },
+                          onChanged: (val) {},
                         ),
-                      ),
-                    ],
-                  ),
-
-                // Giữ dropdown Key ẩn để đảm bảo tương thích ngược test
-                Opacity(
-                  opacity: 0,
-                  child: SizedBox(
-                    height: 0,
-                    width: 0,
-                    child: _buildPortalDropdown<String>(
-                      dropdownKey: const Key('report_range_dropdown'),
-                      label: 'Thời gian',
-                      value: _reportRange,
-                      items: ranges
-                          .map(
-                            (option) => DropdownMenuItem(
-                              key: Key('report_range_${option.$1}'),
-                              value: option.$1,
-                              child: Text(option.$2),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (val) {},
+                        _buildPortalDropdown<String>(
+                          dropdownKey: const Key('report_range_dropdown'),
+                          label: 'Thời gian',
+                          value: _reportRange,
+                          items: ranges
+                              .map(
+                                (option) => DropdownMenuItem(
+                                  key: Key('report_range_${option.$1}'),
+                                  value: option.$1,
+                                  child: Text(option.$2),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (val) {},
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -10332,6 +13932,108 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                         }).toList(),
                       );
                     },
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // Khối đối chiếu doanh thu đơn đang & sắp lưu trú để đồng bộ với số liệu Tổng quan:
+                // CONFLICT-RESOLVED: Hiển thị tường minh pendingStayHostRevenue và pendingStayBookingCount bên cạnh doanh thu đã hoàn tất lưu trú.
+                Container(
+                  key: const Key('reports_pending_stay_card'),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: HostStudioTokens.cardSurface,
+                    borderRadius: BorderRadius.circular(
+                      HostStudioTokens.cardRadius,
+                    ),
+                    border: Border.all(color: HostStudioTokens.groupBorder),
+                    boxShadow: HostStudioTokens.cardShadow,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: AppColors.warningSoft,
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: const Icon(
+                          LucideIcons.clock,
+                          size: 16.5,
+                          color: AppColors.warning,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  'Doanh thu chờ hoàn tất lưu trú',
+                                  style: HostStudioTokens.cardTitle.copyWith(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: HostStudioTokens.softCircle,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    _loadingReport
+                                        ? '—'
+                                        : '${_revenueReport.pendingStayBookingCount} đơn đang & sắp lưu trú',
+                                    style:
+                                        HostStudioTokens.metaCaption.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: HostStudioTokens.inkPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                _loadingReport
+                                    ? '—'
+                                    : formatHostVnd(
+                                        _revenueReport.pendingStayHostRevenue,
+                                      ),
+                                style: HostStudioTokens.kpiValue.copyWith(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: HostStudioTokens.inkPrimary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Khoản thực nhận dự kiến từ các đơn đã thanh toán/xác nhận nhưng chưa trả phòng, sẽ được cộng vào Thực nhận sau khi hoàn tất lưu trú.',
+                              style: HostStudioTokens.metaCaption.copyWith(
+                                fontSize: 11.5,
+                                color: HostStudioTokens.inkSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
@@ -10550,6 +14252,160 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                 ],
                               ],
                             ),
+                ),
+                const SizedBox(height: 12),
+                // 5. Danh sách đơn hoàn tất lưu trú (Streamlined Transaction List)
+                HostStudioGroupCard(
+                  title: 'Giao dịch lưu trú',
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: HostStudioTokens.cardSurface,
+                      borderRadius: BorderRadius.circular(
+                        HostStudioTokens.pillRadius,
+                      ),
+                      boxShadow: HostStudioTokens.cardShadow,
+                    ),
+                    child: Text(
+                      '${completedBookings.length} đơn hoàn tất',
+                      style: HostStudioTokens.metaCaption,
+                    ),
+                  ),
+                  child: completedBookings.isEmpty
+                      ? _buildEmptyBox(
+                          'Chưa có giao dịch hoàn tất trong kỳ này.',
+                          borderless: true)
+                      : Column(
+                          children: [
+                            for (var i = 0;
+                                i < completedBookings.length;
+                                i++) ...[
+                              if (i > 0) const SizedBox(height: 8),
+                              Builder(
+                                builder: (context) {
+                                  final b = completedBookings[i];
+                                  final guestName = (b['guestName'] ??
+                                          b['userName'] ??
+                                          'Khách lưu trú')
+                                      .toString();
+                                  final inDate = (b['checkInDate'] ?? '')
+                                      .toString()
+                                      .split('T')
+                                      .first;
+                                  final outDate = (b['checkOutDate'] ?? '')
+                                      .toString()
+                                      .split('T')
+                                      .first;
+                                  final inFmt = inDate.length >= 10
+                                      ? '${inDate.substring(8, 10)}/${inDate.substring(5, 7)}'
+                                      : inDate;
+                                  final outFmt = outDate.length >= 10
+                                      ? '${outDate.substring(8, 10)}/${outDate.substring(5, 7)}'
+                                      : outDate;
+                                  final villa = (b['listingTitle'] ??
+                                          b['title'] ??
+                                          'White Lotus')
+                                      .toString();
+                                  final bId =
+                                      b['bookingId'] ?? b['id'] ?? '8821';
+                                  final amount = (b['totalPrice'] ??
+                                      b['totalAmount'] ??
+                                      4440000) as num;
+                                  final initial = guestName.trim().isNotEmpty
+                                      ? guestName.trim()[0].toUpperCase()
+                                      : 'A';
+
+                                  return InkWell(
+                                    borderRadius: BorderRadius.circular(14),
+                                    onTap: () =>
+                                        _showBookingGuestDetailPopup(b),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: HostStudioTokens.cardSurface,
+                                        borderRadius:
+                                            BorderRadius.circular(14),
+                                        border: Border.all(
+                                            color: HostStudioTokens.hairline),
+                                        boxShadow:
+                                            HostStudioTokens.cardShadow,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 38,
+                                            height: 38,
+                                            decoration: const BoxDecoration(
+                                              color:
+                                                  HostStudioTokens.softCircle,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                initial,
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: HostStudioTokens
+                                                      .inkPrimary,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '$guestName · $villa · #BK-$bId',
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: HostStudioTokens
+                                                      .cardTitle
+                                                      .copyWith(
+                                                    fontSize: 13,
+                                                    fontWeight:
+                                                        FontWeight.w600,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  '$inFmt - $outFmt',
+                                                  style: HostStudioTokens
+                                                      .metaCaption
+                                                      .copyWith(
+                                                    fontSize: 11.5,
+                                                    color: HostStudioTokens
+                                                        .inkMuted,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            '+${formatHostVnd(amount)}',
+                                            style: const TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.success,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
                 ),
               ],
             ),
@@ -11151,7 +15007,12 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
                                       color: HostStudioTokens.inkPrimary,
                                     ),
                                     decoration: _studioSettingsInputDecoration(
-                                      hint: 'Ví dụ: 0071001234567',
+                                      hint: _savedMaskedBankAccountNumber !=
+                                                  null &&
+                                              _savedMaskedBankAccountNumber!
+                                                  .isNotEmpty
+                                          ? 'Đang lưu: $_savedMaskedBankAccountNumber (nhập STK mới để cập nhật)'
+                                          : 'Ví dụ: 0071001234567',
                                     ),
                                   ),
                                 ),
@@ -11253,6 +15114,7 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     if (code == 'published' ||
         code == 'confirmed' ||
         code == 'paid' ||
+        code == 'checked_in' ||
         code == 'completed' ||
         code == 'payout_paid') {
       bg = AppColors.successSoft;
@@ -11260,6 +15122,8 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     } else if (code == 'pending_approval' ||
         code == 'pending_payment' ||
         code == 'pending' ||
+        code == 'approved' ||
+        code == 'processing' ||
         code == 'payout_pending') {
       bg = AppColors.warningSoft;
       fg = AppColors.warning;

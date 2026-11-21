@@ -30,6 +30,11 @@ const requiredMomoConfigKeys = [
     "MOMO_IPN_URL",
 ] as const;
 
+/**
+ * Giải thuật chuẩn hóa số tiền giao dịch MoMo sang số nguyên dương VND:
+ * - Làm tròn số nguyên (`Math.round`), kiểm tra tính hữu hạn và giá trị lớn hơn 0,
+ *   loại bỏ sai số dấu phẩy động trước khi ký số và gửi yêu cầu tới cổng MoMo.
+ */
 const toMomoAmount = (value: unknown) => {
     const amount = Math.round(Number(value));
 
@@ -40,6 +45,11 @@ const toMomoAmount = (value: unknown) => {
     return amount;
 };
 
+/**
+ * Giải thuật chuẩn hóa chuỗi thông tin đơn hàng (`orderInfo`) gửi MoMo:
+ * - Loại bỏ ký tự xuống dòng (`\r`, `\n`), gộp khoảng trắng thừa và giới hạn tối đa 200 ký tự
+ *   để không làm lệch cấu trúc chuỗi ký chuẩn tắc.
+ */
 const normalizeOrderInfo = (value: string) =>
     value
         .replace(/[\r\n]+/g, " ")
@@ -47,6 +57,10 @@ const normalizeOrderInfo = (value: string) =>
         .trim()
         .slice(0, 200);
 
+/**
+ * Giải thuật đọc và đối soát đầy đủ bộ khóa cấu hình tích hợp cổng thanh toán MoMo từ biến môi trường,
+ * thu thập danh sách các khóa còn thiếu (`missingKeys`) phục vụ chẩn đoán trạng thái sẵn sàng.
+ */
 const readMomoConfig = () => {
     const env = getEnv();
     const config = {
@@ -76,6 +90,10 @@ const readMomoConfig = () => {
     };
 };
 
+/**
+ * Kiểm tra trạng thái sẵn sàng của phương thức thanh toán MoMo; ẩn danh sách tên biến môi trường thiếu
+ * trên môi trường `production` để tránh rò rỉ cấu trúc cấu hình nội bộ.
+ */
 export const getMomoAvailability = () => {
     const { missingKeys, nodeEnv } = readMomoConfig();
 
@@ -85,6 +103,11 @@ export const getMomoAvailability = () => {
     };
 };
 
+/**
+ * Giải thuật chuẩn hóa URL endpoint khởi tạo giao dịch MoMo v2:
+ * - Cắt dấu gạch chéo dư ở cuối và tự động bổ sung đường dẫn chuẩn `/v2/gateway/api/create`
+ *   nếu cấu hình chỉ cung cấp tên miền gốc hoặc `/v2/gateway`.
+ */
 const normalizeMomoEndpoint = (endpoint: string) => {
     const trimmedEndpoint = endpoint.trim().replace(/\/+$/, "");
 
@@ -113,6 +136,10 @@ const normalizeMomoEndpoint = (endpoint: string) => {
     }
 };
 
+/**
+ * Ràng buộc kiểm tra cấu hình MoMo bắt buộc trước khi thực hiện giao dịch;
+ * ném `AppError(503)` nếu thiếu bất kỳ khóa kết nối hoặc khóa bí mật nào.
+ */
 const assertMomoConfigured = () => {
     const { config, missingKeys } = readMomoConfig();
 
@@ -138,6 +165,11 @@ const assertMomoConfigured = () => {
     };
 };
 
+/**
+ * Giải thuật ghép chuỗi khóa-giá trị chuẩn tắc (Canonical Key-Value String) của MoMo:
+ * - Lọc bỏ các trường `undefined`/`null`, sắp xếp tên tham số theo thứ tự từ điển tăng dần (`sort()`)
+ *   và nối dạng `key=value` phân tách bởi dấu `&` (không mã hóa URL) theo đúng đặc tả chữ ký MoMo v2.
+ */
 const stringifyMomoParams = (params: Record<string, string | number | boolean | null | undefined>) =>
     Object.keys(params)
         .filter((key) => params[key] !== undefined && params[key] !== null)
@@ -145,9 +177,19 @@ const stringifyMomoParams = (params: Record<string, string | number | boolean | 
         .map((key) => `${key}=${String(params[key])}`)
         .join("&");
 
+/**
+ * Giải thuật ký mật mã học thông điệp MoMo bằng `HMAC-SHA256`:
+ * - Dựng chuỗi dữ liệu chuẩn tắc UTF-8 qua `stringifyMomoParams` và tính chữ ký `HMAC-SHA256`
+ *   với khóa bí mật `secretKey`, xuất ra chuỗi thập lục phân (hex).
+ */
 const createSignature = (params: Record<string, string | number | boolean | null | undefined>, secretKey: string) =>
     createHmac("sha256", secretKey).update(stringifyMomoParams(params), "utf8").digest("hex");
 
+/**
+ * Giải thuật đối chiếu hai chữ ký hex theo thời gian hằng định (Constant-Time Signature Comparison):
+ * - Kiểm tra biểu thức chính quy thập lục phân, chuyển sang `Buffer` nhị phân cùng độ dài và so sánh
+ *   qua `crypto.timingSafeEqual` nhằm triệt tiêu tấn công kênh kề thời gian (Timing Attack).
+ */
 const safeEqual = (left: string, right: string) => {
     if (!/^[a-f0-9]+$/i.test(left) || !/^[a-f0-9]+$/i.test(right)) {
         return false;
@@ -159,6 +201,10 @@ const safeEqual = (left: string, right: string) => {
     return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 };
 
+/**
+ * Giải thuật chuẩn hóa dữ liệu callback (Return URL / IPN Webhook) của MoMo về bản đồ chuỗi phẳng,
+ * loại bỏ trường `null`/`undefined` và lấy phần tử đầu tiên nếu tham số bị truyền lặp dạng mảng.
+ */
 export const normalizeMomoPayload = (input: Record<string, unknown>): MomoPayload =>
     Object.entries(input).reduce<MomoPayload>((payload, [key, value]) => {
         if (value === undefined || value === null) {
@@ -169,6 +215,14 @@ export const normalizeMomoPayload = (input: Record<string, unknown>): MomoPayloa
         return payload;
     }, {});
 
+/**
+ * Giải thuật khởi tạo phiên thanh toán MoMo v2 và ký số yêu cầu tạo đơn:
+ * 1. Chuẩn hóa số tiền nguyên VND (`toMomoAmount`), gắn `orderId = String(payment.paymentId)`,
+ *    sinh `requestId` duy nhất và mã hóa Base64 ngữ cảnh đối soát vào `extraData`.
+ * 2. Dựng tập tham số chuẩn tắc và ký `HMAC-SHA256` bằng `secretKey`.
+ * 3. Gửi yêu cầu HTTP POST tới cổng MoMo với giới hạn thời gian chờ cứng 10 giây (`AbortSignal.timeout`),
+ *    kiểm tra `resultCode === 0` và trích xuất URL thanh toán (`payUrl` / `shortLink` / `deeplink`).
+ */
 export const buildMomoPaymentUrl = async ({
     booking,
     payment,
@@ -268,6 +322,12 @@ export const buildMomoPaymentUrl = async ({
     };
 };
 
+/**
+ * Giải thuật xác thực chữ ký `HMAC-SHA256` của thông điệp Return URL / IPN từ MoMo:
+ * - Trích xuất đúng danh sách 12 trường dữ liệu cố định theo đặc tả IPN MoMo v2 kết hợp `accessKey` máy chủ,
+ *   sắp xếp từ điển và tính lại chữ ký `HMAC-SHA256` bằng `secretKey`.
+ * - So sánh chữ ký nhận được với chữ ký tính toán bằng `safeEqual` (`timingSafeEqual`) để chống giả mạo callback.
+ */
 export const verifyMomoPayload = (payload: MomoPayload) => {
     const config = assertMomoConfigured();
     const signature = payload.signature;
@@ -304,6 +364,11 @@ export const verifyMomoPayload = (payload: MomoPayload) => {
     return safeEqual(signature.toLowerCase(), signed.toLowerCase());
 };
 
+/**
+ * Giải thuật đối khớp chính xác số tiền thực thu từ MoMo với số tiền gốc của giao dịch thanh toán:
+ * - Ràng buộc `payload.amount` chỉ gồm các chữ số nguyên dương và bằng tuyệt đối `toMomoAmount(payment.amount)`,
+ *   ngăn chặn tấn công hạ giá trị thanh toán ở phía client hoặc callback giả.
+ */
 export const isMomoAmountMatching = (payload: MomoPayload, payment: PaymentDocument) => {
     if (!payload.amount || !/^\d+$/.test(payload.amount)) {
         return false;

@@ -3,13 +3,21 @@ import '../../../../core/errors/app_failure.dart';
 import '../../domain/entities/booking.dart';
 import '../../domain/repositories/booking_repository.dart';
 
+/// Triển khai cụ thể của `BookingRepository` giao tiếp với các điểm cuối REST API
+/// `/api/bookings`, `/api/coupons/validate` và `/api/payments`.
+///
+/// Chịu trách nhiệm chuẩn hóa dữ liệu đặt phòng đơn lẻ/hàng loạt, bóc tách lỗi chi tiết theo từng dòng
+/// trong giao dịch lô (`BulkBookingException`), kiểm tra mã giảm giá, khởi tạo phiên thanh toán trực tuyến
+/// (VNPay / MoMo) và đối soát trạng thái giao dịch.
 class BookingRepositoryImpl implements BookingRepository {
   final dynamic _client;
 
+  /// Khởi tạo `BookingRepositoryImpl` với đối tượng kết nối HTTP (`Dio` hoặc `DioClient`).
   const BookingRepositoryImpl(this._client);
 
   Dio get _dio => _client is Dio ? _client : (_client as dynamic).dio as Dio;
 
+  // Giải thuật mở khung bao phản hồi chuẩn `{ success, data, message, code }` từ Backend API.
   static dynamic _unwrapEnvelope(dynamic responseBody) {
     if (responseBody is Map<String, dynamic>) {
       if (responseBody['success'] == false) {
@@ -35,11 +43,25 @@ class BookingRepositoryImpl implements BookingRepository {
       final mapData =
           rawData is Map<String, dynamic> ? rawData : <String, dynamic>{};
       final serverMessage = mapData['message']?.toString();
-      if (statusCode == 401 || statusCode == 403) {
+      final lowerMsg = serverMessage?.trim().toLowerCase() ?? '';
+      // Giải thuật bản địa hóa và phân loại chuẩn xác lỗi HTTP 401/403/409 từ Backend đặt phòng:
+      // Tách riêng 403 thành `ForbiddenFailure` (tránh báo nhầm hết hạn phiên đăng nhập khi Host tự đặt villa mình),
+      // đồng thời Việt hóa các thông báo tiếng Anh thô từ máy chủ.
+      if (statusCode == 401) {
         return AuthFailure(
           serverMessage ?? 'Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.',
-          mapData['code']?.toString() ?? 'HTTP_$statusCode',
-          statusCode ?? 401,
+          mapData['code']?.toString() ?? 'UNAUTHORIZED',
+          401,
+        );
+      }
+      if (statusCode == 403) {
+        final localizedForbidden = lowerMsg.contains('book own listing') ||
+                lowerMsg.contains('own listing')
+            ? 'Chủ nhà không thể tự đặt chỗ nghỉ của chính mình.'
+            : (serverMessage ?? 'Bạn không có quyền thực hiện thao tác này.');
+        return ForbiddenFailure(
+          localizedForbidden,
+          mapData['code']?.toString() ?? 'FORBIDDEN',
         );
       }
       if (statusCode == 404) {
@@ -48,8 +70,14 @@ class BookingRepositoryImpl implements BookingRepository {
         );
       }
       if (statusCode == 409) {
+        final localizedConflict = lowerMsg.contains('not available') ||
+                lowerMsg.contains('already booked') ||
+                lowerMsg.contains('date')
+            ? 'Khoảng ngày lưu trú vừa được đặt bởi khách khác. Vui lòng chọn ngày khác.'
+            : (serverMessage ?? 'Dữ liệu xung đột hoặc đã được xử lý.');
         return ConflictFailure(
-          serverMessage ?? 'Dữ liệu xung đột hoặc đã được xử lý.',
+          localizedConflict,
+          code: mapData['code']?.toString() ?? 'CONFLICT',
         );
       }
       if (statusCode == 400 || statusCode == 422) {
@@ -71,38 +99,101 @@ class BookingRepositoryImpl implements BookingRepository {
     return UnknownFailure(error.toString());
   }
 
+  /// Truy vấn toàn bộ hoặc một trang lịch sử đặt phòng của khách hàng từ `GET /api/bookings/mine`.
   @override
   Future<List<Booking>> getMyBookings({
     String? status,
     int? page,
     int? limit,
   }) async {
+    // Giải thuật phân trang toàn diện lịch sử đặt phòng của khách:
+    // Khi không chỉ định `page` cố định, lặp tuần tự từ `page = 1` đến `totalPages`
+    // với `limit = 50` và trần an toàn `maxPages = 20` để khách có >20 đơn không bị mất lịch sử.
+    // CONFLICT-RESOLVED: Bỏ giới hạn cứng `page: 1, limit: 20` gây cắt cụt lịch sử chuyến đi của khách.
     try {
-      final response = await _dio.get<Map<String, dynamic>>(
-        '/api/bookings/mine',
-        queryParameters: {
-          if (status != null && status.isNotEmpty) 'status': status,
-          'page': page ?? 1,
-          'limit': limit ?? 20,
-        },
-      );
-      final dataObj = _unwrapEnvelope(response.data);
-      List<dynamic> items = [];
-      if (dataObj is Map<String, dynamic> && dataObj['items'] is List) {
-        items = dataObj['items'] as List<dynamic>;
-      } else if (dataObj is List) {
-        items = dataObj;
+      final effectiveLimit = (limit ?? 50).clamp(1, 50);
+
+      Future<({List<Booking> items, int totalPages})> fetchSinglePage(
+        int targetPage,
+      ) async {
+        final response = await _dio.get<Map<String, dynamic>>(
+          '/api/bookings/mine',
+          queryParameters: {
+            if (status != null && status.isNotEmpty) 'status': status,
+            'page': targetPage,
+            'limit': effectiveLimit,
+          },
+        );
+        final rawBody = response.data;
+        final dataObj = _unwrapEnvelope(rawBody);
+        List<dynamic> items = [];
+        if (dataObj is Map<String, dynamic> && dataObj['items'] is List) {
+          items = dataObj['items'] as List<dynamic>;
+        } else if (dataObj is List) {
+          items = dataObj;
+        }
+
+        final rawTopPagination = rawBody?['pagination'];
+        final paginationMap = (dataObj is Map && dataObj['pagination'] is Map)
+            ? Map<String, dynamic>.from(dataObj['pagination'] as Map)
+            : (rawTopPagination is Map
+                ? Map<String, dynamic>.from(rawTopPagination)
+                : null);
+
+        int? totalPages = (paginationMap?['totalPages'] as num?)?.toInt() ??
+            (dataObj is Map
+                ? (dataObj['totalPages'] as num?)?.toInt()
+                : null) ??
+            (rawBody?['totalPages'] as num?)?.toInt();
+
+        if (totalPages == null) {
+          final total = (paginationMap?['total'] as num?)?.toInt() ??
+              (dataObj is Map ? (dataObj['total'] as num?)?.toInt() : null) ??
+              (rawBody?['total'] as num?)?.toInt();
+          if (total != null && total > 0) {
+            totalPages = (total + effectiveLimit - 1) ~/ effectiveLimit;
+          }
+        }
+
+        final parsed = items
+            .whereType<Map<String, dynamic>>()
+            .map(Booking.fromJson)
+            .toList();
+
+        return (
+          items: parsed,
+          totalPages: (totalPages != null && totalPages > 0) ? totalPages : 1,
+        );
       }
 
-      return items
-          .whereType<Map<String, dynamic>>()
-          .map(Booking.fromJson)
-          .toList();
+      if (page != null) {
+        final single = await fetchSinglePage(page);
+        return single.items;
+      }
+
+      const maxPages = 20;
+      final merged = <Booking>[];
+      final seenIds = <String>{};
+
+      for (int currentPage = 1; currentPage <= maxPages; currentPage++) {
+        final result = await fetchSinglePage(currentPage);
+        for (final booking in result.items) {
+          if (booking.id.isEmpty || seenIds.add(booking.id)) {
+            merged.add(booking);
+          }
+        }
+        if (result.items.isEmpty || currentPage >= result.totalPages) {
+          break;
+        }
+      }
+
+      return merged;
     } catch (e) {
       throw _handleError(e);
     }
   }
 
+  /// Tải thông tin chi tiết đơn đặt phòng theo `bookingId` qua `GET /api/bookings/:id`.
   @override
   Future<Booking?> getBookingById(String bookingId) async {
     final trimmed = bookingId.trim();
@@ -123,6 +214,7 @@ class BookingRepositoryImpl implements BookingRepository {
     }
   }
 
+  /// Tạo mới đơn đặt phòng đơn lẻ qua `POST /api/bookings`, chuẩn hóa mã ưu đãi in hoa và số lượng khách.
   @override
   Future<Booking> createBooking({
     required String listingId,
@@ -132,6 +224,9 @@ class BookingRepositoryImpl implements BookingRepository {
     String? specialRequests,
     String? couponCode,
   }) async {
+    // Giải thuật tạo đơn đặt phòng giữ chỗ tạm thời:
+    // Chuẩn hóa `listingId`, cặp ngày `checkInDate` - `checkOutDate`, truyền đồng thời `guestCount` và `guestsCount`
+    // để tương thích lược đồ Backend, viết hoa `couponCode` và giải mã thực thể `Booking` kèm hạn giữ chỗ `paymentExpiresAt`.
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/api/bookings',
@@ -160,10 +255,15 @@ class BookingRepositoryImpl implements BookingRepository {
     }
   }
 
+  /// Khởi tạo đặt phòng hàng loạt qua `POST /api/bookings/bulk` và bóc tách lỗi chi tiết theo từng dòng khi xung đột lịch.
   @override
   Future<List<Booking>> createBulkBookings({
     required List<Map<String, dynamic>> items,
   }) async {
+    // Giải thuật đặt nhiều biệt thự cùng lúc (Bulk Booking):
+    // Chuẩn hóa từng mục trong `items` về định dạng `{ listingId, checkInDate, checkOutDate, guestCount, couponCode }`.
+    // Nếu máy chủ trả lỗi xác thực theo đường dẫn `items[i].field`, trích xuất qua `_tryParseBulkBookingException`
+    // để giao diện đánh dấu chính xác dòng biệt thự bị trùng lịch hoặc sai điều kiện mã giảm giá.
     try {
       final normalizedItems = items.map((raw) {
         final guests =
@@ -212,6 +312,7 @@ class BookingRepositoryImpl implements BookingRepository {
     }
   }
 
+  // Giải thuật trích xuất lỗi theo từng mục đặt phòng hàng loạt từ biểu thức chính quy `items[index].field`.
   BulkBookingException? _tryParseBulkBookingException(DioException error) {
     final responseData = error.response?.data;
     if (responseData is! Map) return null;
@@ -286,6 +387,7 @@ class BookingRepositoryImpl implements BookingRepository {
     );
   }
 
+  /// Gửi yêu cầu hủy đơn đặt phòng `bookingId` kèm lý do `reason` qua `POST /api/bookings/:id/cancel`.
   @override
   Future<void> cancelBooking({
     required String bookingId,
@@ -317,6 +419,7 @@ class BookingRepositoryImpl implements BookingRepository {
     }
   }
 
+  /// Thẩm định mã giảm giá `code` và xem trước số tiền chiết khấu qua `GET /api/coupons/validate`.
   @override
   Future<CouponValidationResult> validateCoupon({
     required String code,
@@ -327,6 +430,9 @@ class BookingRepositoryImpl implements BookingRepository {
     String? checkOutDate,
     int? guestsCount,
   }) async {
+    // Giải thuật thẩm định và ước tính mức giảm giá (Coupon Preview):
+    // Viết hoa mã `code`, lấy giá trị đơn cơ sở `bookingAmount ?? subtotalAmount ?? 0` và gửi kèm `listingId`
+    // để máy chủ kiểm tra hạn dùng, giá trị đơn tối thiểu, giới hạn lượt dùng mỗi khách và phạm vi chỗ nghỉ.
     final normalizedCode = code.trim().toUpperCase();
     final effectiveBookingAmount = bookingAmount ?? subtotalAmount ?? 0;
     final parsedListingId =
@@ -361,6 +467,7 @@ class BookingRepositoryImpl implements BookingRepository {
     }
   }
 
+  /// Lấy danh sách cổng thanh toán khả dụng (VNPay, MoMo) từ `GET /api/payments/methods`.
   @override
   Future<List<PaymentMethodAvailability>> getPaymentMethods() async {
     try {
@@ -368,8 +475,11 @@ class BookingRepositoryImpl implements BookingRepository {
           await _dio.get<Map<String, dynamic>>('/api/payments/methods');
       final data = _unwrapEnvelope(response.data);
       List<dynamic> rawMethods = [];
-      if (data is Map<String, dynamic> && data['methods'] is List) {
-        rawMethods = data['methods'] as List<dynamic>;
+      if (data is Map<String, dynamic>) {
+        final candidate = data['items'] ?? data['methods'];
+        if (candidate is List) {
+          rawMethods = candidate;
+        }
       } else if (data is List) {
         rawMethods = data;
       }
@@ -382,12 +492,16 @@ class BookingRepositoryImpl implements BookingRepository {
     }
   }
 
+  /// Khởi tạo phiên thanh toán cổng trực tuyến qua `POST /api/payments` và gộp URL chuyển hướng (`paymentUrl` / `payUrl`).
   @override
   Future<PaymentSessionResult> createPayment({
     required String bookingId,
     required String method,
     String? idempotencyKey,
   }) async {
+    // Giải thuật khởi tạo phiên thanh toán trực tuyến (VNPay / MoMo):
+    // Gửi `bookingId` và phương thức `method` chuẩn hóa chữ thường tới `/api/payments`,
+    // hợp nhất trường `paymentUrl` / `payUrl` ở cấp ngoài vào bản ghi `payment` con để trình duyệt mở cổng thanh toán.
     try {
       final parsedBookingId = int.tryParse(bookingId.trim());
       final response = await _dio.post<Map<String, dynamic>>(
@@ -415,6 +529,7 @@ class BookingRepositoryImpl implements BookingRepository {
     }
   }
 
+  /// Truy vấn trạng thái phiên thanh toán theo `paymentId` qua `GET /api/payments/:id` để phục vụ thăm dò kết quả.
   @override
   Future<PaymentSessionResult?> getPaymentById(String paymentId) async {
     final trimmed = paymentId.trim();

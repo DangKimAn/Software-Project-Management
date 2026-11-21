@@ -28,6 +28,7 @@ class _FakeHostFilePickerService implements HostFilePickerService {
   HostPickedFile? defaultFile;
   Object? errorToThrow;
   final List<String> requestedTitles = <String>[];
+  final List<bool> requestedImageOnlyFlags = <bool>[];
 
   void enqueue(HostPickedFile? file) {
     _queue.add(file);
@@ -37,9 +38,12 @@ class _FakeHostFilePickerService implements HostFilePickerService {
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = 'Chọn tài liệu xác minh',
+    // CONFLICT-RESOLVED: Đáp ứng chữ ký `pickKycDocument` hợp nhất gồm cả `imageOnly` và `source`.
+    bool imageOnly = false,
     HostKycFileSource source = HostKycFileSource.deviceFile,
   }) async {
     requestedTitles.add(title);
+    requestedImageOnlyFlags.add(imageOnly);
     if (errorToThrow != null) {
       throw errorToThrow!;
     }
@@ -983,13 +987,15 @@ void main() {
     );
 
     testWidgets(
-      'requests permission via 36dp source sheet, handles denied permission, renders real PDF & Image previews, and supports delete & reselect',
+      'requests permission via 36dp source sheet, rejects PDF on identity slot, renders PDF on businessLicense & Image preview on identitySingle, and supports delete & reselect',
       (tester) async {
         final repo = _FakeHostOnboardingRepository();
         final picker = _FakeHostFilePickerService(
           queue: <HostPickedFile?>[
             _makePdfFile('passport_scan.pdf'),
+            _makePngFile('passport_valid.png'),
             _makePngFile('passport_reselected.png'),
+            _makePdfFile('gpkd_scan.pdf'),
           ],
         );
         final permission = _FakePermissionService(
@@ -1012,6 +1018,7 @@ void main() {
 
         await _fillValidContactForm(
           tester,
+          profileType: HostProfileType.business,
           documentType: HostDocumentType.passport,
         );
 
@@ -1041,16 +1048,25 @@ void main() {
           findsWidgets,
         );
 
-        // Grant permission and pick PDF file
+        // Grant permission and attempt to pick PDF file into identitySingle -> MUST be rejected!
         permission.result = const HostKycPermissionResult(
           status: HostKycPermissionStatus.granted,
         );
         await _tapPickButton(tester, 'identitySingle');
+        expect(picker.requestedImageOnlyFlags.first, isTrue);
         expect(
-          find.byKey(const Key('kyc_pdf_preview_identitySingle')),
+          find.byKey(const Key('kyc_slot_error_identitySingle')),
           findsOneWidget,
         );
-        expect(find.textContaining('passport_scan.pdf'), findsWidgets);
+        expect(
+          find.byKey(const Key('kyc_pdf_preview_identitySingle')),
+          findsNothing,
+        );
+        expect(find.textContaining('không hỗ trợ tệp PDF'), findsWidgets);
+
+        // Pick valid PNG image into identitySingle -> accepted
+        await _tapPickButton(tester, 'identitySingle');
+        expect(find.textContaining('passport_valid.png'), findsWidgets);
 
         // Open 36dp modal preview sheet
         final previewBtn = find.byKey(
@@ -1067,7 +1083,7 @@ void main() {
         await tester.tap(find.byTooltip('Đóng xem trước'));
         await tester.pumpAndSettle();
 
-        // Reselect with PNG image
+        // Reselect with another PNG image
         final reselectBtn = find.byKey(
           const Key('kyc_reselect_btn_identitySingle'),
         );
@@ -1084,7 +1100,16 @@ void main() {
 
         expect(find.textContaining('passport_reselected.png'), findsWidgets);
 
-        // Delete file from slot
+        // Pick PDF into businessLicense -> PDF is still allowed for businessLicense!
+        await _tapPickButton(tester, 'businessLicense');
+        expect(picker.requestedImageOnlyFlags.last, isFalse);
+        expect(
+          find.byKey(const Key('kyc_pdf_preview_businessLicense')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('gpkd_scan.pdf'), findsWidgets);
+
+        // Delete file from identitySingle slot
         final removeBtn = find.byKey(
           const Key('kyc_remove_btn_identitySingle'),
         );

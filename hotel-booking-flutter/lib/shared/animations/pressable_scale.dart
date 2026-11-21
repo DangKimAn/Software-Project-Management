@@ -1,14 +1,26 @@
 import 'package:flutter/material.dart';
 
+/// Lớp bọc tương tác thu nhỏ mượt mà khi nhấn giữ, tạo phản hồi xúc giác tự nhiên cho thẻ và nút.
+///
 /// A wrapper widget that scales down smoothly when pressed,
 /// providing tactile spring feedback like iOS / Airbnb luxury cards.
 class PressableScale extends StatefulWidget {
+  /// Phần tử giao diện con nhận hiệu ứng thu phóng khi chạm.
   final Widget child;
+
+  /// Hàm xử lý khi chạm nhả thành công; nếu `null`, widget dùng `Listener` thụ động không chặn cử chỉ con.
   final VoidCallback? onTap;
+
+  /// Tỷ lệ thu nhỏ tối đa khi đang nhấn giữ (mặc định `0.97`).
   final double scaleDown;
+
+  /// Thời lượng chuyển tiếp thu nhỏ và phục hồi kích thước.
   final Duration duration;
+
+  /// Đường cong nội suy tốc độ thu phóng.
   final Curve curve;
 
+  /// Khởi tạo lớp bọc phản hồi thu phóng khi nhấn.
   const PressableScale({
     super.key,
     required this.child,
@@ -18,10 +30,12 @@ class PressableScale extends StatefulWidget {
     this.curve = Curves.easeOutCubic,
   });
 
+  /// Tạo trạng thái điều khiển hoạt ảnh thu phóng theo sự kiện chạm.
   @override
   State<PressableScale> createState() => _PressableScaleState();
 }
 
+/// Trạng thái nội bộ điều phối `AnimationController` khi nhấn xuống, nhả tay hoặc hủy cử chỉ.
 class _PressableScaleState extends State<PressableScale>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
@@ -85,6 +99,10 @@ class _PressableScaleState extends State<PressableScale>
 
   @override
   Widget build(BuildContext context) {
+    // Giải thuật định tuyến sự kiện chạm hai chế độ:
+    // - Khi có onTap: dùng GestureDetector ở chế độ opaque để bắt trọn vùng chạm và kích hoạt callback.
+    // - Khi không có onTap: hạ xuống Listener cấp thấp lắng nghe pointer thô để tạo hiệu ứng lún
+    //   mà không tranh chấp đấu trường cử chỉ (GestureArena) với các nút bấm bên trong child.
     final disableAnimations = MediaQuery.disableAnimationsOf(context);
     if (widget.onTap != null) {
       return GestureDetector(

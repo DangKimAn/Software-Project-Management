@@ -340,24 +340,6 @@ abstract class AppLocalizations {
   /// **'Đánh giá cao nhất'**
   String get searchSortRatingDesc;
 
-  /// No description provided for @aiSearchTitle.
-  ///
-  /// In vi, this message translates to:
-  /// **'Tìm kiếm thông minh bằng AI'**
-  String get aiSearchTitle;
-
-  /// No description provided for @aiSearchPlaceholder.
-  ///
-  /// In vi, this message translates to:
-  /// **'Mô tả kỳ nghỉ mong muốn (VD: Villa sát biển Bãi Sau cho 15 người có hồ bơi nước mặn, BBQ)...'**
-  String get aiSearchPlaceholder;
-
-  /// No description provided for @aiSearchAction.
-  ///
-  /// In vi, this message translates to:
-  /// **'Tìm bằng AI'**
-  String get aiSearchAction;
-
   /// No description provided for @navDiscover.
   ///
   /// In vi, this message translates to:
@@ -1681,7 +1663,7 @@ abstract class AppLocalizations {
   /// No description provided for @footerCopyright.
   ///
   /// In vi, this message translates to:
-  /// **'© Bản quyền thuộc về Villa Vũng Tàu 2026'**
+  /// **'© 2026 The Palm Villa Vũng Tàu. Bảo lưu mọi quyền.'**
   String get footerCopyright;
 
   /// No description provided for @settingsAvatarUpdateTitle.
@@ -3363,6 +3345,1782 @@ abstract class AppLocalizations {
   /// In vi, this message translates to:
   /// **'Trang {page}'**
   String blogPaginationPage(int page);
+
+  /// No description provided for @footerSupportTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hỗ trợ'**
+  String get footerSupportTitle;
+
+  /// No description provided for @footerLinkBookingGuide.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hướng dẫn đặt phòng'**
+  String get footerLinkBookingGuide;
+
+  /// No description provided for @footerLinkCancellationPolicy.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chính sách hủy phòng'**
+  String get footerLinkCancellationPolicy;
+
+  /// No description provided for @footerLinkComplaintsFeedback.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khiếu nại & Góp ý'**
+  String get footerLinkComplaintsFeedback;
+
+  /// No description provided for @footerLinkFaq.
+  ///
+  /// In vi, this message translates to:
+  /// **'Câu hỏi thường gặp (FAQ)'**
+  String get footerLinkFaq;
+
+  /// No description provided for @footerExploreTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khám phá & Dịch vụ'**
+  String get footerExploreTitle;
+
+  /// No description provided for @footerLinkAboutUs.
+  ///
+  /// In vi, this message translates to:
+  /// **'Về chúng tôi'**
+  String get footerLinkAboutUs;
+
+  /// No description provided for @footerLinkExploreVungTau.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khám phá Vũng Tàu'**
+  String get footerLinkExploreVungTau;
+
+  /// No description provided for @footerLinkTravelGuide.
+  ///
+  /// In vi, this message translates to:
+  /// **'Cẩm nang du lịch'**
+  String get footerLinkTravelGuide;
+
+  /// No description provided for @footerLinkAddonServices.
+  ///
+  /// In vi, this message translates to:
+  /// **'Dịch vụ đi kèm'**
+  String get footerLinkAddonServices;
+
+  /// No description provided for @footerLinkMemberOffers.
+  ///
+  /// In vi, this message translates to:
+  /// **'Ưu đãi thành viên'**
+  String get footerLinkMemberOffers;
+
+  /// No description provided for @footerContactTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Liên hệ'**
+  String get footerContactTitle;
+
+  /// No description provided for @footerHotlineLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hotline: {phone}'**
+  String footerHotlineLabel(String phone);
+
+  /// No description provided for @footerOnlineConsultLink.
+  ///
+  /// In vi, this message translates to:
+  /// **'Liên hệ tư vấn trực tuyến'**
+  String get footerOnlineConsultLink;
+
+  /// No description provided for @footerAddressLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Địa chỉ: {address}'**
+  String footerAddressLabel(String address);
+
+  /// No description provided for @footerEmailLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Email: {email}'**
+  String footerEmailLabel(String email);
+
+  /// No description provided for @footerEmailSubject.
+  ///
+  /// In vi, this message translates to:
+  /// **'Liên hệ đặt phòng The Palm Villa Vũng Tàu'**
+  String get footerEmailSubject;
+
+  /// No description provided for @footerSocialTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Social'**
+  String get footerSocialTitle;
+
+  /// No description provided for @supportGuideStep1Title.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tìm kiếm theo phân khu & lịch trống thực tế'**
+  String get supportGuideStep1Title;
+
+  /// No description provided for @supportGuideStep1Desc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chọn phân khu biển tại Vũng Tàu (Bãi Sau, Bãi Trước, Chí Linh, Long Cung), khoảng ngày lưu trú [Nhận phòng, Trả phòng) và tổng số khách đoàn để lọc đúng các căn biệt thự đang mở lịch.'**
+  String get supportGuideStep1Desc;
+
+  /// No description provided for @supportGuideStep2Title.
+  ///
+  /// In vi, this message translates to:
+  /// **'Kiểm tra bảng giá theo đêm & áp dụng mã ưu đãi'**
+  String get supportGuideStep2Title;
+
+  /// No description provided for @supportGuideStep2Desc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xem chi tiết thông số biệt thự (phòng ngủ, giường, WC, khoảng cách biển), bảng giá từng đêm ngày thường / cuối tuần, phụ thu khách vượt tiêu chuẩn (nếu có) và nhập mã ưu đãi hợp lệ.'**
+  String get supportGuideStep2Desc;
+
+  /// No description provided for @supportGuideStep3Title.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khóa lịch giữ chỗ tạm thời 15 phút'**
+  String get supportGuideStep3Title;
+
+  /// No description provided for @supportGuideStep3Desc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Ngay khi tạo đơn đặt phòng, hệ thống tự động khóa khoảng ngày lưu trú trong 15 phút (trạng thái Chờ thanh toán) để bảo vệ bạn khỏi tình trạng trùng lịch với đoàn khách khác.'**
+  String get supportGuideStep3Desc;
+
+  /// No description provided for @supportGuideStep4Title.
+  ///
+  /// In vi, this message translates to:
+  /// **'Thanh toán trực tuyến & nhận xác nhận lưu trú'**
+  String get supportGuideStep4Title;
+
+  /// No description provided for @supportGuideStep4Desc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hoàn tất thanh toán qua cổng thanh toán được hỗ trợ (VNPay, MoMo hoặc VietQR) trong thời gian giữ chỗ. Theo dõi trạng thái đơn và nhắn tin trực tiếp với Chủ nhà ngay tại mục Chuyến đi.'**
+  String get supportGuideStep4Desc;
+
+  /// No description provided for @supportCancelFlexName.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chính sách Linh hoạt (Flexible)'**
+  String get supportCancelFlexName;
+
+  /// No description provided for @supportCancelFlexBadge.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hoàn 100% trước 24 giờ'**
+  String get supportCancelFlexBadge;
+
+  /// No description provided for @supportCancelFlexRule1.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hủy trước thời điểm nhận phòng từ đủ 24 giờ trở lên: hoàn 100% tổng số tiền đã thanh toán.'**
+  String get supportCancelFlexRule1;
+
+  /// No description provided for @supportCancelFlexRule2.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hủy trong vòng dưới 24 giờ trước giờ nhận phòng: không áp dụng hoàn tiền.'**
+  String get supportCancelFlexRule2;
+
+  /// No description provided for @supportCancelModName.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chính sách Trung bình (Moderate)'**
+  String get supportCancelModName;
+
+  /// No description provided for @supportCancelModBadge.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hoàn 100% trước 5 ngày'**
+  String get supportCancelModBadge;
+
+  /// No description provided for @supportCancelModRule1.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hủy trước thời điểm nhận phòng từ đủ 5 ngày (120 giờ) trở lên: hoàn 100% tổng số tiền đã thanh toán.'**
+  String get supportCancelModRule1;
+
+  /// No description provided for @supportCancelModRule2.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hủy trong khoảng từ đủ 24 giờ đến dưới 5 ngày (120 giờ): hoàn 50% tổng số tiền đã thanh toán.'**
+  String get supportCancelModRule2;
+
+  /// No description provided for @supportCancelModRule3.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hủy trong vòng dưới 24 giờ trước giờ nhận phòng: không áp dụng hoàn tiền.'**
+  String get supportCancelModRule3;
+
+  /// No description provided for @supportCancelStrictName.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chính sách Nghiêm ngặt (Strict)'**
+  String get supportCancelStrictName;
+
+  /// No description provided for @supportCancelStrictBadge.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hoàn 50% trước 7 ngày'**
+  String get supportCancelStrictBadge;
+
+  /// No description provided for @supportCancelStrictRule1.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hủy trước thời điểm nhận phòng từ đủ 7 ngày (168 giờ) trở lên: hoàn 50% tổng số tiền đã thanh toán.'**
+  String get supportCancelStrictRule1;
+
+  /// No description provided for @supportCancelStrictRule2.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hủy trong vòng dưới 7 ngày (168 giờ) trước giờ nhận phòng: không áp dụng hoàn tiền.'**
+  String get supportCancelStrictRule2;
+
+  /// No description provided for @supportComplaintStep1Title.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi phản ánh kèm mã đơn hoặc mã chỗ nghỉ'**
+  String get supportComplaintStep1Title;
+
+  /// No description provided for @supportComplaintStep1Desc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đăng nhập tài khoản và gửi báo cáo trực tuyến kèm mã đơn đặt phòng (Booking ID) hoặc mã biệt thự (Listing ID), nêu rõ vấn đề thực tế cần đối soát.'**
+  String get supportComplaintStep1Desc;
+
+  /// No description provided for @supportComplaintStep2Title.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đối soát lịch sử lưu trú & luồng thanh toán'**
+  String get supportComplaintStep2Title;
+
+  /// No description provided for @supportComplaintStep2Desc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bộ phận Kiểm duyệt & An toàn (Trust & Safety) kiểm tra nhật ký trạng thái đơn, lịch sử trao đổi tin nhắn trên ứng dụng và chứng từ thanh toán độc lập.'**
+  String get supportComplaintStep2Desc;
+
+  /// No description provided for @supportComplaintStep3Title.
+  ///
+  /// In vi, this message translates to:
+  /// **'Phản hồi kết quả & bảo vệ quyền lợi khách hàng'**
+  String get supportComplaintStep3Title;
+
+  /// No description provided for @supportComplaintStep3Desc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Kết quả xử lý được cập nhật minh bạch vào trạng thái báo cáo (Đã giải quyết / Từ chối kèm lý do) và kích hoạt quy trình hoàn tiền nếu Chủ nhà vi phạm cam kết.'**
+  String get supportComplaintStep3Desc;
+
+  /// No description provided for @supportFaqCatAll.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tất cả'**
+  String get supportFaqCatAll;
+
+  /// No description provided for @supportFaqCatBooking.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đặt phòng & Lịch trống'**
+  String get supportFaqCatBooking;
+
+  /// No description provided for @supportFaqCatPayment.
+  ///
+  /// In vi, this message translates to:
+  /// **'Thanh toán & Hoàn tiền'**
+  String get supportFaqCatPayment;
+
+  /// No description provided for @supportFaqCatAmenities.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tiện ích & Nội quy'**
+  String get supportFaqCatAmenities;
+
+  /// No description provided for @supportFaqCatHost.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đối tác Chủ nhà'**
+  String get supportFaqCatHost;
+
+  /// No description provided for @supportFaq1Q.
+  ///
+  /// In vi, this message translates to:
+  /// **'Số đêm lưu trú được hệ thống tính như thế nào?'**
+  String get supportFaq1Q;
+
+  /// No description provided for @supportFaq1A.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hệ thống áp dụng mô hình đêm lưu trú nửa mở [Nhận phòng, Trả phòng) theo múi giờ Việt Nam (Asia/Ho_Chi_Minh). Ví dụ chọn nhận phòng ngày 15 và trả phòng ngày 17 sẽ gồm 2 đêm ở (đêm 15 và đêm 16); ngày 17 là ngày trả phòng.'**
+  String get supportFaq1A;
+
+  /// No description provided for @supportFaq2Q.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tại sao đơn đặt phòng có thời gian giữ chỗ 15 phút?'**
+  String get supportFaq2Q;
+
+  /// No description provided for @supportFaq2A.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mỗi căn biệt thự nguyên căn là tài sản đơn chiếc. Khi bạn tạo đơn, hệ thống khóa ngày lưu trú trong 15 phút để không ai khác đặt trùng trong lúc bạn thao tác thanh toán. Quá 15 phút chưa thanh toán, khóa ngày sẽ tự động giải phóng.'**
+  String get supportFaq2A;
+
+  /// No description provided for @supportFaq3Q.
+  ///
+  /// In vi, this message translates to:
+  /// **'Giá cuối tuần và phụ thu đoàn đông được tính ra sao?'**
+  String get supportFaq3Q;
+
+  /// No description provided for @supportFaq3A.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bảng giá từng đêm (ngày thường, thứ Bảy/cuối tuần), phí dọn dẹp và phụ thu khách vượt mức tiêu chuẩn đều lấy trực tiếp từ cấu hình đã kiểm duyệt của từng căn biệt thự và hiển thị minh bạch trước khi bạn xác nhận đặt phòng.'**
+  String get supportFaq3A;
+
+  /// No description provided for @supportFaq4Q.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tôi có thể thanh toán bằng những phương thức nào?'**
+  String get supportFaq4Q;
+
+  /// No description provided for @supportFaq4A.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hệ thống hỗ trợ thanh toán trực tuyến qua cổng VNPay, ví MoMo và chuyển khoản mã VietQR. Mọi giao dịch đều được đối soát tự động và cập nhật tức thời vào mục Chuyến đi.'**
+  String get supportFaq4A;
+
+  /// No description provided for @supportFaq5Q.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khi hủy phòng hợp lệ hoặc Chủ nhà từ chối đơn, tôi nhận lại tiền bằng cách nào?'**
+  String get supportFaq5Q;
+
+  /// No description provided for @supportFaq5A.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nếu đơn đã thanh toán được hủy trong khung giờ hoàn tiền của căn biệt thự (hoặc bị Chủ nhà hủy/từ chối — hoàn 100%), hệ thống tự động khởi tạo yêu cầu hoàn tiền riêng biệt để bộ phận tài chính đối soát hoàn trả về tài khoản/kênh thanh toán của bạn.'**
+  String get supportFaq5A;
+
+  /// No description provided for @supportFaq6Q.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tôi có thể trao đổi trực tiếp với Chủ nhà trước khi đặt không?'**
+  String get supportFaq6Q;
+
+  /// No description provided for @supportFaq6A.
+  ///
+  /// In vi, this message translates to:
+  /// **'Có. Tại trang chi tiết từng biệt thự, bạn có thể bấm Nhắn tin cho Host hoặc kết nối qua kênh tư vấn Zalo OA / Hotline tại trang Liên hệ để hỏi rõ về hồ bơi, bếp BBQ hoặc chỗ đậu xe đoàn.'**
+  String get supportFaq6A;
+
+  /// No description provided for @supportFaq7Q.
+  ///
+  /// In vi, this message translates to:
+  /// **'Làm thế nào để đăng ký cho thuê biệt thự trên The Palm Villa?'**
+  String get supportFaq7Q;
+
+  /// No description provided for @supportFaq7A.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bạn truy cập mục Trở thành Host trên thanh điều hướng hoặc chân trang, hoàn tất hồ sơ xác thực danh tính (KYC CCCD) và thông tin chỗ nghỉ. Sau khi Quản trị viên phê duyệt, bạn có thể quản lý lịch 30 ngày và đồng bộ hai chiều với Google Sheets.'**
+  String get supportFaq7A;
+
+  /// No description provided for @supportZoneBaiSauName.
+  ///
+  /// In vi, this message translates to:
+  /// **'Phân khu Bãi Sau (Thùy Vân – Thi Sách)'**
+  String get supportZoneBaiSauName;
+
+  /// No description provided for @supportZoneBaiSauHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bờ biển dài, sôi động, thuận tiện đi bộ ra bãi tắm'**
+  String get supportZoneBaiSauHint;
+
+  /// No description provided for @supportZoneBaiSauHighlight.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tập trung nhiều biệt thự hồ bơi riêng diện tích lớn cho nhóm bạn và gia đình, gần trục đường Thùy Vân, Thi Sách, Võ Thị Sáu.'**
+  String get supportZoneBaiSauHighlight;
+
+  /// No description provided for @supportZoneBaiTruocName.
+  ///
+  /// In vi, this message translates to:
+  /// **'Phân khu Bãi Trước (Trần Phú – Quang Trung)'**
+  String get supportZoneBaiTruocName;
+
+  /// No description provided for @supportZoneBaiTruocHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Ngắm hoàng hôn biển trực diện, gần trung tâm ẩm thực'**
+  String get supportZoneBaiTruocHint;
+
+  /// No description provided for @supportZoneBaiTruocHighlight.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không gian biệt thự nghỉ dưỡng hướng biển Trần Phú yên tĩnh, tầm nhìn hoàng hôn thoáng đãng và di chuyển thuận tiện tới công viên Bãi Trước.'**
+  String get supportZoneBaiTruocHighlight;
+
+  /// No description provided for @supportZoneChiLinhName.
+  ///
+  /// In vi, this message translates to:
+  /// **'Phân khu Chí Linh'**
+  String get supportZoneChiLinhName;
+
+  /// No description provided for @supportZoneChiLinhHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khu nghỉ dưỡng biệt lập, an ninh, bãi tắm riêng tư'**
+  String get supportZoneChiLinhHint;
+
+  /// No description provided for @supportZoneChiLinhHighlight.
+  ///
+  /// In vi, this message translates to:
+  /// **'Phù hợp đoàn gia đình nhiều thế hệ hoặc nhóm công ty yêu thích không gian xanh mát, yên tĩnh và bãi biển sạch thoáng.'**
+  String get supportZoneChiLinhHighlight;
+
+  /// No description provided for @supportZoneLongCungName.
+  ///
+  /// In vi, this message translates to:
+  /// **'Phân khu Long Cung – Thủy Tiên'**
+  String get supportZoneLongCungName;
+
+  /// No description provided for @supportZoneLongCungHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Quần thể biệt thự nghỉ dưỡng sát biển cho đoàn đông'**
+  String get supportZoneLongCungHint;
+
+  /// No description provided for @supportZoneLongCungHighlight.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nổi bật với các căn biệt thự sân vườn rộng, hồ bơi riêng và khu tổ chức tiệc nướng BBQ ngoài trời gần bãi tắm Long Cung.'**
+  String get supportZoneLongCungHighlight;
+
+  /// No description provided for @supportAddonPoolTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hồ bơi riêng tại biệt thự'**
+  String get supportAddonPoolTitle;
+
+  /// No description provided for @supportAddonPoolDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không gian hồ bơi riêng tư ngay trong khuôn viên căn biệt thự, phù hợp thư giãn cùng gia đình và nhóm bạn.'**
+  String get supportAddonPoolDesc;
+
+  /// No description provided for @supportAddonPoolNote.
+  ///
+  /// In vi, this message translates to:
+  /// **'Có sẵn theo thông số công bố của từng căn biệt thự.'**
+  String get supportAddonPoolNote;
+
+  /// No description provided for @supportAddonBbqTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khu vực bếp nướng BBQ sân vườn'**
+  String get supportAddonBbqTitle;
+
+  /// No description provided for @supportAddonBbqDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trang bị khu vực nướng ngoài trời, bàn ghế sân vườn và dụng cụ bếp cơ bản phục vụ tiệc tối ấm cúng.'**
+  String get supportAddonBbqDesc;
+
+  /// No description provided for @supportAddonBbqNote.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trao đổi trước với Chủ nhà về than nướng hoặc hỗ trợ dọn rửa.'**
+  String get supportAddonBbqNote;
+
+  /// No description provided for @supportAddonKitchenTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bếp nấu tiêu chuẩn gia đình'**
+  String get supportAddonKitchenTitle;
+
+  /// No description provided for @supportAddonKitchenDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đầy đủ tủ lạnh, bếp nấu, nồi chảo và bát đĩa để đoàn tự chuẩn bị hải sản tươi sống mua tại chợ địa phương.'**
+  String get supportAddonKitchenDesc;
+
+  /// No description provided for @supportAddonKitchenNote.
+  ///
+  /// In vi, this message translates to:
+  /// **'Vui lòng giữ vệ sinh khu bếp theo nội quy từng chỗ nghỉ.'**
+  String get supportAddonKitchenNote;
+
+  /// No description provided for @supportAddonKaraokeTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Phòng giải trí & Âm thanh Karaoke'**
+  String get supportAddonKaraokeTitle;
+
+  /// No description provided for @supportAddonKaraokeDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hệ thống loa giải trí hoặc phòng sinh hoạt chung tại các căn biệt thự có gắn nhãn tiện nghi Karaoke.'**
+  String get supportAddonKaraokeDesc;
+
+  /// No description provided for @supportAddonKaraokeNote.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tuân thủ khung giờ yên tĩnh khu dân cư (trước 22:00).'**
+  String get supportAddonKaraokeNote;
+
+  /// No description provided for @supportAddonParkingTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chỗ đậu xe ô tô & xe đoàn an toàn'**
+  String get supportAddonParkingTitle;
+
+  /// No description provided for @supportAddonParkingDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Sân đậu xe trong khuôn viên hoặc đường nội khu rộng rãi thuận tiện cho ô tô cá nhân và xe du lịch 7–29 chỗ.'**
+  String get supportAddonParkingDesc;
+
+  /// No description provided for @supportAddonParkingNote.
+  ///
+  /// In vi, this message translates to:
+  /// **'Kiểm tra sức chứa xe cụ thể trong phần mô tả chi tiết villa.'**
+  String get supportAddonParkingNote;
+
+  /// No description provided for @supportAddonBeachTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Vị trí gần bãi tắm biển'**
+  String get supportAddonBeachTitle;
+
+  /// No description provided for @supportAddonBeachDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Các căn biệt thự có khoảng cách thực tế tới bãi tắm được công bố rõ ràng bằng đơn vị mét ngay trên thẻ thông tin.'**
+  String get supportAddonBeachDesc;
+
+  /// No description provided for @supportAddonBeachNote.
+  ///
+  /// In vi, this message translates to:
+  /// **'Lọc nhanh các căn sát biển chỉ với một chạm bên dưới.'**
+  String get supportAddonBeachNote;
+
+  /// No description provided for @supportExploreZoneAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xem biệt thự khu vực này'**
+  String get supportExploreZoneAction;
+
+  /// No description provided for @supportServiceNotePrefix.
+  ///
+  /// In vi, this message translates to:
+  /// **'Lưu ý: {note}'**
+  String supportServiceNotePrefix(String note);
+
+  /// No description provided for @supportFilterByAmenityAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Lọc villa có tiện ích này'**
+  String get supportFilterByAmenityAction;
+
+  /// No description provided for @supportFaqSearchHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tìm câu hỏi theo từ khóa (ví dụ: giữ chỗ, hoàn tiền)...'**
+  String get supportFaqSearchHint;
+
+  /// No description provided for @supportFaqClearSearchTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xóa từ khóa'**
+  String get supportFaqClearSearchTooltip;
+
+  /// No description provided for @supportFaqEmptyResult.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không tìm thấy câu hỏi phù hợp với từ khóa hiện tại. Vui lòng thử từ khóa khác hoặc liên hệ trực tiếp đội ngũ tư vấn.'**
+  String get supportFaqEmptyResult;
+
+  /// No description provided for @supportBookingGuideEyebrow.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hỗ trợ đặt phòng'**
+  String get supportBookingGuideEyebrow;
+
+  /// No description provided for @supportBookingGuideTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hướng dẫn đặt biệt thự nguyên căn'**
+  String get supportBookingGuideTitle;
+
+  /// No description provided for @supportBookingGuideSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Quy trình đặt chỗ 4 bước minh bạch với cơ chế khóa lịch 15 phút chống trùng phòng và đối soát thanh toán trực tuyến tức thời.'**
+  String get supportBookingGuideSubtitle;
+
+  /// No description provided for @supportBookingGuideNoteTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Lưu ý khi nhận và trả phòng'**
+  String get supportBookingGuideNoteTitle;
+
+  /// No description provided for @supportBookingGuideNoteBody.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mọi đơn đặt đều tính theo đêm lưu trú [Nhận phòng, Trả phòng) theo múi giờ Việt Nam. Trước khi khởi hành, bạn có thể nhắn tin trực tiếp với Chủ nhà trong mục Tin nhắn để thống nhất giờ đón đoàn và danh sách xe.'**
+  String get supportBookingGuideNoteBody;
+
+  /// No description provided for @supportBookingGuideCtaTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Sẵn sàng tìm căn biệt thự phù hợp cho đoàn của bạn?'**
+  String get supportBookingGuideCtaTitle;
+
+  /// No description provided for @supportBookingGuideCtaDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tra cứu ngay danh sách biệt thự đang mở lịch trống kèm giá niêm yết theo đêm tại Vũng Tàu.'**
+  String get supportBookingGuideCtaDesc;
+
+  /// No description provided for @supportBookingGuidePrimaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tìm biệt thự ngay'**
+  String get supportBookingGuidePrimaryAction;
+
+  /// No description provided for @supportBookingGuideSecondaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Liên hệ tư vấn'**
+  String get supportBookingGuideSecondaryAction;
+
+  /// No description provided for @supportCancelEyebrow.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chính sách lưu trú & hoàn tiền'**
+  String get supportCancelEyebrow;
+
+  /// No description provided for @supportCancelTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chính sách hủy phòng & Hoàn tiền'**
+  String get supportCancelTitle;
+
+  /// No description provided for @supportCancelSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tỷ lệ hoàn tiền được hệ thống tính tự động dựa trên loại chính sách công bố của từng căn biệt thự và số giờ còn lại trước ngày nhận phòng.'**
+  String get supportCancelSubtitle;
+
+  /// No description provided for @supportCancelHostProtectTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bảo vệ khách lưu trú 100% khi Chủ nhà hủy đơn'**
+  String get supportCancelHostProtectTitle;
+
+  /// No description provided for @supportCancelHostProtectBody.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trong trường hợp đơn đã thanh toán bị Chủ nhà từ chối hoặc chủ động hủy, hệ thống tự động tạo lệnh hoàn 100% giá trị thanh toán không phụ thuộc bậc chính sách. Các đơn giữ chỗ chưa thanh toán sẽ tự hủy miễn phí sau 15 phút.'**
+  String get supportCancelHostProtectBody;
+
+  /// No description provided for @supportCancelCtaTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Kiểm tra trạng thái đơn hoặc yêu cầu hủy phòng'**
+  String get supportCancelCtaTitle;
+
+  /// No description provided for @supportCancelCtaDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Truy cập mục Chuyến đi để xem chính sách áp dụng riêng cho đơn đặt phòng của bạn hoặc liên hệ bộ phận hỗ trợ.'**
+  String get supportCancelCtaDesc;
+
+  /// No description provided for @supportCancelPrimaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xem Chuyến đi của tôi'**
+  String get supportCancelPrimaryAction;
+
+  /// No description provided for @supportCancelSecondaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Câu hỏi thường gặp'**
+  String get supportCancelSecondaryAction;
+
+  /// No description provided for @supportComplaintsEyebrow.
+  ///
+  /// In vi, this message translates to:
+  /// **'An toàn & Minh bạch'**
+  String get supportComplaintsEyebrow;
+
+  /// No description provided for @supportComplaintsTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khiếu nại, Báo cáo & Góp ý dịch vụ'**
+  String get supportComplaintsTitle;
+
+  /// No description provided for @supportComplaintsSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mọi phản ánh về chất lượng biệt thự, sai lệch thông tin tin đăng hoặc thái độ phục vụ đều được ghi vết và đối soát độc lập.'**
+  String get supportComplaintsSubtitle;
+
+  /// No description provided for @supportComplaintsCtaTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Cần hỗ trợ khẩn cấp trong thời gian đang lưu trú?'**
+  String get supportComplaintsCtaTitle;
+
+  /// No description provided for @supportComplaintsCtaDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Kết nối trực tiếp qua Hotline hoặc Zalo OA tại văn phòng Vũng Tàu (08:00 – 22:00) để được hỗ trợ ngay.'**
+  String get supportComplaintsCtaDesc;
+
+  /// No description provided for @supportComplaintsPrimaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mở trang Liên hệ'**
+  String get supportComplaintsPrimaryAction;
+
+  /// No description provided for @supportComplaintsSecondaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tin nhắn với Host'**
+  String get supportComplaintsSecondaryAction;
+
+  /// No description provided for @supportFaqEyebrow.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trung tâm giải đáp'**
+  String get supportFaqEyebrow;
+
+  /// No description provided for @supportFaqPageTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Câu hỏi thường gặp (FAQ)'**
+  String get supportFaqPageTitle;
+
+  /// No description provided for @supportFaqSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Giải đáp nhanh các thắc mắc về cách tính đêm lưu trú, khóa lịch 15 phút, phương thức thanh toán, hoàn tiền và đăng ký đối tác Chủ nhà.'**
+  String get supportFaqSubtitle;
+
+  /// No description provided for @supportFaqCtaTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chưa tìm thấy câu trả lời bạn cần?'**
+  String get supportFaqCtaTitle;
+
+  /// No description provided for @supportFaqCtaDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đội ngũ tư vấn tại 28 Thi Sách, TP. Vũng Tàu luôn sẵn sàng giải đáp chi tiết theo nhu cầu riêng của đoàn.'**
+  String get supportFaqCtaDesc;
+
+  /// No description provided for @supportFaqPrimaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Liên hệ tư vấn trực tuyến'**
+  String get supportFaqPrimaryAction;
+
+  /// No description provided for @supportFaqSecondaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xem hướng dẫn đặt phòng'**
+  String get supportFaqSecondaryAction;
+
+  /// No description provided for @supportAboutEyebrow.
+  ///
+  /// In vi, this message translates to:
+  /// **'Về The Palm Villa'**
+  String get supportAboutEyebrow;
+
+  /// No description provided for @supportAboutTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nền tảng đặt biệt thự nghỉ dưỡng nguyên căn tại Vũng Tàu'**
+  String get supportAboutTitle;
+
+  /// No description provided for @supportAboutSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Kết nối trực tiếp du khách với hệ thống biệt thự nghỉ dưỡng đã qua kiểm duyệt thực tế và xác thực danh tính Chủ nhà (KYC) tại TP. Vũng Tàu.'**
+  String get supportAboutSubtitle;
+
+  /// No description provided for @supportAboutPillar1Title.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chỗ nghỉ kiểm duyệt & Host xác thực KYC'**
+  String get supportAboutPillar1Title;
+
+  /// No description provided for @supportAboutPillar1Body.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mọi hồ sơ đối tác Chủ nhà đều trải qua bước xác minh danh tính và kiểm duyệt thông tin, hình ảnh thực tế trước khi mở lịch đón khách.'**
+  String get supportAboutPillar1Body;
+
+  /// No description provided for @supportAboutPillar2Title.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khóa lịch chống đặt trùng (Zero Double-Booking)'**
+  String get supportAboutPillar2Title;
+
+  /// No description provided for @supportAboutPillar2Body.
+  ///
+  /// In vi, this message translates to:
+  /// **'Cơ chế khóa ngày mức giao dịch ngay khi tạo đơn giúp bảo vệ tuyệt đối lịch lưu trú của đoàn trong suốt thời gian thanh toán.'**
+  String get supportAboutPillar2Body;
+
+  /// No description provided for @supportAboutPillar3Title.
+  ///
+  /// In vi, this message translates to:
+  /// **'Giá niêm yết minh bạch theo từng đêm'**
+  String get supportAboutPillar3Title;
+
+  /// No description provided for @supportAboutPillar3Body.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hiển thị rõ giá ngày thường, giá cuối tuần, phí vệ sinh và phụ thu khách vượt tiêu chuẩn từ dữ liệu máy chủ trước khi thanh toán.'**
+  String get supportAboutPillar3Body;
+
+  /// No description provided for @supportAboutCtaTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đồng hành cùng The Palm Villa'**
+  String get supportAboutCtaTitle;
+
+  /// No description provided for @supportAboutCtaDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khám phá các căn biệt thự đang mở lịch hoặc đăng ký trở thành đối tác Chủ nhà để quản lý lịch và doanh thu minh bạch.'**
+  String get supportAboutCtaDesc;
+
+  /// No description provided for @supportAboutPrimaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khám phá nơi lưu trú'**
+  String get supportAboutPrimaryAction;
+
+  /// No description provided for @supportAboutSecondaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trở thành Host'**
+  String get supportAboutSecondaryAction;
+
+  /// No description provided for @supportExploreVtEyebrow.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bản đồ phân khu nghỉ dưỡng'**
+  String get supportExploreVtEyebrow;
+
+  /// No description provided for @supportExploreVtTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khám phá Vũng Tàu theo từng phân khu biển'**
+  String get supportExploreVtTitle;
+
+  /// No description provided for @supportExploreVtSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mỗi phân khu tại Vũng Tàu mang một nét trải nghiệm riêng. Chọn khu vực phù hợp với lịch trình của đoàn để lọc ngay các căn biệt thự thực tế.'**
+  String get supportExploreVtSubtitle;
+
+  /// No description provided for @supportExploreVtCtaTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Kết hợp lịch trình ăn chơi & kinh nghiệm đi biển'**
+  String get supportExploreVtCtaTitle;
+
+  /// No description provided for @supportExploreVtCtaDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tham khảo thêm các bài viết cẩm nang du lịch địa phương để lên kế hoạch trọn vẹn cho kỳ nghỉ tại Vũng Tàu.'**
+  String get supportExploreVtCtaDesc;
+
+  /// No description provided for @supportExploreVtPrimaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đọc Cẩm nang du lịch'**
+  String get supportExploreVtPrimaryAction;
+
+  /// No description provided for @supportExploreVtSecondaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mở bản đồ tìm kiếm'**
+  String get supportExploreVtSecondaryAction;
+
+  /// No description provided for @supportAddonEyebrow.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tiện nghi & Trải nghiệm'**
+  String get supportAddonEyebrow;
+
+  /// No description provided for @supportAddonTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tiện ích biệt thự & Dịch vụ lưu trú đi kèm'**
+  String get supportAddonTitle;
+
+  /// No description provided for @supportAddonSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tổng hợp các nhóm tiện nghi đặc trưng của biệt thự nguyên căn và cách trao đổi nhu cầu chuẩn bị tiệc BBQ, đậu xe đoàn cùng Chủ nhà.'**
+  String get supportAddonSubtitle;
+
+  /// No description provided for @supportAddonNoteTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Cách đặt dịch vụ hoặc yêu cầu chuẩn bị trước giờ nhận phòng'**
+  String get supportAddonNoteTitle;
+
+  /// No description provided for @supportAddonNoteBody.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mỗi căn biệt thự có cấu hình tiện nghi và quy định phụ thu khách đoàn riêng được niêm yết công khai. Sau khi chọn căn ưng ý, bạn có thể nhấn Nhắn tin cho Host ngay trên trang chi tiết để xác nhận các nhu cầu riêng.'**
+  String get supportAddonNoteBody;
+
+  /// No description provided for @supportAddonCtaTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tìm biệt thự có đầy đủ hồ bơi riêng & sân BBQ?'**
+  String get supportAddonCtaTitle;
+
+  /// No description provided for @supportAddonCtaDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Sử dụng bộ lọc đa tiêu chí trên trang Tìm kiếm để chọn chính xác các tiện ích đoàn của bạn mong muốn.'**
+  String get supportAddonCtaDesc;
+
+  /// No description provided for @supportAddonPrimaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mở bộ lọc nơi lưu trú'**
+  String get supportAddonPrimaryAction;
+
+  /// No description provided for @supportAddonSecondaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Liên hệ tư vấn đoàn'**
+  String get supportAddonSecondaryAction;
+
+  /// No description provided for @supportMemberEyebrow.
+  ///
+  /// In vi, this message translates to:
+  /// **'Quyền lợi tài khoản'**
+  String get supportMemberEyebrow;
+
+  /// No description provided for @supportMemberTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Ưu đãi thành viên & Mã giảm giá đặt phòng'**
+  String get supportMemberTitle;
+
+  /// No description provided for @supportMemberSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đăng ký tài khoản thành viên miễn phí để áp dụng mã ưu đãi trực tiếp khi đặt biệt thự, đồng bộ danh sách yêu thích và quản lý lịch sử chuyến đi.'**
+  String get supportMemberSubtitle;
+
+  /// No description provided for @supportMemberNote1Title.
+  ///
+  /// In vi, this message translates to:
+  /// **'Sử dụng Mã giảm giá (Coupon) trực tiếp khi đặt phòng'**
+  String get supportMemberNote1Title;
+
+  /// No description provided for @supportMemberNote1Body.
+  ///
+  /// In vi, this message translates to:
+  /// **'Thành viên đã đăng nhập có thể áp dụng mã ưu đãi theo phần trăm (%) hoặc số tiền cố định trên trang chi tiết biệt thự. Hệ thống tự động kiểm tra hạn dùng, giá trị đơn tối thiểu và số lượt sử dụng của từng tài khoản.'**
+  String get supportMemberNote1Body;
+
+  /// No description provided for @supportMemberNote2Title.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đồng bộ Danh sách yêu thích & Theo dõi Chuyến đi thời gian thực'**
+  String get supportMemberNote2Title;
+
+  /// No description provided for @supportMemberNote2Body.
+  ///
+  /// In vi, this message translates to:
+  /// **'Lưu lại các căn biệt thự ưng ý trên mọi thiết bị, nhận thông báo trạng thái đơn tức thời và nhắn tin trực tiếp với Chủ nhà không qua trung gian.'**
+  String get supportMemberNote2Body;
+
+  /// No description provided for @supportMemberCtaTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Áp dụng ưu đãi cho kỳ nghỉ sắp tới tại Vũng Tàu'**
+  String get supportMemberCtaTitle;
+
+  /// No description provided for @supportMemberCtaDesc.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chọn căn biệt thự yêu thích, kiểm tra giá niêm yết theo đêm và nhập mã giảm giá ngay tại bước xác nhận đặt phòng.'**
+  String get supportMemberCtaDesc;
+
+  /// No description provided for @supportMemberPrimaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tìm biệt thự đang mở lịch'**
+  String get supportMemberPrimaryAction;
+
+  /// No description provided for @supportMemberSecondaryAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Danh sách yêu thích'**
+  String get supportMemberSecondaryAction;
+
+  /// No description provided for @supportReportTargetBooking.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đơn đặt phòng (Mã Booking)'**
+  String get supportReportTargetBooking;
+
+  /// No description provided for @supportReportTargetListing.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chỗ nghỉ / Biệt thự (Mã Villa)'**
+  String get supportReportTargetListing;
+
+  /// No description provided for @supportReportTargetReview.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đánh giá lưu trú (Mã Review)'**
+  String get supportReportTargetReview;
+
+  /// No description provided for @supportReportTargetUser.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tài khoản người dùng (Mã User)'**
+  String get supportReportTargetUser;
+
+  /// No description provided for @supportReportSuccessMessage.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã ghi nhận phản ánh thành công. Bộ phận Kiểm duyệt & An toàn sẽ đối soát và phản hồi sớm nhất.'**
+  String get supportReportSuccessMessage;
+
+  /// No description provided for @supportReportErrorFallback.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không thể gửi phản ánh lúc này. Vui lòng thử lại.'**
+  String get supportReportErrorFallback;
+
+  /// No description provided for @supportReportStatusResolved.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã giải quyết'**
+  String get supportReportStatusResolved;
+
+  /// No description provided for @supportReportStatusRejected.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã từ chối'**
+  String get supportReportStatusRejected;
+
+  /// No description provided for @supportReportStatusOpen.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đang xử lý'**
+  String get supportReportStatusOpen;
+
+  /// No description provided for @supportReportGuestCardTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi báo cáo & khiếu nại trực tuyến'**
+  String get supportReportGuestCardTitle;
+
+  /// No description provided for @supportReportGuestCardBody.
+  ///
+  /// In vi, this message translates to:
+  /// **'Để đảm bảo tính xác thực và đối soát đúng mã đơn đặt phòng, vui lòng đăng nhập tài khoản trước khi gửi phản ánh trực tuyến hoặc kết nối nhanh qua trang Liên hệ.'**
+  String get supportReportGuestCardBody;
+
+  /// No description provided for @supportReportLoginAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đăng nhập để gửi phản ánh'**
+  String get supportReportLoginAction;
+
+  /// No description provided for @supportReportDirectContactAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mở kênh Liên hệ trực tiếp'**
+  String get supportReportDirectContactAction;
+
+  /// No description provided for @supportReportAuthCardTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi phản ánh / báo cáo tới bộ phận Kiểm duyệt'**
+  String get supportReportAuthCardTitle;
+
+  /// No description provided for @supportReportAuthCardSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Thông tin phản ánh được lưu vết trực tiếp để Quản trị viên kiểm tra và phản hồi minh bạch.'**
+  String get supportReportAuthCardSubtitle;
+
+  /// No description provided for @supportReportTargetGroupLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhóm đối tượng phản ánh'**
+  String get supportReportTargetGroupLabel;
+
+  /// No description provided for @supportReportTargetIdLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mã định danh số (ví dụ: mã đơn 102 hoặc mã villa 15)'**
+  String get supportReportTargetIdLabel;
+
+  /// No description provided for @supportReportTargetIdError.
+  ///
+  /// In vi, this message translates to:
+  /// **'Vui lòng nhập mã số nguyên dương hợp lệ'**
+  String get supportReportTargetIdError;
+
+  /// No description provided for @supportReportReasonLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tiêu đề khiếu nại / góp ý'**
+  String get supportReportReasonLabel;
+
+  /// No description provided for @supportReportReasonEmptyError.
+  ///
+  /// In vi, this message translates to:
+  /// **'Vui lòng nhập tiêu đề phản ánh'**
+  String get supportReportReasonEmptyError;
+
+  /// No description provided for @supportReportReasonMaxError.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tối đa 255 ký tự'**
+  String get supportReportReasonMaxError;
+
+  /// No description provided for @supportReportDescLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mô tả chi tiết sự việc (tùy chọn)'**
+  String get supportReportDescLabel;
+
+  /// No description provided for @supportReportSubmittingLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đang gửi phản ánh...'**
+  String get supportReportSubmittingLabel;
+
+  /// No description provided for @supportReportSubmitAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi phản ánh'**
+  String get supportReportSubmitAction;
+
+  /// No description provided for @supportReportRecentTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Phản ánh gần đây của bạn ({count})'**
+  String supportReportRecentTitle(int count);
+
+  /// No description provided for @supportCouponEmptyError.
+  ///
+  /// In vi, this message translates to:
+  /// **'Vui lòng nhập mã ưu đãi cần kiểm tra.'**
+  String get supportCouponEmptyError;
+
+  /// No description provided for @supportCouponValidStatus.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mã {code} hợp lệ — ước tính giảm {discount} cho đơn tạm tính.'**
+  String supportCouponValidStatus(String code, String discount);
+
+  /// No description provided for @supportCouponInvalidFallback.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mã ưu đãi chưa đủ điều kiện hoặc đã hết hạn.'**
+  String get supportCouponInvalidFallback;
+
+  /// No description provided for @supportCouponCheckError.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không thể kiểm tra mã ưu đãi lúc này.'**
+  String get supportCouponCheckError;
+
+  /// No description provided for @supportCouponCardTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tra cứu hiệu lực Mã ưu đãi (Coupon)'**
+  String get supportCouponCardTitle;
+
+  /// No description provided for @supportCouponGuestHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đăng nhập tài khoản thành viên để kiểm tra trực tiếp hiệu lực mã giảm giá theo giá trị đơn dự kiến hoặc áp dụng ngay tại bước đặt biệt thự.'**
+  String get supportCouponGuestHint;
+
+  /// No description provided for @supportCouponAuthHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập mã ưu đãi bạn đang có và giá trị đơn lưu trú dự kiến (VNĐ) để kiểm tra điều kiện áp dụng trực tiếp từ hệ thống.'**
+  String get supportCouponAuthHint;
+
+  /// No description provided for @supportCouponLoginAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đăng nhập thành viên'**
+  String get supportCouponLoginAction;
+
+  /// No description provided for @supportCouponRegisterAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tạo tài khoản miễn phí'**
+  String get supportCouponRegisterAction;
+
+  /// No description provided for @supportCouponCodeInputLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mã ưu đãi (ví dụ: PALM2026)'**
+  String get supportCouponCodeInputLabel;
+
+  /// No description provided for @supportCouponAmountInputLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Giá trị đơn tạm tính (VNĐ)'**
+  String get supportCouponAmountInputLabel;
+
+  /// No description provided for @supportCouponCheckingLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đang kiểm tra...'**
+  String get supportCouponCheckingLabel;
+
+  /// No description provided for @supportCouponCheckAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Kiểm tra mã ưu đãi'**
+  String get supportCouponCheckAction;
+
+  /// No description provided for @homeEmptyApprovedVillas.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hiện chưa có căn biệt thự nào đã được phê duyệt trên hệ thống.'**
+  String get homeEmptyApprovedVillas;
+
+  /// No description provided for @homeApprovedVillasCountTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Danh sách chỗ nghỉ đã duyệt ({count})'**
+  String homeApprovedVillasCountTitle(int count);
+
+  /// No description provided for @homePrevVillaTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Căn trước'**
+  String get homePrevVillaTooltip;
+
+  /// No description provided for @homeNextVillaTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Căn tiếp theo'**
+  String get homeNextVillaTooltip;
+
+  /// No description provided for @homeFavoriteAdd.
+  ///
+  /// In vi, this message translates to:
+  /// **'Lưu vào yêu thích'**
+  String get homeFavoriteAdd;
+
+  /// No description provided for @homeFavoriteRemove.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bỏ khỏi yêu thích'**
+  String get homeFavoriteRemove;
+
+  /// No description provided for @homeCardSpecsSummary.
+  ///
+  /// In vi, this message translates to:
+  /// **'{bedrooms} PN · Tối đa {guests} khách'**
+  String homeCardSpecsSummary(int bedrooms, int guests);
+
+  /// No description provided for @searchFilterBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bộ lọc'**
+  String get searchFilterBtn;
+
+  /// No description provided for @searchFilterActiveBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bộ lọc ({count})'**
+  String searchFilterActiveBtn(int count);
+
+  /// No description provided for @searchShowMapBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hiện bản đồ'**
+  String get searchShowMapBtn;
+
+  /// No description provided for @searchHideMapBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Ẩn bản đồ'**
+  String get searchHideMapBtn;
+
+  /// No description provided for @searchClearAllBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xóa tất cả'**
+  String get searchClearAllBtn;
+
+  /// No description provided for @searchFoundStaysCount.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tìm thấy {count} chỗ nghỉ tại Vũng Tàu'**
+  String searchFoundStaysCount(int count);
+
+  /// No description provided for @favoritesSavedCountSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'{count} căn biệt thự đã lưu'**
+  String favoritesSavedCountSubtitle(int count);
+
+  /// No description provided for @favoritesSyncOfflineNotice.
+  ///
+  /// In vi, this message translates to:
+  /// **'Không thể đồng bộ máy chủ — đang hiển thị danh sách lưu trên thiết bị.'**
+  String get favoritesSyncOfflineNotice;
+
+  /// No description provided for @favoritesInvalidCountNotice.
+  ///
+  /// In vi, this message translates to:
+  /// **'Có {count} chỗ nghỉ không còn mở lịch nhận khách.'**
+  String favoritesInvalidCountNotice(int count);
+
+  /// No description provided for @favoritesExploreAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khám phá biệt thự'**
+  String get favoritesExploreAction;
+
+  /// No description provided for @contactEyebrow.
+  ///
+  /// In vi, this message translates to:
+  /// **'HỖ TRỢ TRỰC TIẾP VŨNG TÀU'**
+  String get contactEyebrow;
+
+  /// No description provided for @contactBrowseVillas.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xem danh sách Villa'**
+  String get contactBrowseVillas;
+
+  /// No description provided for @contactHeroTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Liên hệ đội ngũ tư vấn & vận hành lưu trú'**
+  String get contactHeroTitle;
+
+  /// No description provided for @contactHeroSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hỗ trợ kiểm tra lịch trống, tư vấn chọn căn theo đoàn và giải đáp thông tin lưu trú tại TP. Vũng Tàu.'**
+  String get contactHeroSubtitle;
+
+  /// No description provided for @contactHotlineTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hotline & Zalo tư vấn'**
+  String get contactHotlineTitle;
+
+  /// No description provided for @contactVerifiedBadge.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã xác minh cấu hình'**
+  String get contactVerifiedBadge;
+
+  /// No description provided for @contactCallNow.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gọi ngay'**
+  String get contactCallNow;
+
+  /// No description provided for @contactCopyHotlineTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Sao chép số Hotline'**
+  String get contactCopyHotlineTooltip;
+
+  /// No description provided for @contactCopiedHotline.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã sao chép số Hotline vào bộ nhớ tạm'**
+  String get contactCopiedHotline;
+
+  /// No description provided for @contactOpenZalo.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhắn Zalo OA'**
+  String get contactOpenZalo;
+
+  /// No description provided for @contactOfficeTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Văn phòng đón tiếp tại Vũng Tàu'**
+  String get contactOfficeTitle;
+
+  /// No description provided for @contactMapAction.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xem bản đồ đường đi'**
+  String get contactMapAction;
+
+  /// No description provided for @contactEmailTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hòm thư hỗ trợ & đối soát'**
+  String get contactEmailTitle;
+
+  /// No description provided for @contactSameDayReply.
+  ///
+  /// In vi, this message translates to:
+  /// **'Phản hồi trong ngày'**
+  String get contactSameDayReply;
+
+  /// No description provided for @contactSendEmail.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi Email hỗ trợ'**
+  String get contactSendEmail;
+
+  /// No description provided for @contactCopyEmailTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Sao chép địa chỉ Email'**
+  String get contactCopyEmailTooltip;
+
+  /// No description provided for @contactCopiedEmail.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đã sao chép địa chỉ Email vào bộ nhớ tạm'**
+  String get contactCopiedEmail;
+
+  /// No description provided for @authWelcomeBack.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chào mừng trở lại'**
+  String get authWelcomeBack;
+
+  /// No description provided for @authLoginSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đăng nhập để xem kỳ nghỉ và quản lý chuyến đi của bạn tại The Palm Villa.'**
+  String get authLoginSubtitle;
+
+  /// No description provided for @authIdentifierLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Email hoặc số điện thoại'**
+  String get authIdentifierLabel;
+
+  /// No description provided for @authIdentifierHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập email hoặc số điện thoại Việt Nam'**
+  String get authIdentifierHint;
+
+  /// No description provided for @authPasswordLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mật khẩu'**
+  String get authPasswordLabel;
+
+  /// No description provided for @authPasswordHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập mật khẩu'**
+  String get authPasswordHint;
+
+  /// No description provided for @authShowPasswordTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Hiện mật khẩu'**
+  String get authShowPasswordTooltip;
+
+  /// No description provided for @authHidePasswordTooltip.
+  ///
+  /// In vi, this message translates to:
+  /// **'Ẩn mật khẩu'**
+  String get authHidePasswordTooltip;
+
+  /// No description provided for @authRememberMe.
+  ///
+  /// In vi, this message translates to:
+  /// **'Ghi nhớ đăng nhập'**
+  String get authRememberMe;
+
+  /// No description provided for @authSigningIn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đang đăng nhập...'**
+  String get authSigningIn;
+
+  /// No description provided for @authOrDivider.
+  ///
+  /// In vi, this message translates to:
+  /// **'HOẶC'**
+  String get authOrDivider;
+
+  /// No description provided for @authGoogleLoginBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đăng nhập với Google'**
+  String get authGoogleLoginBtn;
+
+  /// No description provided for @authNoAccountYet.
+  ///
+  /// In vi, this message translates to:
+  /// **'Chưa có tài khoản?'**
+  String get authNoAccountYet;
+
+  /// No description provided for @authRegisterBtn.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đăng ký'**
+  String get authRegisterBtn;
+
+  /// No description provided for @authCreateAccountTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tạo tài khoản mới'**
+  String get authCreateAccountTitle;
+
+  /// No description provided for @authRegisterSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trải nghiệm đặt phòng villa nghỉ dưỡng đẳng cấp và nhận ưu đãi độc quyền.'**
+  String get authRegisterSubtitle;
+
+  /// No description provided for @authFullNameLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Họ và tên'**
+  String get authFullNameLabel;
+
+  /// No description provided for @authFullNameHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập họ và tên'**
+  String get authFullNameHint;
+
+  /// No description provided for @authPhoneRequiredLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Số điện thoại *'**
+  String get authPhoneRequiredLabel;
+
+  /// No description provided for @authPhoneHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập số điện thoại Việt Nam (vd: 0901234567)'**
+  String get authPhoneHint;
+
+  /// No description provided for @authEmailRequiredLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Email *'**
+  String get authEmailRequiredLabel;
+
+  /// No description provided for @authEmailHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập địa chỉ email'**
+  String get authEmailHint;
+
+  /// No description provided for @authPasswordCreateHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tạo mật khẩu (tối thiểu 8 ký tự, gồm chữ và số)'**
+  String get authPasswordCreateHint;
+
+  /// No description provided for @authConfirmPasswordLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xác nhận mật khẩu *'**
+  String get authConfirmPasswordLabel;
+
+  /// No description provided for @authConfirmPasswordHint.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập lại mật khẩu vừa tạo'**
+  String get authConfirmPasswordHint;
+
+  /// No description provided for @authPasswordStrengthLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Độ mạnh mật khẩu: {level}'**
+  String authPasswordStrengthLabel(String level);
+
+  /// No description provided for @authStrengthWeak.
+  ///
+  /// In vi, this message translates to:
+  /// **'Yếu'**
+  String get authStrengthWeak;
+
+  /// No description provided for @authStrengthFair.
+  ///
+  /// In vi, this message translates to:
+  /// **'Trung bình'**
+  String get authStrengthFair;
+
+  /// No description provided for @authStrengthGood.
+  ///
+  /// In vi, this message translates to:
+  /// **'Khá'**
+  String get authStrengthGood;
+
+  /// No description provided for @authStrengthStrong.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mạnh'**
+  String get authStrengthStrong;
+
+  /// No description provided for @authTermsAgreement.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tôi đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của The Palm Villa'**
+  String get authTermsAgreement;
+
+  /// No description provided for @authTermsRequiredError.
+  ///
+  /// In vi, this message translates to:
+  /// **'Vui lòng đồng ý với Điều khoản dịch vụ và Chính sách bảo mật'**
+  String get authTermsRequiredError;
+
+  /// No description provided for @authCreatingAccount.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đang tạo tài khoản...'**
+  String get authCreatingAccount;
+
+  /// No description provided for @authAlreadyHaveAccount.
+  ///
+  /// In vi, this message translates to:
+  /// **'Bạn đã có tài khoản?'**
+  String get authAlreadyHaveAccount;
+
+  /// No description provided for @authForgotQuestionTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Quên mật khẩu?'**
+  String get authForgotQuestionTitle;
+
+  /// No description provided for @authOtpVerifyTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xác thực mã OTP'**
+  String get authOtpVerifyTitle;
+
+  /// No description provided for @authPasswordChangedTitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Đổi mật khẩu thành công'**
+  String get authPasswordChangedTitle;
+
+  /// No description provided for @authForgotRequestSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập email hoặc số điện thoại đã đăng ký để nhận mã xác thực khôi phục mật khẩu.'**
+  String get authForgotRequestSubtitle;
+
+  /// No description provided for @authForgotOtpSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Nhập 6 chữ số OTP và thiết lập mật khẩu mới.'**
+  String get authForgotOtpSubtitle;
+
+  /// No description provided for @authForgotSuccessSubtitle.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mật khẩu của bạn đã được cập nhật an toàn.'**
+  String get authForgotSuccessSubtitle;
+
+  /// No description provided for @authSendOtpButton.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi mã xác thực'**
+  String get authSendOtpButton;
+
+  /// No description provided for @authOtpSentTo.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mã OTP đã gửi tới: {target}'**
+  String authOtpSentTo(String target);
+
+  /// No description provided for @authOtpSixDigitsLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mã OTP gồm 6 chữ số'**
+  String get authOtpSixDigitsLabel;
+
+  /// No description provided for @authNewPasswordLabel.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mật khẩu mới'**
+  String get authNewPasswordLabel;
+
+  /// No description provided for @authResendOtpCountdown.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi lại sau 00:{seconds}'**
+  String authResendOtpCountdown(String seconds);
+
+  /// No description provided for @authResendOtpButton.
+  ///
+  /// In vi, this message translates to:
+  /// **'Gửi lại mã OTP'**
+  String get authResendOtpButton;
+
+  /// No description provided for @authConfirmOtpButton.
+  ///
+  /// In vi, this message translates to:
+  /// **'Xác nhận mã OTP'**
+  String get authConfirmOtpButton;
+
+  /// No description provided for @authOtpSuccessBanner.
+  ///
+  /// In vi, this message translates to:
+  /// **'Mã OTP đã được xác thực và mật khẩu mới đã sẵn sàng sử dụng.'**
+  String get authOtpSuccessBanner;
+
+  /// No description provided for @authBackToLoginButton.
+  ///
+  /// In vi, this message translates to:
+  /// **'Quay lại đăng nhập'**
+  String get authBackToLoginButton;
+
+  /// No description provided for @adminTabFinance.
+  ///
+  /// In vi, this message translates to:
+  /// **'Tài chính & Chi trả'**
+  String get adminTabFinance;
+
+  /// No description provided for @adminTabBlog.
+  ///
+  /// In vi, this message translates to:
+  /// **'Cẩm nang Blog'**
+  String get adminTabBlog;
+
+  /// No description provided for @adminTabTrustSafety.
+  ///
+  /// In vi, this message translates to:
+  /// **'Báo cáo & Khiếu nại'**
+  String get adminTabTrustSafety;
 }
 
 class _AppLocalizationsDelegate

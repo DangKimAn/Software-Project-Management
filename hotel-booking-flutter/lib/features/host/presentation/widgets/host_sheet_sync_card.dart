@@ -12,12 +12,19 @@ import '../../../../core/security/url_security_validator.dart';
 import '../../domain/host_models.dart';
 import '../view_models/host_sheet_sync_notifier.dart';
 
+/// Hàm ủy quyền mở đường dẫn trang tính Google Sheets bằng trình duyệt ngoài (cho phép tiêm phụ thuộc trong kiểm thử widget).
 typedef ExternalSpreadsheetLauncher = Future<bool> Function(Uri uri);
 
 Future<bool> _defaultExternalSpreadsheetLauncher(Uri uri) {
   return launchUrl(uri, mode: LaunchMode.externalApplication);
 }
 
+/// Thẻ quản trị kết nối và điều phối đồng bộ lịch hai chiều Google Sheets dành cho Chủ nhà.
+///
+/// Giải thuật kiểm soát an toàn liên kết và thích ứng bố cục:
+/// 1. Khi mở trang tính ngoài (`_handleOpenSpreadsheet`), xác thực nghiêm ngặt URL qua `UrlSecurityValidator.isValidGoogleSpreadsheetUrl`
+///    khớp đúng `spreadsheetId` đã liên kết; nếu thiết bị không mở được trình duyệt ngoài thì tự động sao chép URL an toàn vào bộ nhớ tạm.
+/// 2. Lưới chỉ số KPI (`_buildKpiGrid`) đo bề rộng thực tế và hệ số phóng chữ (`textScalerOf`) để chuyển đổi mượt giữa bố cục 3 cột ngang và thẻ xếp chồng chống tràn chữ.
 class HostSheetSyncCard extends ConsumerWidget {
   final VoidCallback? onCalendarChanged;
   final ExternalSpreadsheetLauncher externalLauncher;

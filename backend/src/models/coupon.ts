@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý cấu hình chương trình khuyến mãi, loại chiết khấu, hạn mức ngân sách và giá trị đơn tối thiểu.
+ */
 import {
     CreationOptional,
     DataTypes,

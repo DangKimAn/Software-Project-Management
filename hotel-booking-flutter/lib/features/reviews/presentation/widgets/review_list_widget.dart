@@ -1,127 +1,23 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
-import '../../data/repositories/review_repository_impl.dart';
 import '../../domain/entities/review_item.dart';
-import '../../domain/repositories/review_repository.dart';
+import '../view_models/review_view_model.dart';
 
-class ReviewTranslationService {
-  static final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 4),
-    receiveTimeout: const Duration(seconds: 4),
-  ));
-  static final Map<String, String> _cache = <String, String>{};
+// CONFLICT-RESOLVED: Giữ các provider đánh giá và `ReviewTranslationService` ở tầng `review_view_model.dart` (tránh gọi `Dio` trực tiếp trong Widget theo FLUTTER_RULES §2) và tái xuất cho các bên sử dụng.
+export '../view_models/review_view_model.dart';
 
-  static Future<String> translateText(String text, {required String targetLanguage}) async {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return trimmed;
-    final cacheKey = '$targetLanguage:$trimmed';
-    if (_cache.containsKey(cacheKey)) {
-      return _cache[cacheKey]!;
-    }
-
-    // High-quality offline fallback for sample/demo reviews
-    final sampleFallback = _getSampleFallback(trimmed, targetLanguage);
-
-    try {
-      final uri = Uri.parse(
-        'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=$targetLanguage&dt=t&q=${Uri.encodeComponent(trimmed)}',
-      );
-      final response = await _dio.getUri<dynamic>(uri);
-      if (response.statusCode == 200 && response.data is List) {
-        final outer = response.data as List;
-        if (outer.isNotEmpty && outer[0] is List) {
-          final segments = outer[0] as List;
-          final buffer = StringBuffer();
-          for (final seg in segments) {
-            if (seg is List && seg.isNotEmpty && seg[0] != null) {
-              buffer.write(seg[0]);
-            }
-          }
-          final translated = buffer.toString().trim();
-          if (translated.isNotEmpty) {
-            _cache[cacheKey] = translated;
-            return translated;
-          }
-        }
-      }
-    } catch (_) {
-      // Network or sandbox fallback
-    }
-
-    if (sampleFallback != null) {
-      _cache[cacheKey] = sampleFallback;
-      return sampleFallback;
-    }
-
-    return trimmed;
-  }
-
-  static String? _getSampleFallback(String text, String targetLang) {
-    if (text.contains('Không gian rộng rãi')) {
-      if (targetLang == 'en') {
-        return 'Spacious space, high-end amenities, fresh and clean rooms. 10/10 points!';
-      }
-      if (targetLang == 'ko') {
-        return '넓은 공간, 고급 편의시설, 향기롭고 깨끗한 객실. 10점 만점에 10점!';
-      }
-    }
-    if (text.contains('Villa quá đẹp')) {
-      if (targetLang == 'en') {
-        return 'The villa is gorgeous, clean swimming pool, and the sunset sea view is top-notch! The host enthusiastically and thoughtfully assisted our group with the BBQ party. Will definitely come back!';
-      }
-      if (targetLang == 'ko') {
-        return '빌라가 너무 아름답고, 수영장이 깨끗하며 일몰 오션뷰가 최고였습니다! 호스트님께서 바비큐 파티를 친절하고 세심하게 도와주셨습니다. 꼭 다시 방문할게요!';
-      }
-    }
-    if (text.contains('Cảm ơn bạn Long')) {
-      if (targetLang == 'en') {
-        return 'Thank you Long and your group for visiting, it is our pleasure to welcome you back next time!';
-      }
-      if (targetLang == 'ko') {
-        return '방문해 주신 롱 님과 일행분들께 감사드리며, 다음에도 기쁘게 모시겠습니다!';
-      }
-    }
-    return null;
-  }
-}
-
-final reviewRepositoryProvider = Provider<ReviewRepository>((ref) {
-  final client = ref.watch(dioClientProvider);
-  return ReviewRepositoryImpl(client);
-});
-
-typedef ListingReviewsQuery = ({
-  String listingId,
-  int? rating,
-  int limit,
-});
-
-final listingReviewsQueryProvider = FutureProvider.autoDispose
-    .family<List<ReviewItem>, ListingReviewsQuery>((ref, query) async {
-  final repo = ref.watch(reviewRepositoryProvider);
-  return repo.getListingReviews(
-    query.listingId,
-    page: 1,
-    limit: query.limit,
-    rating: query.rating,
-  );
-});
-
-final listingReviewsProvider = FutureProvider.autoDispose
-    .family<List<ReviewItem>, String>((ref, listingId) async {
-  final repo = ref.watch(reviewRepositoryProvider);
-  return repo.getListingReviews(listingId);
-});
-
+/// Danh sách hiển thị điểm trung bình, bộ lọc theo hạng sao (`1..5`) và các nhận xét của khách lưu trú.
+///
+/// Giải thuật mở rộng cửa sổ hiển thị tăng dần kết hợp nạp trang máy chủ:
+/// - Tính số trang API cần nạp `requiredPages = ceil(_visibleLimit / 20)` kẹp trong đoạn `[1, 50]`.
+/// - Mỗi lần nhấn `Xem thêm đánh giá` tăng `_visibleLimit` thêm `6` mục và tự động nạp trang kế tiếp khi chạm ngưỡng dữ liệu đã tải.
 class ReviewListWidget extends ConsumerStatefulWidget {
   final String listingId;
   final double averageRating;
@@ -140,6 +36,7 @@ class ReviewListWidget extends ConsumerStatefulWidget {
 
 class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
   static const int _pageSize = 6;
+  static const int _apiPageLimit = 20;
   int? _selectedRating;
   int _visibleLimit = _pageSize;
 
@@ -148,7 +45,8 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
   final Map<String, String> _translatedHostReplies = <String, String>{};
   final Set<String> _translatingReviewIds = <String>{};
 
-  Future<void> _toggleTranslation(ReviewItem review, String targetLanguage) async {
+  Future<void> _toggleTranslation(
+      ReviewItem review, String targetLanguage) async {
     final reviewId = review.id;
     if (_translatedReviewIds.contains(reviewId)) {
       setState(() {
@@ -202,14 +100,16 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // CONFLICT-RESOLVED: Hợp nhất phân trang an toàn `requiredPages` của nhánh refactor với ngữ cảnh đa ngôn ngữ `l10n` / `targetLang` từ `origin/develop`.
+    final requiredPages =
+        ((_visibleLimit + _apiPageLimit - 1) ~/ _apiPageLimit).clamp(1, 50);
     final l10n = context.l10n;
     final activeLang = context.activeLanguageCode;
     final targetLang = activeLang == 'vi' ? 'en' : activeLang;
-
     final query = (
       listingId: widget.listingId,
       rating: _selectedRating,
-      limit: _visibleLimit,
+      pageCount: requiredPages,
     );
     final reviewsAsync = ref.watch(listingReviewsQueryProvider(query));
 
@@ -255,7 +155,8 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              _buildRatingFilterChip(label: l10n.reviewsFilterAll, ratingValue: null),
+              _buildRatingFilterChip(
+                  label: l10n.reviewsFilterAll, ratingValue: null),
               for (final star in [5, 4, 3, 2, 1]) ...[
                 const SizedBox(width: 8),
                 _buildRatingFilterChip(
@@ -300,8 +201,13 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
               );
             }
 
-            final hasMore = reviews.length >= _visibleLimit &&
-                reviews.length < widget.totalReviews;
+            final visibleReviews = reviews.take(_visibleLimit).toList();
+            final hasMoreLoaded = reviews.length > visibleReviews.length;
+            final canFetchNextServerPage =
+                reviews.length >= requiredPages * _apiPageLimit &&
+                    (_selectedRating != null ||
+                        reviews.length < widget.totalReviews);
+            final hasMore = hasMoreLoaded || canFetchNextServerPage;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -309,20 +215,24 @@ class _ReviewListWidgetState extends ConsumerState<ReviewListWidget> {
                 ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: reviews.length,
+                  itemCount: visibleReviews.length,
                   separatorBuilder: (_, __) =>
                       const SizedBox(height: AppSpacing.s24),
                   itemBuilder: (context, index) {
-                    final review = reviews[index];
-                    final isTranslated = _translatedReviewIds.contains(review.id);
-                    final isTranslating = _translatingReviewIds.contains(review.id);
-                    final displayComment = isTranslated && _translatedComments.containsKey(review.id)
+                    // CONFLICT-RESOLVED: Lấy phần tử từ `visibleReviews[index]` theo cửa sổ phân trang và gắn trạng thái bản dịch `displayComment` / `displayHostReply` từ `origin/develop`.
+                    final review = visibleReviews[index];
+                    final isTranslated =
+                        _translatedReviewIds.contains(review.id);
+                    final isTranslating =
+                        _translatingReviewIds.contains(review.id);
+                    final displayComment = isTranslated &&
+                            _translatedComments.containsKey(review.id)
                         ? _translatedComments[review.id]!
                         : review.comment;
-                    final displayHostReply = isTranslated && _translatedHostReplies.containsKey(review.id)
+                    final displayHostReply = isTranslated &&
+                            _translatedHostReplies.containsKey(review.id)
                         ? _translatedHostReplies[review.id]!
                         : review.hostReply;
-
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [

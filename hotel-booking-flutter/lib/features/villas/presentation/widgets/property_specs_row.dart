@@ -4,6 +4,8 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../domain/entities/villa_specs.dart';
 
+/// Hàng hiển thị thông số kỹ thuật cốt lõi của biệt thự theo đúng thứ tự bắt buộc tại Mục 7.3 của `FLUTTER_RULES.md`.
+///
 /// Renders villa specifications in the EXACT order required by FLUTTER_RULES.md section 7.3:
 /// 1. Phòng ngủ (X phòng, icon bed)
 /// 2. Giường (Y giường, icon bed-double)
@@ -11,9 +13,13 @@ import '../../domain/entities/villa_specs.dart';
 /// 4. WC (W WC, icon bath)
 /// 5. Khoảng cách biển (N m tới biển, icon map-pin)
 class PropertySpecsRow extends StatelessWidget {
+  /// Tập thông số kỹ thuật của căn biệt thự.
   final VillaSpecs specs;
+
+  /// Cho biết có hiển thị thêm thông số khoảng cách ra bãi biển hay không.
   final bool showBeachDistance;
 
+  /// Khởi tạo hàng thông số `PropertySpecsRow`.
   const PropertySpecsRow({
     super.key,
     required this.specs,
@@ -59,11 +65,15 @@ class PropertySpecsRow extends StatelessWidget {
       children: [
         Icon(icon, size: 14, color: AppColors.iconMuted),
         const SizedBox(width: 6),
-        Text(
-          text,
-          style: AppTypography.caption.copyWith(
-            color: const Color(0xFF4B5563),
-            fontWeight: FontWeight.w500,
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.caption.copyWith(
+              color: const Color(0xFF4B5563),
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
       ],

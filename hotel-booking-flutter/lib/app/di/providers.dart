@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/date/booking_date.dart';
@@ -18,10 +19,12 @@ import '../../features/villas/domain/repositories/villa_repository.dart';
 
 // --- Core Providers ---
 
+/// Provider cung cấp dịch vụ lưu trữ bảo mật phần cứng (`Keychain` trên iOS / `EncryptedSharedPreferences` trên Android).
 final secureStorageProvider = Provider<SecureStorageService>((ref) {
   return const SecureStorageService();
 });
 
+/// Provider cung cấp `DioClient` trung tâm tích hợp tự động đính kèm JWT, làm mới phiên đơn luồng và hủy kết nối khi giải phóng.
 final dioClientProvider = Provider<DioClient>((ref) {
   final secureStorage = ref.watch(secureStorageProvider);
   final client = DioClient(secureStorage: secureStorage);
@@ -32,6 +35,7 @@ final dioClientProvider = Provider<DioClient>((ref) {
   return client;
 });
 
+/// Provider cung cấp dịch vụ kết nối thời gian thực `SocketService` tích hợp cơ chế ủy quyền làm mới token qua `dioClientProvider`.
 final socketServiceProvider = Provider<SocketService>((ref) {
   final secureStorage = ref.watch(secureStorageProvider);
   final service = SocketService(
@@ -45,11 +49,13 @@ final socketServiceProvider = Provider<SocketService>((ref) {
 
 /// Overridden in bootstrap when initialized; falls back to active or in-memory
 /// PreferencesService in isolated widget/unit test containers.
+/// Provider cung cấp `DeviceTokenRepository` để đăng ký và thu hồi mã thiết bị thông báo đẩy với máy chủ.
 final deviceTokenRepositoryProvider = Provider<DeviceTokenRepository>((ref) {
   final client = ref.watch(dioClientProvider);
   return DeviceTokenRepositoryImpl(client);
 });
 
+/// Provider cung cấp dịch vụ điều phối thông báo đẩy `PushNotificationService` kết hợp FCM và Socket.IO.
 final pushNotificationServiceProvider =
     Provider<PushNotificationService>((ref) {
   final repo = ref.watch(deviceTokenRepositoryProvider);
@@ -62,12 +68,14 @@ final pushNotificationServiceProvider =
   return service;
 });
 
+/// Provider cung cấp `PreferencesService` đã khởi tạo từ `bootstrap`, tự động dự phòng sang bộ nhớ tạm trong môi trường kiểm thử cô lập.
 final preferencesServiceProvider = Provider<PreferencesService>((ref) {
   return PreferencesService.activeInstance ?? PreferencesService.inMemory();
 });
 
 // --- Repository Provider (Production REST API - Zero Mock / Zero Seed) ---
 
+/// Provider cung cấp `VillaRepository` kết nối trực tiếp tới REST API sản xuất.
 final villaRepositoryProvider = Provider<VillaRepository>((ref) {
   final dioClient = ref.watch(dioClientProvider);
   return VillaRepositoryImpl(dioClient);
@@ -76,22 +84,26 @@ final villaRepositoryProvider = Provider<VillaRepository>((ref) {
 // --- App State Providers ---
 
 /// Locale Provider managing Vietnamese, English, and Korean language switching
+/// Bộ quản lý trạng thái ngôn ngữ giao diện (`vi`, `en`, `ko`) đồng bộ bền vững với `PreferencesService`.
 class LocaleNotifier extends StateNotifier<String> {
   final PreferencesService _prefs;
 
   LocaleNotifier(this._prefs) : super(_prefs.getLocale());
 
+  /// Cập nhật mã ngôn ngữ hiển thị hiện hành và lưu trữ xuống bộ nhớ cục bộ.
   Future<void> setLocale(String languageCode) async {
     state = languageCode;
     await _prefs.setLocale(languageCode);
   }
 }
 
+/// Provider quản lý ngôn ngữ giao diện hiện hành (`vi`, `en`, `ko`) trên toàn ứng dụng.
 final localeProvider = StateNotifierProvider<LocaleNotifier, String>((ref) {
   final prefs = ref.watch(preferencesServiceProvider);
   return LocaleNotifier(prefs);
 });
 
+/// Provider cung cấp `WishlistRepository` phục vụ đồng bộ danh sách yêu thích của khách và tài khoản đã đăng nhập.
 final wishlistRepositoryProvider = Provider<WishlistRepository>((ref) {
   final client = ref.watch(dioClientProvider);
   PreferencesService? prefs;
@@ -103,17 +115,37 @@ final wishlistRepositoryProvider = Provider<WishlistRepository>((ref) {
   return WishlistRepositoryImpl(client, prefs: prefs);
 });
 
+/// Provider tải chi tiết danh sách biệt thự yêu thích từ máy chủ sau khi đã đồng bộ và hợp nhất danh sách tạm của khách.
+final wishlistDetailProvider =
+    FutureProvider.autoDispose<WishlistResponse?>((ref) async {
+  final user = ref.watch(authNotifierProvider).valueOrNull;
+  if (user == null) return null;
+  final repo = ref.watch(wishlistRepositoryProvider);
+  await repo.getWishlistListingIds();
+  return repo.getWishlistDetail();
+});
+
 /// Wishlist / Favorites Notifier
+/// Bộ quản lý tập hợp mã biệt thự yêu thích, hỗ trợ hoạt động ngoại tuyến cho khách và đồng bộ hai chiều khi đăng nhập.
 class FavoritesNotifier extends StateNotifier<Set<String>> {
   final PreferencesService _prefs;
   final WishlistRepository? _wishlistRepo;
   final bool _isAuthenticated;
+  final VoidCallback? _onWishlistMutated;
   late final void Function() _sessionListener;
+  final Set<String> _sessionRemovedIds = <String>{};
+  bool _hasSyncedBackend = false;
 
-  FavoritesNotifier(this._prefs, this._wishlistRepo, this._isAuthenticated)
-      : super(_prefs.getFavorites().toSet()) {
+  FavoritesNotifier(
+    this._prefs,
+    this._wishlistRepo,
+    this._isAuthenticated, {
+    VoidCallback? onWishlistMutated,
+  })  : _onWishlistMutated = onWishlistMutated,
+        super(_prefs.getFavorites().toSet()) {
     _sessionListener = () {
       if (mounted) {
+        _sessionRemovedIds.clear();
         state = _prefs.getFavorites().toSet();
       }
     };
@@ -124,11 +156,20 @@ class FavoritesNotifier extends StateNotifier<Set<String>> {
     }
   }
 
+  /// Cho biết danh sách yêu thích đã hoàn tất ít nhất một lần đồng bộ từ máy chủ trong phiên hiện tại hay chưa.
+  bool get hasSyncedBackend => _hasSyncedBackend;
+
+  /// Cho biết biệt thự có mã `villaId` vừa bị người dùng chủ động bỏ thích trong phiên hiện tại hay không.
+  bool isRemovedInSession(String villaId) =>
+      _sessionRemovedIds.contains(villaId);
+
   Future<void> _syncFromBackend() async {
     try {
       final backendIds = await _wishlistRepo!.getWishlistListingIds();
       if (!mounted) return;
-      final synced = backendIds.toSet();
+      final synced =
+          backendIds.where((id) => !_sessionRemovedIds.contains(id)).toSet();
+      _hasSyncedBackend = true;
       state = synced;
       await _prefs.setFavorites(synced.toList());
     } catch (_) {
@@ -136,30 +177,57 @@ class FavoritesNotifier extends StateNotifier<Set<String>> {
     }
   }
 
-  Future<void> toggleFavorite(String villaId) async {
+  // Giải thuật đồng bộ tức thời thao tác thả tim / bỏ tim (Optimistic Wishlist Sync & Rollback):
+  // Cập nhật ngay lập tức trạng thái cục bộ để phản hồi tức thì, đồng thời lưu ảnh chụp trạng thái trước đó (`previousState`).
+  // Nếu phiên đã đăng nhập gọi API máy chủ thất bại (lỗi 4xx/5xx/mạng), hoàn tác về `previousState` và trả về chuỗi thông báo lỗi.
+  // CONFLICT-RESOLVED: Khắc phục lỗi thẻ biệt thự đã bỏ tim vẫn hiển thị trên `FavoritesScreen` và bổ sung hoàn tác khi lỗi API.
+  /// Đảo trạng thái yêu thích của `villaId` theo cơ chế cập nhật lạc quan và hoàn tác nếu đồng bộ máy chủ thất bại.
+  Future<String?> toggleFavorite(String villaId) async {
+    final previousState = Set<String>.from(state);
+    final wasRemovedInSession = _sessionRemovedIds.contains(villaId);
     final updated = Set<String>.from(state);
     final isAdding = !updated.contains(villaId);
     if (isAdding) {
+      _sessionRemovedIds.remove(villaId);
       updated.add(villaId);
     } else {
+      _sessionRemovedIds.add(villaId);
       updated.remove(villaId);
     }
     state = updated;
     await _prefs.setFavorites(updated.toList());
 
     if (_isAuthenticated && _wishlistRepo != null) {
+      _onWishlistMutated?.call();
       try {
         if (isAdding) {
           await _wishlistRepo.addWishlistListing(villaId);
         } else {
           await _wishlistRepo.removeWishlistListing(villaId);
         }
-      } catch (_) {
-        // Silently keep local state if offline
+        if (mounted) {
+          _onWishlistMutated?.call();
+        }
+      } catch (e) {
+        if (wasRemovedInSession) {
+          _sessionRemovedIds.add(villaId);
+        } else {
+          _sessionRemovedIds.remove(villaId);
+        }
+        if (mounted) {
+          state = previousState;
+        }
+        await _prefs.setFavorites(previousState.toList());
+        if (mounted) {
+          _onWishlistMutated?.call();
+        }
+        return DioClient.handleError(e).message;
       }
     }
+    return null;
   }
 
+  /// Kiểm tra xem biệt thự `villaId` có đang nằm trong danh sách yêu thích hay không.
   bool isFavorite(String villaId) => state.contains(villaId);
 
   @override
@@ -169,6 +237,7 @@ class FavoritesNotifier extends StateNotifier<Set<String>> {
   }
 }
 
+/// Provider quản lý tập hợp mã biệt thự yêu thích và tự động vô hiệu hóa bộ nhớ đệm `wishlistDetailProvider` khi có thay đổi.
 final favoritesProvider =
     StateNotifierProvider<FavoritesNotifier, Set<String>>((ref) {
   final prefs = ref.watch(preferencesServiceProvider);
@@ -180,15 +249,79 @@ final favoritesProvider =
     prefs,
     wishlistRepo,
     authUserId != null && authUserId.isNotEmpty,
+    onWishlistMutated: () => ref.invalidate(wishlistDetailProvider),
   );
 });
 
+// Giải thuật phân giải đầy đủ danh sách biệt thự yêu thích cho khách chưa đăng nhập:
+// Mở rộng truy vấn ngoài 12 mục của trang 1 (`limit: 100`) kết hợp tải bù từng ID còn thiếu qua `getVillaById`
+// để các biệt thự yêu thích thuộc trang sau vẫn hiển thị đầy đủ trên màn hình Yêu thích.
+/// Provider phân giải đầy đủ thông tin các biệt thự yêu thích cho khách chưa đăng nhập.
+///
+/// Giải thuật phân giải ba tầng (3-Tier Favorite Resolution):
+/// 1. Tận dụng ngay dữ liệu trang đầu đang có sẵn trong `villaListProvider` để phản hồi tức thì.
+/// 2. Nếu còn mã biệt thự chưa tìm thấy, mở rộng truy vấn danh mục (`limit: 100`) để gom hàng loạt.
+/// 3. Với các mã vẫn còn thiếu (tối đa 20 mục), gọi song song `getVillaById` và bảo toàn đúng thứ tự ban đầu.
+final resolvedFavoriteVillasProvider =
+    FutureProvider.autoDispose<List<Villa>>((ref) async {
+  final favorites = ref.watch(favoritesProvider);
+  final validIds = favorites
+      .where(PreferencesService.isValidListingId)
+      .toList(growable: false);
+  if (validIds.isEmpty) return const <Villa>[];
+
+  final repo = ref.watch(villaRepositoryProvider);
+  final byId = <String, Villa>{};
+
+  final firstPageCached = ref.read(villaListProvider).valueOrNull;
+  if (firstPageCached != null) {
+    for (final v in firstPageCached) {
+      if (favorites.contains(v.id)) {
+        byId[v.id] = v;
+      }
+    }
+  }
+
+  var missingIds = validIds.where((id) => !byId.containsKey(id)).toList();
+  if (missingIds.isNotEmpty) {
+    try {
+      final catalog = await repo.getVillas(page: 1, limit: 100);
+      for (final v in catalog) {
+        if (favorites.contains(v.id)) {
+          byId[v.id] = v;
+        }
+      }
+    } catch (_) {}
+  }
+
+  missingIds = validIds.where((id) => !byId.containsKey(id)).toList();
+  if (missingIds.isNotEmpty) {
+    final fetched = await Future.wait(
+      missingIds.take(20).map(
+            (id) => repo.getVillaById(id).catchError((_) => null),
+          ),
+    );
+    for (final v in fetched) {
+      if (v != null) {
+        byId[v.id] = v;
+      }
+    }
+  }
+
+  return [
+    for (final id in validIds)
+      if (byId.containsKey(id)) byId[id]!,
+  ];
+});
+
 /// Recently Viewed Notifier (max 8 items, synced to PreferencesService)
+/// Bộ quản lý danh sách biệt thự vừa xem gần đây (tối đa 8 mục theo thứ tự mới nhất lên đầu).
 class RecentlyViewedNotifier extends StateNotifier<List<RecentlyViewedItem>> {
   final PreferencesService _prefs;
 
   RecentlyViewedNotifier(this._prefs) : super(_prefs.getRecentlyViewed());
 
+  /// Ghi nhận biệt thự `villa` vào đầu danh sách vừa xem gần đây và đồng bộ lưu trữ cục bộ.
   Future<void> recordVilla(Villa villa) async {
     final item = RecentlyViewedItem(
       id: villa.id,
@@ -212,6 +345,7 @@ class RecentlyViewedNotifier extends StateNotifier<List<RecentlyViewedItem>> {
   }
 }
 
+/// Provider quản lý danh sách các biệt thự vừa xem gần đây của người dùng.
 final recentlyViewedProvider =
     StateNotifierProvider<RecentlyViewedNotifier, List<RecentlyViewedItem>>(
         (ref) {
@@ -220,6 +354,7 @@ final recentlyViewedProvider =
 });
 
 /// Search History Notifier (max 8 items)
+/// Bộ quản lý lịch sử từ khóa tìm kiếm (tối đa 8 từ khóa, khử trùng lặp không phân biệt hoa thường).
 class SearchHistoryNotifier extends StateNotifier<List<String>> {
   final PreferencesService _prefs;
   late final void Function() _sessionListener;
@@ -233,11 +368,13 @@ class SearchHistoryNotifier extends StateNotifier<List<String>> {
     _prefs.addSessionStateListener(_sessionListener);
   }
 
+  /// Thêm từ khóa `term` vào đầu danh sách lịch sử tìm kiếm.
   Future<void> addTerm(String term) async {
     await _prefs.addSearchHistory(term);
     state = _prefs.getSearchHistory();
   }
 
+  /// Xóa từ khóa `term` khỏi danh sách lịch sử tìm kiếm.
   Future<void> removeTerm(String term) async {
     await _prefs.removeSearchHistory(term);
     state = _prefs.getSearchHistory();
@@ -255,6 +392,7 @@ class SearchHistoryNotifier extends StateNotifier<List<String>> {
   }
 }
 
+/// Provider quản lý lịch sử tìm kiếm theo phiên đăng nhập hiện hành.
 final searchHistoryProvider =
     StateNotifierProvider<SearchHistoryNotifier, List<String>>((ref) {
   final prefs = ref.watch(preferencesServiceProvider);
@@ -263,6 +401,7 @@ final searchHistoryProvider =
 });
 
 /// Booking Queue (Giỏ chờ đặt — MultiBooking) Notifier (max 5 items)
+/// Bộ quản lý giỏ chờ đặt nhiều căn (`BookingQueueItem`, tối đa 5 mục lưu trữ cục bộ).
 class BookingQueueNotifier extends StateNotifier<List<BookingQueueItem>> {
   final PreferencesService _prefs;
   late final void Function() _sessionListener;
@@ -276,17 +415,20 @@ class BookingQueueNotifier extends StateNotifier<List<BookingQueueItem>> {
     _prefs.addSessionStateListener(_sessionListener);
   }
 
+  /// Thêm một mục `item` vào giỏ chờ đặt và trả về mã kết quả (`added`, `exists` hoặc `full`).
   Future<String> addItem(BookingQueueItem item) async {
     final status = await _prefs.addToBookingQueue(item);
     state = _prefs.getBookingQueue();
     return status; // 'added' | 'exists' | 'full'
   }
 
+  /// Cập nhật thông tin ngày lưu trú, số khách hoặc mã ưu đãi của mục `item` trong giỏ chờ đặt.
   Future<void> updateItem(BookingQueueItem item) async {
     await _prefs.updateBookingQueueItem(item);
     state = _prefs.getBookingQueue();
   }
 
+  /// Xóa căn lưu trú có mã `listingId` khỏi giỏ chờ đặt.
   Future<void> removeItem(String listingId) async {
     await _prefs.removeFromBookingQueue(listingId);
     state = _prefs.getBookingQueue();
@@ -304,6 +446,7 @@ class BookingQueueNotifier extends StateNotifier<List<BookingQueueItem>> {
   }
 }
 
+/// Provider quản lý trạng thái giỏ chờ đặt nhiều căn theo phiên hiện hành.
 final bookingQueueProvider =
     StateNotifierProvider<BookingQueueNotifier, List<BookingQueueItem>>((ref) {
   final prefs = ref.watch(preferencesServiceProvider);
@@ -313,6 +456,7 @@ final bookingQueueProvider =
 
 // --- Villa Feature ViewModels ---
 
+/// Trạng thái bộ lọc bất biến phục vụ tìm kiếm, lọc tiện ích, vị trí, ngày lưu trú và phân trang danh sách biệt thự.
 class VillaFilterState {
   final String searchQuery;
   final String? locationGroup;
@@ -371,12 +515,14 @@ class VillaFilterState {
     this.exactnessDays = 0,
   });
 
+  /// Tổng số khách tính sức chứa hiệu lực (`adults + children`), không tính trẻ sơ sinh (`infants`), hoặc rơi về `minGuests`.
   int get effectiveGuests {
     final fromCounters = adults + children;
     if (fromCounters > 0) return fromCounters;
     return minGuests ?? 0;
   }
 
+  /// Đếm số lượng tiêu chí lọc nâng cao đang được kích hoạt khác với mặc định để hiển thị huy hiệu trên nút Bộ lọc.
   int get activeFilterCount {
     int count = 0;
     if (propertyType != 'all' && propertyType.isNotEmpty) count++;
@@ -390,6 +536,7 @@ class VillaFilterState {
     return count;
   }
 
+  /// Sao chép và cập nhật từng phần trạng thái bộ lọc, tự động đồng bộ `minGuests` theo tổng `adults + children`.
   VillaFilterState copyWith({
     String? searchQuery,
     String? locationGroup,
@@ -444,9 +591,12 @@ class VillaFilterState {
       children: nextChildren,
       infants: infants ?? this.infants,
       pets: pets ?? this.pets,
-      bedrooms: bedrooms ?? this.bedrooms,
-      beds: beds ?? this.beds,
-      bathrooms: bathrooms ?? this.bathrooms,
+      bedrooms:
+          bedrooms != null ? (bedrooms > 0 ? bedrooms : null) : this.bedrooms,
+      beds: beds != null ? (beds > 0 ? beds : null) : this.beds,
+      bathrooms: bathrooms != null
+          ? (bathrooms > 0 ? bathrooms : null)
+          : this.bathrooms,
       amenities: amenities ?? this.amenities,
       checkIn: clearDates ? null : (checkIn ?? this.checkIn),
       checkOut: clearDates ? null : (checkOut ?? this.checkOut),
@@ -458,6 +608,114 @@ class VillaFilterState {
       flexDuration: flexDuration ?? this.flexDuration,
       exactnessDays: exactnessDays ?? this.exactnessDays,
     );
+  }
+
+  /// Giải thuật khôi phục trạng thái bộ lọc tìm kiếm từ tham số truy vấn URL (`URL Query Hydration`):
+  /// Chuyển đổi an toàn từng khóa `q`, `locationGroup`, `lat`/`lng`/`radius`, `propertyType`, `priceMin`/`priceMax`,
+  /// `guests`, `bedrooms`/`beds`/`bathrooms`, `amenities`, `checkIn`/`checkOut`, `sort`, `page`, `limit` sang kiểu miền chuẩn.
+  factory VillaFilterState.fromQueryParameters(
+    Map<String, String> params, {
+    VillaFilterState? base,
+  }) {
+    final initial = base ?? const VillaFilterState();
+    if (params.isEmpty) return initial;
+
+    final q = (params['q'] ?? params['searchQuery'] ?? '').trim();
+    final locationGroup = params['locationGroup']?.trim();
+    final lat = double.tryParse(params['lat'] ?? '');
+    final lng = double.tryParse(params['lng'] ?? '');
+    final radius = int.tryParse(params['radius'] ?? '');
+    final propertyType = params['propertyType']?.trim();
+    final priceMin = int.tryParse(params['priceMin'] ?? '');
+    final priceMax = int.tryParse(params['priceMax'] ?? '');
+    final guests = int.tryParse(params['guests'] ?? params['minGuests'] ?? '');
+    final bedrooms = int.tryParse(params['bedrooms'] ?? '');
+    final beds = int.tryParse(params['beds'] ?? '');
+    final bathrooms = int.tryParse(params['bathrooms'] ?? '');
+    final petsParam = params['pets']?.trim().toLowerCase();
+    final pets = (petsParam == 'true' || petsParam == '1')
+        ? 1
+        : (int.tryParse(petsParam ?? '') ?? initial.pets);
+    final rawAmenities = params['amenities']?.trim() ?? '';
+    final amenities = rawAmenities.isNotEmpty
+        ? rawAmenities
+            .split(',')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList()
+        : initial.amenities;
+    final checkIn = BookingDate.tryParse(params['checkIn']);
+    final checkOut = BookingDate.tryParse(params['checkOut']);
+    final sort = params['sort']?.trim();
+    final page = int.tryParse(params['page'] ?? '') ?? initial.page;
+    final limit = int.tryParse(params['limit'] ?? '') ?? initial.limit;
+
+    return initial.copyWith(
+      searchQuery: q.isNotEmpty ? q : initial.searchQuery,
+      locationGroup: (locationGroup != null && locationGroup.isNotEmpty)
+          ? locationGroup
+          : initial.locationGroup,
+      lat: lat ?? initial.lat,
+      lng: lng ?? initial.lng,
+      radius: radius ?? initial.radius,
+      propertyType: (propertyType != null && propertyType.isNotEmpty)
+          ? propertyType
+          : initial.propertyType,
+      priceMin: priceMin ?? initial.priceMin,
+      priceMax: priceMax ?? initial.priceMax,
+      minGuests: guests ?? initial.minGuests,
+      adults: guests != null && guests > 0 ? guests : initial.adults,
+      pets: pets,
+      bedrooms: bedrooms ?? initial.bedrooms,
+      beds: beds ?? initial.beds,
+      bathrooms: bathrooms ?? initial.bathrooms,
+      amenities: amenities,
+      checkIn: checkIn ?? initial.checkIn,
+      checkOut: checkOut ?? initial.checkOut,
+      sort: (sort != null && sort.isNotEmpty) ? sort : initial.sort,
+      page: page > 0 ? page : 1,
+      limit: limit > 0 ? limit : 12,
+    );
+  }
+
+  /// Giải thuật tuần tự hóa trạng thái bộ lọc hiện hành ra từ điển tham số truy vấn URL (`URL Query Serialization`):
+  /// Chỉ xuất các tiêu chí khác giá trị mặc định để giữ đường dẫn chia sẻ gọn sạch và đồng nhất với REST API.
+  Map<String, String> toQueryParameters() {
+    final out = <String, String>{};
+    if (searchQuery.trim().isNotEmpty) out['q'] = searchQuery.trim();
+    if (locationGroup != null && locationGroup!.trim().isNotEmpty) {
+      out['locationGroup'] = locationGroup!.trim();
+    }
+    if (lat != null) out['lat'] = lat!.toStringAsFixed(4);
+    if (lng != null) out['lng'] = lng!.toStringAsFixed(4);
+    if (radius != null && radius! > 0) out['radius'] = radius.toString();
+    if (propertyType.trim().isNotEmpty && propertyType != 'all') {
+      out['propertyType'] = propertyType.trim();
+    }
+    if (priceMin != null && priceMin! > 0) {
+      out['priceMin'] = priceMin.toString();
+    }
+    if (priceMax != null && priceMax! > 0) {
+      out['priceMax'] = priceMax.toString();
+    }
+    if (effectiveGuests > 0) out['guests'] = effectiveGuests.toString();
+    if (bedrooms != null && bedrooms! > 0) {
+      out['bedrooms'] = bedrooms.toString();
+    }
+    if (beds != null && beds! > 0) out['beds'] = beds.toString();
+    if (bathrooms != null && bathrooms! > 0) {
+      out['bathrooms'] = bathrooms.toString();
+    }
+    if (pets > 0) out['pets'] = 'true';
+    if (amenities.isNotEmpty) out['amenities'] = amenities.join(',');
+    if (checkIn != null) out['checkIn'] = checkIn!.toIsoDate();
+    if (checkOut != null) out['checkOut'] = checkOut!.toIsoDate();
+    if (sort.trim().isNotEmpty && sort != 'newest') {
+      out['sort'] = sort.trim();
+    }
+    if (page > 1) out['page'] = page.toString();
+    if (limit != 12) out['limit'] = limit.toString();
+    return out;
   }
 
   @override
@@ -523,66 +781,105 @@ class VillaFilterState {
       ]);
 }
 
+/// Provider lưu giữ trạng thái bộ lọc tìm kiếm biệt thự hiện tại.
 final villaFilterProvider = StateProvider<VillaFilterState>((ref) {
   return const VillaFilterState();
 });
 
 /// Loads villas live from Backend API.
+/// Provider tải danh sách biệt thự trực tiếp từ REST API theo `villaFilterProvider` kèm hủy truy vấn cũ tự động.
+///
+/// Giải thuật giữ phiên truy vấn sống qua ranh giới bất đồng bộ (`KeepAlive In-Flight Cancellation`):
+/// Giữ `keepAliveLink` trong suốt thời gian chờ HTTP để `container.read(villaListProvider.future)` không bị `autoDispose`
+/// hủy sớm ở cuối microtask khi chưa có widget lắng nghe; chỉ gọi `cancelToken.cancel` khi bộ lọc thực sự đổi giữa chừng
+/// hoặc `ProviderContainer` bị giải phóng trước khi phản hồi hoàn tất (`!completed`).
 final villaListProvider = FutureProvider.autoDispose<List<Villa>>((ref) async {
   final repository = ref.watch(villaRepositoryProvider);
   final filter = ref.watch(villaFilterProvider);
+  final keepAliveLink = ref.keepAlive();
+  final cancelToken = CancelToken();
+  var completed = false;
+  ref.onDispose(() {
+    if (!completed && !cancelToken.isCancelled) {
+      cancelToken.cancel('Filter updated');
+    }
+  });
 
-  return repository.getVillas(
-    searchQuery: filter.searchQuery,
-    locationGroup: filter.locationGroup,
-    lat: filter.lat,
-    lng: filter.lng,
-    radius: filter.radius,
-    propertyType: filter.propertyType,
-    priceMin: filter.priceMin,
-    priceMax: filter.priceMax,
-    minGuests: filter.effectiveGuests > 0 ? filter.effectiveGuests : null,
-    bedrooms: filter.bedrooms,
-    beds: filter.beds,
-    bathrooms: filter.bathrooms,
-    amenities: filter.amenities,
-    checkIn: filter.checkIn,
-    checkOut: filter.checkOut,
-    sort: filter.sort,
-    page: filter.page,
-    limit: filter.limit,
-  );
+  try {
+    return await repository.getVillas(
+      searchQuery: filter.searchQuery,
+      locationGroup: filter.locationGroup,
+      lat: filter.lat,
+      lng: filter.lng,
+      radius: filter.radius,
+      propertyType: filter.propertyType,
+      priceMin: filter.priceMin,
+      priceMax: filter.priceMax,
+      minGuests: filter.effectiveGuests > 0 ? filter.effectiveGuests : null,
+      bedrooms: filter.bedrooms,
+      beds: filter.beds,
+      bathrooms: filter.bathrooms,
+      pets: filter.pets > 0 ? true : null,
+      amenities: filter.amenities,
+      checkIn: filter.checkIn,
+      checkOut: filter.checkOut,
+      sort: filter.sort,
+      page: filter.page,
+      limit: filter.limit,
+      cancelToken: cancelToken,
+    );
+  } finally {
+    completed = true;
+    keepAliveLink.close();
+  }
 });
 
 /// Loads paginated villas with pagination metadata.
+/// Provider tải danh sách biệt thự kèm siêu dữ liệu phân trang (`PaginatedResult<Villa>`) và tự động hủy yêu cầu cũ khi đổi bộ lọc.
 final villaPaginatedProvider =
     FutureProvider.autoDispose<PaginatedResult<Villa>>((ref) async {
   final repository = ref.watch(villaRepositoryProvider);
   final filter = ref.watch(villaFilterProvider);
+  final keepAliveLink = ref.keepAlive();
+  final cancelToken = CancelToken();
+  var completed = false;
+  ref.onDispose(() {
+    if (!completed && !cancelToken.isCancelled) {
+      cancelToken.cancel('Filter updated');
+    }
+  });
 
-  return repository.getVillasPaginated(
-    searchQuery: filter.searchQuery,
-    locationGroup: filter.locationGroup,
-    lat: filter.lat,
-    lng: filter.lng,
-    radius: filter.radius,
-    propertyType: filter.propertyType,
-    priceMin: filter.priceMin,
-    priceMax: filter.priceMax,
-    minGuests: filter.effectiveGuests > 0 ? filter.effectiveGuests : null,
-    bedrooms: filter.bedrooms,
-    beds: filter.beds,
-    bathrooms: filter.bathrooms,
-    amenities: filter.amenities,
-    checkIn: filter.checkIn,
-    checkOut: filter.checkOut,
-    sort: filter.sort,
-    page: filter.page,
-    limit: filter.limit,
-  );
+  try {
+    return await repository.getVillasPaginated(
+      searchQuery: filter.searchQuery,
+      locationGroup: filter.locationGroup,
+      lat: filter.lat,
+      lng: filter.lng,
+      radius: filter.radius,
+      propertyType: filter.propertyType,
+      priceMin: filter.priceMin,
+      priceMax: filter.priceMax,
+      minGuests: filter.effectiveGuests > 0 ? filter.effectiveGuests : null,
+      bedrooms: filter.bedrooms,
+      beds: filter.beds,
+      bathrooms: filter.bathrooms,
+      pets: filter.pets > 0 ? true : null,
+      amenities: filter.amenities,
+      checkIn: filter.checkIn,
+      checkOut: filter.checkOut,
+      sort: filter.sort,
+      page: filter.page,
+      limit: filter.limit,
+      cancelToken: cancelToken,
+    );
+  } finally {
+    completed = true;
+    keepAliveLink.close();
+  }
 });
 
 /// Loads villa detail live from Backend API.
+/// Provider tải chi tiết một căn biệt thự theo mã `id` trực tiếp từ REST API.
 final villaDetailProvider =
     FutureProvider.autoDispose.family<Villa?, String>((ref, id) async {
   final repository = ref.watch(villaRepositoryProvider);
@@ -590,6 +887,7 @@ final villaDetailProvider =
 });
 
 /// Loads nearby/similar recommendations for a villa.
+/// Provider tải danh sách tối đa 4 biệt thự gợi ý tương tự hoặc lân cận theo mã `id`.
 final villaRecommendationsProvider =
     FutureProvider.autoDispose.family<List<Villa>, String>((ref, id) async {
   final repository = ref.watch(villaRepositoryProvider);
@@ -597,12 +895,14 @@ final villaRecommendationsProvider =
 });
 
 /// Loads real nightly pricing from Backend API for selected date range.
+/// Bộ tham số định danh truy vấn bảng giá theo đêm cho khoảng nửa mở `[checkIn, checkOut)`.
 typedef PricingParams = ({
   String villaId,
   BookingDate checkIn,
   BookingDate checkOut
 });
 
+/// Provider tải chi tiết giá từng đêm thực tế từ máy chủ cho khoảng ngày đã chọn trong `PricingParams`.
 final villaNightlyPricingProvider = FutureProvider.autoDispose
     .family<List<NightlyPrice>, PricingParams>((ref, params) async {
   final repository = ref.watch(villaRepositoryProvider);

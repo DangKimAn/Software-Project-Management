@@ -31,12 +31,6 @@ jobs:
           --health-timeout=5s
           --health-retries=5
 
-      # (Tùy chọn) Database Vector: Qdrant cho tính năng AI Search
-      qdrant:
-        image: qdrant/qdrant:latest
-        ports:
-          - 6333:6333
-
     defaults:
       run:
         working-directory: backend
@@ -99,7 +93,7 @@ jobs:
           ALLOW_DATABASE_ROOT_USER: "true"
         run: |
           npm run db:ensure-runtime-schema
-          npm run db:migrate || true
+          npm run db:migrate
 
       # 3. CHẠY KIỂM THỬ
       - name: Chạy Unit & Integration Tests
@@ -129,5 +123,4 @@ jobs:
           MYSQLPASSWORD: test_password
           MYSQLDATABASE: hotel_booking_test
           ALLOW_DATABASE_ROOT_USER: "true"
-          QDRANT_URL: http://127.0.0.1:6333
         run: npm run test

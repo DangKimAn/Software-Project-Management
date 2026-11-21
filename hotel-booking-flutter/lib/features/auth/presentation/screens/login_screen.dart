@@ -2,21 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/errors/app_failure.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../../shared/widgets/app_text_field.dart';
-import '../../data/services/google_auth_service.dart';
+
 import '../../domain/entities/user.dart';
 import '../view_models/auth_notifier.dart';
 import '../validation/auth_validation.dart';
 
+/// Màn hình đăng nhập người dùng (`/dang-nhap`), hỗ trợ xác thực bằng Email/Số điện thoại kèm mật khẩu
+/// hoặc đăng nhập một chạm qua Google OAuth, đồng thời điều hướng an toàn theo tham số `redirectTo`.
 class LoginScreen extends ConsumerStatefulWidget {
+  /// Đường dẫn nội bộ cần chuyển hướng tới sau khi đăng nhập thành công (nếu vượt qua kiểm tra an toàn).
   final String? redirectTo;
 
+  /// Khởi tạo `LoginScreen`.
   const LoginScreen({super.key, this.redirectTo});
 
   @override
@@ -28,6 +34,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _rememberMe = true;
   bool _isLoading = false;
   String? _errorMessage;
   Map<String, String> _fieldErrors = {};
@@ -65,6 +72,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     context.go(target);
   }
 
+  // Giải thuật xử lý đăng nhập bằng mật khẩu (`_handleLogin`):
+  // Kiểm tra biểu mẫu cục bộ qua `AuthValidation`, gửi yêu cầu đăng nhập tới `AuthNotifier`,
+  // điều hướng theo quyền nếu thành công hoặc ánh xạ lỗi từng trường dữ liệu trả về từ máy chủ.
   Future<void> _handleLogin() async {
     if (_isLoading) return;
     setState(() {
@@ -128,13 +138,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final activeL10n =
+        lookupAppLocalizations(Locale(ref.watch(localeProvider)));
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          tooltip: 'Quay lại',
+          tooltip: activeL10n.ctaBack,
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           icon: const Icon(LucideIcons.arrowLeft, color: AppColors.iconStrong),
           onPressed: () {
@@ -168,13 +180,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Chào mừng trở lại',
+                          activeL10n.authWelcomeBack,
                           style: AppTypography.display
                               .copyWith(color: AppColors.textStrong),
                         ),
                         const SizedBox(height: AppSpacing.s8),
                         Text(
-                          'Đăng nhập để xem kỳ nghỉ và quản lý chuyến đi của bạn tại The Palm Villa.',
+                          activeL10n.authLoginSubtitle,
                           style: AppTypography.body
                               .copyWith(color: AppColors.textMuted),
                         ),
@@ -214,8 +226,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         AppTextField(
                           controller: _identifierController,
                           readOnly: _isLoading,
-                          labelText: 'Email hoặc số điện thoại',
-                          hintText: 'Nhập email hoặc số điện thoại',
+                          labelText: activeL10n.authIdentifierLabel,
+                          hintText: activeL10n.authIdentifierHint,
                           prefixIcon: const Icon(
                             LucideIcons.userRound,
                             size: 20,
@@ -239,7 +251,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           },
                           validator: (value) =>
                               _fieldErrors['identifier'] ??
-                              AuthValidation.identifier(value),
+                              AuthValidation.loginIdentifier(value),
                         ),
                         const SizedBox(height: AppSpacing.s16),
                         AppTextField(
@@ -247,8 +259,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           readOnly: _isLoading,
                           textInputAction: TextInputAction.done,
                           onSubmitted: (_) => _handleLogin(),
-                          labelText: 'Mật khẩu',
-                          hintText: 'Nhập mật khẩu',
+                          labelText: activeL10n.authPasswordLabel,
+                          hintText: activeL10n.authPasswordHint,
                           obscureText: _obscurePassword,
                           autofillHints: const [AutofillHints.password],
                           onChanged: (_) {
@@ -268,8 +280,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           suffixIcon: IconButton(
                             tooltip: _obscurePassword
-                                ? 'Hiện mật khẩu'
-                                : 'Ẩn mật khẩu',
+                                ? activeL10n.authShowPasswordTooltip
+                                : activeL10n.authHidePasswordTooltip,
                             constraints: const BoxConstraints(
                                 minWidth: 48, minHeight: 48),
                             icon: Icon(
@@ -296,29 +308,80 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           },
                         ),
                         const SizedBox(height: AppSpacing.s8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: () => context.push('/quen-mat-khau'),
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.s8,
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: _isLoading
+                                  ? null
+                                  : () => setState(
+                                        () => _rememberMe = !_rememberMe,
+                                      ),
+                              child: ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(minHeight: 48),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: Checkbox(
+                                        key: const Key(
+                                          'login_remember_me_checkbox',
+                                        ),
+                                        value: _rememberMe,
+                                        activeColor: AppColors.primary,
+                                        onChanged: _isLoading
+                                            ? null
+                                            : (val) => setState(
+                                                  () =>
+                                                      _rememberMe = val ?? true,
+                                                ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        activeL10n.authRememberMe,
+                                        style: AppTypography.caption.copyWith(
+                                          color: AppColors.textStrong,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              minimumSize: const Size(48, 48),
                             ),
-                            child: Text(
-                              'Quên mật khẩu?',
-                              style: AppTypography.caption.copyWith(
-                                color: AppColors.textStrong,
-                                fontWeight: FontWeight.w600,
-                                decoration: TextDecoration.underline,
+                            TextButton(
+                              onPressed: () => context.push('/quen-mat-khau'),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.s8,
+                                ),
+                                minimumSize: const Size(48, 48),
+                              ),
+                              child: Text(
+                                activeL10n.authForgotQuestionTitle,
+                                style: AppTypography.caption.copyWith(
+                                  color: AppColors.textStrong,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline,
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
                         const SizedBox(height: AppSpacing.s16),
                         AppButton(
-                          text: _isLoading ? 'Đang đăng nhập...' : 'Đăng nhập',
+                          text: _isLoading
+                              ? activeL10n.authSigningIn
+                              : activeL10n.authLoginTitle,
                           isLoading: _isLoading,
                           icon: const Icon(
                             LucideIcons.arrowRight,
@@ -335,7 +398,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 12),
                               child: Text(
-                                'HOẶC',
+                                activeL10n.authOrDivider,
                                 style: AppTypography.caption
                                     .copyWith(color: AppColors.textMuted),
                               ),
@@ -345,7 +408,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                         const SizedBox(height: AppSpacing.s16),
                         AppButton.secondary(
-                          text: 'Đăng nhập với Google',
+                          text: activeL10n.authGoogleLoginBtn,
                           icon: const AppBrandIcon.googleLogo(size: 20),
                           onPressed: _isLoading ? null : _handleGoogleLogin,
                         ),
@@ -356,7 +419,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               Text(
-                                'Chưa có tài khoản?',
+                                activeL10n.authNoAccountYet,
                                 style: AppTypography.body
                                     .copyWith(color: AppColors.textMuted),
                               ),
@@ -387,7 +450,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       MaterialTapTargetSize.shrinkWrap,
                                 ),
                                 child: Text(
-                                  'Đăng ký',
+                                  activeL10n.authRegisterBtn,
                                   style: AppTypography.body.copyWith(
                                     color: AppColors.primary,
                                     fontWeight: FontWeight.w600,

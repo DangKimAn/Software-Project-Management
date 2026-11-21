@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/core/network/socket_service.dart';
 import 'package:hotel_booking_flutter/core/notifications/device_token_repository.dart';
 import 'package:hotel_booking_flutter/core/notifications/push_notification_service.dart';
-import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_header.dart';
 
 class _FakeDeviceTokenRepository implements DeviceTokenRepository {
   final List<Map<String, String?>> registeredCalls = <Map<String, String?>>[];

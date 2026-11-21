@@ -11,7 +11,7 @@ process.env.REFRESH_TOKEN_COOKIE_PATH = "/api/auth";
 
 const authService = require("../dist/modules/auth/auth.service");
 const User = require("../dist/models/user").default;
-const hostApplicationService = require("../dist/modules/host-applications/host-application.service");
+const hostApplicationService = require("../dist/modules/host-kyc/host-application.service");
 
 type TestUserRecord = {
     _id: number;

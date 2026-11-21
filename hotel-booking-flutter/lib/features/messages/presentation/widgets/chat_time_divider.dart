@@ -148,9 +148,13 @@ String localizeChatPreview(
   }
   final trimmed = raw.trim();
 
-  // Match voice message pattern in any language:
-  // e.g. "🎤 Tin nhắn thoại (00:07)", "🎤 Voice message (00:07)", "🎤 음성 메시지 (00:07)"
-  if (trimmed.startsWith('🎤')) {
+  // CONFLICT-RESOLVED: Nhận diện tóm tắt tin nhắn thoại và hình ảnh đa ngôn ngữ mà không sử dụng hoặc xuất ký tự Emoji trực tiếp theo rule.md Mục 1.
+  final isVoicePattern = trimmed.startsWith('Tin nhắn thoại (') ||
+      trimmed.startsWith('Voice message (') ||
+      trimmed.startsWith('음성 메시지 (') ||
+      RegExp(r'^[^\w\s\[].*(Tin nhắn thoại|Voice message|음성 메시지)\s*\(')
+          .hasMatch(trimmed);
+  if (isVoicePattern) {
     final match = RegExp(r'\(([0-9:]+)\)').firstMatch(trimmed);
     final duration = match != null ? ' (${match.group(1)})' : '';
     final voiceLabel = loc?.chatVoiceMessage ??
@@ -159,23 +163,23 @@ String localizeChatPreview(
             : (localeCode ?? 'vi').startsWith('ko')
                 ? '음성 메시지'
                 : 'Tin nhắn thoại');
-    return '🎤 $voiceLabel$duration';
+    return '$voiceLabel$duration';
   }
 
-  // Match image message pattern:
-  if (trimmed.startsWith('📷') ||
-      trimmed.startsWith('🖼️') ||
-      trimmed == '[image]' ||
+  final isImagePattern = trimmed == '[image]' ||
       trimmed == 'image' ||
       trimmed == '[Hình ảnh]' ||
-      trimmed == '📷 [Hình ảnh]') {
+      trimmed.startsWith('[Ảnh chụp trực tiếp') ||
+      trimmed.startsWith('[Đã gửi 1 hình ảnh') ||
+      trimmed.endsWith('[Hình ảnh]');
+  if (isImagePattern) {
     final galleryLabel = loc?.chatGalleryLabel ??
         ((localeCode ?? 'vi').startsWith('en')
             ? 'Photo'
             : (localeCode ?? 'vi').startsWith('ko')
                 ? '사진'
                 : 'Hình ảnh');
-    return '📷 $galleryLabel';
+    return '[$galleryLabel]';
   }
 
   return trimmed;

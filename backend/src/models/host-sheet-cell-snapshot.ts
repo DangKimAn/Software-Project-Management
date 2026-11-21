@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu ảnh chụp trạng thái từng ô lịch trên Google Sheets phục vụ giải thuật đối chiếu 3 chiều (3-way diff).
+ */
 import {
     CreationOptional,
     DataTypes,

@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý yêu cầu và kết quả hoàn tiền cho khách hàng theo chính sách hủy phòng và tiến độ lưu trú.
+ */
 import {
     CreationOptional,
     DataTypes,

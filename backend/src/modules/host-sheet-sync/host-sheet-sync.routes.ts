@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP tích hợp đồng bộ Google Sheets của chủ nhà (`/api/host/sheet-sync`):
+ * - Bắt buộc xác thực (`authenticate`), kiểm tra quyền chủ nhà và kiểm chứng dữ liệu cấu hình bảng tính cũng như quyết định giải quyết xung đột lịch.
+ */
+
 import express from "express";
 import { body, param, query } from "express-validator";
 

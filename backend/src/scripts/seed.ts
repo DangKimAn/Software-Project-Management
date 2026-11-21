@@ -6,6 +6,8 @@ import {
     Blog,
     BlogCategory,
     Coupon,
+    HostApplication,
+    HostIdentityDocument,
     HostProfile,
     Listing,
     ListingAmenity,
@@ -157,8 +159,12 @@ const VILLA_GALLERIES: Record<
     ],
 };
 
+/**
+ * Nạp dữ liệu mẫu chuẩn hóa (tiện ích, tài khoản phân quyền, biệt thự, lịch trống, đánh giá, mã giảm giá, bài viết)
+ * theo cơ chế lũy đẳng `findOrCreate`, có khóa chặn thực thi trái phép trên môi trường production.
+ */
 const seed = async () => {
-    console.info("🌱 Bắt đầu nạp dữ liệu mẫu (Seeding Database)...");
+    console.info("Bắt đầu nạp dữ liệu mẫu (Seeding Database)...");
     await sequelize.authenticate();
 
     // 1. Seed Amenities
@@ -195,6 +201,16 @@ const seed = async () => {
     const passwordHash = await bcrypt.hash("12345678", 10);
     const adminPasswordHash = await bcrypt.hash("Admin@123", 10);
 
+    // Giải thuật phân giải động mã vai trò (`role_id`) từ bảng `roles` để tài khoản Admin/Host/Guest luôn liên kết đúng role thực tế trên DB (TC-093):
+    const [roleRows] = await sequelize.query("SELECT role_id AS roleId, code FROM roles");
+    const roleIdByCode = new Map<string, number>();
+    for (const r of roleRows as Array<{ roleId: number; code: string }>) {
+        roleIdByCode.set(String(r.code).toLowerCase(), Number(r.roleId));
+    }
+    const adminRoleId = roleIdByCode.get("admin") ?? 4;
+    const hostRoleId = roleIdByCode.get("host") ?? 2;
+    const guestRoleId = roleIdByCode.get("guest") ?? 1;
+
     const usersData = [
         {
             email: "admin@minhthanhvilla.com",
@@ -202,7 +218,23 @@ const seed = async () => {
             username: "admin",
             fullName: "Quản trị viên The Palm Villa",
             passwordHash: adminPasswordHash,
-            roleId: 4, // admin
+            roleId: adminRoleId,
+        },
+        {
+            email: "admin2@minhthanhvilla.com",
+            phone: "0901000011",
+            username: "admin_checker",
+            fullName: "Quản trị viên Đối soát (Checker)",
+            passwordHash: adminPasswordHash,
+            roleId: adminRoleId,
+        },
+        {
+            email: "admin3@minhthanhvilla.com",
+            phone: "0901000012",
+            username: "admin_treasury",
+            fullName: "Quản trị viên Giải ngân (Payer)",
+            passwordHash: adminPasswordHash,
+            roleId: adminRoleId,
         },
         {
             email: "host.thanh@minhthanhvilla.com",
@@ -210,7 +242,7 @@ const seed = async () => {
             username: "host_thanh",
             fullName: "Nguyễn Minh Thành",
             passwordHash,
-            roleId: 2, // host
+            roleId: hostRoleId,
             isHostVerified: true,
             hostApplicationStatus: "approved" as const,
         },
@@ -220,7 +252,7 @@ const seed = async () => {
             username: "host_lan",
             fullName: "Trần Ngọc Lan",
             passwordHash,
-            roleId: 2, // host
+            roleId: hostRoleId,
             isHostVerified: true,
             hostApplicationStatus: "approved" as const,
         },
@@ -230,7 +262,25 @@ const seed = async () => {
             username: "guest_demo",
             fullName: "Lê Hoàng Long",
             passwordHash,
-            roleId: 1, // guest
+            roleId: guestRoleId,
+        },
+        {
+            email: "kyc.pending@minhthanhvilla.com",
+            phone: "0901000021",
+            username: "kyc_pending",
+            fullName: "Phạm Quốc Bảo",
+            passwordHash,
+            roleId: guestRoleId,
+            hostApplicationStatus: "pending" as const,
+        },
+        {
+            email: "kyc.rejected@minhthanhvilla.com",
+            phone: "0901000022",
+            username: "kyc_rejected",
+            fullName: "Vũ Minh Châu",
+            passwordHash,
+            roleId: guestRoleId,
+            hostApplicationStatus: "rejected" as const,
         },
     ];
 
@@ -486,9 +536,12 @@ const seed = async () => {
             await listingRecord.update({ title: l.title, images: imagesWithMeta });
         }
 
-        // Seed Listing Images table
+        // Seed Listing Images table kèm nhãn phân loại không gian AI Vision chuẩn hóa (TC-029):
+        const roomTypeByIndex = ["exterior", "living_room", "bedroom", "kitchen", "pool"] as const;
         for (let idx = 0; idx < gallery.length; idx++) {
             const img = gallery[idx];
+            const aiImageType = roomTypeByIndex[idx % roomTypeByIndex.length];
+            const aiConfidence = Number((0.98 - idx * 0.01).toFixed(2));
             const [imgRecord, imgCreated] = await ListingImage.findOrCreate({
                 where: {
                     listingId: l.listingId,
@@ -500,6 +553,8 @@ const seed = async () => {
                     caption: img.caption,
                     sortOrder: idx,
                     isCover: img.isCover,
+                    aiImageType,
+                    aiConfidence,
                     aiAnalysisStatus: "analyzed",
                 },
             });
@@ -508,6 +563,9 @@ const seed = async () => {
                     url: img.url,
                     caption: img.caption,
                     isCover: img.isCover,
+                    aiImageType,
+                    aiConfidence,
+                    aiAnalysisStatus: "analyzed",
                 });
             }
         }
@@ -726,13 +784,17 @@ const seed = async () => {
                 "Bên cạnh Bãi Sau nhộn nhịp, Bãi Dâu và Bãi Dứa sở hữu làn nước trong xanh và sự yên tĩnh hiếm có.",
                 "Nghỉ dưỡng tại các căn villa sát biển sẽ giúp bạn ngắm trọn vẹn cảnh bình minh và hoàng hôn buông xuống mặt biển.",
             ],
+            tags: ["Vũng Tàu", "Bãi Dâu", "Check-in biển"],
             status: "published",
             publishedAt: new Date(),
             createdByUserId: hostThanh.userId,
         },
     });
     if (!blog1Created) {
-        await blog1.update({ coverImage: "assets/images/NDT05929-HDR1.jpg" });
+        await blog1.update({
+            coverImage: "assets/images/NDT05929-HDR1.jpg",
+            tags: ["Vũng Tàu", "Bãi Dâu", "Check-in biển"],
+        });
     }
 
     const [blog2, blog2Created] = await Blog.findOrCreate({
@@ -751,16 +813,89 @@ const seed = async () => {
                 "Hãy ưu tiên các căn có hồ bơi riêng và sân vườn rộng để tổ chức tiệc nướng hải sản buổi tối.",
                 "Hệ thống The Palm Villa hỗ trợ đặt phòng trực tuyến nhanh chóng với thông tin minh bạch và cam kết chất lượng.",
             ],
+            tags: ["Kinh nghiệm thuê villa", "Gia đình", "BBQ hồ bơi"],
             status: "published",
             publishedAt: new Date(),
             createdByUserId: hostThanh.userId,
         },
     });
     if (!blog2Created) {
-        await blog2.update({ coverImage: "assets/images/19tranphu.jpg" });
+        await blog2.update({
+            coverImage: "assets/images/19tranphu.jpg",
+            tags: ["Kinh nghiệm thuê villa", "Gia đình", "BBQ hồ bơi"],
+        });
     }
 
-    console.info("🎉 Seeding Database hoàn tất thành công 100%!");
+    // 6. Seed Sample Host KYC Applications (pending & rejected) phục vụ kiểm thử TC-071 và TC-090
+    console.info("6. Seeding Sample Host KYC Applications...");
+    const kycPendingUser = userMap.get("kyc.pending@minhthanhvilla.com");
+    const kycRejectedUser = userMap.get("kyc.rejected@minhthanhvilla.com");
+    const adminPrimary = userMap.get("admin@minhthanhvilla.com");
+
+    if (kycPendingUser) {
+        const [pendingApp] = await HostApplication.findOrCreate({
+            where: { userId: kycPendingUser.userId, status: "pending" },
+            defaults: {
+                userId: kycPendingUser.userId,
+                contactName: kycPendingUser.fullName,
+                contactEmail: kycPendingUser.email,
+                contactPhone: kycPendingUser.phone,
+                entityType: "individual",
+                businessAddress: "88 Thùy Vân, Phường Thắng Tam, Thành phố Vũng Tàu",
+                notes: "Đăng ký vận hành biệt thự nghỉ dưỡng ven biển Bãi Sau.",
+                status: "pending",
+            },
+        });
+        await HostIdentityDocument.findOrCreate({
+            where: { applicationId: pendingApp.applicationId, side: "front" },
+            defaults: {
+                applicationId: pendingApp.applicationId,
+                userId: kycPendingUser.userId,
+                documentType: "cccd",
+                side: "front",
+                objectKey: `kyc/seed/${pendingApp.applicationId}/cccd-front.jpg`,
+                originalFilename: "cccd-front.jpg",
+                mimeType: "image/jpeg",
+                fileSize: 245760,
+                status: "pending",
+            },
+        });
+        await HostIdentityDocument.findOrCreate({
+            where: { applicationId: pendingApp.applicationId, side: "back" },
+            defaults: {
+                applicationId: pendingApp.applicationId,
+                userId: kycPendingUser.userId,
+                documentType: "cccd",
+                side: "back",
+                objectKey: `kyc/seed/${pendingApp.applicationId}/cccd-back.jpg`,
+                originalFilename: "cccd-back.jpg",
+                mimeType: "image/jpeg",
+                fileSize: 238400,
+                status: "pending",
+            },
+        });
+    }
+
+    if (kycRejectedUser) {
+        await HostApplication.findOrCreate({
+            where: { userId: kycRejectedUser.userId, status: "rejected" },
+            defaults: {
+                userId: kycRejectedUser.userId,
+                contactName: kycRejectedUser.fullName,
+                contactEmail: kycRejectedUser.email,
+                contactPhone: kycRejectedUser.phone,
+                entityType: "individual",
+                businessAddress: "42 Hạ Long, Phường 2, Thành phố Vũng Tàu",
+                notes: "Đăng ký cho thuê homestay view biển.",
+                status: "rejected",
+                rejectionReason: "[Yêu cầu bổ sung hồ sơ] Ảnh mặt sau CCCD bị lóa góc phải, vui lòng chụp lại rõ nét.",
+                reviewedByUserId: adminPrimary?.userId ?? null,
+                reviewedAt: new Date(),
+            },
+        });
+    }
+
+    console.info("Seeding Database hoàn tất thành công 100%!");
 };
 
 if (process.env.NODE_ENV === "production" && process.env.ALLOW_PRODUCTION_SEED !== "true") {
@@ -774,7 +909,7 @@ seed()
         process.exit(0);
     })
     .catch(async (error) => {
-        console.error("❌ Seeding thất bại:", error);
+        console.error("Seeding thất bại:", error);
         await sequelize.close();
         process.exit(1);
     });

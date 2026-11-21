@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import '../../../../core/date/booking_date.dart';
 import '../../../../core/media/app_media_helper.dart';
 import '../../../../core/network/dio_client.dart';
@@ -7,10 +8,14 @@ import '../../domain/entities/villa.dart';
 import '../../domain/entities/villa_specs.dart';
 import '../../domain/repositories/villa_repository.dart';
 
-/// Production VillaRepository communicating with live Express Backend REST endpoints (/api/listings, /api/search/semantic, /api/amenities).
+/// Triển khai kho dữ liệu `VillaRepository` kết nối trực tiếp tới các điểm cuối REST API thực tế
+/// (`/api/listings`, `/api/amenities`) thông qua `DioClient`.
+///
+/// Production VillaRepository communicating with live Express Backend REST endpoints (/api/listings, /api/amenities).
 class VillaRepositoryImpl implements VillaRepository {
   final DioClient _client;
 
+  /// Khởi tạo `VillaRepositoryImpl` sử dụng bộ khách mạng `_client`.
   const VillaRepositoryImpl(this._client);
 
   static const Set<String> _validPropertyTypes = {
@@ -71,31 +76,21 @@ class VillaRepositoryImpl implements VillaRepository {
     'thang máy': 'elevator',
   };
 
-  static final List<RegExp> _internalReasonPatterns = [
-    RegExp(r'^Khớp từ khóa\b', caseSensitive: false),
-    RegExp(r'^Semantic similarity\b', caseSensitive: false),
-    RegExp(r'^Keyword match\b', caseSensitive: false),
-    RegExp(r'^Fallback\b', caseSensitive: false),
-  ];
-
+  /// Chuẩn hóa chuỗi tên hoặc bí danh tiện ích `raw` sang mã chuẩn backend thông qua bảng `_amenityCodeAliases`.
   static String normalizeAmenityCode(String raw) {
     final trimmed = raw.trim();
     final lower = trimmed.toLowerCase();
     return _amenityCodeAliases[lower] ?? trimmed;
   }
 
-  static List<String> filterCustomerReasons(Iterable<dynamic>? reasons) {
-    if (reasons == null) return const [];
-    final out = <String>[];
-    for (final item in reasons) {
-      final r = item?.toString().trim() ?? '';
-      if (r.isEmpty) continue;
-      if (_internalReasonPatterns.any((p) => p.hasMatch(r))) continue;
-      out.add(r);
-    }
-    return out;
-  }
-
+  /// Xây dựng từ điển tham số truy vấn HTTP chuẩn hóa cho điểm cuối `/api/listings`.
+  ///
+  /// Giải thuật chuẩn hóa tham số tìm kiếm:
+  /// 1. Phân giải cụm khu vực `locationGroup` chuẩn tại Vũng Tàu và triệt tiêu từ khóa `q` trùng lặp
+  ///    nếu `searchQuery` đang trùng tên với chính `locationGroup` (tránh truy vấn kép thu hẹp sai tập kết quả).
+  /// 2. Ánh xạ danh sách `amenities` sang mã snake_case không trùng lặp và kiểm chứng `propertyType` hợp lệ.
+  /// 3. Kẹp biên ngày nhận phòng `checkIn` không lùi về quá khứ trước `BookingDate.todayVn()` (UTC+7)
+  ///    và bảo đảm bất biến khoảng nửa mở `[checkIn, checkOut)` tối thiểu `1` đêm.
   Map<String, dynamic> _buildSearchQueryParams({
     String? searchQuery,
     String? locationGroup,
@@ -109,6 +104,7 @@ class VillaRepositoryImpl implements VillaRepository {
     int? bedrooms,
     int? beds,
     int? bathrooms,
+    bool? pets,
     List<String>? amenities,
     BookingDate? checkIn,
     BookingDate? checkOut,
@@ -172,6 +168,7 @@ class VillaRepositoryImpl implements VillaRepository {
       if (bedrooms != null && bedrooms > 0) 'bedrooms': bedrooms,
       if (beds != null && beds > 0) 'beds': beds,
       if (bathrooms != null && bathrooms > 0) 'bathrooms': bathrooms,
+      if (pets != null) 'pets': pets,
       if (normalizedAmenities != null && normalizedAmenities.isNotEmpty)
         'amenities': normalizedAmenities.join(','),
       if (effectiveCheckIn != null) 'checkIn': effectiveCheckIn.toIsoDate(),
@@ -182,6 +179,7 @@ class VillaRepositoryImpl implements VillaRepository {
     };
   }
 
+  /// Lấy danh sách phẳng các biệt thự bằng cách ủy quyền cho `getVillasPaginated` và trích xuất `items`.
   @override
   Future<List<Villa>> getVillas({
     String? searchQuery,
@@ -196,12 +194,14 @@ class VillaRepositoryImpl implements VillaRepository {
     int? bedrooms,
     int? beds,
     int? bathrooms,
+    bool? pets,
     List<String>? amenities,
     BookingDate? checkIn,
     BookingDate? checkOut,
     String? sort,
     int page = 1,
     int limit = 20,
+    CancelToken? cancelToken,
   }) async {
     final result = await getVillasPaginated(
       searchQuery: searchQuery,
@@ -216,16 +216,19 @@ class VillaRepositoryImpl implements VillaRepository {
       bedrooms: bedrooms,
       beds: beds,
       bathrooms: bathrooms,
+      pets: pets,
       amenities: amenities,
       checkIn: checkIn,
       checkOut: checkOut,
       sort: sort,
       page: page,
       limit: limit,
+      cancelToken: cancelToken,
     );
     return result.items;
   }
 
+  /// Truy vấn phân trang danh sách biệt thự từ `/api/listings` kết hợp bộ lọc bảo vệ phía client.
   @override
   Future<PaginatedResult<Villa>> getVillasPaginated({
     String? searchQuery,
@@ -240,16 +243,19 @@ class VillaRepositoryImpl implements VillaRepository {
     int? bedrooms,
     int? beds,
     int? bathrooms,
+    bool? pets,
     List<String>? amenities,
     BookingDate? checkIn,
     BookingDate? checkOut,
     String? sort,
     int page = 1,
     int limit = 12,
+    CancelToken? cancelToken,
   }) async {
     try {
       final response = await _client.dio.get<Map<String, dynamic>>(
         '/api/listings',
+        cancelToken: cancelToken,
         queryParameters: _buildSearchQueryParams(
           searchQuery: searchQuery,
           locationGroup: locationGroup,
@@ -263,6 +269,7 @@ class VillaRepositoryImpl implements VillaRepository {
           bedrooms: bedrooms,
           beds: beds,
           bathrooms: bathrooms,
+          pets: pets,
           amenities: amenities,
           checkIn: checkIn,
           checkOut: checkOut,
@@ -271,15 +278,46 @@ class VillaRepositoryImpl implements VillaRepository {
           limit: limit,
         ),
       );
-      return DioClient.parsePaginated<Villa>(
+      final parsed = DioClient.parsePaginated<Villa>(
         response.data,
         _mapJsonToVilla,
+      );
+      // Giải thuật lọc dự phòng phía client đồng bộ với tham số truy vấn máy chủ:
+      // Bảo đảm kết quả luôn thỏa mãn ngưỡng tối thiểu bedrooms/beds/bathrooms và chính sách thú cưng (khi có dữ liệu rules).
+      final filteredItems = parsed.items.where((villa) {
+        if (bedrooms != null &&
+            bedrooms > 0 &&
+            villa.specs.bedrooms < bedrooms) {
+          return false;
+        }
+        if (beds != null && beds > 0 && villa.specs.beds < beds) {
+          return false;
+        }
+        if (bathrooms != null &&
+            bathrooms > 0 &&
+            villa.specs.bathrooms < bathrooms) {
+          return false;
+        }
+        if (pets == true && villa.rules != null && !villa.rules!.allowPets) {
+          return false;
+        }
+        return true;
+      }).toList();
+      return PaginatedResult<Villa>(
+        items: filteredItems,
+        pagination: parsed.pagination,
       );
     } catch (e) {
       throw DioClient.handleError(e);
     }
   }
 
+  /// Tải chi tiết biệt thự từ `/api/listings/:id` và đồng thời nạp song song lịch kín phòng 6 tháng cùng nội quy.
+  ///
+  /// Giải thuật làm giàu dữ liệu song song chịu lỗi (Concurrent Graceful Hydration):
+  /// Sau khi ánh xạ thực thể `Villa` gốc, kích hoạt đồng thời `Future.wait` cho `getUnavailableDates`
+  /// và `getVillaRules`. Nếu một nhánh phụ gặp lỗi mạng cục bộ, hệ thống tự động lùi về giá trị mặc định
+  /// an toàn thay vì làm hỏng toàn bộ trang chi tiết biệt thự.
   @override
   Future<Villa?> getVillaById(String id) async {
     try {
@@ -311,6 +349,7 @@ class VillaRepositoryImpl implements VillaRepository {
     }
   }
 
+  /// Tải nội quy lưu trú từ `/api/listings/:id/rules` với cơ chế lùi về `VillaRules` mặc định khi lỗi.
   @override
   Future<VillaRules> getVillaRules(String villaId) async {
     try {
@@ -326,6 +365,7 @@ class VillaRepositoryImpl implements VillaRepository {
     }
   }
 
+  /// Truy vấn danh sách biệt thự gợi ý tương đồng từ `/api/listings/:id/recommendations`.
   @override
   Future<List<Villa>> getRecommendations(
     String villaId, {
@@ -352,17 +392,19 @@ class VillaRepositoryImpl implements VillaRepository {
     }
   }
 
+  /// Quét song song lịch khả dụng của `monthsAhead` tháng tiếp theo để gom toàn bộ ngày đã kín phòng (`YYYY-MM-DD`).
   @override
   Future<Set<String>> getUnavailableDates(
     String villaId, {
     int monthsAhead = 6,
   }) async {
-    final now = DateTime.now();
+    // Giải thuật truy vấn lịch kín phòng các tháng tiếp theo theo múi giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7):
+    final now = BookingDate.todayVn();
     final unavailable = <String>{};
     final futures = <Future<void>>[];
 
     for (var offset = 0; offset < monthsAhead; offset++) {
-      final target = DateTime(now.year, now.month + offset, 1);
+      final target = DateTime.utc(now.year, now.month + offset, 1);
       futures.add(() async {
         try {
           final response = await _client.dio.get<Map<String, dynamic>>(
@@ -393,6 +435,16 @@ class VillaRepositoryImpl implements VillaRepository {
     return unavailable;
   }
 
+  /// Truy vấn và trích lọc danh sách giá theo từng đêm `NightlyPrice` trong khoảng lưu trú nửa mở `[checkIn, checkOut)`.
+  ///
+  /// Giải thuật gom tháng dương lịch và lọc khoảng nửa mở `[checkIn, checkOut)`:
+  /// 1. **Gom tập tháng dương lịch (`months`)**: Dịch con trỏ `cursor` từ `checkIn` theo bước nhảy
+  ///    `15` ngày cho tới `checkOut`, đồng thời chèn tường minh tháng của `checkOut` vào `Set` để
+  ///    không bỏ sót bất kỳ tháng trung gian nào dù tháng chỉ có 28 ngày.
+  /// 2. **Truy vấn lịch máy chủ**: Gọi `/api/listings/:id/availability` cho từng cặp `(year, month)`.
+  /// 3. **Lọc nghiêm ngặt theo khoảng nửa mở `[checkIn, checkOut)`**: Chỉ giữ các ngày `parsedDate`
+  ///    thỏa mãn `!parsedDate.isBefore(checkIn) && parsedDate.isBefore(checkOut)` (tức `checkIn <= d < checkOut`),
+  ///    ánh xạ `price`, `isWeekend`, `isAvailable` và ghi chú `note` (ẩn ghi chú nếu đêm không khả dụng).
   @override
   Future<List<NightlyPrice>> getNightlyPrices({
     required String villaId,
@@ -400,6 +452,7 @@ class VillaRepositoryImpl implements VillaRepository {
     required BookingDate checkOut,
   }) async {
     try {
+      // Giải thuật thu thập danh sách các tháng dương lịch nằm giữa checkIn và checkOut:
       // Collect months spanned between checkIn and checkOut
       final months = <({int year, int month})>{};
       var cursor = checkIn;
@@ -448,6 +501,7 @@ class VillaRepositoryImpl implements VillaRepository {
     }
   }
 
+  /// Kiểm tra tính khả dụng xuyên suốt khoảng nửa mở `[checkIn, checkOut)` dựa trên dữ liệu `getNightlyPrices`.
   @override
   Future<bool> checkAvailability({
     required String villaId,
@@ -467,71 +521,7 @@ class VillaRepositoryImpl implements VillaRepository {
     }
   }
 
-  @override
-  Future<SemanticSearchResponse> semanticSearch({
-    required String query,
-    int topK = 12,
-  }) async {
-    try {
-      final response = await _client.dio.post<Map<String, dynamic>>(
-        '/api/search/semantic',
-        data: {
-          'query': query.trim(),
-          'limit': topK,
-          'topK': topK,
-        },
-      );
-      final data = DioClient.unwrapEnvelope(response.data);
-      if (data is Map<String, dynamic>) {
-        final rawResults =
-            (data['results'] ?? data['items']) as List<dynamic>? ?? [];
-        final villas = rawResults
-            .whereType<Map<String, dynamic>>()
-            .map(_mapJsonToVilla)
-            .toList();
-
-        SemanticDateIntent? dateIntent;
-        final rawSearchMeta = data['searchMeta'];
-        if (rawSearchMeta is Map<String, dynamic>) {
-          final parsedFilters = rawSearchMeta['parsedFilters'];
-          if (parsedFilters is Map<String, dynamic> &&
-              parsedFilters['dateIntent'] is Map<String, dynamic>) {
-            dateIntent = SemanticDateIntent.fromJson(
-              parsedFilters['dateIntent'] as Map<String, dynamic>,
-            );
-          }
-        }
-        if (dateIntent == null && data['dateIntent'] is Map<String, dynamic>) {
-          dateIntent = SemanticDateIntent.fromJson(
-            data['dateIntent'] as Map<String, dynamic>,
-          );
-        }
-
-        return SemanticSearchResponse(
-          query: (data['query'] ?? query).toString(),
-          mode: (data['mode'] ?? 'semantic').toString(),
-          reason: data['reason']?.toString(),
-          message: data['message']?.toString(),
-          availabilityNotice: data['availabilityNotice']?.toString(),
-          dateIntent: dateIntent,
-          detectedRoomType: data['detectedRoomType']?.toString(),
-          items: villas,
-        );
-      } else if (data is List) {
-        return SemanticSearchResponse(
-          query: query,
-          items: data
-              .whereType<Map<String, dynamic>>()
-              .map(_mapJsonToVilla)
-              .toList(),
-        );
-      }
-      return SemanticSearchResponse(query: query, items: const []);
-    } catch (e) {
-      throw DioClient.handleError(e);
-    }
-  }
-
+  /// Tải danh mục tiện ích chuẩn từ `/api/amenities` phục vụ đồng bộ bộ lọc tìm kiếm.
   @override
   Future<List<Map<String, dynamic>>> getAmenitiesCatalog() async {
     try {
@@ -552,6 +542,16 @@ class VillaRepositoryImpl implements VillaRepository {
     }
   }
 
+  /// Ánh xạ đối tượng JSON đa định dạng từ backend thành thực thể miền `Villa` chuẩn hóa.
+  ///
+  /// Giải thuật ánh xạ và chuỗi lùi dự phòng (Multi-Schema Mapping & Fallback Chain):
+  /// - **Địa chỉ**: Hợp nhất từ `address`, `addressSummary` hoặc ghép chuỗi `addressLine, ward, district, city`.
+  /// - **Bộ ảnh xác thực**: Thay thế tự động mọi ảnh kho mẫu bằng bộ ảnh nội bộ đã tuyển chọn qua
+  ///   `AppMediaHelper.bundledGalleryForListing` nhằm giữ đúng chất lượng thị giác của thương hiệu.
+  /// - **Giá & phụ phí**: Đồng bộ linh hoạt cả khóa `camelCase` và `snake_case`, giữ nguyên `basePriceVnd = null`
+  ///   khi máy chủ chưa công bố giá xác thực.
+  /// - **Huy hiệu ưu tiên (`badges`)**: Tự động suy diễn nhãn `featured`, `nearBeach`, `saltwater`, `group`
+  ///   từ điểm đánh giá, khoảng cách biển, loại hồ bơi và sức chứa khách.
   Villa _mapJsonToVilla(Map<String, dynamic> json) {
     final listingId = (json['listingId'] ?? json['id'])?.toString() ?? '';
     final title = json['title']?.toString() ?? (json['name']?.toString() ?? '');
@@ -729,9 +729,10 @@ class VillaRepositoryImpl implements VillaRepository {
         ((json['cleaningFee'] ?? json['cleaning_fee']) as num?)?.toInt() ?? 0;
     final serviceFee =
         ((json['serviceFee'] ?? json['service_fee']) as num?)?.toInt() ?? 0;
-    final serviceFeePct =
+    final rawServiceFeePct =
         ((json['serviceFeePct'] ?? json['service_fee_pct']) as num?)
             ?.toDouble();
+    final serviceFeePct = rawServiceFeePct ?? (serviceFee > 0 ? null : 10.0);
     final extraGuestFee =
         ((json['extraGuestFee'] ?? json['extra_guest_fee']) as num?)?.toInt() ??
             0;
@@ -774,20 +775,6 @@ class VillaRepositoryImpl implements VillaRepository {
     if (json['rules'] is Map<String, dynamic>) {
       rules = VillaRules.fromJson(json['rules'] as Map<String, dynamic>);
     }
-
-    // Semantic search metadata
-    final similarityScore =
-        ((json['similarityScore'] ?? json['score']) as num?)?.toDouble();
-    final matchedRoomType =
-        (json['matchedRoomType'] ?? json['roomType'])?.toString();
-    final rawMatchedImage =
-        (json['matchedImageUrl'] ?? json['matchedImage'])?.toString();
-    final matchedImageUrl = AppMediaHelper.isStockPlaceholderUrl(rawMatchedImage)
-        ? fallbackGallery.first
-        : rawMatchedImage;
-    final matchedReasons = filterCustomerReasons(
-      json['matchedReasons'] as Iterable<dynamic>?,
-    );
 
     // Badges
     final badges = <VillaBadgeType>[];
@@ -842,13 +829,10 @@ class VillaRepositoryImpl implements VillaRepository {
       badges: badges,
       amenities: amenitiesList,
       bookedDatesIso: const {},
-      similarityScore: similarityScore,
-      matchedRoomType: matchedRoomType,
-      matchedImageUrl: matchedImageUrl,
-      matchedReasons: matchedReasons,
     );
   }
 
+  /// Trích xuất bộ thông số kỹ thuật `VillaSpecs` từ nhánh con `specs` hoặc suy diễn từ trường phẳng và từ khóa tiện ích.
   VillaSpecs _parseSpecs(Map<String, dynamic> json) {
     final specsJson = json['specs'] as Map<String, dynamic>?;
     if (specsJson != null) {

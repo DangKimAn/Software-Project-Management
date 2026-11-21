@@ -156,19 +156,19 @@ void main() {
       await tester.longPress(find.text('xin chao'));
       await tester.pumpAndSettle();
 
-      expect(find.text('❤️'), findsOneWidget);
-      expect(find.text('😆'), findsOneWidget);
-      expect(find.text('😮'), findsOneWidget);
-      expect(find.text('😢'), findsOneWidget);
-      expect(find.text('😡'), findsOneWidget);
-      expect(find.text('👍'), findsOneWidget);
+      expect(find.byKey(const Key('reaction_heart_m1')), findsOneWidget);
+      expect(find.byKey(const Key('reaction_laugh_m1')), findsOneWidget);
+      expect(find.byKey(const Key('reaction_surprised_m1')), findsOneWidget);
+      expect(find.byKey(const Key('reaction_sad_m1')), findsOneWidget);
+      expect(find.byKey(const Key('reaction_angry_m1')), findsOneWidget);
+      expect(find.byKey(const Key('reaction_like_m1')), findsOneWidget);
 
-      // Tap ❤️ to react
-      await tester.tap(find.text('❤️'));
+      // Tap heart icon to react
+      await tester.tap(find.byKey(const Key('reaction_heart_m1')));
       await tester.pumpAndSettle();
 
-      // Reaction badge ❤️ is now attached to the bubble
-      expect(find.text('❤️'), findsOneWidget);
+      // Reaction badge icon is now attached to the bubble
+      expect(find.byKey(const Key('reaction_badge_heart_m1')), findsOneWidget);
 
       // 8. Test quick reply chips filling input
       final quickChip = find.text('Dạ vâng, bên em đã nhận thông tin ạ!');
@@ -184,7 +184,7 @@ void main() {
       // When text is non-empty, send button appears
       expect(find.byKey(const Key('host_message_send_btn')), findsOneWidget);
 
-      // 9. Verify Messenger toolbar buttons (Plus, Camera, Gallery, Mic, Quick Emoji 😤)
+      // 9. Verify Messenger toolbar buttons (Plus, Camera, Gallery, Mic, Quick LucideIcon)
       inputWidget.controller?.clear();
       await tester.pumpAndSettle();
 
@@ -194,7 +194,13 @@ void main() {
       expect(find.byKey(const Key('chat_mic_btn')), findsOneWidget);
       expect(find.byKey(const Key('chat_input_smile_btn')), findsOneWidget);
       expect(find.byKey(const Key('chat_quick_emoji_btn')), findsOneWidget);
-      expect(find.text('😤'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('chat_quick_emoji_btn')),
+          matching: find.byIcon(LucideIcons.thumbsUp),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Nhắn tin'), findsOneWidget);
     },
   );
@@ -215,7 +221,7 @@ void main() {
                   'id': 'conv-admin',
                   'conversationId': 'conv-admin',
                   'listingId': 12,
-                  'listingTitle': 'Seaside Sunset Homestay & Studio Hạ Long',
+                  'listingTitle': 'Seaside Sunset Homestay & Studio Bãi Trước',
                   'otherParticipant': {
                     'fullName': 'Quản trị viên The Palm Villa',
                     'role': 'admin',
@@ -230,14 +236,14 @@ void main() {
                   'id': 'conv-guest',
                   'conversationId': 'conv-guest',
                   'listingId': 12,
-                  'listingTitle': 'Seaside Sunset Homestay & Studio Hạ Long',
+                  'listingTitle': 'Seaside Sunset Homestay & Studio Bãi Trước',
                   'guestName': 'ĐẶNG KIM AN',
                   'otherParticipant': {
                     'fullName': 'ĐẶNG KIM AN',
                     'role': 'guest',
                   },
                   'lastMessage': {
-                    'content': '👍',
+                    'content': '[Thích]',
                     'createdAt': '2026-10-31T11:49:00.000Z',
                   },
                   'unreadCount': 2,
@@ -277,7 +283,7 @@ void main() {
 
       // Listing title rendered below participant name on both rows
       expect(
-        find.text('Seaside Sunset Homestay & Studio Hạ Long'),
+        find.text('Seaside Sunset Homestay & Studio Bãi Trước'),
         findsNWidgets(2),
       );
 
@@ -286,7 +292,7 @@ void main() {
         find.text('Hồ bơi của biệt thự là nước mặn hay nước ngọt?'),
         findsOneWidget,
       );
-      expect(find.text('👍'), findsOneWidget);
+      expect(find.text('[Thích]'), findsOneWidget);
       expect(find.text('2'), findsOneWidget);
     },
   );

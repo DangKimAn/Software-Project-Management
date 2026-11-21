@@ -1,3 +1,8 @@
+/**
+ * Bộ điều phối HTTP đồng bộ hóa hai chiều lịch phòng và giá với Google Sheets cho chủ nhà (`host-sheet-sync`):
+ * - Điều phối kết nối bảng tính, kiểm tra quyền chia sẻ Service Account, khởi tạo mẫu lịch chuẩn, đồng bộ tức thời, cấu hình tự động, xử lý xung đột và tra cứu nhật ký thay đổi.
+ */
+
 import type { RequestHandler } from "express";
 
 import { asyncHandler } from "../../common/async-handler";
@@ -26,12 +31,18 @@ import {
     applySheetButtonSync,
 } from "./host-sheet-sync.service";
 
+/**
+ * Truy vấn trạng thái kết nối và đồng bộ Google Sheets hiện tại của chủ nhà.
+ */
 export const getHostSheetSyncStatusHandler: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
     const data = await getHostSheetSyncStatus(Number(req.user!.id));
     return sendSuccess(res, { data });
 });
 
+/**
+ * Thiết lập liên kết bảng tính Google Sheets với tài khoản chủ nhà.
+ */
 export const connectHostSpreadsheetHandler: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
     const body = getValidatedBody<ConnectHostSheetInput>(req);
@@ -43,6 +54,9 @@ export const connectHostSpreadsheetHandler: RequestHandler = asyncHandler(async 
     });
 });
 
+/**
+ * Kiểm tra quyền đọc/ghi của tài khoản dịch vụ hệ thống trên tệp Google Sheets đã cấu hình.
+ */
 export const verifyHostSpreadsheetPermissionsHandler: RequestHandler = asyncHandler(
     async (req, res) => {
         assertValidRequest(req);
@@ -54,6 +68,9 @@ export const verifyHostSpreadsheetPermissionsHandler: RequestHandler = asyncHand
     },
 );
 
+/**
+ * Khởi tạo cấu trúc trang tính lịch phòng và biểu giá tiêu chuẩn trên Google Sheets của chủ nhà.
+ */
 export const initializeHostStandardCalendarHandler: RequestHandler = asyncHandler(
     async (req, res) => {
         assertValidRequest(req);
@@ -65,6 +82,9 @@ export const initializeHostStandardCalendarHandler: RequestHandler = asyncHandle
     },
 );
 
+/**
+ * Kích hoạt tiến trình đồng bộ tức thời dữ liệu lịch và giá giữa hệ thống với Google Sheets.
+ */
 export const syncHostSpreadsheetNowHandler: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
     const data = await syncHostSpreadsheetNow(Number(req.user!.id));
@@ -74,6 +94,9 @@ export const syncHostSpreadsheetNowHandler: RequestHandler = asyncHandler(async 
     });
 });
 
+/**
+ * Cập nhật tùy chọn cấu hình đồng bộ tự động Google Sheets của chủ nhà.
+ */
 export const updateHostSheetSettingsHandler: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
     const body = getValidatedBody<UpdateHostSheetSettingsInput>(req);
@@ -84,6 +107,9 @@ export const updateHostSheetSettingsHandler: RequestHandler = asyncHandler(async
     });
 });
 
+/**
+ * Ngắt kết nối tích hợp Google Sheets khỏi tài khoản chủ nhà.
+ */
 export const disconnectHostSpreadsheetHandler: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
     const data = await disconnectHostSpreadsheet(Number(req.user!.id));
@@ -93,6 +119,9 @@ export const disconnectHostSpreadsheetHandler: RequestHandler = asyncHandler(asy
     });
 });
 
+/**
+ * Liệt kê các xung đột dữ liệu phát sinh trong quá trình đồng bộ hai chiều với Google Sheets.
+ */
 export const listHostSheetConflictsHandler: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
     const query = getValidatedQuery<{
@@ -105,6 +134,9 @@ export const listHostSheetConflictsHandler: RequestHandler = asyncHandler(async 
     return sendSuccess(res, { data });
 });
 
+/**
+ * Áp dụng quyết định giải quyết xung đột đồng bộ lịch/giá do chủ nhà lựa chọn.
+ */
 export const resolveHostSheetConflictHandler: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
     const params = getValidatedParams<{ conflictId: number }>(req);
@@ -116,6 +148,9 @@ export const resolveHostSheetConflictHandler: RequestHandler = asyncHandler(asyn
     });
 });
 
+/**
+ * Truy vấn lịch sử nhật ký các lần đồng bộ và biến động dữ liệu với Google Sheets.
+ */
 export const listHostSheetChangeLogsHandler: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
     const query = getValidatedQuery<{

@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
+import 'package:hotel_booking_flutter/features/admin/domain/admin_status_helper.dart';
 
 class AdminRevenuePoint {
   const AdminRevenuePoint({
@@ -865,8 +868,9 @@ class AdminRepository {
     String userId,
     String status,
   ) async {
+    // CONFLICT-RESOLVED: Chuẩn hóa các trạng thái khóa ('blocked', 'locked') về 'suspended' trước khi gửi API.
     final normalizedStatus =
-        status.trim().toLowerCase() == 'blocked' ? 'suspended' : status.trim();
+        AdminStatusHelper.normalizeOutboundUserStatus(status);
     final res = await _dio.patch<dynamic>(
       '/api/users/$userId/status',
       data: {'status': normalizedStatus},
@@ -886,6 +890,37 @@ class AdminRepository {
   }
 
   // ── Listing Moderation & AI Image Vision ──
+  // Giải thuật truy vấn phân trang danh sách chỗ nghỉ cho Admin theo bộ lọc trạng thái:
+  // Giữ đường dẫn `/api/admin/listings/pending` mặc định khi lọc `pending_approval` để tương thích ngược,
+  // và chuyển sang `/api/admin/listings?status=...` khi lọc các trạng thái khác (`active`, `rejected`, `inactive`, `all`).
+  Future<AdminPaginatedResult<Map<String, dynamic>>> getAdminListingsPaginated({
+    String status = 'pending_approval',
+    int page = 1,
+    int limit = maxListingsPageLimit,
+  }) async {
+    final normalizedStatus = status.trim().toLowerCase();
+    if (normalizedStatus.isEmpty ||
+        normalizedStatus == 'pending_approval' ||
+        normalizedStatus == 'pending') {
+      return getPendingListingsPaginated(page: page, limit: limit);
+    }
+    final safePage = page < 1 ? 1 : page;
+    final safeLimit = limit.clamp(1, maxListingsPageLimit);
+    final res = await _dio.get<dynamic>(
+      '/api/admin/listings',
+      queryParameters: {
+        'status': normalizedStatus,
+        'page': safePage,
+        'limit': safeLimit,
+      },
+    );
+    return _extractPaginated(
+      res.data,
+      fallbackPage: safePage,
+      fallbackLimit: safeLimit,
+    );
+  }
+
   Future<AdminPaginatedResult<Map<String, dynamic>>>
       getPendingListingsPaginated({
     int page = 1,
@@ -997,6 +1032,28 @@ class AdminRepository {
     return _unwrapMap(res.data);
   }
 
+  /// Giải thuật tải luồng byte tài liệu KYC riêng tư cho Admin không lộ token trên URL:
+  /// Sử dụng phiên Dio đã xác thực (`Authorization: Bearer`) kết hợp header `X-Document-Stream-Token`
+  /// thay vì truyền `streamToken` trên URL query string.
+  Future<Uint8List> fetchAdminHostDocumentBytes(
+    String applicationId,
+    String documentId, {
+    String? streamToken,
+  }) async {
+    final trimmedToken = streamToken?.trim() ?? '';
+    final res = await _dio.get<List<int>>(
+      '/api/admin/host-applications/$applicationId/documents/$documentId/file',
+      options: Options(
+        responseType: ResponseType.bytes,
+        headers: <String, dynamic>{
+          if (trimmedToken.isNotEmpty) 'X-Document-Stream-Token': trimmedToken,
+        },
+      ),
+    );
+    final raw = res.data ?? const <int>[];
+    return raw is Uint8List ? raw : Uint8List.fromList(raw);
+  }
+
   Future<void> approveHostApplication(String applicationId) async {
     await _dio.patch<dynamic>(
       '/api/admin/host-applications/$applicationId/approve',
@@ -1009,6 +1066,17 @@ class AdminRepository {
   ) async {
     await _dio.patch<dynamic>(
       '/api/admin/host-applications/$applicationId/reject',
+      data: {'reason': reason.trim()},
+    );
+  }
+
+  // Giải thuật yêu cầu Chủ nhà bổ sung hoặc chụp lại chứng từ KYC (`PATCH /api/admin/host-applications/:id/request-more-info`).
+  Future<void> requestMoreInfoHostApplication(
+    String applicationId,
+    String reason,
+  ) async {
+    await _dio.patch<dynamic>(
+      '/api/admin/host-applications/$applicationId/request-more-info',
       data: {'reason': reason.trim()},
     );
   }
@@ -1142,6 +1210,48 @@ class AdminRepository {
     return map;
   }
 
+  // Giải thuật đối soát & chi trả Maker-Checker 3 bước (`POST /host-payouts`, `PATCH /:id/approve`, `PATCH /:id/paid`).
+  Future<Map<String, dynamic>> createAdminHostPayout({
+    required int hostId,
+    required List<int> bookingIds,
+    required int payoutAccountId,
+    required int amount,
+    String? notes,
+  }) async {
+    final response = await _dio.post<dynamic>(
+      '/api/admin/host-payouts',
+      data: <String, dynamic>{
+        'hostId': hostId,
+        'bookingIds': bookingIds,
+        'payoutAccountId': payoutAccountId,
+        'amount': amount,
+        'currency': 'VND',
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> approveHostPayout(String payoutId) async {
+    final response = await _dio.patch<dynamic>(
+      '/api/admin/host-payouts/$payoutId/approve',
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> markHostPayoutPaid(
+    String payoutId,
+    String transferReference,
+  ) async {
+    final response = await _dio.patch<dynamic>(
+      '/api/admin/host-payouts/$payoutId/paid',
+      data: <String, dynamic>{
+        'transferReference': transferReference.trim(),
+      },
+    );
+    return _unwrapMap(response.data);
+  }
+
   Future<Map<String, dynamic>> rejectHostPayout(
     String payoutId,
     String reason,
@@ -1190,5 +1300,57 @@ class AdminRepository {
     );
     final map = _unwrapMap(response.data);
     return map;
+  }
+
+  // Giải thuật truy vấn phân trang và xử lý báo cáo vi phạm (`GET/PATCH /api/admin/reports`).
+  Future<AdminPaginatedResult<Map<String, dynamic>>> getAdminReportsPaginated({
+    String status = 'all',
+    String targetType = 'all',
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final safePage = page < 1 ? 1 : page;
+    final safeLimit = limit.clamp(1, 100);
+    final res = await _dio.get<dynamic>(
+      '/api/admin/reports',
+      queryParameters: <String, dynamic>{
+        'page': safePage,
+        'limit': safeLimit,
+        if (status.isNotEmpty && status != 'all') 'status': status,
+        if (targetType.isNotEmpty && targetType != 'all')
+          'targetType': targetType,
+      },
+    );
+    return _extractPaginated(
+      res.data,
+      fallbackPage: safePage,
+      fallbackLimit: safeLimit,
+    );
+  }
+
+  Future<Map<String, dynamic>> resolveAdminReport(
+    String reportId,
+    String resolution,
+  ) async {
+    final res = await _dio.patch<dynamic>(
+      '/api/admin/reports/$reportId/resolve',
+      data: <String, dynamic>{
+        'resolution': resolution.trim(),
+      },
+    );
+    return _unwrapMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> rejectAdminReport(
+    String reportId,
+    String reason,
+  ) async {
+    final res = await _dio.patch<dynamic>(
+      '/api/admin/reports/$reportId/reject',
+      data: <String, dynamic>{
+        'reason': reason.trim(),
+      },
+    );
+    return _unwrapMap(res.data);
   }
 }

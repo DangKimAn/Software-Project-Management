@@ -246,7 +246,6 @@ void main() {
                             SourceSearchBar(
                               isCompact: true,
                               onSearchSubmitted: () {},
-                              onOpenAiSearch: () {},
                             ),
                             const SizedBox(height: 16),
                             PropertyCard(
@@ -506,9 +505,9 @@ void main() {
           );
           expect(
             specOverflows,
-            isNotEmpty,
+            isEmpty,
             reason:
-                'Confirms BUG-T20-13 baseline state: MobileSpecSummary Row overflows horizontally at 320dp viewport width',
+                'BUG-T20-13 regression check: MobileSpecSummary must render without horizontal RenderFlex overflow at 320dp viewport width',
           );
         },
       );

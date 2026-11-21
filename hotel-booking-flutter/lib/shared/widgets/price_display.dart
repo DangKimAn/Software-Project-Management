@@ -5,6 +5,12 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_typography.dart';
 import '../../l10n/l10n.dart';
 
+/// Thành phần hiển thị bậc giá chỗ nghỉ đa tiền tệ và giá phụ Thứ Bảy theo `FLUTTER_RULES.md` Mục 7.4.
+///
+/// Giải thuật phân tách định dạng nhãn giá đa ngôn ngữ (`_buildWithFormatter`):
+/// 1. Nếu `basePriceVnd == null || basePriceVnd <= 0`, hiển thị nhãn `Liên hệ báo giá` đã bản địa hóa thay vì số `0` sai lệch.
+/// 2. Tự động thích ứng cả khi có `ProviderScope` (theo dõi `moneyFormatterProvider`) lẫn môi trường kiểm thử widget độc lập.
+/// 3. Định vị vị trí chuỗi số tiền `priceStr` bên trong mẫu câu đa ngôn ngữ `l10n.priceFrom(priceStr)` (ví dụ tiếng Việt, Anh, Hàn có trật tự từ khác nhau) để tô đậm phần số tiền và làm dịu màu phần tiền tố/hậu tố, đồng thời gộp nhãn ngữ nghĩa `Semantics` đọc liền mạch cả giá ngày thường lẫn giá Thứ Bảy.
 class PriceDisplay extends StatelessWidget {
   final int? basePriceVnd;
   final int? saturdayPriceVnd;

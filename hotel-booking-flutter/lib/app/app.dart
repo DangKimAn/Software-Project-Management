@@ -8,11 +8,15 @@ import '../features/auth/domain/entities/user.dart';
 import '../features/auth/presentation/view_models/auth_notifier.dart';
 import '../features/trips/presentation/view_models/trips_view_model.dart';
 import '../l10n/generated/app_localizations.dart';
-import '../shared/widgets/app_header_footer.dart';
+import '../shared/widgets/app_header.dart';
 import 'di/providers.dart';
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
 
+/// Widget gốc của ứng dụng The Palm Villa quản lý định tuyến, đa ngôn ngữ và vòng đời toàn cục.
+///
+/// Đóng vai trò điều phối trung tâm giữa giao diện `MaterialApp.router`, chủ đề `AppTheme.lightTheme`,
+/// bộ ngôn ngữ (`vi`, `en`, `ko`), đồng bộ tỷ giá ngoại tệ nền và luồng thông báo đẩy FCM / Socket.IO.
 class ThePalmVillaApp extends ConsumerStatefulWidget {
   const ThePalmVillaApp({super.key});
 
@@ -30,6 +34,10 @@ class _ThePalmVillaAppState extends ConsumerState<ThePalmVillaApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
+    // Giải thuật khởi tạo hậu khung hình đầu tiên (Post-Frame Initialization):
+    // Trì hoãn các tác vụ mạng không chặn giao diện (làm mới tỷ giá ngoại tệ, đăng ký lắng nghe
+    // thông báo đẩy, xử lý thao tác chạm thông báo khi mở lạnh `takePendingInitialTap` và đồng bộ
+    // mã thiết bị FCM của người dùng đang đăng nhập) sang sau khung hình đầu tiên.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (ref.read(effectiveCurrencyProvider).isForeign) {
@@ -59,6 +67,7 @@ class _ThePalmVillaAppState extends ConsumerState<ThePalmVillaApp>
     });
   }
 
+  /// Xử lý sự kiện người dùng chạm vào thông báo đẩy để đánh dấu đã đọc và điều hướng tới màn hình đích.
   void _handlePushTap(PushNotificationTapEvent event) {
     if (!mounted) return;
     final notifId = event.notificationId;
@@ -66,7 +75,19 @@ class _ThePalmVillaAppState extends ConsumerState<ThePalmVillaApp>
       unawaited(ref.read(notificationsProvider.notifier).markAsRead(notifId));
     }
     if (event.route.isNotEmpty) {
-      ref.read(appRouterProvider).push(event.route);
+      final clean = event.route.split('?').first.toLowerCase();
+      final isTab = clean == '/' ||
+          clean == '/messages' ||
+          clean == '/tin-nhan' ||
+          clean == '/trips' ||
+          clean == '/account/trips' ||
+          clean == '/settings' ||
+          clean == '/account/profile';
+      if (isTab) {
+        ref.read(appRouterProvider).go(event.route);
+      } else {
+        ref.read(appRouterProvider).push(event.route);
+      }
     }
   }
 
@@ -80,6 +101,9 @@ class _ThePalmVillaAppState extends ConsumerState<ThePalmVillaApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Giải thuật hồi phục trạng thái khi ứng dụng quay lại tiền cảnh (`resumed`):
+    // Kiểm tra lại phiên xác thực, làm mới danh sách đặt phòng, cập nhật tỷ giá ngoại tệ nếu cần
+    // và đồng bộ lại mã thông báo thiết bị FCM cho người dùng hiện tại.
     if (state == AppLifecycleState.resumed) {
       ref.read(authNotifierProvider.notifier).onAppResumed();
       ref.invalidate(myBookingsProvider);

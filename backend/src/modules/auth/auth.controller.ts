@@ -1,3 +1,9 @@
+/**
+ * Bộ điều phối HTTP xác thực và quản lý phiên đăng nhập (`auth`):
+ * - Điều phối đăng ký, đăng nhập mật khẩu/Google OAuth, xoay vòng Refresh Token qua HttpOnly Cookie,
+ *   đăng xuất thu hồi phiên, cấp phát/xác thực OTP (đặt lại mật khẩu, xác minh email/số điện thoại) và tra cứu thông tin người dùng hiện tại.
+ */
+
 import type { Request, RequestHandler, Response } from "express";
 
 import { ApiError } from "../../common/api-error";
@@ -5,11 +11,13 @@ import { asyncHandler } from "../../common/async-handler";
 import { sendSuccess } from "../../common/http";
 import { assertValidRequest, getValidatedBody } from "../../common/validation";
 import { getEnv } from "../../config/env";
-import { authenticateWithGoogleIdToken } from "./google-auth.service";
+import { disconnectUserSockets } from "../../socket/socket";
+import { authenticateWithGoogleIdToken, authenticateWithGoogleToken } from "./google-auth.service";
 import {
     buildAuthCookieOptions,
     buildRefreshCookieOptions,
     comparePassword,
+    extractAuthToken,
     extractRefreshToken,
     findUserForLogin,
     issueAuthOtp,
@@ -19,8 +27,11 @@ import {
     refreshAuthSession,
     registerUser,
     resetPasswordWithOtp,
+    revokeAllRefreshSessionsForUser,
     revokeRefreshSessionByToken,
     toAuthResponseUser,
+    verifyAuthToken,
+    verifyRefreshToken,
     verifyPhoneWithOtp,
     verifyEmailWithOtp,
 } from "./auth.service";
@@ -34,6 +45,9 @@ const writeAuthCookies = (res: Response, session: { accessToken: string; refresh
     res.cookie(getEnv().refreshCookieName, session.refreshToken, buildRefreshCookieOptions());
 };
 
+/**
+ * Xử lý đăng ký tài khoản mới, khởi tạo phiên xác thực và thiết lập HttpOnly Cookie cho cặp token.
+ */
 export const register: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -78,13 +92,18 @@ export const register: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Xác thực thông tin đăng nhập cục bộ, kiểm tra khóa tạm thời chống Brute-Force và cấp phiên đăng nhập mới.
+ */
 export const login: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
     const payload = getValidatedBody<{ identifier: string; password: string }>(req);
+    const lockMinutes = getEnv().authRateLimitWindowMinutes || 15;
+    const lockoutMessage = `Tài khoản tạm thời bị khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau ${lockMinutes} phút.`;
 
     if (await isLoginTemporarilyLocked(payload.identifier)) {
-        throw new ApiError(423, "Tài khoản tạm thời bị khóa. Vui lòng thử lại sau.");
+        throw new ApiError(423, lockoutMessage);
     }
 
     const user = await findUserForLogin(payload.identifier);
@@ -94,7 +113,7 @@ export const login: RequestHandler = asyncHandler(async (req, res) => {
         const failedCount = await recordFailedLoginAttempt(payload.identifier, authContextFromRequest(req), user);
 
         if (failedCount >= 5) {
-            throw new ApiError(423, "Tài khoản tạm thời bị khóa. Vui lòng thử lại sau.");
+            throw new ApiError(423, lockoutMessage);
         }
 
         throw new ApiError(401, "Email/SĐT hoặc mật khẩu không đúng.");
@@ -115,11 +134,32 @@ export const login: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Thu hồi phiên Refresh Token hiện tại trong cơ sở dữ liệu và xóa toàn bộ cookie xác thực trên trình duyệt.
+ */
 export const logout: RequestHandler = asyncHandler(async (req, res) => {
     const refreshToken = extractRefreshToken(req);
+    const accessToken = extractAuthToken(req);
 
+    // Giải thuật thu hồi phiên kép khi đăng xuất (TC-065):
+    // 1. Ưu tiên thu hồi phiên Refresh Token theo cookie/body hiện hành.
+    // 2. Nếu client không gửi kèm cookie Refresh Token (ví dụ mobile/SPA chỉ gửi Bearer Access Token),
+    //    giải mã an toàn Access Token để thu hồi các phiên Refresh Session đang mở và ngắt kênh Socket.IO.
     if (refreshToken) {
         await revokeRefreshSessionByToken(refreshToken);
+        try {
+            const refreshPayload = verifyRefreshToken(refreshToken);
+            disconnectUserSockets(refreshPayload.userId);
+        } catch {
+            // Bỏ qua nếu chữ ký token giả lập hoặc đã hết hạn
+        }
+    } else if (accessToken) {
+        try {
+            const authPayload = verifyAuthToken(accessToken);
+            await revokeAllRefreshSessionsForUser(Number(authPayload.userId));
+        } catch {
+            // Đảm bảo đăng xuất luôn bất biến (idempotent) ngay cả khi Access Token hết hạn
+        }
     }
 
     res.clearCookie("auth_token", buildAuthCookieOptions());
@@ -130,6 +170,9 @@ export const logout: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Thực hiện xoay vòng Refresh Token một lần (Single-Use Rotation) và cấp lại cặp Access/Refresh Token mới.
+ */
 export const refresh: RequestHandler = asyncHandler(async (req, res) => {
     const refreshToken = extractRefreshToken(req);
 
@@ -151,6 +194,9 @@ export const refresh: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Tiếp nhận yêu cầu cấp phát mã OTP theo mục đích xác thực kèm giới hạn tần suất gửi.
+ */
 export const sendOtp: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -166,6 +212,9 @@ export const sendOtp: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Khởi tạo luồng quên mật khẩu bằng cách phát hành mã OTP đặt lại mật khẩu một cách chống dò tìm tài khoản.
+ */
 export const forgotPassword: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -184,6 +233,9 @@ export const forgotPassword: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Xác thực mã OTP một lần để đặt mật khẩu mới và thu hồi toàn diện các phiên đăng nhập cũ.
+ */
 export const resetPassword: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -203,6 +255,9 @@ export const resetPassword: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Xác thực mã OTP để đánh dấu số điện thoại của tài khoản đã được xác minh.
+ */
 export const verifyPhone: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -214,6 +269,9 @@ export const verifyPhone: RequestHandler = asyncHandler(async (req, res) => {
         data: result,
     });
 });
+/**
+ * Xác thực mã OTP để đánh dấu địa chỉ email của tài khoản đã được xác minh.
+ */
 export const verifyEmail: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
@@ -226,11 +284,16 @@ export const verifyEmail: RequestHandler = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Xác thực Google ID Token, liên kết hoặc tạo tài khoản xã hội an toàn và cấp phiên đăng nhập.
+ */
 export const loginWithGoogle: RequestHandler = asyncHandler(async (req, res) => {
     assertValidRequest(req);
 
-    const payload = getValidatedBody<{ idToken: string }>(req);
-    const result = await authenticateWithGoogleIdToken(payload.idToken, authContextFromRequest(req));
+    const payload = getValidatedBody<{ idToken?: string; accessToken?: string }>(req);
+    const result = payload.idToken
+        ? await authenticateWithGoogleIdToken(payload.idToken, authContextFromRequest(req))
+        : await authenticateWithGoogleToken(payload, authContextFromRequest(req));
 
     writeAuthCookies(res, result);
 
@@ -244,6 +307,9 @@ export const loginWithGoogle: RequestHandler = asyncHandler(async (req, res) => 
     });
 });
 
+/**
+ * Trả về thông tin hồ sơ và vai trò đã đồng bộ của người dùng đang đăng nhập hiện tại.
+ */
 export const getCurrentUser: RequestHandler = (req, res) => {
     const user = req.user!;
     const role = user.roles.includes("admin")

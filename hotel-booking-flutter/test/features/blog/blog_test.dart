@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -11,7 +12,8 @@ import 'package:hotel_booking_flutter/core/security/secure_storage_service.dart'
 import 'package:hotel_booking_flutter/features/blog/data/blog_repository.dart';
 import 'package:hotel_booking_flutter/features/blog/presentation/screens/blog_detail_screen.dart';
 import 'package:hotel_booking_flutter/features/blog/presentation/screens/blog_screen.dart';
-import 'package:hotel_booking_flutter/features/booking_inquiry/domain/services/contact_service.dart';
+// CONFLICT-RESOLVED: Giữ đường dẫn chuẩn hóa `support/domain/services/contact_service.dart` của HEAD kết hợp gói đa ngôn ngữ `l10n.dart` từ develop.
+import 'package:hotel_booking_flutter/features/support/domain/services/contact_service.dart';
 import 'package:hotel_booking_flutter/l10n/l10n.dart';
 
 class _FakeSecureStorage extends SecureStorageService {
@@ -590,14 +592,111 @@ void main() {
       },
     );
 
+    // CONFLICT-RESOLVED: Giữ cả bài kiểm thử chống tràn/cắt chữ `BlogPostCard` của HEAD lẫn bài kiểm thử đa ngôn ngữ `BlogDetailScreen` từ develop.
+    testWidgets(
+      'BlogPostCard truncates long title and excerpt with ellipsis (maxLines 2) without vertical clipping across viewports and textScale 1.0–2.0',
+      (tester) async {
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        const longPost = BlogPost(
+          id: '202',
+          slug: 'kinh-nghiem-chon-thue-biet-thu-nghi-duong',
+          title:
+              'Kinh nghiệm chọn thuê biệt thự nghỉ dưỡng Vũng Tàu cho gia đình đông người dịp lễ',
+          excerpt:
+              'Những tiêu chí quan trọng khi đặt villa: hồ bơi riêng, tiện ích BBQ, vị trí sát biển và độ uy tín của chủ nhà để kỳ nghỉ thoải mái.',
+          content: 'Nội dung chi tiết.',
+          coverImage: '',
+          category: 'Review Villa & Homestay',
+          readTime: '7 phút đọc',
+          location: 'Bãi Sau, Vũng Tàu',
+          authorName: 'Minh Thanh Villa',
+          publishedAt: '2026-10-22',
+        );
+
+        for (final width in [320.0, 390.0, 768.0]) {
+          for (final scale in [1.0, 1.3, 1.6, 2.0]) {
+            await tester.binding.setSurfaceSize(Size(width, 900));
+            await tester.pumpWidget(
+              wrapWithScope(
+                surfaceSize: Size(width, 900),
+                textScale: scale,
+                child: const BlogScreen(),
+                overrides: [
+                  blogPaginatedProvider.overrideWith(
+                    (ref, filter) async => const BlogPaginatedResult(
+                      items: [longPost],
+                      pagination: BlogPagination(
+                        page: 1,
+                        limit: 12,
+                        total: 1,
+                        totalPages: 1,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+            await tester.pumpAndSettle();
+
+            expect(
+              tester.takeException(),
+              isNull,
+              reason:
+                  'BlogScreen must not overflow at width $width / textScale $scale',
+            );
+
+            final cardFinder = find.byKey(
+              const ValueKey(
+                'blog-card-kinh-nghiem-chon-thue-biet-thu-nghi-duong',
+              ),
+            );
+            await tester.scrollUntilVisible(
+              cardFinder,
+              250,
+              scrollable: find
+                  .descendant(
+                    of: find.byType(CustomScrollView),
+                    matching: find.byType(Scrollable),
+                  )
+                  .first,
+            );
+            await tester.pumpAndSettle();
+
+            final excerptFinder = find.descendant(
+              of: cardFinder,
+              matching: find.text(longPost.excerpt),
+            );
+            final excerptWidget = tester.widget<Text>(excerptFinder);
+            expect(excerptWidget.maxLines, 2);
+            expect(excerptWidget.overflow, TextOverflow.ellipsis);
+
+            final excerptRender = tester.renderObject<RenderParagraph>(
+              find.descendant(
+                of: excerptFinder,
+                matching: find.byType(RichText),
+              ),
+            );
+            expect(
+              excerptRender.size.height + 0.5,
+              greaterThanOrEqualTo(excerptRender.textSize.height),
+            );
+            expect(excerptRender.didExceedMaxLines, isTrue);
+          }
+        }
+      },
+    );
+
     testWidgets(
       'BlogDetailScreen and LocaleFormatters properly localize date, readTime, category, author, and UI across vi, en, ko',
       (tester) async {
         const testPost = BlogPost(
           id: 'test-seed-1',
           slug: 'kinh-nghiem-thue-villa-vung-tau-gia-dinh',
-          title: 'Kinh nghiệm chọn thuê biệt thự nghỉ dưỡng Vũng Tàu cho gia đình và nhóm bạn',
-          excerpt: 'Những tiêu chí quan trọng khi đặt villa: hồ bơi riêng, tiện ích BBQ...',
+          title:
+              'Kinh nghiệm chọn thuê biệt thự nghỉ dưỡng Vũng Tàu cho gia đình và nhóm bạn',
+          excerpt:
+              'Những tiêu chí quan trọng khi đặt villa: hồ bơi riêng, tiện ích BBQ...',
           content: 'Nội dung chi tiết về villa...',
           coverImage: '',
           category: 'Review Villa & Homestay',
@@ -656,7 +755,9 @@ void main() {
         expect(find.text('Vung Tau'), findsOneWidget);
         expect(find.text('The Palm Editorial Team'), findsOneWidget);
         expect(
-          find.text('Tips for renting vacation villas in Vung Tau for families and friend groups'),
+          find.text(
+            'Tips for renting vacation villas in Vung Tau for families and friend groups',
+          ),
           findsOneWidget,
         );
 

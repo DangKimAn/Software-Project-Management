@@ -1,12 +1,14 @@
 import { Op } from "sequelize";
 
 import { ApiError } from "../../common/api-error";
+import { parseVietnamDateBoundary } from "../../common/date-time";
 import sequelize from "../../config/database";
 import type { AuthenticatedUser } from "../auth/auth.service";
+import Booking from "../../models/booking";
 import Coupon, { CouponType } from "../../models/coupon";
 import CouponRedemption from "../../models/coupon-redemption";
-import { calculateCouponDiscountVnd, moneyToVnd, vndToNumber } from "../../utils/money";
-import { writeAuditLog } from "../../services/audit-log-service";
+import { calculateCouponDiscountVnd, moneyToVnd, vndToNumber } from "../../common/money";
+import { writeAuditLog } from "../../services/audit-log.service";
 
 export type ValidateCouponInput = {
     code: string;
@@ -42,14 +44,23 @@ type AuditContext = {
     userAgent?: string | null;
 };
 
+/**
+ * Giải thuật kiểm tra quyền quản trị viên (`admin`) của người dùng xác thực; ném lỗi `403 Forbidden` nếu không đủ thẩm quyền.
+ */
 const assertAdmin = (user: AuthenticatedUser) => {
     if (!user.roles.includes("admin")) {
         throw new ApiError(403, "Forbidden");
     }
 };
 
+/**
+ * Giải thuật chuẩn hóa mã giảm giá: loại bỏ khoảng trắng hai đầu và chuyển toàn bộ ký tự sang chữ in hoa (`UPPERCASE`).
+ */
 const normalizeCode = (code: string) => code.trim().toUpperCase();
 
+/**
+ * Giải thuật chuyển đổi giá trị chuỗi/số tùy chọn sang kiểu `number` hoặc `null` khi không được cung cấp.
+ */
 const toNullableNumber = (value: string | number | null | undefined) => {
     if (value === null || value === undefined) {
         return value ?? null;
@@ -58,8 +69,14 @@ const toNullableNumber = (value: string | number | null | undefined) => {
     return Number(value);
 };
 
-const toDate = (value: string) => {
-    const date = new Date(value);
+// Giải thuật chuyển đổi ngày hiệu lực coupon theo biên giờ Việt Nam (UTC+7):
+// Khi truyền chuỗi YYYY-MM-DD, ngày bắt đầu tính từ 00:00:00+07:00 và ngày kết thúc tính tới 23:59:59.999+07:00.
+/**
+ * Giải thuật phân tích chuỗi ngày đầu vào thành mốc `Date` theo biên đầu ngày (`00:00:00.000+07:00`)
+ * hoặc cuối ngày (`23:59:59.999+07:00`) giờ Việt Nam; ném lỗi `422` nếu định dạng thời gian không hợp lệ.
+ */
+const toDate = (value: string, boundary: "start" | "end" = "start") => {
+    const date = parseVietnamDateBoundary(value, boundary);
 
     if (Number.isNaN(date.getTime())) {
         throw new ApiError(422, "Validation error", [
@@ -73,6 +90,10 @@ const toDate = (value: string) => {
     return date;
 };
 
+/**
+ * Giải thuật kiểm định và quy đổi giá trị tiền tệ sang số nguyên lớn `BigInt` đồng chẵn VND;
+ * ném lỗi `422 Validation error` gắn đúng đường dẫn trường `path` nếu chứa phần lẻ thập phân hoặc sai định dạng.
+ */
 const parseIntegerVndOrThrow = (value: string | number, path: string) => {
     try {
         return moneyToVnd(value);
@@ -86,6 +107,9 @@ const parseIntegerVndOrThrow = (value: string | number, path: string) => {
     }
 };
 
+/**
+ * Giải thuật tuần tự hóa đầy đủ thực thể `Coupon` cho phân hệ quản trị, chuẩn hóa các trường tiền tệ qua `BigInt` VND sang `number` an toàn.
+ */
 const serializeCoupon = (coupon: InstanceType<typeof Coupon>) => ({
     couponId: coupon.couponId,
     code: coupon.code,
@@ -113,6 +137,9 @@ const serializeCoupon = (coupon: InstanceType<typeof Coupon>) => ({
     updatedAt: coupon.updatedAt,
 });
 
+/**
+ * Giải thuật tuần tự hóa thông tin `Coupon` công khai cho phía khách hàng (lược bỏ số liệu nội bộ `usedCount`, `totalLimit`, `deletedAt`).
+ */
 const serializePublicCoupon = (coupon: InstanceType<typeof Coupon>) => ({
     couponId: coupon.couponId,
     code: coupon.code,
@@ -135,6 +162,9 @@ const serializePublicCoupon = (coupon: InstanceType<typeof Coupon>) => ({
     isActive: coupon.isActive,
 });
 
+/**
+ * Giải thuật đóng gói kết quả từ chối áp dụng mã giảm giá kèm nguyên nhân cụ thể.
+ */
 const buildInvalidCouponResult = (reason: string) => ({
     valid: false,
     reason,
@@ -143,9 +173,16 @@ const buildInvalidCouponResult = (reason: string) => ({
     finalAmount: null,
 });
 
+/**
+ * Giải thuật kiểm định tính khả dụng của coupon và tính toán chiết khấu bằng số học nguyên lớn `BigInt`:
+ * 1. Kiểm tra tồn tại, chưa xóa mềm (`deletedAt === null`), đang kích hoạt (`isActive === true`) và nằm trong khung giờ hiệu lực `startDate <= now <= endDate`.
+ * 2. Kiểm tra hạn mức lượt dùng toàn cục (`usedCount < totalLimit`), tổng tiền đơn tối thiểu (`bookingAmountVnd >= minOrderValue`),
+ *    và hạn mức quy đổi lũy kế theo người dùng trên bảng `CouponRedemption` (`redemptionCount < limitPerUser`).
+ * 3. Tính mức giảm có áp trần `maxDiscountAmount` qua `calculateCouponDiscountVnd` và trả về số tiền sau chiết khấu `bookingAmountVnd - discountAmountVnd`.
+ */
 const validateCouponAvailability = async (
     coupon: InstanceType<typeof Coupon> | null,
-    userId: number,
+    userId: number | null,
     bookingAmount: string,
 ) => {
     if (!coupon || coupon.deletedAt) {
@@ -172,7 +209,9 @@ const validateCouponAvailability = async (
         return buildInvalidCouponResult("Order value does not meet coupon minimum");
     }
 
-    if (coupon.limitPerUser !== null && coupon.limitPerUser !== undefined) {
+    // Giải thuật kiểm tra hạn mức lượt dùng mỗi người dùng nhất quán với booking-pricing.service (TC-035):
+    // Chỉ kiểm tra khi người dùng đã đăng nhập (`userId !== null`) và cộng cả số đơn đang giữ chỗ (`pending_payment` còn hạn).
+    if (userId !== null && coupon.limitPerUser !== null && coupon.limitPerUser !== undefined) {
         const redemptionCount = await CouponRedemption.count({
             where: {
                 couponId: coupon.couponId,
@@ -180,7 +219,25 @@ const validateCouponAvailability = async (
             },
         });
 
-        if (redemptionCount >= coupon.limitPerUser) {
+        let pendingHoldCount = 0;
+        if (Object.prototype.hasOwnProperty.call(Booking, "count")) {
+            try {
+                pendingHoldCount = await Booking.count({
+                    where: {
+                        guestUserId: userId,
+                        couponId: coupon.couponId,
+                        status: "pending_payment",
+                        lockedUntil: {
+                            [Op.gt]: now,
+                        },
+                    },
+                });
+            } catch {
+                pendingHoldCount = 0;
+            }
+        }
+
+        if (redemptionCount + pendingHoldCount >= coupon.limitPerUser) {
             return buildInvalidCouponResult("Coupon usage limit has been reached");
         }
     }
@@ -201,7 +258,10 @@ const validateCouponAvailability = async (
     };
 };
 
-export const validateCouponForUser = async (user: AuthenticatedUser, input: ValidateCouponInput) => {
+/**
+ * Giải thuật tra cứu coupon theo mã chuẩn hóa chưa xóa mềm và xác thực hiệu lực áp dụng cho người dùng hiện tại hoặc khách vãng lai.
+ */
+export const validateCouponForUser = async (user: AuthenticatedUser | null, input: ValidateCouponInput) => {
     const coupon = await Coupon.findOne({
         where: {
             code: normalizeCode(input.code),
@@ -209,9 +269,13 @@ export const validateCouponForUser = async (user: AuthenticatedUser, input: Vali
         },
     });
 
-    return validateCouponAvailability(coupon, Number(user.id), input.bookingAmount);
+    return validateCouponAvailability(coupon, user ? Number(user.id) : null, input.bookingAmount);
 };
 
+/**
+ * Giải thuật chuẩn hóa tải dữ liệu tạo/cập nhật coupon: cắt khoảng trắng chuỗi, chuẩn hóa mã chữ hoa,
+ * chuyển đổi các trường số và biên thời gian bắt đầu/kết thúc theo giờ Việt Nam (`UTC+7`).
+ */
 const normalizeCouponPayload = (input: CreateCouponInput | UpdateCouponInput) => ({
     ...(input.code !== undefined ? { code: normalizeCode(input.code) } : {}),
     ...(input.title !== undefined ? { title: input.title.trim() } : {}),
@@ -222,13 +286,19 @@ const normalizeCouponPayload = (input: CreateCouponInput | UpdateCouponInput) =>
     ...(input.discountValue !== undefined ? { discountValue: Number(input.discountValue) } : {}),
     ...(input.maxDiscountAmount !== undefined ? { maxDiscountAmount: toNullableNumber(input.maxDiscountAmount) } : {}),
     ...(input.minOrderValue !== undefined ? { minOrderValue: toNullableNumber(input.minOrderValue) } : {}),
-    ...(input.startDate !== undefined ? { startDate: toDate(input.startDate) } : {}),
-    ...(input.endDate !== undefined ? { endDate: toDate(input.endDate) } : {}),
+    ...(input.startDate !== undefined ? { startDate: toDate(input.startDate, "start") } : {}),
+    ...(input.endDate !== undefined ? { endDate: toDate(input.endDate, "end") } : {}),
     ...(input.totalLimit !== undefined ? { totalLimit: input.totalLimit } : {}),
     ...(input.limitPerUser !== undefined ? { limitPerUser: input.limitPerUser } : {}),
     ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
 });
 
+/**
+ * Giải thuật kiểm tra bất biến nghiệp vụ cấu hình mã giảm giá:
+ * - Loại `percent`: giá trị giảm phải thuộc nửa khoảng `(0, 100]`.
+ * - Loại `fixed_amount`, `maxDiscountAmount` và `minOrderValue`: phải là số nguyên đồng chẵn VND hợp lệ.
+ * - Khoảng hiệu lực thời gian phải thỏa mãn bất đẳng thức chặt `startDate < endDate`.
+ */
 const assertCouponBusinessRules = (input: CreateCouponInput | UpdateCouponInput) => {
     if (input.type === "percent" && input.discountValue !== undefined) {
         const percentValue = Number(input.discountValue);
@@ -258,7 +328,7 @@ const assertCouponBusinessRules = (input: CreateCouponInput | UpdateCouponInput)
         parseIntegerVndOrThrow(value, field);
     }
 
-    if (input.startDate && input.endDate && toDate(input.startDate) >= toDate(input.endDate)) {
+    if (input.startDate && input.endDate && toDate(input.startDate, "start") >= toDate(input.endDate, "end")) {
         throw new ApiError(422, "Validation error", [
             {
                 path: "endDate",
@@ -268,6 +338,10 @@ const assertCouponBusinessRules = (input: CreateCouponInput | UpdateCouponInput)
     }
 };
 
+/**
+ * Giải thuật liệt kê danh sách coupon có phân trang dành cho quản trị viên, lọc các bản ghi chưa xóa mềm
+ * và sắp xếp giảm dần theo thời điểm tạo (`createdAt DESC, couponId DESC`).
+ */
 export const listAdminCoupons = async (admin: AuthenticatedUser, query: ListCouponsQuery) => {
     assertAdmin(admin);
 
@@ -293,6 +367,11 @@ export const listAdminCoupons = async (admin: AuthenticatedUser, query: ListCoup
     };
 };
 
+/**
+ * Giải thuật khởi tạo mã giảm giá mới nguyên tử trong giao dịch ACID:
+ * kiểm tra quyền Admin, xác thực quy tắc nghiệp vụ, chống trùng lặp mã `code` đang hoạt động,
+ * khởi tạo `usedCount = 0` và ghi vết kiểm toán (`coupon.create`) trong cùng `transaction`.
+ */
 export const createAdminCoupon = async (
     admin: AuthenticatedUser,
     input: CreateCouponInput,
@@ -345,6 +424,11 @@ export const createAdminCoupon = async (
     });
 };
 
+/**
+ * Giải thuật cập nhật cấu hình mã giảm giá nguyên tử trong giao dịch ACID:
+ * hợp nhất trường cập nhật với dữ liệu hiện hữu để tái kiểm định toàn vẹn quy tắc nghiệp vụ,
+ * kiểm tra xung đột mã `code` với các bản ghi khác và lưu nhật ký kiểm toán (`coupon.update`).
+ */
 export const updateAdminCoupon = async (
     admin: AuthenticatedUser,
     couponId: number,
@@ -412,6 +496,11 @@ export const updateAdminCoupon = async (
     });
 };
 
+/**
+ * Giải thuật xóa mềm (soft-delete) mã giảm giá nguyên tử trong giao dịch ACID:
+ * vô hiệu hóa cờ `isActive = false`, đánh dấu `deletedAt = now` và ghi nhật ký kiểm toán (`coupon.delete`)
+ * nhằm giữ nguyên tính toàn vẹn tham chiếu cho các đơn đặt phòng và lịch sử quy đổi cũ.
+ */
 export const deleteAdminCoupon = async (
     admin: AuthenticatedUser,
     couponId: number,

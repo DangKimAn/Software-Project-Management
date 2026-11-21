@@ -8,22 +8,27 @@ import '../../../../app/di/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+// CONFLICT-RESOLVED: Bổ sung danh mục ngân hàng Việt Nam từ develop để phục vụ biểu mẫu hoàn tiền khi hủy đơn đã thanh toán.
 import '../../../../core/constants/vietnam_banks.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../host/domain/host_models.dart';
 import '../../../../shared/widgets/app_empty_view.dart';
 import '../../../../shared/widgets/app_error_view.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_loading.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
-import '../../../reviews/presentation/widgets/review_list_widget.dart';
 import '../../domain/entities/booking.dart';
 import '../view_models/trips_view_model.dart';
 
-/// Complete port of `Source goc/frontend/src/views/pages/Trips/index.tsx` (`TripHistoryList`, `TripHistoryCard`, `ReviewModal`).
+/// Màn hình quản lý danh sách chuyến đi cá nhân của khách hàng (`/account/trips`).
+///
+/// Phân tách lịch sử đặt phòng thành 3 phân nhóm (`Sắp tới`, `Hoàn tất`, `Đã hủy`), tự động làm mới nền
+/// mỗi 60 giây, hiển thị đếm ngược giữ chỗ cho đơn chờ thanh toán, cho phép xem chi tiết bóc tách chi phí,
+/// hủy đặt phòng hợp lệ kèm lý do và gửi đánh giá sao sau khi hoàn thành kỳ nghỉ.
 class TripsScreen extends ConsumerStatefulWidget {
+  /// Khởi tạo `TripsScreen`.
   const TripsScreen({super.key});
 
   @override
@@ -35,6 +40,31 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
   late final TabController _tabController;
   final Set<String> _expandedBookingIds = {};
   Timer? _autoRefreshTimer;
+  Timer? _holdCountdownTimer;
+
+  // Giải thuật đồng bộ nhịp đếm ngược 1 giây cho các đơn giữ chỗ chờ thanh toán:
+  // Chỉ bật bộ đếm khi danh sách thực sự có đơn `pending_payment` còn hạn > 0 giây và tự hủy ngay khi hết đơn chờ,
+  // giúp giao diện đếm ngược mượt theo thời gian thực mà không tiêu tốn CPU khi không có đơn giữ chỗ.
+  void _syncHoldCountdownTimer(List<Booking> bookings) {
+    final hasActiveHold = bookings.any(
+      (b) =>
+          b.effectiveStatus == 'pending_payment' &&
+          b.computeRemainingPaymentSeconds() > 0,
+    );
+    if (hasActiveHold && _holdCountdownTimer == null) {
+      _holdCountdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted) {
+          _holdCountdownTimer?.cancel();
+          _holdCountdownTimer = null;
+          return;
+        }
+        setState(() {});
+      });
+    } else if (!hasActiveHold && _holdCountdownTimer != null) {
+      _holdCountdownTimer?.cancel();
+      _holdCountdownTimer = null;
+    }
+  }
 
   @override
   void initState() {
@@ -50,9 +80,26 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
 
   @override
   void dispose() {
+    _holdCountdownTimer?.cancel();
     _autoRefreshTimer?.cancel();
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleMessageHost(Booking booking) async {
+    if (booking.listingId.isEmpty) return;
+    try {
+      final convId =
+          await ref.read(tripsActionsViewModelProvider).openHostConversation(
+                listingId: booking.listingId,
+                bookingId: booking.id,
+              );
+      if (!mounted) return;
+      context.go('/tin-nhan?conversationId=$convId');
+    } catch (_) {
+      if (!mounted) return;
+      context.go('/tin-nhan');
+    }
   }
 
   String _formatHoldCountdown(int seconds) {
@@ -61,6 +108,8 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
     return '$mins:$secs';
   }
 
+  // Giải thuật xác nhận và thực thi hủy đặt phòng từ phía khách hàng (`_handleCancelBooking`):
+  // Kiểm tra điều kiện `booking.canCancel`, mở hộp thoại bắt buộc nhập lý do hủy và ủy quyền qua `TripsActionsViewModel.cancelBooking`.
   Future<void> _handleCancelBooking(Booking booking) async {
     if (!booking.canCancel) return;
 
@@ -112,7 +161,9 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
       if (!RegExp(r'^\d{10,12}$').hasMatch(text)) {
         return isEn
             ? 'Account number must be 10 to 12 digits'
-            : (isKo ? '계좌번호는 10~12자리 숫자여야 합니다' : 'Số tài khoản phải gồm 10 đến 12 chữ số');
+            : (isKo
+                ? '계좌번호는 10~12자리 숫자여야 합니다'
+                : 'Số tài khoản phải gồm 10 đến 12 chữ số');
       }
       return null;
     }
@@ -128,12 +179,16 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
       if (RegExp(r'[0-9]').hasMatch(text)) {
         return isEn
             ? 'Name cannot contain numbers'
-            : (isKo ? '예금주명에 숫자를 포함할 수 없습니다' : 'Tên chủ tài khoản không được chứa chữ số');
+            : (isKo
+                ? '예금주명에 숫자를 포함할 수 없습니다'
+                : 'Tên chủ tài khoản không được chứa chữ số');
       }
       if (text.length < 3) {
         return isEn
             ? 'Name must be at least 3 characters'
-            : (isKo ? '예금주명은 3자 이상이어야 합니다' : 'Tên chủ tài khoản tối thiểu 3 ký tự');
+            : (isKo
+                ? '예금주명은 3자 이상이어야 합니다'
+                : 'Tên chủ tài khoản tối thiểu 3 ký tự');
       }
       return null;
     }
@@ -143,7 +198,8 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
       builder: (ctx) => StatefulBuilder(
         builder: (dialogCtx, setModalState) {
           return AlertDialog(
-            title: Text(isEn ? 'Cancel booking' : (isKo ? '예약 취소' : 'Hủy đặt phòng')),
+            title: Text(
+                isEn ? 'Cancel booking' : (isKo ? '예약 취소' : 'Hủy đặt phòng')),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -174,7 +230,9 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                           : (isKo ? '취소 사유 (필수)' : 'Lý do hủy (bắt buộc)'),
                       hintText: isEn
                           ? 'Change of personal plans, work schedule...'
-                          : (isKo ? '개인 일정 변경...' : 'Thay đổi kế hoạch cá nhân, bận việc...'),
+                          : (isKo
+                              ? '개인 일정 변경...'
+                              : 'Thay đổi kế hoạch cá nhân, bận việc...'),
                       isDense: true,
                       errorText: hasValidated ? validateReason() : null,
                       errorMaxLines: 2,
@@ -188,7 +246,8 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppColors.textStrong, width: 1.5),
+                        borderSide: const BorderSide(
+                            color: AppColors.textStrong, width: 1.5),
                       ),
                       errorBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -196,93 +255,138 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                       ),
                       focusedErrorBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+                        borderSide: const BorderSide(
+                            color: AppColors.error, width: 1.5),
                       ),
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
                     ),
                   ),
                   if (booking.isPaid) ...[
                     const SizedBox(height: AppSpacing.s16),
-                    Container(
-                      padding: const EdgeInsets.all(AppSpacing.s12),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceBase,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                    Builder(
+                      builder: (_) {
+                        final refundEst = booking.estimatePolicyRefund();
+                        final policyTitle = switch (refundEst.policyKey) {
+                          'flexible' => isEn
+                              ? 'Flexible policy'
+                              : (isKo ? '유연 환불 정책' : 'Chính sách Linh hoạt'),
+                          'strict' => isEn
+                              ? 'Strict policy'
+                              : (isKo ? '엄격 환불 정책' : 'Chính sách Nghiêm ngặt'),
+                          _ => isEn
+                              ? 'Moderate policy'
+                              : (isKo ? '보통 환불 정책' : 'Chính sách Trung bình'),
+                        };
+                        return Container(
+                          padding: const EdgeInsets.all(AppSpacing.s12),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceBase,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                isEn
-                                    ? 'Refund amount:'
-                                    : (isKo ? '환불 예상 금액:' : 'Số tiền hoàn dự kiến:'),
-                                style: AppTypography.caption.copyWith(
-                                  color: AppColors.textMuted,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    formatter.formatExactVnd(booking.totalAmount),
-                                    style: const TextStyle(
-                                      fontSize: 16,
+                                    policyTitle,
+                                    style: AppTypography.caption.copyWith(
+                                      color: AppColors.textStrong,
                                       fontWeight: FontWeight.w700,
-                                      color: AppColors.primary,
                                     ),
                                   ),
-                                  if (formatter.effectiveCurrency.isForeign) ...[
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '≈ ${formatter.format(booking.totalAmount).formatted}',
+                                  Text(
+                                    '${refundEst.refundPct}%',
+                                    style: AppTypography.caption.copyWith(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    isEn
+                                        ? 'Estimated refund:'
+                                        : (isKo
+                                            ? '환불 예상 금액:'
+                                            : 'Số tiền hoàn dự kiến:'),
+                                    style: AppTypography.caption.copyWith(
+                                      color: AppColors.textMuted,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        formatter.formatExactVnd(
+                                          refundEst.estimatedRefundVnd,
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                      if (formatter
+                                          .effectiveCurrency.isForeign) ...[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '≈ ${formatter.format(refundEst.estimatedRefundVnd).formatted}',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: AppColors.textMuted,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8),
+                                child:
+                                    Divider(height: 1, color: AppColors.border),
+                              ),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(
+                                    LucideIcons.shieldCheck,
+                                    size: 16,
+                                    color: AppColors.textStrong,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      isEn
+                                          ? 'This booking was paid. Please provide your bank details so Admin can review and disburse your refund via Napas 24/7.'
+                                          : (isKo
+                                              ? '결제 완료된 예약입니다. 관리자가 검토 후 Napas 24/7로 송금할 수 있도록 계좌 정보를 입력해주세요.'
+                                              : 'Đơn này đã thanh toán. Vui lòng cung cấp số tài khoản ngân hàng để Admin duyệt và hoàn tiền tự động qua Napas 24/7.'),
                                       style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.textMuted,
+                                        fontSize: 12,
+                                        color: AppColors.textStrong,
+                                        height: 1.4,
                                       ),
                                     ),
-                                  ],
+                                  ),
                                 ],
                               ),
                             ],
                           ),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8),
-                            child: Divider(height: 1, color: AppColors.border),
-                          ),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(
-                                LucideIcons.shieldCheck,
-                                size: 16,
-                                color: AppColors.textStrong,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  isEn
-                                      ? 'This booking was paid. Please provide your bank details so Admin can review and disburse your refund via Napas 24/7.'
-                                      : (isKo
-                                          ? '결제 완료된 예약입니다. 관리자가 검토 후 Napas 24/7로 송금할 수 있도록 계좌 정보를 입력해주세요.'
-                                          : 'Đơn này đã thanh toán. Vui lòng cung cấp số tài khoản ngân hàng để Admin duyệt và hoàn tiền tự động qua Napas 24/7.'),
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textStrong,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
                     const SizedBox(height: AppSpacing.s12),
                     InkWell(
@@ -363,11 +467,13 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                             ),
                             errorBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(color: AppColors.error),
+                              borderSide:
+                                  const BorderSide(color: AppColors.error),
                             ),
                             focusedErrorBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+                              borderSide: const BorderSide(
+                                  color: AppColors.error, width: 1.5),
                             ),
                             contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 10),
@@ -391,8 +497,11 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                             ? 'Account number (10 - 12 digits)'
                             : 'Số tài khoản (10 - 12 số)',
                         hintText: isEn ? 'e.g. 0987654321' : 'VD: 0987654321',
-                        helperText: isEn ? 'Required: 10 to 12 digits' : 'Bắt buộc: 10 đến 12 chữ số',
-                        errorText: hasValidated ? validateAccountNumber() : null,
+                        helperText: isEn
+                            ? 'Required: 10 to 12 digits'
+                            : 'Bắt buộc: 10 đến 12 chữ số',
+                        errorText:
+                            hasValidated ? validateAccountNumber() : null,
                         errorMaxLines: 2,
                         isDense: true,
                         prefixIcon: const Icon(
@@ -410,7 +519,8 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.textStrong, width: 1.5),
+                          borderSide: const BorderSide(
+                              color: AppColors.textStrong, width: 1.5),
                         ),
                         errorBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -418,10 +528,11 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                         ),
                         focusedErrorBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+                          borderSide: const BorderSide(
+                              color: AppColors.error, width: 1.5),
                         ),
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.s8),
@@ -445,8 +556,11 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                         labelText: isEn
                             ? 'Account owner name (no numbers)'
                             : 'Tên chủ tài khoản (không chứa số)',
-                        hintText: isEn ? 'e.g. NGUYEN VAN A' : 'VD: NGUYEN VAN A',
-                        helperText: isEn ? 'Required: Letters only (auto-uppercase)' : 'Bắt buộc: Chỉ chữ cái (tự động in hoa)',
+                        hintText:
+                            isEn ? 'e.g. NGUYEN VAN A' : 'VD: NGUYEN VAN A',
+                        helperText: isEn
+                            ? 'Required: Letters only (auto-uppercase)'
+                            : 'Bắt buộc: Chỉ chữ cái (tự động in hoa)',
                         errorText: hasValidated ? validateAccountName() : null,
                         errorMaxLines: 2,
                         isDense: true,
@@ -465,7 +579,8 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.textStrong, width: 1.5),
+                          borderSide: const BorderSide(
+                              color: AppColors.textStrong, width: 1.5),
                         ),
                         errorBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -473,10 +588,11 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                         ),
                         focusedErrorBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+                          borderSide: const BorderSide(
+                              color: AppColors.error, width: 1.5),
                         ),
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
                       ),
                     ),
                   ],
@@ -486,7 +602,8 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(false),
-                child: Text(isEn ? 'Keep booking' : (isKo ? '예약 유지' : 'Giữ đặt phòng')),
+                child: Text(
+                    isEn ? 'Keep booking' : (isKo ? '예약 유지' : 'Giữ đặt phòng')),
               ),
               FilledButton(
                 style: FilledButton.styleFrom(
@@ -506,7 +623,9 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                   if (hasError) return;
                   Navigator.of(ctx).pop(true);
                 },
-                child: Text(isEn ? 'Confirm cancellation' : (isKo ? '취소 확인' : 'Xác nhận hủy')),
+                child: Text(isEn
+                    ? 'Confirm cancellation'
+                    : (isKo ? '취소 확인' : 'Xác nhận hủy')),
               ),
             ],
           );
@@ -516,16 +635,14 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
 
     if (shouldCancel == true && mounted) {
       try {
-        final repo = ref.read(bookingRepositoryProvider);
-        await repo.cancelBooking(
-          bookingId: booking.id,
-          reason: reasonController.text.trim(),
-          bankName: bankNameController.text.trim(),
-          accountNumber: accountNumberController.text.trim(),
-          accountName: accountNameController.text.trim(),
-        );
-        ref.invalidate(myBookingsProvider);
-        ref.invalidate(bookingDetailProvider(booking.id));
+        // CONFLICT-RESOLVED: Ủy quyền hủy đơn qua TripsActionsViewModel (chuẩn MVVM của HEAD) kèm thông tin tài khoản hoàn tiền từ develop.
+        await ref.read(tripsActionsViewModelProvider).cancelBooking(
+              bookingId: booking.id,
+              reason: reasonController.text.trim(),
+              bankName: bankNameController.text.trim(),
+              accountNumber: accountNumberController.text.trim(),
+              accountName: accountNameController.text.trim(),
+            );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -555,6 +672,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
     }
   }
 
+  // Giải thuật thu thập số sao (`1..5`) và nhận xét thực tế (tối thiểu 5 ký tự) cho chuyến đi đã hoàn tất (`_openReviewModal`).
   Future<void> _openReviewModal(Booking booking) async {
     final locale = ref.read(localeProvider);
     final isEn = locale.startsWith('en');
@@ -562,6 +680,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
 
     final reviewResult = await showDialog<({int rating, String comment})>(
       context: context,
+      // CONFLICT-RESOLVED: Dùng _ReviewModalDialog tách biệt có hỗ trợ đa ngôn ngữ từ develop và truyền đủ listingId cho TripsActionsViewModel của HEAD.
       builder: (ctx) => _ReviewModalDialog(
         booking: booking,
         isEn: isEn,
@@ -571,15 +690,12 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
 
     if (reviewResult != null && mounted) {
       try {
-        await ref.read(reviewRepositoryProvider).createReview(
+        await ref.read(tripsActionsViewModelProvider).submitStayReview(
               bookingId: booking.id,
+              listingId: booking.listingId,
               rating: reviewResult.rating,
               comment: reviewResult.comment,
             );
-        ref.invalidate(myBookingsProvider);
-        if (booking.listingId.isNotEmpty) {
-          ref.invalidate(listingReviewsProvider(booking.listingId));
-        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -633,7 +749,9 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                         Text(
                           isEn
                               ? 'Log in to view trips'
-                              : (isKo ? '로그인하여 여행 확인' : 'Đăng nhập để xem chuyến đi'),
+                              : (isKo
+                                  ? '로그인하여 여행 확인'
+                                  : 'Đăng nhập để xem chuyến đi'),
                           style: AppTypography.sectionHeading,
                           textAlign: TextAlign.center,
                         ),
@@ -696,8 +814,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
               top: false,
               child: bookingsAsync.when(
                 loading: () => Center(
-                    child: AppLoading(
-                        message: context.l10n.loadingTrips)),
+                    child: AppLoading(message: context.l10n.loadingTrips)),
                 error: (err, _) => Center(
                   child: AppErrorView(
                     message: err.toString().replaceFirst('Exception: ', ''),
@@ -745,19 +862,24 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                   return TabBarView(
                     controller: _tabController,
                     children: [
-                      _buildBookingList(
-                        bookings: activeBookings,
-                        emptyTitle: isEn
-                            ? 'No upcoming trips'
-                            : (isKo
-                                ? '예정된 여행이 없습니다'
-                                : 'Chưa có chuyến đi sắp tới'),
-                        emptyDescription: isEn
-                            ? 'You have no upcoming vacations. Explore and book a villa now!'
-                            : (isKo
-                                ? '예정된 여행이 없습니다. 지금 빌라를 둘러보고 예약해보세요!'
-                                : 'Bạn chưa có kỳ nghỉ nào sắp diễn ra. Hãy khám phá và đặt villa ngay!'),
-                        locale: locale,
+                      Builder(
+                        builder: (_) {
+                          _syncHoldCountdownTimer(activeBookings);
+                          return _buildBookingList(
+                            bookings: activeBookings,
+                            emptyTitle: isEn
+                                ? 'No upcoming trips'
+                                : (isKo
+                                    ? '예정된 여행이 없습니다'
+                                    : 'Chưa có chuyến đi sắp tới'),
+                            emptyDescription: isEn
+                                ? 'You have no upcoming vacations. Explore and book a villa now!'
+                                : (isKo
+                                    ? '예정된 여행이 없습니다. 지금 빌라를 둘러보고 예약해보세요!'
+                                    : 'Bạn chưa có kỳ nghỉ nào sắp diễn ra. Hãy khám phá và đặt villa ngay!'),
+                            locale: locale,
+                          );
+                        },
                       ),
                       _buildBookingList(
                         bookings: completedBookings,
@@ -811,9 +933,8 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
       return AppEmptyView(
         title: emptyTitle,
         description: emptyDescription,
-        actionText: isEn
-            ? 'Explore villas'
-            : (isKo ? '빌라 둘러보기' : 'Khám phá villa'),
+        actionText:
+            isEn ? 'Explore villas' : (isKo ? '빌라 둘러보기' : 'Khám phá villa'),
         onAction: () => context.go('/'),
       );
     }
@@ -841,17 +962,33 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
       booking.totalAmount,
       context: MoneyDisplayContext.breakdown,
     );
-    final isRefundStatus = booking.effectiveStatus == 'refund_pending' ||
-        booking.effectiveStatus == 'refunded';
+    // Giải thuật phân loại màu sắc & biểu tượng huy hiệu trạng thái trên thẻ chuyến đi:
+    // Suy xuất trực tiếp từ `booking.effectiveStatus` thay vì `booking.status` thô
+    // để `completed`/`checked_out` mang sắc xanh thành công, còn `refunded`/`refund_pending`
+    // mang sắc trung tính/hổ phách thông tin thay vì đỏ báo lỗi.
+    // CONFLICT-RESOLVED: Tránh hiển thị nhầm huy hiệu đỏ lỗi cho đơn hoàn tiền hoặc hổ phách cho đơn đã trả phòng.
+    final effStatus = booking.effectiveStatus;
+    final isRefundStatus =
+        effStatus == 'refund_pending' || effStatus == 'refunded';
     Color badgeText = const Color(0xFFB45309);
-    if (booking.status == 'paid' ||
-        booking.status == 'confirmed' ||
-        booking.status == 'checked_in' ||
-        booking.status == 'completed' ||
-        booking.effectiveStatus == 'refunded') {
+    // CONFLICT-RESOLVED: Giữ biểu tượng badgeIcon theo effectiveStatus của HEAD kết hợp phân màu trạng thái rõ ràng.
+    IconData badgeIcon = LucideIcons.clock;
+    if (effStatus == 'paid' ||
+        effStatus == 'confirmed' ||
+        effStatus == 'checked_in' ||
+        effStatus == 'checked_out' ||
+        effStatus == 'completed') {
       badgeText = const Color(0xFF047857);
+      badgeIcon = LucideIcons.circleCheck;
+    } else if (effStatus == 'refunded') {
+      badgeText = AppColors.textSecondary;
+      badgeIcon = LucideIcons.rotateCcw;
+    } else if (effStatus == 'refund_pending') {
+      badgeText = const Color(0xFFB45309);
+      badgeIcon = LucideIcons.refreshCw;
     } else if (booking.isCancelled) {
       badgeText = AppColors.errorRed;
+      badgeIcon = LucideIcons.circleX;
     }
 
     final isExpanded = _expandedBookingIds.contains(booking.id);
@@ -887,8 +1024,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
                       child: Text(
@@ -900,13 +1036,24 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                     ),
                     const SizedBox(width: 8),
                     Flexible(
-                      child: Text(
-                        booking.statusDisplayFor(locale),
-                        textAlign: TextAlign.right,
-                        style: AppTypography.caption.copyWith(
-                          color: badgeText,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      // CONFLICT-RESOLVED: Kết hợp biểu tượng trạng thái badgeIcon của HEAD với nhãn đa ngôn ngữ statusDisplayFor(locale) từ develop.
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Icon(badgeIcon, size: 13, color: badgeText),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              booking.statusDisplayFor(locale),
+                              textAlign: TextAlign.right,
+                              style: AppTypography.caption.copyWith(
+                                color: badgeText,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -957,10 +1104,14 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                     () {
                       final nightsText = isEn
                           ? '${booking.nights} ${booking.nights == 1 ? "night" : "nights"}'
-                          : (isKo ? '${booking.nights}박' : '${booking.nights} đêm');
+                          : (isKo
+                              ? '${booking.nights}박'
+                              : '${booking.nights} đêm');
                       final guestsText = isEn
                           ? '${booking.guestCount} ${booking.guestCount == 1 ? "guest" : "guests"}'
-                          : (isKo ? '${booking.guestCount}명' : '${booking.guestCount} khách');
+                          : (isKo
+                              ? '${booking.guestCount}명'
+                              : '${booking.guestCount} khách');
                       return Text(
                         '$nightsText • $guestsText',
                         style: AppTypography.caption
@@ -970,7 +1121,7 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                   ],
                 ),
 
-                if (booking.status == 'pending_payment') ...[
+                if (effStatus == 'pending_payment') ...[
                   const SizedBox(height: 6),
                   Row(
                     children: [
@@ -1027,66 +1178,79 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                           ),
                         ),
                         const SizedBox(height: 6),
+                        // CONFLICT-RESOLVED: Sử dụng nhãn đa ngôn ngữ và bộ định dạng đa tiền tệ MoneyDisplayContext.breakdown từ develop.
                         _DetailItemRow(
                           label: isEn
                               ? 'Room rate (${booking.nights} ${booking.nights == 1 ? "night" : "nights"})'
                               : (isKo
                                   ? '숙박 요금 (${booking.nights}박)'
                                   : 'Tiền phòng (${booking.nights} đêm)'),
-                          value: formatter.format(
-                            pb.baseNightsAmount,
-                            context: MoneyDisplayContext.breakdown,
-                          ).formatted,
+                          value: formatter
+                              .format(
+                                pb.baseNightsAmount,
+                                context: MoneyDisplayContext.breakdown,
+                              )
+                              .formatted,
                         ),
                         if (pb.weekendSurchargeAmount > 0)
                           _DetailItemRow(
                             label: isEn
                                 ? 'Weekend surcharge'
                                 : (isKo ? '주말 할증료' : 'Phụ thu cuối tuần'),
-                            value: formatter.format(
-                              pb.weekendSurchargeAmount,
-                              context: MoneyDisplayContext.breakdown,
-                            ).formatted,
+                            value: formatter
+                                .format(
+                                  pb.weekendSurchargeAmount,
+                                  context: MoneyDisplayContext.breakdown,
+                                )
+                                .formatted,
                           ),
                         if (pb.extraGuestFeeAmount > 0)
                           _DetailItemRow(
                             label: isEn
                                 ? 'Extra guest fee'
                                 : (isKo ? '추가 인원 요금' : 'Phụ thu khách thêm'),
-                            value: formatter.format(
-                              pb.extraGuestFeeAmount,
-                              context: MoneyDisplayContext.breakdown,
-                            ).formatted,
+                            value: formatter
+                                .format(
+                                  pb.extraGuestFeeAmount,
+                                  context: MoneyDisplayContext.breakdown,
+                                )
+                                .formatted,
                           ),
                         if (pb.surchargeAmount > 0)
                           _DetailItemRow(
                             label: isEn
                                 ? 'Standard surcharge'
                                 : (isKo ? '고정 추가 요금' : 'Phụ thu cố định'),
-                            value: formatter.format(
-                              pb.surchargeAmount,
-                              context: MoneyDisplayContext.breakdown,
-                            ).formatted,
+                            value: formatter
+                                .format(
+                                  pb.surchargeAmount,
+                                  context: MoneyDisplayContext.breakdown,
+                                )
+                                .formatted,
                           ),
                         if (pb.cleaningFee > 0)
                           _DetailItemRow(
                             label: isEn
                                 ? 'Cleaning fee'
                                 : (isKo ? '청소비' : 'Phí vệ sinh'),
-                            value: formatter.format(
-                              pb.cleaningFee,
-                              context: MoneyDisplayContext.breakdown,
-                            ).formatted,
+                            value: formatter
+                                .format(
+                                  pb.cleaningFee,
+                                  context: MoneyDisplayContext.breakdown,
+                                )
+                                .formatted,
                           ),
                         if (pb.serviceFee > 0)
                           _DetailItemRow(
                             label: isEn
                                 ? 'Service fee'
                                 : (isKo ? '서비스 수수료' : 'Phí dịch vụ'),
-                            value: formatter.format(
-                              pb.serviceFee,
-                              context: MoneyDisplayContext.breakdown,
-                            ).formatted,
+                            value: formatter
+                                .format(
+                                  pb.serviceFee,
+                                  context: MoneyDisplayContext.breakdown,
+                                )
+                                .formatted,
                           ),
                         if (pb.discountAmount > 0)
                           _DetailItemRow(
@@ -1105,6 +1269,20 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                               context: MoneyDisplayContext.breakdown,
                             ),
                           ),
+                        if (booking.hostName != null &&
+                            booking.hostName!.trim().isNotEmpty)
+                          _DetailItemRow(
+                            label: isEn ? 'Host' : (isKo ? '호스트' : 'Chủ nhà'),
+                            value: booking.hostName!.trim(),
+                          ),
+                        if (booking.hostPhone != null &&
+                            booking.hostPhone!.trim().isNotEmpty)
+                          _DetailItemRow(
+                            label: isEn
+                                ? 'Host phone'
+                                : (isKo ? '호스트 연락처' : 'Liên hệ chủ nhà'),
+                            value: booking.hostPhone!.trim(),
+                          ),
                         if (booking.specialRequests != null &&
                             booking.specialRequests!.isNotEmpty)
                           Padding(
@@ -1121,8 +1299,11 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                               ),
                             ),
                           ),
-                        if (booking.cancellationReasonDisplayFor(locale) != null &&
-                            booking.cancellationReasonDisplayFor(locale)!.isNotEmpty)
+                        if (booking.cancellationReasonDisplayFor(locale) !=
+                                null &&
+                            booking
+                                .cancellationReasonDisplayFor(locale)!
+                                .isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
@@ -1148,13 +1329,14 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      isEn
-                          ? 'Total payment'
-                          : (isKo ? '총 결제 금액' : 'Tổng thanh toán'),
-                      style: AppTypography.caption.copyWith(
-                          color: AppColors.textMuted,
-                          fontWeight: FontWeight.w400)),
+                        isEn
+                            ? 'Total payment'
+                            : (isKo ? '총 결제 금액' : 'Tổng thanh toán'),
+                        style: AppTypography.caption.copyWith(
+                            color: AppColors.textMuted,
+                            fontWeight: FontWeight.w400)),
                     const SizedBox(height: 4),
+                    // CONFLICT-RESOLVED: Hiển thị tổng tiền định dạng đa tiền tệ từ develop kèm chú thích quy đổi VND bên dưới.
                     Text(totalResult.formatted,
                         style: AppTypography.cardTitle
                             .copyWith(color: AppColors.primary)),
@@ -1261,6 +1443,23 @@ class _TripsScreenState extends ConsumerState<TripsScreen>
                                 ),
                               ],
                             )),
+                        if (booking.isActive && booking.listingId.isNotEmpty)
+                          OutlinedButton.icon(
+                            key: ValueKey<String>('message_host_${booking.id}'),
+                            style: secondaryStyle,
+                            onPressed: () => _handleMessageHost(booking),
+                            icon: const Icon(
+                              LucideIcons.messageSquare,
+                              size: 15,
+                              color: AppColors.iconStrong,
+                            ),
+                            label: Text(
+                              isEn
+                                  ? 'Message host'
+                                  : (isKo ? '호스트 문의' : 'Nhắn tin chủ nhà'),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                         if (booking.canCancel)
                           TextButton(
                               style: TextButton.styleFrom(
@@ -1353,7 +1552,6 @@ class _DetailItemRow extends StatelessWidget {
     );
   }
 }
-
 
 class _ReviewModalDialog extends StatefulWidget {
   final Booking booking;
@@ -1448,12 +1646,11 @@ class _ReviewModalDialogState extends State<_ReviewModalDialog> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '$starVal★',
+                          '$starVal',
                           style: TextStyle(
                             fontSize: 11,
-                            fontWeight: isSelected
-                                ? FontWeight.w700
-                                : FontWeight.w400,
+                            fontWeight:
+                                isSelected ? FontWeight.w700 : FontWeight.w400,
                             color: isSelected
                                 ? const Color(0xFFD97706)
                                 : AppColors.textMuted,
@@ -1583,16 +1780,13 @@ class _BankLogoWidget extends StatelessWidget {
       fit: BoxFit.contain,
       errorBuilder: (_, __, ___) {
         if (bank.logo != null && bank.logo!.isNotEmpty) {
-          return Image.network(
-            bank.logo!,
+          // CONFLICT-RESOLVED: Thay Image.network trực tiếp bằng AppImage theo chuẩn FLUTTER_RULES.md.
+          return SizedBox(
             width: size,
             height: size,
-            fit: BoxFit.contain,
-            headers: const {'User-Agent': 'Mozilla/5.0'},
-            errorBuilder: (_, __, ___) => Icon(
-              LucideIcons.building2,
-              size: size * 0.75,
-              color: AppColors.textStrong,
+            child: AppImage(
+              url: bank.logo!,
+              fit: BoxFit.contain,
             ),
           );
         }
@@ -1689,7 +1883,8 @@ class _BankPickerDialogState extends State<_BankPickerDialog> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(LucideIcons.x, size: 20, color: AppColors.textStrong),
+                    icon: const Icon(LucideIcons.x,
+                        size: 20, color: AppColors.textStrong),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -1706,11 +1901,14 @@ class _BankPickerDialogState extends State<_BankPickerDialog> {
                   hintText: isEn
                       ? 'Search bank (e.g. MB, VCB, Techcombank...)'
                       : 'Tìm ngân hàng (VD: MB, VCB, Techcombank...)',
-                  hintStyle: const TextStyle(fontSize: 13, color: AppColors.textMuted),
-                  prefixIcon: const Icon(LucideIcons.search, size: 18, color: AppColors.textMuted),
+                  hintStyle:
+                      const TextStyle(fontSize: 13, color: AppColors.textMuted),
+                  prefixIcon: const Icon(LucideIcons.search,
+                      size: 18, color: AppColors.textMuted),
                   suffixIcon: _query.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(LucideIcons.x, size: 16, color: AppColors.textMuted),
+                          icon: const Icon(LucideIcons.x,
+                              size: 16, color: AppColors.textMuted),
                           onPressed: () {
                             _searchCtrl.clear();
                             setState(() => _query = '');
@@ -1728,9 +1926,11 @@ class _BankPickerDialogState extends State<_BankPickerDialog> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: AppColors.textStrong, width: 1.5),
+                    borderSide: const BorderSide(
+                        color: AppColors.textStrong, width: 1.5),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 ),
               ),
             ),
@@ -1743,13 +1943,15 @@ class _BankPickerDialogState extends State<_BankPickerDialog> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(LucideIcons.searchX, size: 36, color: AppColors.textMuted),
+                            const Icon(LucideIcons.searchX,
+                                size: 36, color: AppColors.textMuted),
                             const SizedBox(height: 10),
                             Text(
                               isEn
                                   ? 'No matching banks found'
                                   : 'Không tìm thấy ngân hàng phù hợp',
-                              style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
+                              style: const TextStyle(
+                                  fontSize: 14, color: AppColors.textMuted),
                             ),
                             if (_query.isNotEmpty) ...[
                               const SizedBox(height: 12),
@@ -1758,7 +1960,8 @@ class _BankPickerDialogState extends State<_BankPickerDialog> {
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  side: const BorderSide(color: AppColors.border),
+                                  side:
+                                      const BorderSide(color: AppColors.border),
                                 ),
                                 onPressed: () {
                                   Navigator.of(context).pop(VietnamBank(
@@ -1767,10 +1970,12 @@ class _BankPickerDialogState extends State<_BankPickerDialog> {
                                     shortName: _query,
                                   ));
                                 },
-                                icon: const Icon(LucideIcons.check, size: 16, color: AppColors.textStrong),
+                                icon: const Icon(LucideIcons.check,
+                                    size: 16, color: AppColors.textStrong),
                                 label: Text(
                                   isEn ? 'Use "$_query"' : 'Sử dụng "$_query"',
-                                  style: const TextStyle(color: AppColors.textStrong),
+                                  style: const TextStyle(
+                                      color: AppColors.textStrong),
                                 ),
                               ),
                             ],
@@ -1785,11 +1990,12 @@ class _BankPickerDialogState extends State<_BankPickerDialog> {
                         controller: _scrollController,
                         padding: const EdgeInsets.symmetric(vertical: 6),
                         itemCount: filteredBanks.length,
-                        separatorBuilder: (_, __) =>
-                            const Divider(height: 1, indent: 64, color: AppColors.border),
+                        separatorBuilder: (_, __) => const Divider(
+                            height: 1, indent: 64, color: AppColors.border),
                         itemBuilder: (ctx, index) {
                           final bank = filteredBanks[index];
-                          final isSelected = widget.currentSelection?.code == bank.code;
+                          final isSelected =
+                              widget.currentSelection?.code == bank.code;
                           return InkWell(
                             onTap: () => Navigator.of(context).pop(bank),
                             child: Padding(
@@ -1812,12 +2018,14 @@ class _BankPickerDialogState extends State<_BankPickerDialog> {
                                             : AppColors.border,
                                       ),
                                     ),
-                                    child: _BankLogoWidget(bank: bank, size: 28),
+                                    child:
+                                        _BankLogoWidget(bank: bank, size: 28),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           '${bank.shortName} (${bank.code})',

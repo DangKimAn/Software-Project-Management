@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý luồng hội thoại nhắn tin giữa khách, chủ nhà và quản trị viên có khóa chống trùng lặp (dedupe_key).
+ */
 import {
     CreationOptional,
     DataTypes,

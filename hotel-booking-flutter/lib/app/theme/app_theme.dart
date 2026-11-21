@@ -3,7 +3,14 @@ import 'app_colors.dart';
 import 'app_radii.dart';
 import 'app_typography.dart';
 
+/// Cấu hình chủ đề Material 3 Light Luxury thống nhất cho toàn bộ ứng dụng The Palm Villa.
+///
+/// Giải thuật cấu hình chủ đề giao diện:
+/// 1. Ánh xạ bảng màu `AppColors` vào `ColorScheme.light` và triệt tiêu hoàn toàn lớp phủ màu `surfaceTint` / hiệu ứng gợn sóng mặc định.
+/// 2. Áp dụng họ phông chữ `SF Pro Display` cùng chuỗi phông dự phòng đa ngôn ngữ từ `AppTypography`.
+/// 3. Chuẩn hóa vùng chạm tối thiểu `48x48` logical pixel, viền tiêu điểm `AppColors.borderFocus` và dáng viên thuốc (`StadiumBorder`) cho hệ thống nút bấm, ô nhập liệu và chip.
 abstract final class AppTheme {
+  /// Dựng cấu hình `ThemeData` chế độ sáng chuẩn của ứng dụng.
   static ThemeData get lightTheme {
     const scheme = ColorScheme.light(
       primary: AppColors.primary,
@@ -190,9 +197,13 @@ abstract final class AppTheme {
             color: states.contains(WidgetState.selected)
                 ? scheme.primary
                 : AppColors.border)),
-        labelStyle: WidgetStateTextStyle.resolveWith((states) => states.contains(WidgetState.selected) ? AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.w700, color: AppColors.textInverse) : AppTypography.bodyMedium),
-        secondaryLabelStyle:
-            AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.w700, color: AppColors.textInverse),
+        labelStyle: WidgetStateTextStyle.resolveWith((states) =>
+            states.contains(WidgetState.selected)
+                ? AppTypography.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w700, color: AppColors.textInverse)
+                : AppTypography.bodyMedium),
+        secondaryLabelStyle: AppTypography.bodyMedium.copyWith(
+            fontWeight: FontWeight.w700, color: AppColors.textInverse),
       ),
       datePickerTheme: const DatePickerThemeData(
           rangeSelectionBackgroundColor: AppColors.rangeBackground,

@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu hồ sơ cá nhân mở rộng của người dùng (địa điểm, nghề nghiệp, ngôn ngữ giao tiếp).
+ */
 import {
     CreationOptional,
     DataTypes,

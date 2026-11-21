@@ -5,6 +5,12 @@ import '../../../villas/domain/entities/villa.dart';
 import '../../../villas/domain/entities/villa_specs.dart';
 import '../../domain/repositories/wishlist_repository.dart';
 
+/// Triển khai kho lưu trữ danh sách yêu thích kết hợp `PreferencesService` cục bộ và REST API `/api/wishlist`.
+///
+/// Chịu trách nhiệm hợp nhất các yêu cầu mạng trùng lặp đang bay (In-Flight Coalescing),
+/// di trú danh sách tim của khách vãng lai sau khi đăng nhập, đối soát hai chiều giữa
+/// `SharedPreferences` và backend, tự động cắt tỉa `invalidListingIds`, đồng thời
+/// chuyển hóa lỗi mạng thành `AppFailure` để tầng trạng thái hoàn tác thao tác bấm tim lạc quan (Optimistic Toggle Rollback).
 class WishlistRepositoryImpl implements WishlistRepository {
   final dynamic _client;
   final PreferencesService? _prefs;
@@ -12,6 +18,7 @@ class WishlistRepositoryImpl implements WishlistRepository {
   Future<List<String>>? _inFlightSyncIds;
   Future<WishlistResponse>? _inFlightDetail;
 
+  /// Khởi tạo `WishlistRepositoryImpl` với HTTP `_client` (`Dio` hoặc `DioClient`) và tùy chọn `prefs`.
   WishlistRepositoryImpl(this._client, {PreferencesService? prefs})
       : _prefs = prefs;
 
@@ -20,6 +27,9 @@ class WishlistRepositoryImpl implements WishlistRepository {
   PreferencesService? get _effectivePrefs =>
       _prefs ?? PreferencesService.activeInstance;
 
+  // Giải thuật bóc tách phong bì dữ liệu API (Envelope Unwrapping):
+  // Kiểm tra cờ `success == false` để chủ động ném `ValidationFailure` kèm mã lỗi nghiệp vụ,
+  // sau đó trích xuất trường `data` nếu phản hồi tuân theo chuẩn `{ success, data }`.
   static dynamic _unwrapEnvelope(dynamic responseBody) {
     if (responseBody is Map<String, dynamic>) {
       if (responseBody['success'] == false) {
@@ -35,6 +45,9 @@ class WishlistRepositoryImpl implements WishlistRepository {
     return responseBody;
   }
 
+  // Giải thuật chuẩn hóa ngoại lệ HTTP sang `AppFailure` phục vụ hoàn tác lạc quan (Optimistic Rollback Error Mapping):
+  // Ánh xạ `401/403` -> `AuthFailure`, `404` -> `NotFoundFailure`, mã HTTP khác -> `ServerFailure`,
+  // và mất kết nối -> `NetworkFailure` để `FavoritesNotifier` bắt được và khôi phục lại trạng thái tim trước đó.
   static AppFailure _handleError(dynamic error) {
     if (error is AppFailure) return error;
     if (error is DioException) {
@@ -68,6 +81,10 @@ class WishlistRepositoryImpl implements WishlistRepository {
     return UnknownFailure(error.toString());
   }
 
+  /// Đồng bộ danh sách mã định danh yêu thích với cơ chế gộp yêu cầu đồng thời (In-Flight Request Coalescing).
+  ///
+  /// Nếu một tiến trình đồng bộ `_inFlightSyncIds` đang chạy, các lời gọi song song sẽ
+  /// dùng chung cùng một `Future` thay vì phát sinh nhiều lượt di trú và gọi mạng trùng lặp.
   @override
   Future<List<String>> getWishlistListingIds() {
     if (_inFlightSyncIds != null) {
@@ -83,6 +100,20 @@ class WishlistRepositoryImpl implements WishlistRepository {
     return future;
   }
 
+  // Giải thuật đồng bộ hai chiều cục bộ <-> máy chủ, hợp nhất phiên khách và cắt tỉa ID hỏng (`_performSyncAndGetIds`):
+  // Bước 1 (Đọc hàng đợi khách vãng lai): Truy xuất danh sách `pendingGuestIds` lưu trong `SharedPreferences`
+  //   khi người dùng thả tim ở chế độ chưa đăng nhập.
+  // Bước 2 (Hợp nhất Guest -> Authenticated): Chuẩn hóa và lọc ID hợp lệ qua `normalizeListingIds` & `isValidListingId`,
+  //   sau đó đẩy tuần tự từng ID lên `POST /api/wishlist/:id`. Nếu máy chủ trả về `400`, `404` hoặc `422`
+  //   (biệt thự đã bị xóa/ẩn), đưa ID đó vào `invalidFromMigration` và tiếp tục vòng lặp thay vì làm gãy luồng đồng bộ;
+  //   các lỗi mạng hoặc hết phiên (`401/403/5xx`) được `rethrow` ngay để bảo toàn hàng đợi cục bộ.
+  // Bước 3 (Đối soát nguồn sự thật từ `/api/wishlist`): Gọi `getWishlistDetail()` để thu thập tập `listingIds`
+  //   chính tắc trên máy chủ, danh mục `invalidListingIds` do backend phát hiện, và `userId` hiện hành.
+  // Bước 4 (Cắt tỉa `invalidListingIds` & Ghi nhận vào `SharedPreferences`): Hợp nhất `invalidFromMigration`
+  //   và `detail.invalidListingIds` thành tập `allInvalid`, rồi ủy quyền cho `prefs.markWishlistSynced(...)`
+  //   để gộp `backendIds` + `migratedGuestIds`, loại bỏ triệt để mọi ID nằm trong `allInvalid` và xóa hàng đợi chờ.
+  // Bước 5 (Bảo toàn dữ liệu khi lỗi): Nếu xảy ra sự cố trong quá trình đồng bộ, đánh dấu `markWishlistSyncFailed()`
+  //   trên `SharedPreferences` để giữ nguyên dữ liệu cục bộ không bị ghi đè rỗng và ném `AppFailure` đã phân loại.
   Future<List<String>> _performSyncAndGetIds() async {
     final prefs = _effectivePrefs;
     final pendingGuestIds =
@@ -144,6 +175,11 @@ class WishlistRepositoryImpl implements WishlistRepository {
     }
   }
 
+  /// Di trú danh sách mã chỗ nghỉ `listingIds` từ bộ nhớ cục bộ của khách vãng lai lên tài khoản đã xác thực.
+  ///
+  /// Giải thuật khử trùng lặp và lọc định dạng ID trước khi gọi `addWishlistListing` tuần tự;
+  /// tự động bỏ qua các mã trả về lỗi `400`, `404` hoặc `422` để một chỗ nghỉ ngừng hoạt động
+  /// không làm gián đoạn việc di trú các chỗ nghỉ hợp lệ còn lại.
   @override
   Future<List<String>> migrateWishlistListingIds(
       List<String> listingIds) async {
@@ -172,6 +208,7 @@ class WishlistRepositoryImpl implements WishlistRepository {
     return migrated;
   }
 
+  /// Truy xuất chi tiết danh sách yêu thích từ `/api/wishlist` với cơ chế chia sẻ `Future` đang bay `_inFlightDetail`.
   @override
   Future<WishlistResponse> getWishlistDetail() {
     if (_inFlightDetail != null) {
@@ -187,6 +224,10 @@ class WishlistRepositoryImpl implements WishlistRepository {
     return future;
   }
 
+  // Giải thuật phân tích và đối soát dữ liệu chi tiết `/api/wishlist`:
+  // 1. Hỗ trợ đa hình cấu trúc phản hồi (đối tượng `{ items, listingIds, invalidListingIds, userId }` hoặc mảng trực tiếp).
+  // 2. Trích xuất ID chỗ nghỉ từ cả mảng `listingIds` tường minh lẫn từng phần tử trong `items` (kể cả cấu trúc lồng `listing.listingId`).
+  // 3. Xây dựng tập đen `invalidSet` từ `invalidListingIds` để lọc sạch cả danh sách `combinedIds` lẫn danh sách thực thể `Villa`.
   Future<WishlistResponse> _fetchWishlistDetail() async {
     try {
       final response = await _dio.get<Map<String, dynamic>>('/api/wishlist');
@@ -239,8 +280,14 @@ class WishlistRepositoryImpl implements WishlistRepository {
           .whereType<String>()
           .toList();
 
-      final invalidSet =
-          PreferencesService.normalizeListingIds(invalidIds).toSet();
+      // Giải thuật hợp nhất danh sách mã biệt thự đã ẩn/xóa (`invalidIds`) với bộ nhớ đệm cục bộ:
+      // Đảm bảo các căn bị ẩn hoặc ngừng hoạt động đã được tỉa bỏ trước đó không bao giờ xuất hiện lại sau khi tải lại trang.
+      final persistedInvalid =
+          _effectivePrefs?.getInvalidWishlistIds() ?? const <String>[];
+      final invalidSet = PreferencesService.normalizeListingIds([
+        ...invalidIds,
+        ...persistedInvalid,
+      ]).toSet();
       final combinedIds = PreferencesService.normalizeListingIds([
         ...explicitListingIds,
         ...itemIds,
@@ -267,6 +314,10 @@ class WishlistRepositoryImpl implements WishlistRepository {
     }
   }
 
+  /// Gửi yêu cầu `POST /api/wishlist/:listingId` để lưu chỗ nghỉ vào danh sách yêu thích trên máy chủ.
+  ///
+  /// Bỏ qua sớm nếu `listingId` không đúng định dạng chuẩn. Khi gặp lỗi mạng hoặc xác thực,
+  /// phương thức ném `AppFailure` để bộ điều phối trạng thái thực hiện hoàn tác cập nhật lạc quan (Optimistic Toggle Rollback).
   @override
   Future<void> addWishlistListing(String listingId) async {
     final trimmed = listingId.trim();
@@ -280,6 +331,10 @@ class WishlistRepositoryImpl implements WishlistRepository {
     }
   }
 
+  /// Gửi yêu cầu `DELETE /api/wishlist/:listingId` để gỡ chỗ nghỉ khỏi danh sách yêu thích trên máy chủ.
+  ///
+  /// Bỏ qua sớm nếu `listingId` không hợp lệ. Khi thất bại, phương thức ném `AppFailure`
+  /// để bộ điều phối khôi phục lại trạng thái đã lưu trong bộ nhớ và `SharedPreferences` (Optimistic Toggle Rollback).
   @override
   Future<void> removeWishlistListing(String listingId) async {
     final trimmed = listingId.trim();
@@ -293,6 +348,9 @@ class WishlistRepositoryImpl implements WishlistRepository {
     }
   }
 
+  // Giải thuật chuẩn hóa JSON mục yêu thích sang thực thể `Villa`:
+  // Tự động bóc đối tượng con `listing` (nếu có), hợp nhất giá ngày thường/cuối tuần theo cả camelCase lẫn snake_case,
+  // thu thập danh sách ảnh theo thứ tự ưu tiên `images` -> `coverImage` -> `imageUrl`, và ghép địa chỉ hành chính.
   Villa _mapWishlistJsonToVilla(Map<String, dynamic> json) {
     final listing = json['listing'] is Map<String, dynamic>
         ? json['listing'] as Map<String, dynamic>
@@ -338,16 +396,17 @@ class WishlistRepositoryImpl implements WishlistRepository {
       address = parts.join(', ');
     }
 
-    double rating = 5.0;
+    // CONFLICT-RESOLVED: Mặc định điểm đánh giá bằng 0.0 thay vì 5.0 giả định khi chỗ nghỉ chưa có đánh giá.
+    double rating = 0.0;
     int reviewCount = 0;
     if (listing['ratingSummary'] is Map) {
       final rs = listing['ratingSummary'] as Map<String, dynamic>;
-      rating = (rs['avgRating'] as num?)?.toDouble() ?? 5.0;
+      rating = (rs['avgRating'] as num?)?.toDouble() ?? 0.0;
       reviewCount = (rs['reviewCount'] as num?)?.toInt() ?? 0;
     } else {
       rating =
           ((listing['ratingAvg'] ?? listing['rating']) as num?)?.toDouble() ??
-              5.0;
+              0.0;
       reviewCount =
           ((listing['reviewCount'] ?? listing['review_count']) as num?)
                   ?.toInt() ??

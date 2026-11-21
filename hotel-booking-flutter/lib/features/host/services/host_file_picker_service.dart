@@ -10,12 +10,20 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/security/url_security_validator.dart';
 import '../domain/host_models.dart';
+// CONFLICT-RESOLVED: Giữ đồng thời export `HostPickedFile` từ nhánh refactor và `HostKycFileSource` từ `origin/develop`.
 import '../onboarding/host_onboarding_services.dart';
+
+export '../domain/host_models.dart' show HostPickedFile;
 export '../onboarding/host_onboarding_services.dart' show HostKycFileSource;
 import 'host_file_picker_web_stub.dart'
     if (dart.library.js_interop) 'host_file_picker_web.dart';
 
-/// Resolves the canonical MIME type from a file name and optional magic header bytes.
+/// Xác định kiểu MIME chính tắc của tệp dựa trên byte chữ ký đầu tệp (`headerBytes`) và phần mở rộng của `filename`.
+///
+/// Giải thuật nhận diện chữ ký nhị phân (Magic-Byte MIME Sniffing):
+/// Ưu tiên đối chiếu các byte đầu tiên (`FF D8 FF` cho JPEG, `89 50 4E 47` cho PNG,
+/// `47 49 46 38` cho GIF, `25 50 44 46` cho PDF, `RIFF....WEBP` cho WebP) nhằm chống
+/// giả mạo phần mở rộng tệp trước khi fallback về đuôi tệp của `filename`.
 String resolveHostFileMimeType(String filename, {Uint8List? headerBytes}) {
   if (headerBytes != null && headerBytes.length >= 4) {
     // JPEG: FF D8 FF
@@ -68,34 +76,42 @@ String resolveHostFileMimeType(String filename, {Uint8List? headerBytes}) {
   return 'application/octet-stream';
 }
 
-/// Service interface for selecting real files from the device.
+/// Hợp đồng dịch vụ chọn tệp thực tế từ thiết bị cho phân hệ Chủ nhà (KYC, ảnh chỗ nghỉ, ảnh đại diện).
 abstract class HostFilePickerService {
-  /// Picks a single KYC document (`JPG`, `PNG`, `WebP`, or `PDF`, max 5MB).
+  /// Chọn một chứng từ xác minh KYC (`JPG`, `PNG`, `WebP` hoặc `PDF`, dung lượng tối đa 5MB).
+  ///
+  /// Khi `imageOnly` là `true` (giấy tờ định danh cá nhân), giới hạn chỉ cho phép chọn ảnh `JPG`, `PNG`, `WebP`.
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = 'Chọn tài liệu xác minh',
+    // CONFLICT-RESOLVED: Kết hợp cờ giới hạn ảnh định danh `imageOnly` với nguồn chọn tệp `source` (camera, thư viện ảnh, tệp thiết bị).
+    bool imageOnly = false,
     HostKycFileSource source = HostKycFileSource.deviceFile,
   });
 
-  /// Picks one or more listing images (`JPG`, `PNG`, `WebP`, `GIF`, max 5MB each).
+  /// Chọn một hoặc nhiều ảnh chỗ nghỉ (`JPG`, `PNG`, `WebP`, `GIF`, tối đa `maxImages` ảnh, mỗi ảnh tối đa 5MB).
   Future<List<HostPickedFile>> pickListingImages({
     BuildContext? context,
     int maxImages = kMaxListingImagesCount,
   });
 
-  /// Picks a single image for avatar upload (`JPG`, `PNG`, `WebP`, `GIF`, max 5MB).
+  /// Chọn một ảnh đại diện cá nhân (`JPG`, `PNG`, `WebP`, `GIF`, tối đa 5MB).
   Future<HostPickedFile?> pickAvatarImage({
     BuildContext? context,
   });
 
-  /// Reads a real file from an absolute file path on disk.
+  /// Đọc trực tiếp nội dung và chữ ký MIME của tệp từ đường dẫn tuyệt đối `filePath` trên ổ đĩa cục bộ.
   Future<HostPickedFile> readFromFilePath(String filePath);
 }
 
-/// Default implementation that selects real files from the device filesystem
-/// using `file_picker` / `image_picker` across Web, Mobile, and Desktop, with
-/// native desktop OS dialog and local path selector modal fallbacks.
+/// Triển khai mặc định của `HostFilePickerService` hỗ trợ đa nền tảng (Web, Mobile, Desktop).
+///
+/// Giải thuật chọn tệp đa tầng chịu lỗi (Multi-Tier Fallback File Selection):
+/// 1. Ưu tiên gọi plugin `FilePicker` (tự động dự phòng sang `ImagePicker` nếu chỉ chọn ảnh).
+/// 2. Trên Desktop (Windows PowerShell WinForms, macOS `osascript`, Linux `zenity`), tự động mở hộp thoại hệ điều hành nếu plugin không khả dụng.
+/// 3. Cuối cùng dự phòng bằng hộp thoại nhập đường dẫn hoặc mở lại trình chọn tệp ngay trong ứng dụng.
 class DefaultHostFilePickerService implements HostFilePickerService {
+  /// Khởi tạo bộ chọn tệp mặc định cho Host.
   const DefaultHostFilePickerService();
 
   @override
@@ -148,9 +164,9 @@ class DefaultHostFilePickerService implements HostFilePickerService {
     return null;
   }
 
-  /// Attempts to pick files using `FilePicker.platform.pickFiles`.
-  /// Returns `null` if the plugin failed to initialize/execute, or a list of
-  /// [HostPickedFile] (empty if the user cancelled the native/browser dialog).
+  // Giải thuật chọn tệp qua `FilePicker.platform.pickFiles` kèm nhánh dự phòng `ImagePicker`:
+  // Trả về `null` khi plugin lỗi khởi tạo để luồng ngoài chuyển sang hộp thoại hệ điều hành,
+  // hoặc trả về danh sách rỗng khi người dùng chủ động nhấn Hủy hộp thoại.
   Future<List<HostPickedFile>?> _tryPickWithFilePickerPlugin({
     required bool allowMultiple,
     required String dialogTitle,
@@ -427,6 +443,8 @@ if (\$dlg.ShowDialog(\$topForm) -eq [System.Windows.Forms.DialogResult]::OK) {
   Future<HostPickedFile?> pickKycDocument({
     BuildContext? context,
     String title = 'Chọn tài liệu xác minh',
+    // CONFLICT-RESOLVED: Hợp nhất nhánh chụp ảnh trực tiếp (`cameraScan`) và chọn thư viện ảnh (`photoLibrary`) từ `origin/develop` với lọc định dạng `imageOnly` của nhánh refactor.
+    bool imageOnly = false,
     HostKycFileSource source = HostKycFileSource.deviceFile,
   }) async {
     if (source == HostKycFileSource.cameraScan) {
@@ -483,12 +501,16 @@ if (\$dlg.ShowDialog(\$topForm) -eq [System.Windows.Forms.DialogResult]::OK) {
       }
     }
 
-    const extensions = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
+    // Giải thuật giới hạn định dạng chọn tệp KYC theo loại chứng từ:
+    // Giấy tờ định danh (imageOnly = true) chỉ cho phép ảnh JPG, PNG, WebP khớp image/* của Backend.
+    final extensions = imageOnly
+        ? const ['jpg', 'jpeg', 'png', 'webp']
+        : const ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
     final pluginFiles = await _tryPickWithFilePickerPlugin(
       allowMultiple: false,
       dialogTitle: title,
       extensions: extensions,
-      isImageOnly: false,
+      isImageOnly: imageOnly,
     );
     if (pluginFiles != null) {
       return pluginFiles.isEmpty ? null : pluginFiles.first;
@@ -496,7 +518,8 @@ if (\$dlg.ShowDialog(\$topForm) -eq [System.Windows.Forms.DialogResult]::OK) {
 
     final paths = await _openNativeFileDialog(
       allowMultiple: false,
-      filterDescription: 'Tài liệu xác minh KYC',
+      filterDescription:
+          imageOnly ? 'Ảnh giấy tờ định danh KYC' : 'Tài liệu xác minh KYC',
       extensions: extensions,
     );
     if (paths.isNotEmpty) {
@@ -507,11 +530,12 @@ if (\$dlg.ShowDialog(\$topForm) -eq [System.Windows.Forms.DialogResult]::OK) {
       final dialogFiles = await _promptFilePathDialog(
         context,
         title: title,
-        hint:
-            'Chọn tệp thật từ thiết bị (JPG, PNG, WebP hoặc PDF, tối đa 5MB).',
+        hint: imageOnly
+            ? 'Chọn ảnh thật từ thiết bị (JPG, PNG hoặc WebP, tối đa 5MB).'
+            : 'Chọn tệp thật từ thiết bị (JPG, PNG, WebP hoặc PDF, tối đa 5MB).',
         allowMultiple: false,
         extensions: extensions,
-        isImageOnly: false,
+        isImageOnly: imageOnly,
       );
       return dialogFiles.isEmpty ? null : dialogFiles.first;
     }
@@ -599,17 +623,19 @@ if (\$dlg.ShowDialog(\$topForm) -eq [System.Windows.Forms.DialogResult]::OK) {
   }
 }
 
+/// Provider cung cấp thể hiện `HostFilePickerService` cho toàn bộ phân hệ Host.
 final hostFilePickerProvider = Provider<HostFilePickerService>((ref) {
   return const DefaultHostFilePickerService();
 });
 
-/// Result of a presigned R2 upload (`POST /api/uploads/presign` + `PUT <uploadUrl>`).
+/// Kết quả cấp phát liên kết tải lên trực tiếp Cloudflare R2 (`POST /api/uploads/presign` + `PUT <uploadUrl>`).
 class HostR2UploadResult {
   final String uploadUrl;
   final String publicUrl;
   final String key;
   final int expiresIn;
 
+  /// Khởi tạo thông tin presigned URL phục vụ tải tệp trực tiếp lên R2.
   const HostR2UploadResult({
     required this.uploadUrl,
     required this.publicUrl,
@@ -617,6 +643,7 @@ class HostR2UploadResult {
     this.expiresIn = 300,
   });
 
+  /// Giải mã và thẩm định an toàn bảo mật (`UrlSecurityValidator`) cho phản hồi presign từ Backend.
   factory HostR2UploadResult.fromPresignJson(Map<String, dynamic> json) {
     final data = json['data'] is Map<String, dynamic>
         ? json['data'] as Map<String, dynamic>
@@ -653,11 +680,14 @@ class HostR2UploadResult {
   }
 }
 
-/// Dedicated R2 uploader that sends raw bytes via `PUT` to the presigned URL
-/// WITHOUT attaching the API `Authorization: Bearer` header.
+/// Bộ tải tệp nhị phân trực tiếp lên Cloudflare R2 qua giao thức `PUT` presigned URL.
+///
+/// Sử dụng thể hiện `Dio` sạch độc lập nhằm đảm bảo tuyệt đối không đính kèm header
+/// `Authorization: Bearer` của API ứng dụng sang miền lưu trữ đám mây bên ngoài.
 class HostR2DirectUploader {
   final Dio _cleanDio;
 
+  /// Khởi tạo bộ tải trực tiếp R2 với tùy chọn `cleanDio` không chứa interceptor xác thực nội bộ.
   HostR2DirectUploader({Dio? cleanDio})
       : _cleanDio = cleanDio ??
             Dio(
@@ -668,8 +698,7 @@ class HostR2DirectUploader {
               ),
             );
 
-  /// Uploads [file] bytes directly to [presigned.uploadUrl] using HTTP `PUT`.
-  /// Never attaches `Authorization` header so API Bearer token is never leaked to R2.
+  /// Đẩy luồng byte của `file` trực tiếp lên `presigned` (`uploadUrl`) bằng phương thức HTTP `PUT` kèm cơ chế thử lại tối đa `maxRetries` lần.
   Future<HostR2UploadResult> putBytesToPresignedUrl({
     required HostPickedFile file,
     required HostR2UploadResult presigned,

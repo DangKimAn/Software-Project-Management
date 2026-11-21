@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu tài khoản ngân hàng nhận tiền của chủ nhà với số tài khoản mã hóa AES-256-GCM và băm tra cứu.
+ */
 import {
     CreationOptional,
     DataTypes,

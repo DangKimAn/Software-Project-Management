@@ -1,3 +1,6 @@
+/**
+ * Bộ điều phối HTTP xử lý tra cứu, phê duyệt giải ngân và từ chối hoàn tiền Khách đặt phòng (`modules/refunds`).
+ */
 import { RequestHandler } from "express";
 import { asyncHandler } from "../../common/async-handler";
 import { sendSuccess } from "../../common/http";

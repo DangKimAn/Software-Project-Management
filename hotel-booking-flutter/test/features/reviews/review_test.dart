@@ -115,15 +115,19 @@ void main() {
       expect(updatedFiveStarChip.side?.color, AppColors.primary);
     });
 
-    testWidgets('allows translating review comments and host replies and toggling back to original', (tester) async {
+    testWidgets(
+        'allows translating review comments and host replies and toggling back to original',
+        (tester) async {
       final reviews = [
         ReviewItem(
           id: 'rev-1',
           rating: 5.0,
-          comment: 'Không gian rộng rãi, tiện nghi cao cấp, phòng ốc thơm tho sạch sẽ. 10/10 điểm!',
+          comment:
+              'Không gian rộng rãi, tiện nghi cao cấp, phòng ốc thơm tho sạch sẽ. 10/10 điểm!',
           reviewerName: 'Nguyen Van A',
           reviewerAvatar: null,
-          hostReply: 'Cảm ơn bạn Long và đoàn đã ghé thăm, rất hân hạnh được đón tiếp bạn lần sau nhé!',
+          hostReply:
+              'Cảm ơn bạn Long và đoàn đã ghé thăm, rất hân hạnh được đón tiếp bạn lần sau nhé!',
           createdAt: DateTime(2026, 10, 27),
         ),
       ];
@@ -184,7 +188,9 @@ void main() {
       expect(find.textContaining('Không gian rộng rãi'), findsOneWidget);
     });
 
-    testWidgets('PropertyFaqSection dynamically localizes in Vietnamese, English, and Korean', (tester) async {
+    testWidgets(
+        'PropertyFaqSection dynamically localizes in Vietnamese, English, and Korean',
+        (tester) async {
       Widget buildFaqApp(Locale locale) {
         return MaterialApp(
           theme: AppTheme.lightTheme,
@@ -208,15 +214,19 @@ void main() {
       await tester.pumpWidget(buildFaqApp(const Locale('vi')));
       await tester.pumpAndSettle();
       expect(find.text('Quy định & Câu hỏi thường gặp'), findsOneWidget);
-      expect(find.text('Thời gian nhận và trả villa như thế nào?'), findsOneWidget);
-      expect(find.text('Quy định về tiếng ồn và sử dụng karaoke?'), findsOneWidget);
+      expect(find.text('Thời gian nhận và trả villa như thế nào?'),
+          findsOneWidget);
+      expect(find.text('Quy định về tiếng ồn và sử dụng karaoke?'),
+          findsOneWidget);
 
       // 2. English
       await tester.pumpWidget(buildFaqApp(const Locale('en')));
       await tester.pumpAndSettle();
       expect(find.text('House Rules & FAQ'), findsOneWidget);
-      expect(find.text('What are the check-in and check-out times?'), findsOneWidget);
-      expect(find.text('What are the noise and karaoke regulations?'), findsOneWidget);
+      expect(find.text('What are the check-in and check-out times?'),
+          findsOneWidget);
+      expect(find.text('What are the noise and karaoke regulations?'),
+          findsOneWidget);
 
       // 3. Korean
       await tester.pumpWidget(buildFaqApp(const Locale('ko')));

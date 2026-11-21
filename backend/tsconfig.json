@@ -11,6 +11,5 @@
         "strict": true,
         "skipLibCheck": true
     },
-    "include": ["src/**/*.ts", "src/**/*.d.ts"],
-    "exclude": ["src/tests/**/*"]
+    "include": ["src/**/*.ts", "src/**/*.d.ts"]
 }

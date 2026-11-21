@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_booking_flutter/app/di/providers.dart';
@@ -11,7 +12,7 @@ import 'package:hotel_booking_flutter/features/search/presentation/widgets/sourc
 import 'package:hotel_booking_flutter/features/trips/presentation/view_models/trips_view_model.dart';
 import 'package:hotel_booking_flutter/features/villas/domain/entities/villa.dart';
 import 'package:hotel_booking_flutter/features/villas/domain/entities/villa_specs.dart';
-import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_header.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -46,7 +47,12 @@ class _FakeNotificationsNotifier extends StateNotifier<NotificationsState>
 class _FakeRecentlyViewedNotifier
     extends StateNotifier<List<RecentlyViewedItem>>
     implements RecentlyViewedNotifier {
-  _FakeRecentlyViewedNotifier() : super(const []);
+  _FakeRecentlyViewedNotifier([super.initial = const []]);
+
+  @override
+  Future<void> clear() async {
+    state = const [];
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -527,6 +533,320 @@ void main() {
       expect(find.text('Bãi Sau'), findsNothing);
       expect(find.byTooltip('Bỏ chọn khách'), findsOneWidget);
       expect(find.byTooltip('Bỏ chọn ngày'), findsOneWidget);
+    });
+
+    testWidgets(
+        'Recently Viewed section renders horizontal cards like Popular Destinations, keeps Xóa lịch sử on the same row across viewports/scales, and clears on tap',
+        (tester) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      const sampleRecent = <RecentlyViewedItem>[
+        RecentlyViewedItem(
+          id: '101',
+          title: 'Seaside Sunset Homestay Vũng Tàu',
+          imageUrl: '',
+          location: '84 Hạ Long, Phường 2, Thành phố Vũng Tàu',
+          pricePerNight: 1200000,
+          rating: 5.0,
+        ),
+        RecentlyViewedItem(
+          id: '102',
+          title: 'Ocean Pearl Garden Villa',
+          imageUrl: '',
+          location: '15 Quang Trung, Phường 1, Thành phố Vũng Tàu',
+          pricePerNight: 3500000,
+          rating: 4.0,
+        ),
+        RecentlyViewedItem(
+          id: '103',
+          title: 'White Sand Pool Villa Bãi Sau',
+          imageUrl: '',
+          location: '28 Thi Sách, Vũng Tàu',
+          pricePerNight: 4800000,
+          rating: 4.9,
+        ),
+      ];
+
+      // 1. Verify zero overflow & single-row header alignment across 320–1200dp and textScale 1.0–1.6
+      for (final width in <double>[320, 360, 390, 430, 768, 1200]) {
+        for (final scale in <double>[1.0, 1.3, 1.6]) {
+          final errors = <String>[];
+          final prevOnError = FlutterError.onError;
+          FlutterError.onError = (details) {
+            errors.add(details.exceptionAsString());
+          };
+
+          try {
+            tester.view.physicalSize = Size(width, 900);
+            tester.view.devicePixelRatio = 1.0;
+
+            await tester.pumpWidget(
+              ProviderScope(
+                key: UniqueKey(),
+                overrides: [
+                  authNotifierProvider
+                      .overrideWith((ref) => _FakeAuthNotifier()),
+                  notificationsProvider
+                      .overrideWith((ref) => _FakeNotificationsNotifier()),
+                  activePendingBookingProvider.overrideWithValue(null),
+                  popularDestinationsProvider
+                      .overrideWith((ref) async => <Villa>[]),
+                  blogHighlightsProvider
+                      .overrideWith((ref) async => <BlogPost>[]),
+                  recentlyViewedProvider.overrideWith(
+                    (ref) => _FakeRecentlyViewedNotifier(sampleRecent),
+                  ),
+                ],
+                child: MaterialApp(
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                      textScaler: TextScaler.linear(scale),
+                    ),
+                    child: child!,
+                  ),
+                  home: const HomeScreen(),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+
+            final titleRect = tester.getRect(find.text('Đã xem gần đây'));
+            final clearBtnRect = tester.getRect(
+              find.byKey(const ValueKey<String>('clear-recently-viewed-btn')),
+            );
+
+            // Clear button MUST sit to the right of the title on the same row (never wrapped onto a new line below)
+            expect(
+              clearBtnRect.left >= titleRect.right ||
+                  clearBtnRect.center.dx > titleRect.center.dx,
+              isTrue,
+              reason:
+                  'Clear button should sit to the right of title at ${width}dp / scale $scale',
+            );
+            expect(
+              clearBtnRect.top < titleRect.bottom,
+              isTrue,
+              reason:
+                  'Clear button must stay on the same row (not wrap below title) at ${width}dp / scale $scale',
+            );
+          } finally {
+            FlutterError.onError = prevOnError;
+          }
+
+          expect(
+            errors,
+            isEmpty,
+            reason:
+                'Expected zero layout errors in Recently Viewed at ${width}dp / scale $scale, got: ${errors.join("; ")}',
+          );
+        }
+      }
+
+      // 2. Verify horizontal card layout, `<` / `>` carousel buttons, and tapping clear button
+      tester.view.physicalSize = const Size(390, 900);
+      tester.view.devicePixelRatio = 1.0;
+      final recentNotifier = _FakeRecentlyViewedNotifier(sampleRecent);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          key: UniqueKey(),
+          overrides: [
+            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier()),
+            notificationsProvider
+                .overrideWith((ref) => _FakeNotificationsNotifier()),
+            activePendingBookingProvider.overrideWithValue(null),
+            popularDestinationsProvider.overrideWith((ref) async => <Villa>[]),
+            blogHighlightsProvider.overrideWith((ref) async => <BlogPost>[]),
+            recentlyViewedProvider.overrideWith((ref) => recentNotifier),
+          ],
+          child: const MaterialApp(
+            home: HomeScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final horizontalScroll = find.byKey(
+        const ValueKey<String>('recently-viewed-horizontal-scroll'),
+      );
+      expect(horizontalScroll, findsOneWidget);
+      final scrollWidget =
+          tester.widget<SingleChildScrollView>(horizontalScroll);
+      expect(scrollWidget.scrollDirection, Axis.horizontal);
+
+      // First two cards sit side-by-side horizontally (same top Y, card1 left < card2 left)
+      final card1Pos =
+          tester.getTopLeft(find.text('Seaside Sunset Homestay Vũng Tàu'));
+      final card2Pos = tester.getTopLeft(find.text('Ocean Pearl Garden Villa'));
+      expect((card1Pos.dy - card2Pos.dy).abs(), lessThan(2.0));
+      expect(card1Pos.dx, lessThan(card2Pos.dx));
+
+      // Carousel nav buttons are rendered when > 2 items
+      expect(find.byTooltip('Căn đã xem trước'), findsOneWidget);
+      expect(find.byTooltip('Căn đã xem tiếp theo'), findsOneWidget);
+
+      // Tap clear button and verify section disappears
+      final clearBtn = find.byKey(
+        const ValueKey<String>('clear-recently-viewed-btn'),
+      );
+      await tester.ensureVisible(clearBtn);
+      await tester.tap(clearBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Đã xem gần đây'), findsNothing);
+      expect(recentNotifier.state, isEmpty);
+    });
+
+    testWidgets(
+        'Blog Highlights cards truncate long title and excerpt with ellipsis (maxLines 2) without vertical clipping across viewports and textScale 1.0–2.0',
+        (tester) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      const longPost = BlogPost(
+        id: 'blog-vt-1',
+        slug: 'kinh-nghiem-chon-thue-biet-thu-vung-tau',
+        title:
+            'Kinh nghiệm chọn thuê biệt thự nghỉ dưỡng Vũng Tàu cho gia đình đông người dịp cuối tuần',
+        excerpt:
+            'Những tiêu chí quan trọng khi đặt villa: hồ bơi riêng, tiện ích BBQ, vị trí sát biển và độ uy tín của chủ nhà để kỳ nghỉ trọn vẹn.',
+        content: 'Nội dung chi tiết bài viết.',
+        coverImage: '',
+        category: 'Review Villa & Homestay',
+        readTime: '7 phút đọc',
+        location: 'Bãi Sau, Thành phố Vũng Tàu',
+        authorName: 'Minh Thanh Villa',
+        publishedAt: '2026-10-20',
+      );
+
+      for (final width in <double>[320, 360, 390, 430, 768, 1200]) {
+        for (final scale in <double>[1.0, 1.3, 1.6, 2.0]) {
+          final errors = <String>[];
+          final prevOnError = FlutterError.onError;
+          FlutterError.onError = (details) {
+            errors.add(details.toString());
+          };
+
+          try {
+            tester.view.physicalSize = Size(width, 1000);
+            tester.view.devicePixelRatio = 1.0;
+
+            await tester.pumpWidget(
+              ProviderScope(
+                key: UniqueKey(),
+                overrides: [
+                  authNotifierProvider
+                      .overrideWith((ref) => _FakeAuthNotifier()),
+                  notificationsProvider
+                      .overrideWith((ref) => _FakeNotificationsNotifier()),
+                  activePendingBookingProvider.overrideWithValue(null),
+                  popularDestinationsProvider
+                      .overrideWith((ref) async => <Villa>[]),
+                  blogHighlightsProvider
+                      .overrideWith((ref) async => const <BlogPost>[longPost]),
+                  recentlyViewedProvider
+                      .overrideWith((ref) => _FakeRecentlyViewedNotifier()),
+                ],
+                child: MaterialApp(
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                      textScaler: TextScaler.linear(scale),
+                    ),
+                    child: child!,
+                  ),
+                  home: const HomeScreen(),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+
+            final cardFinder = find.byKey(
+              const ValueKey<String>(
+                'home-blog-card-kinh-nghiem-chon-thue-biet-thu-vung-tau',
+              ),
+            );
+            await tester.scrollUntilVisible(
+              cardFinder,
+              250,
+              scrollable: find
+                  .descendant(
+                    of: find.byType(CustomScrollView),
+                    matching: find.byType(Scrollable),
+                  )
+                  .first,
+            );
+            await tester.pumpAndSettle();
+
+            final titleFinder = find.descendant(
+              of: cardFinder,
+              matching: find.text(longPost.title),
+            );
+            final excerptFinder = find.descendant(
+              of: cardFinder,
+              matching: find.text(longPost.excerpt),
+            );
+
+            expect(titleFinder, findsOneWidget);
+            expect(excerptFinder, findsOneWidget);
+
+            final titleWidget = tester.widget<Text>(titleFinder);
+            final excerptWidget = tester.widget<Text>(excerptFinder);
+            expect(titleWidget.maxLines, 2);
+            expect(titleWidget.overflow, TextOverflow.ellipsis);
+            expect(excerptWidget.maxLines, 2);
+            expect(excerptWidget.overflow, TextOverflow.ellipsis);
+
+            // RenderParagraph height must NEVER be clamped smaller than laid-out textSize.height
+            final titleRender = tester.renderObject<RenderParagraph>(
+              find.descendant(
+                of: titleFinder,
+                matching: find.byType(RichText),
+              ),
+            );
+            final excerptRender = tester.renderObject<RenderParagraph>(
+              find.descendant(
+                of: excerptFinder,
+                matching: find.byType(RichText),
+              ),
+            );
+
+            expect(
+              titleRender.size.height + 0.5,
+              greaterThanOrEqualTo(titleRender.textSize.height),
+              reason:
+                  'Blog title was vertically clipped at ${width}dp / scale $scale',
+            );
+            expect(
+              excerptRender.size.height + 0.5,
+              greaterThanOrEqualTo(excerptRender.textSize.height),
+              reason:
+                  'Blog excerpt was vertically clipped at ${width}dp / scale $scale',
+            );
+            expect(
+              excerptRender.didExceedMaxLines,
+              isTrue,
+              reason:
+                  'Long blog excerpt should truncate with ellipsis at 2 lines at ${width}dp / scale $scale',
+            );
+          } finally {
+            FlutterError.onError = prevOnError;
+          }
+
+          expect(
+            errors,
+            isEmpty,
+            reason:
+                'Expected zero layout errors in HomeScreen Blog Highlights at ${width}dp / scale $scale, got: ${errors.join("; ")}',
+          );
+        }
+      }
     });
   });
 }

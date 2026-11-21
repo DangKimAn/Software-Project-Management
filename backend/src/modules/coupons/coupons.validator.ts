@@ -1,3 +1,8 @@
+/**
+ * Lược đồ kiểm chứng dữ liệu đầu vào bằng Zod cho phân hệ mã giảm giá (`coupons`):
+ * - Ràng buộc quy tắc mã code chuẩn hóa, loại giảm giá (phần trăm/số tiền cố định), ngưỡng đơn tối thiểu, giới hạn lượt dùng và tính hợp lệ của khoảng ngày hiệu lực.
+ */
+
 import { z } from "zod";
 
 const decimalStringSchema = z
@@ -18,12 +23,18 @@ const isoDateTimeSchema = z
     .trim()
     .refine((value) => !Number.isNaN(new Date(value).getTime()), "date must be a valid ISO datetime");
 
+/**
+ * Schema kiểm chứng tham số truy vấn khi khách kiểm tra mã giảm giá trên giá trị đơn hàng.
+ */
 export const validateCouponQuerySchema = z.object({
     code: couponCodeSchema,
     bookingAmount: decimalStringSchema,
     listingId: z.coerce.number().int().positive().optional(),
 });
 
+/**
+ * Schema kiểm chứng bộ lọc tìm kiếm và phân trang danh sách mã giảm giá quản trị.
+ */
 export const couponListQuerySchema = z.object({
     active: z
         .enum(["true", "false"])
@@ -76,8 +87,14 @@ const validateCouponShape = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
         }
     });
 
+/**
+ * Schema kiểm chứng toàn vẹn dữ liệu tạo mới mã giảm giá (mức giảm, trần giảm, ngày bắt đầu/kết thúc, giới hạn lượt dùng).
+ */
 export const createCouponBodySchema = validateCouponShape(z.object(couponWritableFields));
 
+/**
+ * Schema kiểm chứng dữ liệu cập nhật mã giảm giá đảm bảo tính nhất quán giữa loại giảm giá và khoảng thời gian hiệu lực.
+ */
 export const updateCouponBodySchema = validateCouponShape(
     z
         .object(couponWritableFields)
@@ -87,6 +104,9 @@ export const updateCouponBodySchema = validateCouponShape(
         }),
 );
 
+/**
+ * Schema kiểm chứng tham số đường dẫn `couponId` nguyên dương.
+ */
 export const couponIdParamSchema = z.object({
     couponId: z.coerce.number().int().positive(),
 });

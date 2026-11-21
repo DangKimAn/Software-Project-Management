@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../app/theme/app_colors.dart';
 
+/// Bộ ánh xạ biểu tượng ngữ nghĩa và biểu trưng thương hiệu tập trung trên toàn ứng dụng.
+///
+/// Đảm bảo mọi tiện ích, tùy chọn sắp xếp và điều hướng đều hiển thị đúng biểu tượng nét mảnh đơn sắc,
+/// không đặt vòng tròn màu hay hộp trang trí dư thừa quanh biểu tượng.
+///
 /// Centralized semantic & brand icon helper for the entire project.
 ///
 /// Guarantees:
@@ -36,6 +41,12 @@ class AppSemanticIcons {
   static const IconData checkIn = LucideIcons.keyRound;
   static const IconData checkOut = LucideIcons.clock;
 
+  /// Phân giải biểu tượng `LucideIcons` ngữ nghĩa tương ứng cho mọi mã hoặc nhãn tiện ích tiếng Việt `nameOrCode`.
+  ///
+  /// Giải thuật đối sánh từ khóa có thứ tự ưu tiên:
+  /// Kiểm tra nhóm từ khóa đặc thù (`bbq`, `nướng`, `lò sưởi`) trước nhóm bao hàm rộng (`bếp`, `sân vườn`)
+  /// để các cụm từ ghép như `"Bếp nướng BBQ sân vườn"` luôn nhận đúng biểu tượng ngọn lửa thay vì bị nuốt bởi từ khóa chung.
+  ///
   /// Resolves the exact semantic icon for any villa amenity code or Vietnamese label
   /// (matching `ListingDetailPage.tsx` `getAmenityIcon` + `filterOptions.ts`).
   static IconData resolveAmenityIcon(String nameOrCode) {
@@ -221,6 +232,8 @@ class AppSemanticIcons {
     return LucideIcons.circleCheck;
   }
 
+  /// Phân giải biểu tượng ngữ nghĩa tương ứng cho mã tùy chọn sắp xếp `sortValue`.
+  ///
   /// Resolves the exact semantic icon for sort options (`filterOptions.ts`).
   static IconData resolveSortIcon(String sortValue) {
     switch (sortValue) {
@@ -242,11 +255,19 @@ class AppSemanticIcons {
   }
 }
 
+/// Widget biểu trưng thương hiệu vector nét mảnh dành cho Minh Thanh Villa / The Palm Villa, Google và các mạng xã hội.
+///
+/// Bọc các bộ vẽ `CustomPainter` chuẩn hóa trên hệ lưới `24x24` hoặc `48x48` để giữ độ sắc nét đồng nhất ở mọi mật độ điểm ảnh.
+///
 /// Monochrome neutral stroke brand icons for The Palm Villa, Google, TikTok,
 /// Threads, YouTube, Facebook, and Instagram.
 class AppBrandIcon extends StatelessWidget {
   final _BrandType _type;
+
+  /// Kích thước cạnh vuông của biểu trưng tính bằng điểm ảnh logic.
   final double size;
+
+  /// Màu nét vẽ đơn sắc áp dụng cho biểu trưng.
   final Color color;
 
   /// The Palm Villa palm tree mark (`assets/icons/app_icon.png`) rendered in
@@ -401,6 +422,7 @@ enum _BrandType {
   instagram,
 }
 
+/// Bộ vẽ vector nét mảnh biểu trưng YouTube trên hệ lưới chuẩn `24x24`.
 class _YouTubeStrokePainter extends CustomPainter {
   final Color color;
 
@@ -408,6 +430,9 @@ class _YouTubeStrokePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Giải thuật vẽ khung màn hình bo góc và tam giác phát trung tâm (24x24 Normalized Vector Geometry):
+    // Co giãn hệ tọa độ theo tỷ lệ s = size.width / 24.0, dựng hình chữ nhật bo góc RRect (20x15, bán kính 4.2s)
+    // làm thân màn hình và khép kín đường gấp khúc 3 đỉnh (10, 9.2) -> (15.2, 12) -> (10, 14.8) làm nút Play.
     final s = size.width / 24.0;
     final paint = Paint()
       ..color = color
@@ -437,6 +462,7 @@ class _YouTubeStrokePainter extends CustomPainter {
       oldDelegate.color != color;
 }
 
+/// Bộ vẽ vector nét mảnh chữ `'f'` biểu trưng Facebook trên hệ lưới chuẩn `24x24`.
 class _FacebookStrokePainter extends CustomPainter {
   final Color color;
 
@@ -444,6 +470,9 @@ class _FacebookStrokePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Giải thuật vẽ đường bao chữ 'f' khép kín bằng cung tròn tiếp tuyến (Arc-Segment Outline Path):
+    // Chuẩn hóa tỷ lệ s = size.width / 24.0, kết hợp hai cung tròn arcToPoint bán kính 5s (vai ngoài ngược chiều kim đồng hồ)
+    // và 1s (góc lượn trong cùng chiều kim đồng hồ) nối với thanh ngang cắt thân chữ tại tung độ y = 10s..14s.
     final s = size.width / 24.0;
     final paint = Paint()
       ..color = color
@@ -488,6 +517,7 @@ class _FacebookStrokePainter extends CustomPainter {
       oldDelegate.color != color;
 }
 
+/// Bộ vẽ vector nét mảnh biểu trưng máy ảnh Instagram trên hệ lưới chuẩn `24x24`.
 class _InstagramStrokePainter extends CustomPainter {
   final Color color;
 
@@ -495,6 +525,9 @@ class _InstagramStrokePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Giải thuật vẽ thân máy ảnh vuông bo góc đồng tâm và chấm kính ngắm (Concentric Camera Glyph):
+    // Vẽ khung vuông bo góc RRect (20x20, bán kính 5s), vòng tròn ống kính tâm (12s, 12s) bán kính 4s bằng nét stroke,
+    // và chấm đặc đèn báo góc trên phải tại tọa độ (17.5s, 6.5s) bán kính 1.1s.
     final s = size.width / 24.0;
     final paint = Paint()
       ..color = color
@@ -520,6 +553,7 @@ class _InstagramStrokePainter extends CustomPainter {
       oldDelegate.color != color;
 }
 
+/// Bộ vẽ vector chữ `'G'` Google phiên bản nét mảnh đơn sắc đồng bộ hệ thống biểu tượng tối giản.
 class _GoogleGStrokePainter extends CustomPainter {
   final Color color;
 
@@ -527,6 +561,9 @@ class _GoogleGStrokePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Giải thuật vẽ cung lượng giác chữ 'G' hở góc phần tư thứ nhất và thanh ngang xuyên tâm:
+    // Quét cung tròn từ góc 0 rad một lượng 1.72 * pi rad (~310 độ) để chừa khe hở ~50 độ phía trên bên phải,
+    // sau đó nối đoạn thẳng ngang từ tâm (center.dx, center.dy) ra biên phải (center.dx + radius, center.dy).
     final stroke = math.max(1.75, size.width * 0.1);
     final paint = Paint()
       ..color = color
@@ -555,11 +592,15 @@ class _GoogleGStrokePainter extends CustomPainter {
       oldDelegate.color != color;
 }
 
+/// Bộ vẽ biểu trưng chữ `'G'` 4 màu chuẩn nhận diện Google Identity dành riêng cho nút Đăng nhập bằng Google.
 class _GoogleOfficialLogoPainter extends CustomPainter {
   const _GoogleOfficialLogoPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Giải thuật ghép 4 miền cong Bezier bậc ba trên không gian chuẩn 48x48 (Multi-Segment Cubic Bezier Logo):
+    // Căn giữa khung vuông cạnh min(width, height), chuẩn hóa hệ số s = side / 48.0, rồi lần lượt tô đặc 4 mảnh
+    // Đỏ (cung đỉnh), Xanh dương (thanh ngang + cung phải), Vàng (cung trái) và Xanh lá (cung đáy) bằng các đường cubicTo khép kín.
     final side = math.min(size.width, size.height);
     final s = side / 48.0;
     final dx = (size.width - side) / 2.0;
@@ -642,6 +683,7 @@ class _GoogleOfficialLogoPainter extends CustomPainter {
   bool shouldRepaint(covariant _GoogleOfficialLogoPainter oldDelegate) => false;
 }
 
+/// Bộ vẽ vector nét mảnh nốt nhạc biểu trưng TikTok theo tỷ lệ khung nhìn chuẩn hóa.
 class _TikTokStrokePainter extends CustomPainter {
   final Color color;
 
@@ -649,6 +691,9 @@ class _TikTokStrokePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Giải thuật vẽ thân nốt nhạc kết hợp cung tròn kép và cờ uốn Bezier bậc hai:
+    // Kẻ trục dọc tại x = 0.58w từ 0.14h xuống 0.66h, nối hai cung tròn bán kính 0.17w tạo bầu nốt nhạc bên dưới,
+    // rồi vẽ lá cờ uốn mềm phía trên đỉnh qua đường cong quadraticBezierTo tới điểm cuối (0.84w, 0.36h).
     final stroke = math.max(1.7, size.width * 0.095);
     final paint = Paint()
       ..color = color

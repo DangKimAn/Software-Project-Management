@@ -9,7 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../../app/theme/app_colors.dart';
-import '../../shared/widgets/app_header_footer.dart';
+import '../../shared/widgets/app_header.dart';
 import '../logging/app_logger.dart';
 import '../network/socket_service.dart';
 import 'device_token_repository.dart';

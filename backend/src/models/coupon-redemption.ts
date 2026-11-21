@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu lịch sử áp dụng và tiêu thụ mã giảm giá gắn với từng đơn đặt phòng và người dùng.
+ */
 import {
     CreationOptional,
     DataTypes,

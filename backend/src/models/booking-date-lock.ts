@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý khóa ngày lưu trú mức cơ sở dữ liệu chống đặt trùng phòng (double-booking) theo từng đêm [checkIn, checkOut).
+ */
 import {
     CreationOptional,
     DataTypes,

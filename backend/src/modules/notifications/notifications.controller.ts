@@ -1,3 +1,8 @@
+/**
+ * Bộ điều phối HTTP quản lý hộp thư thông báo trong ứng dụng và thiết bị nhận Push Notification (`notifications`):
+ * - Hỗ trợ phân trang danh sách thông báo, đánh dấu đã đọc từng mục/tất cả và đăng ký/hủy đăng ký mã FCM device token của thiết bị.
+ */
+
 import type { RequestHandler } from "express";
 
 import { ApiError } from "../../common/api-error";
@@ -25,6 +30,9 @@ const toBoolean = (value: unknown) =>
     value === "1" ||
     value === 1;
 
+/**
+ * Liệt kê phân trang thông báo của người dùng kèm bộ lọc chưa đọc.
+ */
 export const getMyNotifications: RequestHandler = asyncHandler(async (req, res) => {
     const query: ListNotificationsQuery = {
         page: toPositiveInteger(req.query.page),
@@ -38,6 +46,9 @@ export const getMyNotifications: RequestHandler = asyncHandler(async (req, res) 
     });
 });
 
+/**
+ * Đánh dấu một thông báo cụ thể của người dùng sang trạng thái đã đọc.
+ */
 export const markMyNotificationRead: RequestHandler = asyncHandler(async (req, res) => {
     const notificationId = toPositiveInteger(req.params.id);
 
@@ -53,6 +64,9 @@ export const markMyNotificationRead: RequestHandler = asyncHandler(async (req, r
     });
 });
 
+/**
+ * Đánh dấu đồng loạt toàn bộ thông báo chưa đọc của người dùng thành đã đọc.
+ */
 export const markAllMyNotificationsRead: RequestHandler = asyncHandler(async (req, res) => {
     const result = await markAllNotificationsRead(req.user!);
 
@@ -62,6 +76,9 @@ export const markAllMyNotificationsRead: RequestHandler = asyncHandler(async (re
     });
 });
 
+/**
+ * Đăng ký hoặc làm mới mã thiết bị FCM để nhận thông báo đẩy cho tài khoản hiện tại.
+ */
 export const registerMyDeviceToken: RequestHandler = asyncHandler(async (req, res) => {
     const userId = Number(req.user?.id);
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -79,6 +96,9 @@ export const registerMyDeviceToken: RequestHandler = asyncHandler(async (req, re
     });
 });
 
+/**
+ * Hủy kích hoạt mã thiết bị FCM khi người dùng đăng xuất hoặc tắt nhận thông báo đẩy.
+ */
 export const unregisterMyDeviceToken: RequestHandler = asyncHandler(async (req, res) => {
     const userId = Number(req.user?.id);
     const body = (req.body ?? {}) as Record<string, unknown>;

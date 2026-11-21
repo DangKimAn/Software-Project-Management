@@ -1,3 +1,6 @@
+/**
+ * Dịch vụ nghiệp vụ đối soát, giải ngân hoàn tiền tự động và từ chối yêu cầu hoàn tiền Khách đặt phòng (`refunds.service`).
+ */
 import { Op } from "sequelize";
 import sequelize from "../../config/database";
 import { ApiError } from "../../common/api-error";
@@ -5,7 +8,8 @@ import { AuthenticatedUser } from "../auth/auth.service";
 import Booking from "../../models/booking";
 import Refund, { RefundStatus } from "../../models/refund";
 import { executeDisbursement } from "../disbursement/disbursement.service";
-import { writeAuditLog } from "../../services/audit-log-service";
+// CONFLICT-RESOLVED: Trỏ import ghi nhật ký kiểm toán về đường dẫn chuẩn `../../services/audit-log.service`.
+import { writeAuditLog } from "../../services/audit-log.service";
 import { notifyRefundSucceeded, notifyRefundRejected } from "../notifications/notification.service";
 
 export type AdminRefundListQuery = {

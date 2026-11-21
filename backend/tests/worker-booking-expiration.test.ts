@@ -14,9 +14,9 @@ const Payment = require("../dist/models/payment").default;
 const Refund = require("../dist/models/refund").default;
 const BookingDateLock = require("../dist/models/booking-date-lock").default;
 const BookingStatusHistory = require("../dist/models/booking-status-history").default;
-const bookingDateLockService = require("../dist/services/booking-date-lock.service");
+const bookingDateLockService = require("../dist/modules/bookings/booking-date-lock.service");
 const notificationService = require("../dist/modules/notifications/notification.service");
-const expirationService = require("../dist/services/booking-expiration.service");
+const expirationService = require("../dist/modules/bookings/booking-expiration.service");
 const { logger } = require("../dist/config/logger");
 
 const originals: PatchEntry[] = [];

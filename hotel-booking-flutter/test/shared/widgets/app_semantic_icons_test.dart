@@ -78,7 +78,7 @@ void main() {
         'lib/features/host/presentation/screens/host_onboarding_screens.dart',
       ).readAsStringSync();
       final addProperty = File(
-        'lib/features/host/presentation/screens/them_cho_nghi_screen.dart',
+        'lib/features/host/presentation/screens/host_listing_form_screen.dart',
       ).readAsStringSync();
 
       expect(hostOnboarding.contains('LucideIcons.alertTriangle'), isFalse);

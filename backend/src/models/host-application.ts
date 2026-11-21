@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize lưu hồ sơ đăng ký trở thành chủ nhà (KYC) và trạng thái xét duyệt của quản trị viên.
+ */
 import {
     CreationOptional,
     DataTypes,

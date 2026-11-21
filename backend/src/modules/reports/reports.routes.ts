@@ -1,3 +1,8 @@
+/**
+ * Định tuyến HTTP báo cáo vi phạm và thống kê phân tích cho người dùng, chủ nhà (`hostReportsRouter`) và quản trị viên (`adminReportsRouter`):
+ * - Kết hợp xác thực `authenticate`, phân quyền vai trò tương ứng (`host`/`admin`) và giới hạn tần suất gửi báo cáo (`Limiter`).
+ */
+
 import express from "express";
 import { body, param, query } from "express-validator";
 

@@ -7,15 +7,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/di/providers.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_typography.dart';
-import 'app_header_footer.dart';
+import 'app_notification_bell.dart';
 
+/// Phân loại biểu tượng hình học nét mảnh và sắc thái kính mờ pastel cho từng nhóm thông báo nghiệp vụ.
+///
 /// Visual palette and slender vector glyph for each notification category,
 /// modeled after the frosted-glass capsule notification template while
 /// preserving 100% of existing notification text and business logic.
 enum NotificationVisualKind {
+  /// Bong bóng hội thoại tròn dành cho tin nhắn mới, bình luận và đánh giá.
   chatBubble,
+
+  /// Đồng hồ báo thức đôi chuông dành cho đơn đặt phòng chờ thanh toán, nhắc lịch hoặc hoàn hủy.
   alarmClock,
+
+  /// Bánh răng 8 răng bo tròn dành cho sự kiện hệ thống, duyệt hồ sơ chủ nhà và tin đăng quản trị.
   settingsCog,
+
+  /// Chuông thông báo nghiêng 33 độ dành cho các cập nhật chung khác.
   tiltedBell,
 }
 
@@ -66,6 +75,7 @@ class _NotificationVisualStyle {
     iconColor: Color(0xFFA96E08),
   );
 
+  /// Phân giải bảng màu kính mờ và kiểu biểu tượng `NotificationVisualKind` tương ứng với loại sự kiện của `item`.
   static _NotificationVisualStyle resolveFor(AppNotificationItem item) {
     final eType = item.eventType.trim().toLowerCase();
     final tType = (item.targetType ?? '').trim().toLowerCase();
@@ -103,17 +113,36 @@ class _NotificationVisualStyle {
   }
 }
 
+/// Nút chuông thông báo dạng đĩa kính mờ ngọc trai (`BackdropFilter` khi nổi trên ảnh bìa) kèm huy hiệu đếm tin chưa đọc.
+///
+/// Bao bọc bộ vẽ `_SlenderHeaderBellPainter` nét mảnh và tự động cắt tròn hiệu ứng làm mờ hậu cảnh qua `ClipOval`
+/// khi đặt ở chế độ nổi `isOverlayTop`.
+///
 /// Circular frosted pearl-glass trigger button with slender bell outline
 /// and glossy crimson-rose unread counter badge.
 class GlassNotificationBellButton extends StatefulWidget {
+  /// Số lượng thông báo chưa đọc (hiển thị `'99+'` nếu vượt quá `99`).
   final int unreadCount;
+
+  /// Cho biết nút chuông đang đặt nổi trên nền ảnh tối ở đỉnh Trang chủ để bật kính mờ xuyên thấu.
   final bool isOverlayTop;
+
+  /// Hàm gọi lại khi người dùng bấm mở hoặc đóng ngăn thông báo.
   final VoidCallback onTap;
+
+  /// Đường kính đĩa tròn kính mờ chứa biểu tượng chuông.
   final double discDiameter;
+
+  /// Chiều rộng vùng chạm tương tác bao ngoài.
   final double boxWidth;
+
+  /// Chiều cao vùng chạm tương tác bao ngoài (mặc định `48px` chuẩn trợ năng).
   final double boxHeight;
+
+  /// Nhãn đọc màn hình trợ năng `Semantics` cho nút chuông.
   final String semanticsLabel;
 
+  /// Khởi tạo nút chuông kính mờ `GlassNotificationBellButton`.
   const GlassNotificationBellButton({
     super.key,
     required this.unreadCount,
@@ -193,9 +222,7 @@ class _GlassNotificationBellButtonState
         child: CustomPaint(
           size: Size(iconSize, iconSize),
           painter: _SlenderHeaderBellPainter(
-            color: widget.isOverlayTop
-                ? Colors.white
-                : const Color(0xFF3A3E47),
+            color: widget.isOverlayTop ? Colors.white : const Color(0xFF3A3E47),
           ),
         ),
       ),
@@ -287,6 +314,8 @@ class _GlassNotificationBellButtonState
   }
 }
 
+/// Hiển thị lớp phủ thông báo dạng viên nang kính mờ nổi trên nền làm mờ toàn màn hình, tôn trọng cài đặt giảm chuyển động.
+///
 /// Opens the frosted-glass floating capsule notification overlay while keeping
 /// all existing notification text, mark-as-read actions, and navigation intact.
 Future<void> showGlassNotificationsOverlay({
@@ -455,7 +484,8 @@ class _GlassNotificationsModal extends ConsumerWidget {
                           Flexible(
                             child: notifState.items.isEmpty
                                 ? Padding(
-                                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+                                    padding: const EdgeInsets.fromLTRB(
+                                        14, 8, 14, 14),
                                     child: _EmptyNotificationGlassCard(
                                       label: isEn
                                           ? 'No new notifications.'
@@ -778,9 +808,8 @@ class _NotificationGlassCapsuleCardState
                           fontFamily: AppTypography.primaryFontFamily,
                           fontFamilyFallback: AppTypography.fontFallbacks,
                           fontSize: 15,
-                          fontWeight: item.isRead
-                              ? FontWeight.w500
-                              : FontWeight.w600,
+                          fontWeight:
+                              item.isRead ? FontWeight.w500 : FontWeight.w600,
                           letterSpacing: -0.22,
                           height: 1.24,
                           color: item.isRead
@@ -876,6 +905,8 @@ class _NotificationGlassCapsuleCardState
   }
 }
 
+/// Huy hiệu kính tròn hai lớp viền sáng phản quang đồng tâm bao quanh bộ vẽ biểu tượng vector `_SlenderNotificationGlyphPainter`.
+///
 /// Jewel-like pastel circular glass badge with concentric outer frost rim
 /// and slender 1.55px custom-drawn vector icon.
 class _PastelGlassIconBadge extends StatelessWidget {
@@ -935,6 +966,9 @@ class _PastelGlassIconBadge extends StatelessWidget {
   }
 }
 
+/// Bộ vẽ 4 biểu tượng vector nét mảnh (`1.55px` trên lưới `24x24`) cho từng nhóm thông báo:
+/// bong bóng hội thoại, đồng hồ báo thức, bánh răng 8 răng và chuông nghiêng.
+///
 /// Ultra-clean slender stroke painter (1.55px on 24x24 grid) matching the
 /// 4 template icons: rounded speech bubble, alarm clock, 8-tooth cog, tilted bell.
 class _SlenderNotificationGlyphPainter extends CustomPainter {
@@ -948,6 +982,9 @@ class _SlenderNotificationGlyphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Giải thuật vẽ biểu tượng thông báo đa hình học chuẩn hóa trên không gian 24x24:
+    // Tính hệ số tỷ lệ s = size.width / 24.0, khởi tạo bút stroke đầu tròn (StrokeCap.round / StrokeJoin.round)
+    // với độ dày tối thiểu 1.35px để giữ nét mảnh thanh thoát, sau đó điều phối sang hàm dựng hình tương ứng với kind.
     final s = size.width / 24.0;
     final paint = Paint()
       ..color = color
@@ -968,7 +1005,11 @@ class _SlenderNotificationGlyphPainter extends CustomPainter {
     }
   }
 
+  /// Vẽ bong bóng hội thoại elip nối liền đuôi nhọn góc dưới trái bằng cung lượng giác và đường cong Bezier bậc hai.
   void _paintChatBubble(Canvas canvas, double s, Paint paint) {
+    // Giải thuật dựng đường bao elip hở và đuôi nhọn Bezier bậc hai:
+    // Quét cung elip từ góc 2.62 rad (~150 độ) một góc 5.66 rad (~324 độ), sau đó nối hai nhánh quadraticBezierTo
+    // hội tụ về đỉnh đuôi (4.9s, 18.3s) và khép kín mượt về điểm xuất phát (startX, startY).
     final rect = Rect.fromCenter(
       center: Offset(12.2 * s, 11.6 * s),
       width: 15.8 * s,
@@ -991,7 +1032,11 @@ class _SlenderNotificationGlyphPainter extends CustomPainter {
     canvas.drawPath(fullBubble, paint);
   }
 
+  /// Vẽ đồng hồ báo thức gồm mặt tròn trung tâm, cặp tai chuông cong đối xứng và kim chỉ giờ phút.
   void _paintAlarmClock(Canvas canvas, double s, Paint paint) {
+    // Giải thuật dựng hình đồng hồ báo thức:
+    // Vẽ đường tròn thân đồng hồ bán kính 6.9s tại tâm (12s, 13s), dựng hai cung tai chuông đối xứng qua trục x = 12s
+    // bằng quadraticBezierTo, và kẻ hai đoạn thẳng vuông góc mềm từ tâm biểu diễn kim giờ - kim phút.
     // Clock body circle
     canvas.drawCircle(Offset(12.0 * s, 13.0 * s), 6.9 * s, paint);
 
@@ -1013,7 +1058,11 @@ class _SlenderNotificationGlyphPainter extends CustomPainter {
     canvas.drawPath(hands, paint);
   }
 
+  /// Vẽ bánh răng cài đặt 8 răng bo tròn trong hệ tọa độ cực quanh tâm `(12s, 12s)`.
   void _paintSettingsCog(Canvas canvas, double s, Paint paint) {
+    // Giải thuật tọa độ cực dựng biên dạng bánh răng 8 răng đều (Polar Gear Contour):
+    // Chia vòng tròn thành 8 bước góc step = 2*pi/8; tại mỗi bước tính 4 góc lệch đối xứng a1, a2, a3, a4 quanh trục răng
+    // để nối luân phiên từ bán kính chân răng innerR (6.35s) lên đỉnh răng outerR (8.4s) bằng các cung tròn arcToPoint.
     final cx = 12.0 * s;
     final cy = 12.0 * s;
 
@@ -1056,7 +1105,11 @@ class _SlenderNotificationGlyphPainter extends CustomPainter {
     canvas.drawPath(gear, paint);
   }
 
+  /// Vẽ chuông thông báo xoay nghiêng cùng chiều kim đồng hồ quanh tâm bằng phép biến đổi ma trận `canvas.rotate`.
   void _paintTiltedBell(Canvas canvas, double s, Paint paint) {
+    // Giải thuật biến đổi hệ trục xoay tâm và dựng đường cong loe thân chuông:
+    // Tịnh tiến gốc tọa độ về tâm (12s, 12s), xoay khung vẽ một góc pi / 5.4 rad (~33 độ),
+    // sau đó vẽ núm treo trên đỉnh, vòm chuông nửa tròn nối hai sườn uốn loe cubicTo và quả lắc cung tròn bên dưới.
     canvas.save();
     canvas.translate(12.0 * s, 12.0 * s);
     canvas.rotate(math.pi / 5.4); // ~33 deg clockwise tilt matching template
@@ -1100,6 +1153,8 @@ class _SlenderNotificationGlyphPainter extends CustomPainter {
       oldDelegate.kind != kind || oldDelegate.color != color;
 }
 
+/// Bộ vẽ đường viền chuông thẳng đứng nét mảnh đặt trong nút kích hoạt kính mờ trên thanh điều hướng đỉnh.
+///
 /// Slender upright bell outline for the circular header trigger button.
 class _SlenderHeaderBellPainter extends CustomPainter {
   final Color color;
@@ -1108,6 +1163,9 @@ class _SlenderHeaderBellPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Giải thuật vẽ chuông đứng đối xứng trục dọc trên hệ lưới 24x24:
+    // Dựng vòm đỉnh chuông bằng cung nửa tròn bán kính 5.2s nối từ x = 6.8s sang x = 17.2s, kéo hai đường cong
+    // bậc ba cubicTo loe nhẹ ra vành đáy rộng (4.8s -> 19.2s) và điểm thêm cung tròn quả lắc phía dưới đáy chuông.
     final s = size.width / 24.0;
     final paint = Paint()
       ..color = color

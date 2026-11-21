@@ -1,7 +1,12 @@
+/**
+ * Dịch vụ chuyển khoản giải ngân tự động liên ngân hàng (Napas 24/7 Mock Engine & PayOS Disbursement Gateway)
+ * phục vụ chi trả doanh thu Chủ nhà (`host_payout`) và hoàn tiền Khách đặt phòng (`guest_refund`).
+ */
 import crypto from "node:crypto";
+import { ApiError } from "../../common/api-error";
+import { maskBankAccountNumber } from "../../common/crypto-pii";
 import { getEnv } from "../../config/env";
 import { logger } from "../../config/logger";
-import { ApiError } from "../../common/api-error";
 
 export type DisbursementParams = {
     targetType: "host_payout" | "guest_refund";
@@ -34,11 +39,13 @@ const executeMockDisbursement = async (params: DisbursementParams): Promise<Disb
 
     const formattedAmount = `${Number(params.amount).toLocaleString("vi-VN")} ${params.currency || "VND"}`;
 
+    const maskedAccount = maskBankAccountNumber(params.accountNumber);
+
     logger.info(`[MOCK NAPAS 24/7] ==================================================`);
     logger.info(`[MOCK NAPAS 24/7] GIAO DỊCH CHUYỂN KHOẢN TỰ ĐỘNG THÀNH CÔNG`);
     logger.info(`[MOCK NAPAS 24/7] Loại GD      : ${params.targetType.toUpperCase()} (ID: #${params.targetId})`);
     logger.info(`[MOCK NAPAS 24/7] Người nhận   : ${params.accountName.toUpperCase()}`);
-    logger.info(`[MOCK NAPAS 24/7] Ngân hàng/STK: ${params.bankCode.toUpperCase()} - ${params.accountNumber}`);
+    logger.info(`[MOCK NAPAS 24/7] Ngân hàng/STK: ${params.bankCode.toUpperCase()} - ${maskedAccount}`);
     logger.info(`[MOCK NAPAS 24/7] Số tiền      : ${formattedAmount}`);
     logger.info(`[MOCK NAPAS 24/7] Nội dung     : ${params.description}`);
     logger.info(`[MOCK NAPAS 24/7] Mã FT Napas  : ${transferReference}`);
@@ -49,7 +56,7 @@ const executeMockDisbursement = async (params: DisbursementParams): Promise<Disb
         provider: "mock",
         transferReference,
         transferredAt: new Date(),
-        message: `Chuyển khoản thành công tới ${params.accountName} (${params.accountNumber})`,
+        message: `Chuyển khoản thành công tới ${params.accountName} (${maskedAccount})`,
     };
 };
 

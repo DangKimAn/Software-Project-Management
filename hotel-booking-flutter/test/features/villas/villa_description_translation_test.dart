@@ -47,7 +47,9 @@ void main() {
   }
 
   group('Villa Description Localization & Original Toggle Tests', () {
-    testWidgets('renders Korean translation by default, toggles to original and back', (tester) async {
+    testWidgets(
+        'renders Korean translation by default, toggles to original and back',
+        (tester) async {
       await tester.pumpWidget(buildApp(const Locale('ko'), homestay104));
       await tester.pumpAndSettle();
 
@@ -97,7 +99,9 @@ void main() {
       );
     });
 
-    testWidgets('renders English translation by default and allows toggling to original', (tester) async {
+    testWidgets(
+        'renders English translation by default and allows toggling to original',
+        (tester) async {
       await tester.pumpWidget(buildApp(const Locale('en'), homestay104));
       await tester.pumpAndSettle();
 
@@ -117,7 +121,9 @@ void main() {
       );
     });
 
-    testWidgets('renders Vietnamese description directly without translation badge', (tester) async {
+    testWidgets(
+        'renders Vietnamese description directly without translation badge',
+        (tester) async {
       await tester.pumpWidget(buildApp(const Locale('vi'), homestay104));
       await tester.pumpAndSettle();
 

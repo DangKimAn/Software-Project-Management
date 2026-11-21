@@ -10,9 +10,11 @@ import 'package:hotel_booking_flutter/features/settings/presentation/screens/set
 import 'package:hotel_booking_flutter/features/trips/domain/entities/booking.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/screens/trips_screen.dart';
 import 'package:hotel_booking_flutter/features/trips/presentation/view_models/trips_view_model.dart';
+// CONFLICT-RESOLVED: Giữ `app_header.dart` và `app_semantic_icons.dart` của HEAD kết hợp `GlobalPendingBookingBanner` và `AppLocalizations` từ develop.
 import 'package:hotel_booking_flutter/features/trips/presentation/widgets/global_pending_booking_banner.dart';
-import 'package:hotel_booking_flutter/shared/widgets/app_header_footer.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:hotel_booking_flutter/l10n/l10n.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_header.dart';
+import 'package:hotel_booking_flutter/shared/widgets/app_semantic_icons.dart';
 
 class _FakeAuthNotifier extends StateNotifier<AsyncValue<User?>>
     implements AuthNotifier {
@@ -43,6 +45,7 @@ void main() {
     role: 'guest',
   );
 
+  // CONFLICT-RESOLVED: Kiểm thử đầy đủ 6 kịch bản luân phiên giữa thanh tìm kiếm đầu trang và biểu ngữ giữ chỗ `GlobalPendingBookingBanner` từ develop.
   final now = DateTime.now();
   final testPendingBooking = Booking(
     id: 'test-pending-123',
@@ -60,27 +63,38 @@ void main() {
     createdAt: now,
   );
 
-  group('Header & Pending Booking Banner Alternation across Tabs (Messages, Trips, Account)', () {
+  Widget buildTestApp(Widget home) {
+    return MaterialApp(
+      theme: AppTheme.lightTheme,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('vi'),
+      home: home,
+    );
+  }
+
+  group(
+      'Header & Pending Booking Banner Alternation across Tabs (Messages, Trips, Account)',
+      () {
     testWidgets(
         '1. MessagesScreen without pending booking: shows header (search bar & bell)',
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
             conversationsListProvider
                 .overrideWith((ref) => Future.value(<ConversationItem>[])),
             activePendingBookingProvider.overrideWithValue(null),
           ],
-          child: MaterialApp(
-            theme: AppTheme.lightTheme,
-            home: const MessagesScreen(),
-          ),
+          child: buildTestApp(const MessagesScreen()),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('header-search-bar')),
+          findsOneWidget);
       expect(find.text('Bạn muốn đi đâu?'), findsOneWidget);
       expect(find.byType(NotificationBell), findsOneWidget);
       expect(find.byType(GlobalPendingBookingBanner), findsNothing);
@@ -92,15 +106,13 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
             conversationsListProvider
                 .overrideWith((ref) => Future.value(<ConversationItem>[])),
             activePendingBookingProvider.overrideWithValue(testPendingBooking),
           ],
-          child: MaterialApp(
-            theme: AppTheme.lightTheme,
-            home: const MessagesScreen(),
-          ),
+          child: buildTestApp(const MessagesScreen()),
         ),
       );
       await tester.pumpAndSettle();
@@ -113,7 +125,10 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('header-search-bar')),
+        findsNothing,
+      );
       expect(find.byType(NotificationBell), findsNothing);
     });
 
@@ -123,38 +138,39 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
             myBookingsProvider.overrideWith((ref) => Future.value(<Booking>[])),
             activePendingBookingProvider.overrideWithValue(null),
           ],
-          child: MaterialApp(
-            theme: AppTheme.lightTheme,
-            home: const TripsScreen(),
-          ),
+          child: buildTestApp(const TripsScreen()),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('header-search-bar')),
+        findsOneWidget,
+      );
       expect(find.text('Bạn muốn đi đâu?'), findsOneWidget);
       expect(find.byType(NotificationBell), findsOneWidget);
       expect(find.byType(GlobalPendingBookingBanner), findsNothing);
     });
 
     testWidgets(
+        // CONFLICT-RESOLVED: Giữ bài kiểm thử #4 cho `TripsScreen` khi có đơn giữ chỗ và bài #5, #6 cho `SettingsScreen`.
         '4. TripsScreen with pending booking: prioritizes pending banner and hides search header & bell',
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
-            myBookingsProvider.overrideWith((ref) => Future.value(<Booking>[testPendingBooking])),
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            myBookingsProvider.overrideWith(
+                (ref) => Future.value(<Booking>[testPendingBooking])),
             activePendingBookingProvider.overrideWithValue(testPendingBooking),
           ],
-          child: MaterialApp(
-            theme: AppTheme.lightTheme,
-            home: const TripsScreen(),
-          ),
+          child: buildTestApp(const TripsScreen()),
         ),
       );
       await tester.pumpAndSettle();
@@ -167,7 +183,10 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('header-search-bar')),
+        findsNothing,
+      );
       expect(find.byType(NotificationBell), findsNothing);
     });
 
@@ -177,25 +196,26 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
             activePendingBookingProvider.overrideWithValue(null),
           ],
-          child: MaterialApp(
-            theme: AppTheme.lightTheme,
-            home: const SettingsScreen(),
-          ),
+          child: buildTestApp(const SettingsScreen()),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('header-search-bar')),
+        findsOneWidget,
+      );
       expect(find.text('Bạn muốn đi đâu?'), findsOneWidget);
       expect(find.byType(NotificationBell), findsOneWidget);
       expect(find.byType(GlobalPendingBookingBanner), findsNothing);
       expect(
         find.descendant(
           of: find.byKey(const Key('settings_bottom_logout_button')),
-          matching: find.byIcon(LucideIcons.doorOpen),
+          matching: find.byIcon(AppSemanticIcons.logout),
         ),
         findsOneWidget,
       );
@@ -207,13 +227,11 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authNotifierProvider.overrideWith((ref) => _FakeAuthNotifier(testUser)),
+            authNotifierProvider
+                .overrideWith((ref) => _FakeAuthNotifier(testUser)),
             activePendingBookingProvider.overrideWithValue(testPendingBooking),
           ],
-          child: MaterialApp(
-            theme: AppTheme.lightTheme,
-            home: const SettingsScreen(),
-          ),
+          child: buildTestApp(const SettingsScreen()),
         ),
       );
       await tester.pumpAndSettle();
@@ -226,7 +244,8 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.byKey(const ValueKey<String>('header-search-bar')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('header-search-bar')),
+          findsNothing);
       expect(find.byType(NotificationBell), findsNothing);
     });
   });

@@ -2,50 +2,47 @@ import 'package:flutter/material.dart';
 import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
 import 'package:hotel_booking_flutter/app/theme/app_typography.dart';
 
-/// Scoped design tokens exclusively for the Admin Portal ("Studio Minimalist"
-/// layout inspired by clean Apple/Studio frosted Bento aesthetics).
-///
-/// Does not alter Guest or Host tokens.
+/// Bộ token thiết kế phong cách Studio Minimalist dành riêng cho cổng Quản trị (bố cục thẻ Bento nổi trên nền sứ mờ, tách biệt hoàn toàn với token của Khách và Chủ nhà).
 abstract final class AdminStudioTokens {
   // ── Surfaces & Frosted Layers ──
-  /// Cool mist-porcelain canvas so white cards & frosted groups float cleanly.
+  /// Màu nền sứ lạnh giúp các thẻ trắng và khung kính mờ nổi bật rõ nét.
   static const Color canvas = Color(0xFFF2F4F7);
 
-  /// Outer grouped container surface (e.g. "Activity" & "Creators" sections).
+  /// Bề mặt khung gom nhóm bên ngoài cho từng phân khu chức năng.
   static const Color groupSurface = Color(0xFFF7F8FA);
 
-  /// Translucent frosted group fill when paired with blur or white specular rim.
+  /// Màu phủ bán trong suốt khi kết hợp hiệu ứng làm mờ kính hoặc viền sáng trắng.
   static const Color groupGlassFill = Color(0xD9F8F9FB);
 
-  /// Specular white edge highlight on frosted containers.
+  /// Viền sáng trắng tạo hiệu ứng phản quang nhẹ cho khung nhóm Bento.
   static const Color groupBorder = Color(0xFFFFFFFF);
 
-  /// Subtle hairline when separating light surfaces without heavy borders.
+  /// Đường phân cách mảnh nhẹ giữa các bề mặt sáng mà không gây nặng nề.
   static const Color hairline = Color(0xFFECEEF2);
 
-  /// Pure crisp white inner card surface.
+  /// Bề mặt thẻ con màu trắng tinh bên trong khung nhóm.
   static const Color cardSurface = Color(0xFFFFFFFF);
 
-  /// Soft neutral fill for circular micro-badges (`↗`, initials, pill inputs).
+  /// Nền xám trung tính dịu cho huy hiệu tròn nhỏ, chữ viết tắt và ô nhập dạng viên thuốc.
   static const Color softCircle = Color(0xFFF3F4F7);
 
-  /// Frosted top bar & bottom navigation dock surfaces.
+  /// Lớp phủ kính mờ cho thanh tiêu đề trên cùng và thanh điều hướng dưới đáy.
   static const Color frostedHeaderFill = Color(0xCCF2F4F7);
   static const Color frostedDockFill = Color(0xCFffffff);
   static const Color frostedDockBorder = Color(0xE6FFFFFF);
 
   // ── Studio Monochrome Ink Palette ──
-  /// Primary deep obsidian ink for active circular pills, numbers, and CTAs.
+  /// Màu mực đen tuyền chủ đạo cho nút chọn đang kích hoạt, con số KPI và nút hành động chính.
   static const Color obsidian = Color(0xFF141416);
   static const Color obsidianPressed = Color(0xFF27272A);
 
-  /// Refined text hierarchy (lighter weights, high legibility).
+  /// Hệ phân cấp màu chữ tinh gọn có độ tương phản và khả năng đọc cao.
   static const Color inkPrimary = Color(0xFF141416);
   static const Color inkSecondary = Color(0xFF525866);
   static const Color inkMuted = Color(0xFF7B818F);
   static const Color inkSubtle = Color(0xFF9AA0AC);
 
-  /// Delicate icon tints for thin optical stroke perception.
+  /// Hệ màu biểu tượng thanh mảnh theo mức độ ưu tiên thị giác.
   static const Color iconInk = Color(0xFF18181B);
   static const Color iconSecondary = Color(0xFF525866);
   static const Color iconMuted = Color(0xFF858B98);
@@ -279,6 +276,7 @@ abstract final class AdminStudioTokens {
     shape: const CircleBorder(),
   );
 
+  /// Tạo trang trí ô tìm kiếm bo tròn dạng viên thuốc dùng chung trên cổng Quản trị.
   static InputDecoration searchPillDecoration({
     required String hintText,
     required IconData prefixIcon,
@@ -316,6 +314,7 @@ abstract final class AdminStudioTokens {
     );
   }
 
+  /// Tạo trang trí ô nhập văn bản nhiều dòng (lý do từ chối, ghi chú kiểm duyệt) có viền báo lỗi rõ ràng.
   static InputDecoration multilineDecoration({
     String? hintText,
     String? labelText,

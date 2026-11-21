@@ -71,7 +71,9 @@ void main() {
       expect(villa4.primaryBadge, isNull);
     });
 
-    test('localizes villa description for Korean and English and supports original Vietnamese', () {
+    test(
+        'localizes villa description for Korean and English and supports original Vietnamese',
+        () {
       const specs = VillaSpecs(
         bedrooms: 2,
         beds: 2,

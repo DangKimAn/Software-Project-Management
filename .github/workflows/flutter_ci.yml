@@ -6,12 +6,14 @@ on:
     paths:
       - "hotel-booking-flutter/**"
       - "tools/quality/**"
+      - "backend/tests/fixtures/identity/**"
       - ".github/workflows/flutter_ci.yml"
   pull_request:
     branches: [main, develop]
     paths:
       - "hotel-booking-flutter/**"
       - "tools/quality/**"
+      - "backend/tests/fixtures/identity/**"
       - ".github/workflows/flutter_ci.yml"
 
 permissions:
@@ -61,14 +63,17 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
+      # CONFLICT-RESOLVED: Thực thi trực tiếp ../tools/quality/secret_and_rule_audit.dart ở root để khớp 100% với bộ lọc paths: tools/quality/** và xóa bỏ bản sao lệch dòng trong hotel-booking-flutter/.
       - name: Run Secret, Zero-Mock & FLUTTER_RULES Audit
-        run: dart run tools/quality/secret_and_rule_audit.dart
+        run: dart run ../tools/quality/secret_and_rule_audit.dart
 
       - name: Verify Code Formatting
-        run: dart format --output=none --set-exit-if-changed test/integration integration_test tools/quality
+        run: dart format --output=none --set-exit-if-changed test/integration integration_test ../tools/quality
 
       - name: Run Static Analysis
-        run: flutter analyze --no-fatal-infos
+        run: |
+          flutter analyze --no-fatal-infos
+          dart analyze ../tools/quality
 
       - name: Run Unit & Widget Tests
         run: flutter test --exclude-tags=golden

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,16 +11,18 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../core/network/dio_client.dart';
+// CONFLICT-RESOLVED: Giữ cả tiện ích đa ngôn ngữ `l10n.dart` từ `origin/develop` và thành phần đầu trang tách riêng `app_header.dart`.
 import '../../../../l10n/l10n.dart';
-import '../../../../shared/widgets/app_header_footer.dart';
+import '../../../../shared/widgets/app_header.dart';
 import '../../../../shared/widgets/app_image.dart';
 import '../../../../shared/widgets/app_semantic_icons.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/view_models/auth_notifier.dart';
-import '../../../booking_inquiry/domain/services/contact_service.dart';
+import '../../../support/domain/services/contact_service.dart';
 import '../../domain/account_profile_models.dart';
-import '../../services/avatar_upload_service.dart';
+
 import '../view_models/account_settings_view_model.dart';
+import '../view_models/profile_settings_actions_view_model.dart';
 
 /// Account & Settings tab (`Hồ sơ & Tài khoản`).
 ///
@@ -56,6 +59,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   ProfileDraftData? _unsavedDraft;
   String? _activeUserId;
 
+  // Giải thuật cô lập dữ liệu cá nhân (PII) giữa các phiên tài khoản và khôi phục bản nháp
+  // chưa lưu tương ứng với đúng `userId` hiện tại từ bộ nhớ cục bộ.
   void _enforceUserIsolation(User? currentUser) {
     final newUserId = currentUser?.id;
     if (_activeUserId != newUserId) {
@@ -63,6 +68,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _unsavedDraft = null;
       }
       _activeUserId = newUserId;
+      if (newUserId != null && _unsavedDraft == null) {
+        final persisted = ref
+            .read(profileSettingsActionsProvider)
+            .loadProfileDraft(newUserId);
+        if (persisted != null &&
+            currentUser != null &&
+            persisted.hasChangesComparedTo(currentUser)) {
+          _unsavedDraft = persisted;
+        }
+      }
     }
   }
 
@@ -161,7 +176,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context.push(loginUri.toString());
       return;
     }
-    context.push(targetPath);
+    final clean = targetPath.split('?').first.toLowerCase();
+    final isTab = clean == '/' ||
+        clean == '/messages' ||
+        clean == '/tin-nhan' ||
+        clean == '/trips' ||
+        clean == '/account/trips' ||
+        clean == '/settings' ||
+        clean == '/account/profile';
+    if (isTab) {
+      context.go(targetPath);
+    } else {
+      context.push(targetPath);
+    }
   }
 
   Future<bool> _confirmSensitivePhoneChange(
@@ -171,6 +198,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }) async {
     final currentLocale = ref.read(localeProvider);
     final dialogL10n = lookupAppLocalizations(Locale(currentLocale));
+    final displayOldPhone = oldPhone.trim().isEmpty ? '---' : oldPhone.trim();
     final confirmed = await showDialog<bool>(
       context: parentContext,
       builder: (dialogCtx) {
@@ -187,8 +215,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           content: Text(
             newPhone.isEmpty
-                ? dialogL10n.settingsConfirmPhoneRemove(oldPhone)
-                : dialogL10n.settingsConfirmPhoneChange(oldPhone, newPhone),
+                ? dialogL10n.settingsConfirmPhoneRemove(displayOldPhone)
+                : dialogL10n.settingsConfirmPhoneChange(
+                    displayOldPhone,
+                    newPhone,
+                  ),
             style: AppTypography.bodyMedium,
           ),
           actions: [
@@ -275,6 +306,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     if (confirmed != true || !mounted) return;
 
+    unawaited(
+      ref.read(profileSettingsActionsProvider).clearProfileDraft(user.id),
+    );
     setState(() {
       _unsavedDraft = null;
       _activeUserId = null;
@@ -308,8 +342,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
               AvatarPickedFile? picked;
               try {
-                final picker = ref.read(avatarPickerServiceProvider);
-                picked = await picker.pickAvatarFromDevice();
+                picked = await ref
+                    .read(profileSettingsActionsProvider)
+                    .pickAvatarFromDevice();
               } on AvatarPickException catch (e) {
                 if (!ctx.mounted) return;
                 setModalState(() {
@@ -319,8 +354,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               } catch (_) {
                 if (!ctx.mounted) return;
                 setModalState(() {
-                  modalError =
-                      modalL10n.settingsAvatarPickError;
+                  modalError = modalL10n.settingsAvatarPickError;
                 });
                 return;
               }
@@ -337,8 +371,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               });
 
               try {
-                final uploadService = ref.read(avatarUploadServiceProvider);
-                final presigned = await uploadService.uploadAvatarToR2(picked);
+                final presigned = await ref
+                    .read(profileSettingsActionsProvider)
+                    .uploadAvatarToR2(picked);
                 await ref.read(authNotifierProvider.notifier).updateAvatar(
                       url: presigned.publicUrl,
                       key: presigned.key,
@@ -549,6 +584,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     bool isSubmitting = false;
     bool isUploadingAvatar = false;
+    bool didSave = false;
     AvatarPickedFile? selectedLocalAvatar;
     String? uploadedAvatarKey;
     String? errorMessage;
@@ -569,10 +605,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
     }
 
+    // Giải thuật chụp và lưu bản nháp hồ sơ chưa lưu xuống bộ nhớ cục bộ mỗi khi hộp thoại đóng trước khi lưu thành công.
     void snapshotDraft() {
       final candidate = buildCurrentDraft();
       if (candidate.hasChangesComparedTo(user)) {
         _unsavedDraft = candidate;
+        unawaited(
+          ref.read(profileSettingsActionsProvider).saveProfileDraft(candidate),
+        );
+      } else if (_unsavedDraft?.userId == user.id) {
+        _unsavedDraft = null;
+        unawaited(
+          ref.read(profileSettingsActionsProvider).clearProfileDraft(user.id),
+        );
       }
     }
 
@@ -596,8 +641,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
               AvatarPickedFile? picked;
               try {
-                final picker = ref.read(avatarPickerServiceProvider);
-                picked = await picker.pickAvatarFromDevice();
+                picked = await ref
+                    .read(profileSettingsActionsProvider)
+                    .pickAvatarFromDevice();
               } on AvatarPickException catch (e) {
                 if (!ctx.mounted) return;
                 setModalState(() {
@@ -607,8 +653,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               } catch (_) {
                 if (!ctx.mounted) return;
                 setModalState(() {
-                  errorMessage =
-                      editL10n.settingsAvatarPickError;
+                  errorMessage = editL10n.settingsAvatarPickError;
                 });
                 return;
               }
@@ -624,8 +669,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               });
 
               try {
-                final uploadService = ref.read(avatarUploadServiceProvider);
-                final presigned = await uploadService.uploadAvatarToR2(picked);
+                final presigned = await ref
+                    .read(profileSettingsActionsProvider)
+                    .uploadAvatarToR2(picked);
                 avatarUrlCtrl.text = presigned.publicUrl;
                 uploadedAvatarKey = presigned.key;
                 await ref.read(authNotifierProvider.notifier).updateAvatar(
@@ -710,22 +756,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       avatarUrl: newAvatarUrl.isNotEmpty ? newAvatarUrl : null,
                     );
 
-                try {
-                  final prefs = ref.read(preferencesServiceProvider);
-                  await prefs.saveAccountProfile(updatedUser.id, {
-                    'fullName': updatedUser.fullName,
-                    'phone': updatedUser.phone ?? '',
-                    'bio': updatedUser.bio ?? '',
-                    'location': updatedUser.location ?? '',
-                    'job': updatedUser.job ?? '',
-                    'dreamDestination': updatedUser.dreamDestination ?? '',
-                    'school': updatedUser.school ?? '',
-                    'languages': updatedUser.languages.join(', '),
-                  });
-                } catch (_) {
-                  // Ignore local cache write failure when backend update succeeded.
-                }
+                await ref
+                    .read(profileSettingsActionsProvider)
+                    .cacheSyncedAccountProfile(updatedUser);
 
+                didSave = true;
                 _unsavedDraft = null;
                 if (!ctx.mounted) return;
                 Navigator.of(ctx).pop();
@@ -938,10 +973,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                           const SizedBox(height: 2),
                                           Text(
                                             isUploadingAvatar
-                                                ? editL10n.settingsAvatarUploading
+                                                ? editL10n
+                                                    .settingsAvatarUploading
                                                 : (selectedLocalAvatar != null
-                                                    ? editL10n.settingsAvatarSelectedShort(selectedLocalAvatar!.name)
-                                                    : editL10n.settingsAvatarPickHint),
+                                                    ? editL10n
+                                                        .settingsAvatarSelectedShort(
+                                                            selectedLocalAvatar!
+                                                                .name)
+                                                    : editL10n
+                                                        .settingsAvatarPickHint),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style:
@@ -980,8 +1020,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                         ),
                                         label: Text(
                                           isUploadingAvatar
-                                              ? editL10n.settingsAvatarUploadingShort
-                                              : editL10n.settingsAvatarPickFromDeviceShort,
+                                              ? editL10n
+                                                  .settingsAvatarUploadingShort
+                                              : editL10n
+                                                  .settingsAvatarPickFromDeviceShort,
                                           style: AppTypography.caption.copyWith(
                                             fontWeight: FontWeight.w600,
                                             color: AppColors.textStrong,
@@ -1030,7 +1072,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 ),
                                 controller: dreamDestinationCtrl,
                                 enabled: !busy,
-                                labelText: editL10n.settingsDreamDestinationLabel,
+                                labelText:
+                                    editL10n.settingsDreamDestinationLabel,
                                 hintText: editL10n.settingsDreamDestinationHint,
                                 errorText: fieldErrors['dreamDestination'],
                               ),
@@ -1109,7 +1152,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      if (!didSave && !isSubmitting) {
+        snapshotDraft();
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    });
   }
 
   String _roleLabelForUser(User user, [AppLocalizations? l10n]) {
@@ -1187,10 +1237,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         padding:
                             const EdgeInsets.symmetric(vertical: AppSpacing.s8),
                         child: isInitialLoading
-                             ? _buildLoadingProfileCard(l10n)
-                             : (effectiveUser != null
-                                 ? _buildSignedInProfileCard(effectiveUser, l10n)
-                                 : _buildLoggedOutProfileCard(l10n)),
+                            ? _buildLoadingProfileCard(l10n)
+                            : (effectiveUser != null
+                                ? _buildSignedInProfileCard(effectiveUser, l10n)
+                                : _buildLoggedOutProfileCard(l10n)),
                       ),
 
                       _buildGroupDivider(),
@@ -1238,7 +1288,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           tileKey: const Key('menu_host_portal'),
                           icon: AppSemanticIcons.home,
                           title: l10n.settingsManageProperties,
-                          onTap: () => context.push('/chu-nha/cho-nghi'),
+                          onTap: () => context.push('/chu-nha'),
                         )
                       else if (effectiveUser != null && effectiveUser.isNewHost)
                         _buildSettingsMenuTile(
@@ -1291,7 +1341,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               const SizedBox(width: AppSpacing.s12),
                               Expanded(
                                 child: Text(
-                                  lookupAppLocalizations(Locale(currentLocale)).settingsLanguage,
+                                  lookupAppLocalizations(Locale(currentLocale))
+                                      .settingsLanguage,
                                   style: _menuTitleStyle,
                                 ),
                               ),
@@ -1682,23 +1733,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: SizedBox(
               width: 54,
               height: 54,
-              child: (user.avatarUrl != null &&
-                      user.avatarUrl!.trim().isNotEmpty)
-                  ? AppImage(
-                      url: user.avatarUrl!.trim(),
-                      fit: BoxFit.cover,
-                    )
-                  : Center(
-                      child: Text(
-                        user.firstName.isNotEmpty
-                            ? user.firstName[0].toUpperCase()
-                            : 'U',
-                        style: AppTypography.displayMedium.copyWith(
-                          color: AppColors.textStrong,
-                          fontSize: 20,
+              child:
+                  (user.avatarUrl != null && user.avatarUrl!.trim().isNotEmpty)
+                      ? AppImage(
+                          url: user.avatarUrl!.trim(),
+                          fit: BoxFit.cover,
+                        )
+                      : Center(
+                          child: Text(
+                            user.firstName.isNotEmpty
+                                ? user.firstName[0].toUpperCase()
+                                : 'U',
+                            style: AppTypography.displayMedium.copyWith(
+                              color: AppColors.textStrong,
+                              fontSize: 20,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
             ),
           ),
         ),

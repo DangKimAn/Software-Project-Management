@@ -1,8 +1,13 @@
+/**
+ * Định tuyến HTTP công khai tra cứu chỗ ở (`/api/listings`):
+ * - Tích hợp kiểm chứng tham số truy vấn tìm kiếm, bộ lọc ngày/giá/vị trí/sức chứa và định danh `listingId` trước khi truy xuất dữ liệu.
+ */
+
 import express from "express";
 import { param, query } from "express-validator";
 
 import { isValidIsoDate } from "../../common/validation";
-import { isValidLocationGroup } from "../../common/vung-tau-location-groups";
+import { isValidLocationGroup } from "./vung-tau-location-groups";
 import {
     getPublicListingAvailabilityById,
     getPublicListingDetailById,
@@ -73,6 +78,10 @@ router.get(
             )
             .withMessage(`Date range cannot exceed ${MAX_STAY_NIGHTS} nights`),
         query("guests").optional().isInt({ min: 1 }).withMessage("guests must be at least 1").toInt(),
+        query("bedrooms").optional().isInt({ min: 0 }).withMessage("bedrooms must be 0 or more").toInt(),
+        query("beds").optional().isInt({ min: 1 }).withMessage("beds must be at least 1").toInt(),
+        query("bathrooms").optional().isFloat({ min: 0.5 }).withMessage("bathrooms must be at least 0.5").toFloat(),
+        query("pets").optional().isBoolean().withMessage("pets must be boolean").toBoolean(),
         query("propertyType")
             .optional()
             .isIn(["apartment", "villa", "hotel", "homestay"])

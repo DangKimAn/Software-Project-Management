@@ -1,3 +1,6 @@
+/**
+ * Mô hình Sequelize quản lý cấu hình biểu phí dịch vụ nền tảng theo lịch trình hiệu lực và trạng thái kích hoạt.
+ */
 import {
     CreationOptional,
     DataTypes,

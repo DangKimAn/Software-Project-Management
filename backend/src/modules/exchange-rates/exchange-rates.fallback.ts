@@ -5,6 +5,9 @@ import { parseRetryAfterHeader } from "./exchange-rates.provider";
 import { validateUpstreamQuotes } from "./exchange-rates.validator";
 
 /**
+ * Bộ chuyển đổi (adapter) nhà cung cấp tỷ giá dự phòng (Fallback Provider) kết nối tới
+ * ExchangeRate-API Open Access v6 để lấy bảng tỷ giá tham chiếu cơ sở VND.
+ *
  * Secondary fallback FX adapter using ExchangeRate-API Open Access v6:
  * `GET https://open.er-api.com/v6/latest/VND`
  */
@@ -15,6 +18,10 @@ export class OpenErApiExchangeRateProvider implements ExchangeRateProviderAdapte
     private readonly fetchImpl: FetchLike;
     private readonly nowFn: () => number;
 
+    /**
+     * Khởi tạo bộ cung cấp tỷ giá dự phòng với cấu hình điểm cuối HTTP, ngưỡng cắt thời gian chờ
+     * (`timeoutMs`, mặc định 5000ms), hàm thực thi `fetch` và nguồn đồng hồ hệ thống phục vụ kiểm thử.
+     */
     constructor(options?: {
         endpointUrl?: string;
         timeoutMs?: number;
@@ -27,6 +34,18 @@ export class OpenErApiExchangeRateProvider implements ExchangeRateProviderAdapte
         this.nowFn = options?.nowFn ?? Date.now;
     }
 
+    /**
+     * Giải thuật truy xuất và kiểm định báo giá tỷ giá cơ sở VND sang USD/KRW từ ExchangeRate-API:
+     * 1. Kiểm soát thời gian chờ (Timeout Composition): Tạo tín hiệu `AbortSignal.timeout(timeoutMs)`
+     *    và hợp nhất với `externalSignal` (nếu có) qua `AbortSignal.any` để hủy sớm kết nối treo quá hạn.
+     * 2. Chịu lỗi tầng giao vận & HTTP: Mọi lỗi mạng hoặc mã trạng thái ngoài dải `2xx` đều được
+     *    đóng gói thành `UpstreamHttpError` kèm số giây chờ trích xuất từ header `Retry-After`
+     *    nhằm phục vụ tính toán giãn cách lũy thừa (Exponential Backoff) ở tầng dịch vụ.
+     * 3. Xác thực cấu trúc & miền giá trị dương hữu hạn: Kiểm tra phản hồi là đối tượng JSON hợp lệ,
+     *    trạng thái `result === "success"`, tiền tệ gốc `base_code === "VND"`, trích xuất mốc cập nhật
+     *    (`time_last_update_unix` hoặc `time_last_update_utc`) và ủy quyền cho `validateUpstreamQuotes`
+     *    kiểm tra tính dương hữu hạn cùng biên độ an toàn trước khi trả kết quả.
+     */
     async fetchVndQuotes(externalSignal?: AbortSignal): Promise<UpstreamQuoteResult> {
         const timeoutSignal = AbortSignal.timeout(this.timeoutMs);
         const signal = externalSignal ? AbortSignal.any([externalSignal, timeoutSignal]) : timeoutSignal;

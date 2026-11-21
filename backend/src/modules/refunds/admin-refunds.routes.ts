@@ -1,3 +1,7 @@
+/**
+ * Định tuyến HTTP quản trị yêu cầu hoàn tiền cho Khách đặt phòng (`/api/admin/refunds`):
+ * - Liệt kê danh sách hoàn tiền, phê duyệt giải ngân hoàn tiền hoặc từ chối kèm lý do.
+ */
 import express from "express";
 import { param, query, body } from "express-validator";
 import { authenticate } from "../../middlewares/authenticate.middleware";

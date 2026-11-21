@@ -148,7 +148,7 @@ describe("UC-09 reviews, conversations, and reports rules", () => {
     });
 
     it("strips executable HTML from review and message text", async () => {
-        const { sanitizeAndModerateText } = require("../dist/services/trust-safety-service");
+        const { sanitizeAndModerateText } = require("../dist/common/text-moderation");
         const payloads = [
             "<script>alert(1)</script>Hello",
             "<img src=x onerror=alert(1)>Nice",
