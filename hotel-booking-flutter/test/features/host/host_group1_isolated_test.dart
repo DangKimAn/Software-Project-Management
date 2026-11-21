@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hotel_booking_flutter/app/router/app_router.dart';
 import 'package:hotel_booking_flutter/app/theme/app_colors.dart';
 import 'package:hotel_booking_flutter/core/network/dio_client.dart';
@@ -13,6 +14,7 @@ import 'package:hotel_booking_flutter/features/host/presentation/screens/host_po
 import 'package:hotel_booking_flutter/features/host/presentation/widgets/host_chat_composer_bar.dart';
 import 'package:hotel_booking_flutter/features/host/presentation/widgets/host_studio_widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 final Uint8List _kSamplePngBytes = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -634,7 +636,7 @@ void main() {
             );
           }
           return ResponseBody.fromString(
-            jsonEncode({'items': []}),
+            jsonEncode({'items': <Object?>[]}),
             200,
             headers: {
               Headers.contentTypeHeader: [Headers.jsonContentType],
@@ -736,7 +738,7 @@ void main() {
             );
           }
           return ResponseBody.fromString(
-            jsonEncode({'items': []}),
+            jsonEncode({'items': <Object?>[]}),
             200,
             headers: {
               Headers.contentTypeHeader: [Headers.jsonContentType],
@@ -832,7 +834,7 @@ void main() {
             );
           }
           return ResponseBody.fromString(
-            jsonEncode({'items': []}),
+            jsonEncode({'items': <Object?>[]}),
             200,
             headers: {
               Headers.contentTypeHeader: [Headers.jsonContentType],
@@ -914,6 +916,111 @@ void main() {
           matching: find.byIcon(LucideIcons.messageCircle),
         );
         expect(zaloCardBtn, findsOneWidget);
+      },
+    );
+
+    test(
+      'CHROME-08: HostPortalSection.fromSlug resolves tai-chinh, rut-tien, finance, lich, and cho-nghi/them-moi aliases',
+      () {
+        for (final alias in [
+          'tai-chinh',
+          'thanh-toan',
+          'rut-tien',
+          'finance',
+          'payouts',
+          '  TAI-CHINH  ',
+        ]) {
+          final section = HostPortalSection.fromSlug(alias);
+          expect(section, HostPortalSection.payouts);
+          expect(section.routeSlug, 'thanh-toan');
+        }
+
+        expect(HostPortalSection.fromSlug('lich'), HostPortalSection.calendar);
+        expect(
+          HostPortalSection.fromSlug('cho-nghi/them-moi'),
+          HostPortalSection.newProperty,
+        );
+      },
+    );
+
+    testWidgets(
+      'CHROME-08: direct /chu-nha/tai-chinh route redirects to /chu-nha/thanh-toan and persists kHostLastActiveSectionKey',
+      (tester) async {
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final adapter = _SimpleAdapter((options) async {
+          return ResponseBody.fromString(
+            jsonEncode({'items': <Object?>[]}),
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        });
+
+        final client = DioClient()..dio.httpClientAdapter = adapter;
+        final testRepo = HostRepository(client);
+
+        final router = GoRouter(
+          initialLocation: '/chu-nha/tai-chinh',
+          routes: [
+            GoRoute(
+              path: '/chu-nha',
+              redirect: (context, state) async {
+                final prefs = await SharedPreferences.getInstance();
+                final cached = prefs.getString(kHostLastActiveSectionKey);
+                if (cached != null &&
+                    cached.isNotEmpty &&
+                    cached != 'tong-quan') {
+                  final section = HostPortalSection.fromSlug(cached);
+                  if (section != HostPortalSection.overview) {
+                    return '/chu-nha/${section.routeSlug}';
+                  }
+                }
+                return '/chu-nha/tong-quan';
+              },
+            ),
+            GoRoute(
+              path: '/chu-nha/tong-quan',
+              builder: (context, state) =>
+                  const HostPortalScreen(section: 'tong-quan'),
+            ),
+            GoRoute(
+              path: '/chu-nha/thanh-toan',
+              builder: (context, state) =>
+                  const HostPortalScreen(section: 'thanh-toan'),
+            ),
+            GoRoute(
+              path: '/chu-nha/tai-chinh',
+              redirect: (context, state) => '/chu-nha/thanh-toan',
+            ),
+          ],
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              hostRepositoryProvider.overrideWithValue(testRepo),
+              hostCurrentUserRoleProvider.overrideWithValue('host'),
+            ],
+            child: MaterialApp.router(routerConfig: router),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          router.routeInformationProvider.value.uri.path,
+          '/chu-nha/thanh-toan',
+        );
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString(kHostLastActiveSectionKey), 'thanh-toan');
+
+        // Navigating to /chu-nha restores /chu-nha/thanh-toan via kHostLastActiveSectionKey
+        router.go('/chu-nha');
+        await tester.pumpAndSettle();
+        expect(
+          router.routeInformationProvider.value.uri.path,
+          '/chu-nha/thanh-toan',
+        );
       },
     );
   });

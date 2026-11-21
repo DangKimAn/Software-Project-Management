@@ -89,12 +89,15 @@ enum HostPortalSection {
     }
   }
 
+  /// Giải thuật chuẩn hóa và phân giải đường dẫn slug (bao gồm các bí danh tiếng Việt/Anh như `tai-chinh`, `rut-tien`, `lich`, `khach`)
+  /// về đúng phân mục `HostPortalSection` tương ứng phục vụ định tuyến URL trực tiếp và khôi phục phiên `kHostLastActiveSectionKey`.
   static HostPortalSection fromSlug(String? slug) {
     final normalized = (slug ?? '').trim().toLowerCase();
     switch (normalized) {
       case 'cho-nghi':
       case 'properties':
         return HostPortalSection.properties;
+      case 'cho-nghi/them-moi':
       case 'them-moi':
       case 'them-cho-nghi':
       case 'new_property':
@@ -102,6 +105,7 @@ enum HostPortalSection {
       case 'dat-phong':
       case 'bookings':
         return HostPortalSection.bookings;
+      case 'lich':
       case 'lich-luu-tru':
       case 'calendar':
         return HostPortalSection.calendar;
@@ -112,7 +116,10 @@ enum HostPortalSection {
       case 'tin-nhan':
       case 'messages':
         return HostPortalSection.messages;
+      case 'tai-chinh':
       case 'thanh-toan':
+      case 'rut-tien':
+      case 'finance':
       case 'payouts':
         return HostPortalSection.payouts;
       case 'danh-gia':
@@ -522,9 +529,18 @@ class _HostPortalScreenState extends ConsumerState<HostPortalScreen>
     }).catchError((_) {});
   }
 
+  /// Giải thuật đồng bộ hai chiều phân mục đang mở (`kHostLastActiveSectionKey`) trong `SharedPreferences`:
+  /// - Nếu truy cập trực tiếp bằng đường dẫn chuyên biệt (ví dụ `/chu-nha/tai-chinh` -> `/chu-nha/thanh-toan`), lưu ngay `routeSlug` hiện hành vào bộ nhớ đệm.
+  /// - Nếu mở cổng mặc định (`tong-quan`), khôi phục lại phân mục gần nhất mà chủ nhà đã làm việc trước đó.
   Future<void> _restoreCachedSectionIfNeeded() async {
-    if (widget.initialSection != null ||
-        (widget.section.isNotEmpty && widget.section != 'tong-quan')) {
+    if (widget.initialSection != null) {
+      return;
+    }
+    if (widget.section.isNotEmpty && widget.section != 'tong-quan') {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(kHostLastActiveSectionKey, _activeSection.routeSlug);
+      } catch (_) {}
       return;
     }
     try {

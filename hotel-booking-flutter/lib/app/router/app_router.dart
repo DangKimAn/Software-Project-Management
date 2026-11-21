@@ -771,6 +771,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           child: const HostPortalScreen(section: 'thanh-toan'),
         ),
       ),
+      // Giải thuật chuyển hướng bí danh tài chính/rút tiền (/chu-nha/tai-chinh, /chu-nha/rut-tien, /host/tai-chinh, /host/thanh-toan)
+      // về đường dẫn chính tắc /chu-nha/thanh-toan nhằm triệt tiêu lỗi 404 khi truy cập URL trực tiếp (CHROME-08).
+      GoRoute(
+        path: '/chu-nha/tai-chinh',
+        redirect: (context, state) => '/chu-nha/thanh-toan',
+      ),
+      GoRoute(
+        path: '/chu-nha/rut-tien',
+        redirect: (context, state) => '/chu-nha/thanh-toan',
+      ),
+      GoRoute(
+        path: '/host/tai-chinh',
+        redirect: (context, state) => '/chu-nha/thanh-toan',
+      ),
+      GoRoute(
+        path: '/host/thanh-toan',
+        redirect: (context, state) => '/chu-nha/thanh-toan',
+      ),
       GoRoute(
         path: '/chu-nha/danh-gia',
         pageBuilder: (context, state) => _buildProtectedSlidePage(
